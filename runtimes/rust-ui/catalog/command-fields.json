@@ -1,4 +1,5 @@
 {
+  "allow": "text",
   "caption": "text",
   "handler": "text",
   "icon": "text",

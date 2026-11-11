@@ -45,6 +45,15 @@ pub(crate) struct FileDriver {
     original: Vec<u8>,
     readonly: bool,
     dirty: bool,
+    /// The file's size and modification time when it was last read or
+    /// written: a change by another program refuses the next save.
+    seen: Option<(u64, std::time::SystemTime)>,
+}
+
+/// A file's size and modification time, or None when it is not there.
+fn stamp(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.len(), meta.modified().ok()?))
 }
 
 /// One table read from the file and kept in SQLite.
@@ -205,6 +214,7 @@ impl FileDriver {
             original,
             readonly: source.readonly,
             dirty: false,
+            seen: stamp(path),
         })
     }
 
@@ -253,6 +263,29 @@ impl FileDriver {
         Ok(clarity_formats::tree::write(&Tree::Object(vec![("tables".into(), Tree::List(list))])))
     }
 
+    /// Refuses a change when another program changed the file since it was
+    /// read or written: its size or modification time differ, and so do its bytes.
+    fn unchanged_on_disk(&mut self) -> Outcome<()> {
+        if self.readonly {
+            return Ok(());
+        }
+        let now = stamp(&self.path);
+        if now == self.seen {
+            return Ok(());
+        }
+        let bytes = match std::fs::read(&self.path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && self.original.is_empty() => Vec::new(),
+            Err(_) => return Err(Failure::Changed),
+        };
+        if bytes != self.original {
+            return Err(Failure::Changed);
+        }
+        // The same bytes written again: no change.
+        self.seen = now;
+        Ok(())
+    }
+
     /// Writes the table back when a change is kept: to a new file beside the old one, which then replaces it.
     fn keep(&mut self) -> Outcome<()> {
         if !self.dirty || !self.db.0.is_autocommit() || self.readonly {
@@ -270,6 +303,7 @@ impl FileDriver {
         std::fs::write(&new, &bytes).map_err(|e| Failure::Other(format!("cannot write {}: {e}", new.display())))?;
         std::fs::rename(&new, &self.path).map_err(|e| Failure::Other(format!("cannot replace {}: {e}", self.path.display())))?;
         self.original = bytes;
+        self.seen = stamp(&self.path);
         Ok(())
     }
 }
@@ -280,6 +314,7 @@ impl Driver for FileDriver {
     }
 
     fn execute(&mut self, sql: &str, params: &[SqlValue]) -> Outcome<u64> {
+        self.unchanged_on_disk()?;
         let changed = self.db.execute(sql, params)?;
         self.dirty |= changed > 0;
         self.keep()?;
@@ -287,6 +322,7 @@ impl Driver for FileDriver {
     }
 
     fn insert(&mut self, sql: &str, params: &[SqlValue]) -> Outcome<Id> {
+        self.unchanged_on_disk()?;
         let id = self.db.insert(sql, params)?;
         self.dirty = true;
         self.keep()?;
@@ -297,8 +333,14 @@ impl Driver for FileDriver {
         self.db.rows(sql, params)
     }
 
-    /// A transaction's end keeps what it changed.
+    /// A transaction's end keeps what it changed; a file another program
+    /// changed meanwhile rolls it back instead.
     fn batch(&mut self, sql: &str) -> Outcome<()> {
+        if self.dirty && sql.trim().eq_ignore_ascii_case("COMMIT") && self.unchanged_on_disk().is_err() {
+            self.db.batch("ROLLBACK")?;
+            self.dirty = false;
+            return Err(Failure::Changed);
+        }
         self.db.batch(sql)?;
         self.keep()
     }

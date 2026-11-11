@@ -35,7 +35,7 @@ fn reply(state: WindowState) -> Reply {
 
 impl Program for Failing {
     fn started(&self) -> Started {
-        Started { main: "Failing".into(), unconnected: None }
+        Started { main: "Failing".into(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         Ok(reply(WindowState::new("", Map::new())))

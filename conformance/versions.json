@@ -1,0 +1,149 @@
+{
+  "about": "A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md, step 5). Every record of a versioned entity carries a version, a whole number in its own column; find reads it, a save of a stored record writes only when it is still the one read, and adds one. A save or a delete of a record someone changed since is refused with Clarity's savedSince and changes nothing; a save anyway writes regardless; reload reads the record as it is stored now. Undo compares the version instead of the whole row. A file source refuses a save when its file changed on disk since it was read. Each case is run on its own, on a fresh database: the table item (id, name, row_version) for the database cases, the CSV file below for the file case. Steps work on named copies of records: two copies of one record are what two windows hold. Every step expects ok unless it says otherwise; a refusal is the error with the key and English of refusal (or of undoRefusal for undo).",
+  "refusal": { "key": "savedSince", "english": "Someone else changed this record since you opened it. Reload it to see their change." },
+  "undoRefusal": { "key": "undoChangedSince", "english": "This was changed since, so it cannot be taken back" },
+  "column": "row_version",
+  "table": "CREATE TABLE item (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, row_version INTEGER NOT NULL DEFAULT 1)",
+  "steps": {
+    "insert": "save a new record with this name as copy; it is stored with version 1",
+    "read": "copy is the record of copy of, found by its id",
+    "set": "sets the name of copy, in the copy only",
+    "save": "saves copy",
+    "saveAnyway": "saves copy regardless of its version",
+    "delete": "deletes copy",
+    "reload": "copy is read again as it is stored now",
+    "version": "the version copy holds is",
+    "stored": "the stored record of copy has this name and version, or is gone",
+    "stepSave": "saves copy as one undo step (a handler run that changed it)",
+    "undo": "takes back the last undo step",
+    "redo": "does the last undone step again"
+  },
+  "cases": [
+    {
+      "name": "a new record starts at version 1, and each save adds one",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "version", "copy": "a", "is": 1 },
+        { "do": "set", "copy": "a", "name": "second" },
+        { "do": "save", "copy": "a" },
+        { "do": "version", "copy": "a", "is": 2 },
+        { "do": "save", "copy": "a" },
+        { "do": "stored", "copy": "a", "name": "second", "version": 3 }
+      ]
+    },
+    {
+      "name": "the second of two copies is refused and changes nothing",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "save", "copy": "a" },
+        { "do": "set", "copy": "b", "name": "Ben" },
+        { "do": "save", "copy": "b", "expect": "refused" },
+        { "do": "version", "copy": "b", "is": 1 },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 2 }
+      ]
+    },
+    {
+      "name": "a save anyway writes regardless, and adds one",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "save", "copy": "a" },
+        { "do": "set", "copy": "b", "name": "Ben" },
+        { "do": "saveAnyway", "copy": "b" },
+        { "do": "version", "copy": "b", "is": 3 },
+        { "do": "stored", "copy": "a", "name": "Ben", "version": 3 }
+      ]
+    },
+    {
+      "name": "reload reads the change, after which the save goes",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "save", "copy": "a" },
+        { "do": "reload", "copy": "b" },
+        { "do": "stored", "copy": "b", "name": "Anna", "version": 2 },
+        { "do": "version", "copy": "b", "is": 2 },
+        { "do": "set", "copy": "b", "name": "Ben" },
+        { "do": "save", "copy": "b" },
+        { "do": "stored", "copy": "a", "name": "Ben", "version": 3 }
+      ]
+    },
+    {
+      "name": "a delete of a record changed since is refused; with the version read it goes",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "save", "copy": "a" },
+        { "do": "delete", "copy": "b", "expect": "refused" },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 2 },
+        { "do": "delete", "copy": "a" },
+        { "do": "stored", "copy": "a", "gone": true }
+      ]
+    },
+    {
+      "name": "a save of a record deleted since is refused as not found",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "delete", "copy": "a" },
+        { "do": "save", "copy": "b", "expect": "notFound" },
+        { "do": "reload", "copy": "b", "expect": "notFound" }
+      ]
+    },
+    {
+      "name": "undo compares the version: a save since with the same values still refuses it",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "stepSave", "copy": "a" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "save", "copy": "b" },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 3 },
+        { "do": "undo", "expect": "refused" },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 3 }
+      ]
+    },
+    {
+      "name": "undo and redo add one each, so a copy read before them is refused",
+      "steps": [
+        { "do": "insert", "copy": "a", "name": "first" },
+        { "do": "set", "copy": "a", "name": "Anna" },
+        { "do": "stepSave", "copy": "a" },
+        { "do": "read", "copy": "b", "of": "a" },
+        { "do": "undo" },
+        { "do": "stored", "copy": "a", "name": "first", "version": 3 },
+        { "do": "redo" },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 4 },
+        { "do": "undo" },
+        { "do": "stored", "copy": "a", "name": "first", "version": 5 },
+        { "do": "set", "copy": "b", "name": "Ben" },
+        { "do": "save", "copy": "b", "expect": "refused" }
+      ]
+    }
+  ],
+  "file": {
+    "about": "A file source: the file is the unit. A save is refused when the file changed on disk since it was read or last written (its size and modification time differ, and so do its bytes); the same bytes written again are no change. Every step is a save of the first record with the name given.",
+    "format": "csv",
+    "fields": [{ "name": "name", "kind": "text" }],
+    "text": "name\nfirst\n",
+    "steps": [
+      { "do": "save", "name": "one" },
+      { "do": "rewrite" },
+      { "do": "save", "name": "two" },
+      { "do": "write", "text": "name\nsomeone else\n" },
+      { "do": "save", "name": "three", "expect": "refused" },
+      { "do": "contents", "text": "name\nsomeone else\n" }
+    ],
+    "stepsHelp": {
+      "save": "sets the name of the record read first and saves it",
+      "rewrite": "writes the file's own bytes to it again (its modification time changes, its bytes do not)",
+      "write": "another program writes this text to the file",
+      "contents": "the file holds this text"
+    }
+  }
+}

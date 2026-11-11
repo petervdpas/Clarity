@@ -29,7 +29,7 @@ fn undo_and_redo_are_built_in_targets() {
 /// Why an undo was refused is a Clarity word, which every project with windows translates.
 #[test]
 fn why_an_undo_was_refused_is_a_clarity_word() {
-    assert_eq!(clarity_spec::translations::UNDO_KEYS, [("undoChangedSince", "This was changed since, so it cannot be taken back")]);
+    assert_eq!(clarity_spec::translations::UNDO_KEYS.map(|(k, _)| k), ["undoChangedSince", "undoTooOld", "savedSince"]);
     let project = load_converted([("m.clarity", APP)]);
     let keys: Vec<String> = clarity_spec::translations::keys(&project).into_iter().map(|k| k.key).collect();
     assert!(keys.contains(&"undoChangedSince".to_string()), "{keys:?}");

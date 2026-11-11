@@ -16,6 +16,8 @@ translation nl
     cancel "Annuleren"
     dismiss "Sluiten"
     undoChangedSince "Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt"
+    undoTooOld "Dit is te lang geleden gedaan om terug te nemen"
+    savedSince "Iemand anders heeft dit record gewijzigd sinds je het opende. Laad het opnieuw om de wijziging te zien."
     calculatorItem "Rekenmachine"
     preferencesItem "Voorkeuren"
     quitItem "Afsluiten"

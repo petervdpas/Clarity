@@ -21,4 +21,10 @@ column: string | null,
  * `store photos`: an image field keeps its pictures as files in this
  * file store of the project settings, not in the database.
  */
-store: string | null, };
+store: string | null, 
+/**
+ * `hashed`, on a text field of a stored entity: assigning text stores
+ * its hash (the hash of the sign-in strategy that names the field,
+ * `Signin::hash_of`); code never reads it and no part shows it.
+ */
+hashed: boolean, };

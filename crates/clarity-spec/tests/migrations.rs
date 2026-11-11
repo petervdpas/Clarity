@@ -28,15 +28,18 @@ entity Order
 const FIRST: &str = "// The first step.
 migration \"Customers and orders\"
     add entity Customer
+        version
         name: text(80)
         email: email, unique
         kind: Kind, default Private
         vatNumber: text(14)
     add entity Order
+        version
         number: text(12), unique
         customer: ref Customer
         total: money
     add entity Note
+        version
         text: text
 ";
 
@@ -146,7 +149,7 @@ fn a_project_in_step_with_its_migrations_has_nothing_pending() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(migrate::pending(&project, "main", &[]).is_empty());
     assert!(first.starts_with("// Written by Clarity"), "{first}");
-    assert!(first.contains("\nmigration \"Customers and orders\"\n    add entity Customer\n        name: text(80)\n"), "{first}");
+    assert!(first.contains("\nmigration \"Customers and orders\"\n    add entity Customer\n        version\n        name: text(80)\n"), "{first}");
 }
 
 #[test]
@@ -231,7 +234,7 @@ fn a_written_step_is_the_next_file_in_the_folder() {
 /// that becomes a duration under another name is proposed as a rename.
 #[test]
 fn an_integer_that_becomes_a_duration_is_a_rename() {
-    let first = "migration \"Tracks\"\n    add entity Track\n        title: text(80)\n        seconds: integer\n";
+    let first = "migration \"Tracks\"\n    add entity Track\n        version\n        title: text(80)\n        seconds: integer\n";
     let now = "module music\n\nentity Track\n    title: text(80)\n    length: duration\n";
     let project = load_with_migrations([("music.clarity", now)], [("0001.clarity", first)]);
     let proposed = migrate::proposed_renames(&project, "main");

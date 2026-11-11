@@ -25,7 +25,7 @@ typedef struct {
 } ClarityRequired;
 
 /// How the runtime reads and writes the records of one entity.
-typedef struct {
+typedef struct ClarityEntity {
     /// The entity's name, as Clarity writes it: `Customer`.
     const char* name;
     const char* table;
@@ -55,6 +55,17 @@ typedef struct {
     /// The required fields a save checks, in the entity's order; NULL when it has none.
     const ClarityRequired* required;
     size_t required_count;
+    /// The column of the record's version (conformance/versions.json):
+    /// `row_version` for an owned entity, the column an external entity
+    /// names, or NULL for an entity whose saves are not checked; and where
+    /// its `int64_t` is in the record (0 for a new record).
+    const char* version;
+    size_t version_at;
+    /// Refuses a save or delete of a record someone saved since in the
+    /// entity's own words (clarity_refuse, then false), about `current`, the
+    /// record as it is stored now, with `db` to load what its fields refer
+    /// to (`{current.changedBy.name}`); NULL for Clarity's savedSince.
+    bool (*saved_since)(ClarityDb* db, const void* current);
 } ClarityEntity;
 
 /// Whether a record with these columns and values has a value in every
@@ -102,6 +113,8 @@ void clarity_db_close(ClarityDb* db);
 
 /// Runs SQL without parameters in the database of `source`, for tools and tests.
 bool clarity_db_batch(ClarityDb* db, const char* source, const char* sql);
+/// The rows SQL reads in the database of `source`, for tools and tests.
+bool clarity_db_rows(ClarityDb* db, const char* source, const char* sql, const ClarityValues* params, ClarityRows* out);
 bool clarity_db_dialect(ClarityDb* db, const char* source, ClarityDialect* out);
 /// The number of migration steps applied so far to the default database.
 bool clarity_schema_version(ClarityDb* db, int* out);
@@ -109,25 +122,50 @@ bool clarity_schema_version(ClarityDb* db, int* out);
 /// own; `applied` (may be NULL) gets how many ran.
 bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps, size_t count, int* applied);
 
+/// How many undo steps are kept: the oldest goes when a newer one comes, so
+/// a long session does not keep every row it ever changed.
+#define CLARITY_UNDO_STEPS 100
+
+/// Why a save or a delete is refused: someone saved the record since it was
+/// read (conformance/versions.json), in Clarity's own words with their English.
+ClarityText* clarity_saved_since(void);
+/// Why an undo is refused: what it would take back was changed since.
+ClarityText* clarity_undo_changed_since(void);
+/// Why an undo is refused when its step is older than the ones kept.
+ClarityText* clarity_undo_too_old(void);
+
 /// Inserts a new record (and gives it its id) or updates a stored one,
-/// with the entity's data events around it.
+/// with the entity's data events around it. A record someone saved since
+/// it was read is refused (clarity_saved_since), changing nothing.
 bool clarity_save(ClarityDb* db, const ClarityEntity* entity, void* record);
-/// Removes a stored record, with the entity's data events around it.
+/// Saves a record regardless of its version (`save ... anyway`): what
+/// someone saved since is written over, on purpose.
+bool clarity_save_anyway(ClarityDb* db, const ClarityEntity* entity, void* record);
+/// Reads a record again as it is stored now, with its version.
+bool clarity_reload(ClarityDb* db, const ClarityEntity* entity, void* record);
+/// Removes a stored record, with the entity's data events around it; one
+/// someone saved since it was read is refused.
 bool clarity_delete(ClarityDb* db, const ClarityEntity* entity, const void* record);
 /// Runs a handler, `run(context)`, as one step, which undo takes back whole
 /// (DESIGN 5.29): its id, when it changed anything, is clarity_last_step.
-/// When it fails, what it changed is put back at once, so it leaves
-/// nothing behind. A step inside a step is part of it. Without a database
-/// it just runs.
+/// Everything it changes is one transaction in each source it changes:
+/// kept when it ends, left whole when it fails, so it leaves nothing
+/// behind. A step inside a step is part of it. Without a database it just
+/// runs. The last CLARITY_UNDO_STEPS are kept.
 bool clarity_step(ClarityDb* db, bool (*run)(void* context), void* context);
 /// The id of the last step a handler made, to undo it later by; 0 before any.
 int64_t clarity_last_step(const ClarityDb* db);
 /// Takes back step `id`: every row it changed as it was, with its own id.
 /// Refused, changing nothing, when one of its rows changed since. `done`
-/// (may be NULL) is false when there is no such step, or it is undone already.
+/// (may be NULL) is false when it is undone already.
 bool clarity_undo(ClarityDb* db, int64_t id, bool* done);
 /// Does step `id` again after an undo; `done` is false when it is not undone.
 bool clarity_redo(ClarityDb* db, int64_t id, bool* done);
+/// Takes back (`back`) or does again the steps of one edit, in the order
+/// given, as one: all of them or, refused, none. A step older than the
+/// ones kept is refused (clarity_undo_too_old); `done` is false when none
+/// of them is in the state to be replayed.
+bool clarity_replay_steps(ClarityDb* db, const int64_t* ids, size_t count, bool back, bool* done);
 /// The records a query finds, in its order, as an array in the scratch arena.
 bool clarity_find(ClarityDb* db, const ClarityEntity* entity, const ClarityQuery* query, void** items, size_t* count);
 bool clarity_get(ClarityDb* db, const ClarityEntity* entity, int64_t id, void* record);

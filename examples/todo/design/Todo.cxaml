@@ -8,6 +8,7 @@
       <Item caption="@languageItem" name="languageItem" opens="language" />
       <Item caption="@themeItem" name="themeItem" opens="theme" />
       <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
+      <Item caption="@signOutItem" name="signOutItem" opens="signout" />
       <Item kind="separator" />
       <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
     </Item>

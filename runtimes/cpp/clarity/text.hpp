@@ -54,6 +54,9 @@ public:
     static Text plain(const std::string& text);
     /// The text of key `key`, with its value in the person's language.
     static Text key(const std::string& key);
+    /// Clarity's own words by key with their English, shown where no
+    /// translation has the key; the wire carries both.
+    static Text keyed(const std::string& key, const std::string& english);
 
     /// The slot at `path` gets its value.
     Text with(const std::string& path, Slot value) const;

@@ -260,7 +260,7 @@ public sealed partial class Db : IDisposable
         catch
         {
             at.Depth--;
-            if (outer)
+            if (at.Depth == 0)
             {
                 // The error that made it roll back is the one to report.
                 try
@@ -274,8 +274,25 @@ public sealed partial class Db : IDisposable
             throw;
         }
         at.Depth--;
-        if (outer)
-            at.Driver.Batch(at.Driver.Dialect.Commit());
+        // A step that holds the transaction ends it itself; a commit that fails leaves nothing half kept.
+        if (at.Depth == 0)
+        {
+            try
+            {
+                at.Driver.Batch(at.Driver.Dialect.Commit());
+            }
+            catch
+            {
+                try
+                {
+                    at.Driver.Batch(at.Driver.Dialect.Rollback());
+                }
+                catch (ClarityException)
+                {
+                }
+                throw;
+            }
+        }
     }
 
     /// <summary>Runs SQL without parameters in the database of <paramref name="source"/>, for tools and tests.</summary>
@@ -304,35 +321,66 @@ public sealed partial class Db : IDisposable
     }
 
     /// <summary>
-    /// Inserts a new record (and gives it its id) or updates a stored one, with
-    /// the entity's data events around it.
+    /// Why a save or a delete is refused: someone saved the record since it was
+    /// read (conformance/versions.json), in Clarity's own words with their English.
     /// </summary>
-    public void Save<R>(R record) where R : IRecord<R>
+    public static Text SavedSinceText() =>
+        new("Someone else changed this record since you opened it. Reload it to see their change.") { Key = "savedSince" };
+
+    /// <summary>
+    /// Inserts a new record (and gives it its id) or updates a stored one, with
+    /// the entity's data events around it. A record someone saved since it was
+    /// read is refused (<see cref="SavedSinceText"/>), changing nothing.
+    /// </summary>
+    public void Save<R>(R record) where R : IRecord<R> => SaveWith(record, anyway: false);
+
+    /// <summary>
+    /// Saves a record regardless of its version (<c>save ... anyway</c>): what
+    /// someone saved since is written over, on purpose.
+    /// </summary>
+    public void SaveAnyway<R>(R record) where R : IRecord<R> => SaveWith(record, anyway: true);
+
+    /// <summary>The record as it is stored now, with its version: <c>reload</c>.</summary>
+    public R Reload<R>(R record) where R : IRecord<R> => Get<R>(record.Id);
+
+    void SaveWith<R>(R record, bool anyway) where R : IRecord<R>
     {
-        if (!R.HasEvents)
-        {
-            Write(record);
-            return;
-        }
-        var id = record.Id;
+        var (id, version) = (record.Id, record.Version);
         try
         {
-            Atomic(R.SourceName, () =>
-            {
-                record.BeforeSave(this);
-                Write(record);
-                record.AfterSave(this);
-            });
+            if (!R.HasEvents)
+                Write(record, anyway);
+            else
+                Atomic(R.SourceName, () =>
+                {
+                    record.BeforeSave(this);
+                    Write(record, anyway);
+                    record.AfterSave(this);
+                });
         }
         catch
         {
-            // Nothing was kept, so a new record is still new.
+            // Nothing was kept, so a new record is still new, at the version it was read with.
             record.Id = id;
+            record.Version = version;
             throw;
         }
     }
 
-    void Write<R>(R record) where R : IRecord<R>
+    /// <summary>The refusal of a save or delete of record <paramref name="id"/> someone saved since, in its entity's words about the record as stored now.</summary>
+    RefusedException SavedSince<R>(long id) where R : IRecord<R>
+    {
+        try
+        {
+            return new RefusedException(R.SavedSince(this, Get<R>(id)));
+        }
+        catch (ClarityException)
+        {
+            return new RefusedException(SavedSinceText());
+        }
+    }
+
+    void Write<R>(R record, bool anyway) where R : IRecord<R>
     {
         try
         {
@@ -343,17 +391,22 @@ public sealed partial class Db : IDisposable
             refused.Record = record;
             throw;
         }
+        Enlist(R.SourceName);
+        var secrets = SecretsBefore(R.SourceName, R.TableName, R.KeyColumn, record.Id);
         if (recording is null)
         {
-            WriteRow(record);
+            WriteRow(record, anyway);
+            SecretsSaved(R.SourceName, R.TableName, R.KeyColumn, record.Id, secrets);
             return;
         }
-        var before = record.Id == 0 ? null : Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id);
-        WriteRow(record);
-        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id, before, Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id)));
+        var (before, beforeVersion) = record.Id == 0 ? ((object?[]?)null, (long?)null) : State(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, R.VersionColumn, record.Id);
+        WriteRow(record, anyway);
+        SecretsSaved(R.SourceName, R.TableName, R.KeyColumn, record.Id, secrets);
+        var (after, afterVersion) = State(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, R.VersionColumn, record.Id);
+        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, R.VersionColumn, record.Id, before, after) { BeforeVersion = beforeVersion, AfterVersion = afterVersion });
     }
 
-    void WriteRow<R>(R record) where R : IRecord<R>
+    void WriteRow<R>(R record, bool anyway) where R : IRecord<R>
     {
         var values = SavedValues(record);
         var conn = Conn(R.SourceName);
@@ -366,8 +419,13 @@ public sealed partial class Db : IDisposable
             var kept = R.ColumnNames.Select((c, i) => (Column: c, Value: values[i]))
                 .Where(p => !(IsPicture(p.Column) && (p.Value is null || ReferenceEquals(p.Value, Sql.Kept))))
                 .ToList();
+            // A new record starts at version 1.
+            if (R.VersionColumn is { } column)
+                kept.Add((column, 1L));
             var insert = d.Insert(R.TableName, R.KeyColumn, kept.Select(p => p.Column).ToList());
             record.Id = Unfit(() => conn.Insert(insert, kept.Select(p => p.Value).ToArray()));
+            if (R.VersionColumn is not null)
+                record.Version = 1;
             return;
         }
         // A kept picture stays as it is; an emptied one is set to NULL as text.
@@ -386,18 +444,36 @@ public sealed partial class Db : IDisposable
             parameters.Add(values[i]);
             sets.Add($"{d.Quote(column)} = {d.Mark(parameters.Count)}");
         }
+        // Each save adds one to the version; a checked one writes only over the version it read.
+        var version = R.VersionColumn;
+        if (version is not null)
+            sets.Add($"{d.Quote(version)} = {d.Quote(version)} + 1");
         if (sets.Count == 0)
         {
             if (!Exists<R>(conn, record.Id))
                 throw new NotFoundException(R.TableName, record.Id);
             return;
         }
-        var sql = $"UPDATE {d.Quote(R.TableName)} SET {string.Join(", ", sets)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(parameters.Count + 1)}";
         parameters.Add(record.Id);
+        var sql = $"UPDATE {d.Quote(R.TableName)} SET {string.Join(", ", sets)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(parameters.Count)}";
+        var checkedVersion = version is not null && !anyway;
+        if (checkedVersion)
+        {
+            parameters.Add(record.Version);
+            sql += $" AND {d.Quote(version!)} = {d.Mark(parameters.Count)}";
+        }
         // MySQL counts only the rows whose values changed, so an update that
-        // changes nothing is told apart from a missing record.
-        if (Unfit(() => conn.Execute(sql, parameters)) == 0 && !Exists<R>(conn, record.Id))
-            throw new NotFoundException(R.TableName, record.Id);
+        // changes nothing is told apart from a missing record (one with a
+        // version always changes).
+        if (Unfit(() => conn.Execute(sql, parameters)) == 0)
+        {
+            if (!Exists<R>(conn, record.Id))
+                throw new NotFoundException(R.TableName, record.Id);
+            if (checkedVersion)
+                throw SavedSince<R>(record.Id);
+        }
+        if (version is not null)
+            record.Version = anyway ? State(R.SourceName, R.TableName, R.KeyColumn, [], version, record.Id).Version ?? 0 : record.Version + 1;
     }
 
     /// <summary>A failed save: a reference to a record that is not there reads better than the database's own words.</summary>
@@ -433,28 +509,40 @@ public sealed partial class Db : IDisposable
 
     void Remove<R>(R record) where R : IRecord<R>
     {
+        Enlist(R.SourceName);
         if (recording is null)
         {
             RemoveRow(record);
             return;
         }
-        var before = Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id);
+        var (before, beforeVersion) = State(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, R.VersionColumn, record.Id);
         RemoveRow(record);
-        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id, before, null));
+        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, R.VersionColumn, record.Id, before, null) { BeforeVersion = beforeVersion });
     }
 
     void RemoveRow<R>(R record) where R : IRecord<R>
     {
         var conn = Conn(R.SourceName);
         var d = conn.Dialect;
+        var sql = $"DELETE FROM {d.Quote(R.TableName)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(1)}";
+        List<object?> parameters = [record.Id];
+        // A record someone saved since it was read is not deleted.
+        if (R.VersionColumn is { } version)
+        {
+            sql += $" AND {d.Quote(version)} = {d.Mark(2)}";
+            parameters.Add(record.Version);
+        }
+        int changed;
         try
         {
-            conn.Execute($"DELETE FROM {d.Quote(R.TableName)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(1)}", [record.Id]);
+            changed = conn.Execute(sql, parameters);
         }
         catch (ReferenceFailure)
         {
             throw new InUseException(R.TableName, record.Id);
         }
+        if (changed == 0 && R.VersionColumn is not null && Exists<R>(conn, record.Id))
+            throw SavedSince<R>(record.Id);
     }
 
     /// <summary>The records a query finds, in its order.</summary>
@@ -480,14 +568,26 @@ public sealed partial class Db : IDisposable
     public R Load<R>(long? id) where R : IRecord<R> =>
         id is { } n ? Get<R>(n) : throw new NotFoundException(R.TableName, null);
 
-    /// <summary>The key and the stored columns of a record, for SELECT.</summary>
+    /// <summary>The key, the stored columns and the version of a record, for SELECT.</summary>
     static string SelectColumns<R>(Dialect d) where R : IRecord<R> =>
         string.Join(", ", R.ColumnNames.Prepend(R.KeyColumn).Select(c =>
             // Whether there is a picture, not the picture.
-            R.Pictures.Any(p => p.Column == c && p.Store is null) ? Pictures.Presence(d, c) : d.Quote(c)));
+            R.Pictures.Any(p => p.Column == c && p.Store is null) ? Pictures.Presence(d, c) : d.Quote(c))
+            .Concat(R.VersionColumn is { } version ? [d.Quote(version)] : []));
 
     static List<R> Records<R>(IDriver conn, string sql, IReadOnlyList<object?> parameters) where R : IRecord<R> =>
-        conn.Rows(sql, parameters).Select(row => R.FromValues(Sql.GetInteger(R.KeyColumn, row[0]), row[1..])).ToList();
+        conn.Rows(sql, parameters).Select(row =>
+        {
+            // The version, read last.
+            if (R.VersionColumn is null)
+                return R.FromValues(Sql.GetInteger(R.KeyColumn, row[0]), row[1..]);
+            var record = R.FromValues(Sql.GetInteger(R.KeyColumn, row[0]), row[1..^1]);
+            record.Version = Sql.GetInteger("version", row[^1]);
+            return record;
+        }).ToList();
+
+    /// <summary>The rows SQL reads in the database of <paramref name="source"/>, for tools and tests.</summary>
+    public List<object?[]> Rows(string source, string sql, IReadOnlyList<object?> parameters) => [.. Conn(source).Rows(sql, parameters)];
 
     static bool Exists<R>(IDriver conn, long id) where R : IRecord<R>
     {

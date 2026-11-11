@@ -56,10 +56,20 @@ fn param(p: &ParamSpec) -> String {
     )
 }
 
-fn command(c: &CommandSpec) -> String {
+/// The options a command takes for signing in, when people sign in on the
+/// command line (clarity::cli_signin_of reads them).
+const SIGNIN_OPTIONS: [&str; 2] = ["user", "token"];
+
+fn command(c: &CommandSpec, signs_in: bool) -> String {
     let line: Vec<String> = c.line.iter().map(|w| string(w)).collect();
     let arguments: Vec<String> = c.arguments.iter().map(param).collect();
-    let options: Vec<String> = c.options.iter().map(param).collect();
+    let mut options: Vec<String> = c.options.iter().map(param).collect();
+    // After the command's own, so their values stay where the command reads them.
+    if signs_in {
+        for name in SIGNIN_OPTIONS.iter().filter(|n| !c.options.iter().any(|o| o.name == **n)) {
+            options.push(format!("clarity::cli::Param{{{}, clarity::cli::Kind::text, {{}}, std::nullopt, std::nullopt, std::nullopt, false, std::nullopt}}", string(name)));
+        }
+    }
     format!("            clarity::cli::Command{{{{{}}}, {}, {{{}}}, {{{}}}}},\n", line.join(", "), said(&c.help), arguments.join(", "), options.join(", "))
 }
 
@@ -117,18 +127,19 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, settings, &space);
+    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, settings, &space) + &super::auth_cmake_lines(project, &space);
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the service and the desktop: no window.
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
+    let auth_files = super::auth_files(project).chain(super::library_folder_files(project, settings, false));
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_cpp) = model::emit(project);
-    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.hpp\"\n#include \"formats/file_source.hpp\"\n" } else { "" }), &records_h)));
+    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}{}{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.hpp\"\n#include \"formats/file_source.hpp\"\n" } else { "" }, if crate::carries_auth(project) { "#include \"auth/auth.hpp\"\n" } else { "" }), &records_h)));
     files.push(text("src/records.cpp", namespaced(&space, "#include \"records.hpp\"\n", &records_cpp)));
 
     let mut errors = Vec::new();
@@ -210,7 +221,15 @@ fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(S
         .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
-    let listed: String = commands.iter().map(command).collect();
+    // When people sign in on the command line, a command signs in before it runs.
+    let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
+    let listed: String = commands.iter().map(|c| command(c, signs_in)).collect();
+    let signin = if signs_in {
+        "            // The person signs in first (--token, --user with the password typed, or the computer's account).\n            clarity::cli::Console terminal;\n            clarity::cli_signin(db, clarity::cli_signin_of(std::vector<std::string>(argv + 1, argv + argc)), terminal, clarity::Text::keyed(\"cliPassword\", \"Password\").show() + \": \");\n"
+    } else {
+        ""
+    };
+    let add_signin = if super::signin_source(project, settings).is_some() { format!("        db.add_signin({space}::signin_source);\n") } else { String::new() };
     let kept = project.files.iter().flat_map(|f| &f.entities).find(|e| e.settings);
     let (kept_fn, start, keep, settings_arg) = match kept {
         Some(entity) => {
@@ -258,7 +277,7 @@ const std::vector<clarity::Source> databases{{{sources}}};
 /// The folder of each file store.
 const std::vector<std::pair<std::string, std::string>> stores{{{stores}}};
 
-/// The texts the program shows, in every language the project has.
+{signin_source}/// The texts the program shows, in every language the project has.
 const std::string& texts() {{
     static const std::string text = [] {{
 {texts}    }}();
@@ -288,8 +307,8 @@ clarity::cli::Program program() {{
 {start}        clarity::Db db({space}::databases);
         for (const auto& s : {space}::sources()) db.migrate_source(s.source, s.steps);
         for (const auto& [name, at] : {space}::stores) db.add_store(name, at);
-{folder_stores}        const int code = clarity::cli::run({space}::program(), argc, argv, [&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
-            switch (command) {{
+{folder_stores}{add_signin}        const int code = clarity::cli::run({space}::program(), argc, argv, [&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
+{signin}            switch (command) {{
 {dispatch}            }}
             return 2;
         }});
@@ -308,5 +327,6 @@ clarity::cli::Program program() {{
         help = said(&crate::commands::program_help(project)),
         languages = languages.join(", "),
         base = string(&base),
+        signin_source = super::signin_source(project, settings).map(|s| format!("{}\n", s.trim_start())).unwrap_or_default(),
     )
 }

@@ -3,12 +3,14 @@
 
 #include "service/serve.h"
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include "clarity/people.h"
 #include "clarity/splash.h"
 #include "clarity/text.h"
 
@@ -32,13 +34,18 @@ typedef int serve_socket;
 /// The largest request the server reads: a command with a file in it.
 #define LARGEST_REQUEST (64u * 1024u * 1024u)
 
-static const char* reply(const char* status, const char* type, const char* body, size_t body_length, size_t* length) {
-    const char* head = clarity_format("HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", status, type, body_length);
+/// A reply with `more` header lines (each ending in CRLF, "" for none) beside the fixed ones.
+static const char* reply_with(const char* status, const char* type, const char* more, const char* body, size_t body_length, size_t* length) {
+    const char* head = clarity_format("HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nCache-Control: no-cache\r\nConnection: close\r\n%s\r\n", status, type, body_length, more);
     ClarityBuffer out = {0};
     clarity_buffer_add_n(&out, head, strlen(head));
     clarity_buffer_add_n(&out, body, body_length);
     *length = out.length;
     return clarity_buffer_text(&out);
+}
+
+static const char* reply(const char* status, const char* type, const char* body, size_t body_length, size_t* length) {
+    return reply_with(status, type, "", body, body_length, length);
 }
 
 static bool ends_with(const char* text, const char* end) {
@@ -315,17 +322,41 @@ static cJSON* answered_as(ClarityServer* server, const char* browser, const cJSO
     return out;
 }
 
+/// The command of page `browser` as the person of its session (people.h):
+/// while people sign in on the web, a call without a session reaches only
+/// the sign-in window and its commands, the rest refused with notAllowed.
+/// `set_cookie` gets the Set-Cookie value when the call signed in or out.
+static cJSON* answered_by(ClarityServer* server, const char* browser, const cJSON* sent, const char* command, cJSON* args, const char* cookie, const char* address, const char** set_cookie) {
+    *set_cookie = NULL;
+    if (!clarity_people()) return answered_as(server, browser, sent, command, args);
+    ClarityCall call;
+    clarity_call_open(&call, cookie, address);
+    const char* page = clarity_people_web_page();
+    if (page && call.me <= 0 && !clarity_open_without_session(command, args, page)) {
+        cJSON* out = cJSON_CreateObject();
+        cJSON_AddItemToObject(out, "error", clarity_text_json(clarity_not_allowed()));
+        return out;
+    }
+    clarity_call_enter(&call);
+    cJSON* out = answered_as(server, browser, sent, command, args);
+    clarity_call_enter(NULL);
+    const cJSON* error = cJSON_GetObjectItem(out, "error");
+    *set_cookie = clarity_call_cookie(&call, !out || (error && !cJSON_IsNull(error)));
+    return out;
+}
+
 /// A command's answer: none reads as the service's error for a command it
 /// does not know, which the library takes as its default.
-static const char* invoked(ClarityServer* server, const char* body, size_t body_length, size_t* length) {
+static const char* invoked(ClarityServer* server, const char* body, size_t body_length, const char* cookie, const char* address, size_t* length) {
     cJSON* sent = cJSON_ParseWithLength(body, body_length);
     const cJSON* command = cJSON_GetObjectItem(sent, "command");
     cJSON* args = cJSON_GetObjectItem(sent, "args");
     cJSON* answer;
+    const char* set_cookie = NULL;
     if (cJSON_IsString(command)) {
         // The page that asks (one id per tab) and its person's settings as it keeps them.
         const cJSON* browser = cJSON_GetObjectItem(sent, "browser");
-        answer = answered_as(server, cJSON_IsString(browser) ? browser->valuestring : "", cJSON_GetObjectItem(sent, "settings"), command->valuestring, cJSON_IsObject(args) ? args : cJSON_CreateObject());
+        answer = answered_by(server, cJSON_IsString(browser) ? browser->valuestring : "", cJSON_GetObjectItem(sent, "settings"), command->valuestring, cJSON_IsObject(args) ? args : cJSON_CreateObject(), cookie, address, &set_cookie);
         if (!answer) {
             answer = cJSON_CreateObject();
             cJSON_AddStringToObject(answer, "error", clarity_format("there is no command %s", command->valuestring));
@@ -336,10 +367,32 @@ static const char* invoked(ClarityServer* server, const char* body, size_t body_
     }
     // cJSON takes its memory from the scratch arena, like the rest of the command.
     const char* printed = cJSON_PrintUnformatted(answer);
-    return reply("200 OK", "application/json", printed, strlen(printed), length);
+    const char* more = set_cookie ? clarity_format("Set-Cookie: %s\r\n", set_cookie) : "";
+    return reply_with("200 OK", "application/json", more, printed, strlen(printed), length);
+}
+
+/// The value of header `name` (lower case) among the request's headers, up to `end`; NULL when it has none.
+static const char* header_of(const char* request, const char* end, const char* name) {
+    size_t length = strlen(name);
+    for (const char* line = strstr(request, "\r\n"); line && line < end; line = strstr(line + 2, "\r\n")) {
+        const char* at = line + 2;
+        if (at >= end) break;
+        bool same = true;
+        for (size_t i = 0; i < length && same; i++) same = at[i] && (char)tolower((unsigned char)at[i]) == name[i];
+        if (!same || at[length] != ':') continue;
+        const char* value = at + length + 1;
+        while (*value == ' ' || *value == '\t') value++;
+        const char* stop = strstr(value, "\r\n");
+        return clarity_format("%.*s", (int)((stop ? stop : end) - value), value);
+    }
+    return NULL;
 }
 
 const char* clarity_serve_answer(ClarityServer* server, const char* request, size_t request_length, size_t* length) {
+    return clarity_serve_answer_from(server, request, request_length, "", length);
+}
+
+const char* clarity_serve_answer_from(ClarityServer* server, const char* request, size_t request_length, const char* address, size_t* length) {
     const char* end = strstr(request, "\r\n\r\n");
     char method[8] = {0}, target[1024] = {0};
     if (!end || sscanf(request, "%7s %1023s", method, target) != 2) return reply("400 Bad Request", "text/plain", "", 0, length);
@@ -349,7 +402,7 @@ const char* clarity_serve_answer(ClarityServer* server, const char* request, siz
             const char* body = "send a command with POST";
             return reply("405 Method Not Allowed", "text/plain", body, strlen(body), length);
         }
-        return invoked(server, end + 4, request_length - (size_t)(end + 4 - request), length);
+        return invoked(server, end + 4, request_length - (size_t)(end + 4 - request), header_of(request, end, "cookie"), address ? address : "", length);
     }
     if (strcmp(method, "GET") == 0) {
         // The browser files by their paths below browser/; the page at /.
@@ -411,13 +464,22 @@ typedef struct {
     serve_socket client;
 } Connection;
 
+/// Where a client connects from: its address as digits, "" when unknown.
+static const char* peer_of(serve_socket client) {
+    struct sockaddr_storage peer;
+    socklen_t size = sizeof peer;
+    char host[64] = "";
+    if (getpeername(client, (struct sockaddr*)&peer, &size) != 0 || getnameinfo((struct sockaddr*)&peer, size, host, sizeof host, NULL, 0, NI_NUMERICHOST) != 0) return "";
+    return clarity_format("%s", host);
+}
+
 /// Reads the request, sends the answer, closes and frees the connection.
 static void answer_one(Connection* connection) {
     size_t got = 0;
     char* request = read_request(connection->client, &got);
     if (request) {
         size_t length = 0;
-        const char* answer = clarity_serve_answer(connection->server, request, got, &length);
+        const char* answer = clarity_serve_answer_from(connection->server, request, got, peer_of(connection->client), &length);
         send_all(connection->client, answer, length);
         free(request);
     }

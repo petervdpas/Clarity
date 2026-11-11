@@ -136,3 +136,73 @@ public sealed class FileSourceTests
         }
     }
 }
+
+sealed record VersionLine : IRecord<VersionLine>
+{
+    public static string SourceName => "lines";
+    public static string TableName => "line";
+    public static IReadOnlyList<string> ColumnNames { get; } = ["name"];
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public object?[] ToValues() => [Name];
+    public static VersionLine FromValues(long id, object?[] values) => new() { Id = id, Name = Sql.GetText("name", values[0]) };
+}
+
+/// <summary>A file source refuses a save when its file changed on disk since it was read (conformance/versions.json, its file case).</summary>
+public sealed class FileVersionTests
+{
+    static System.Text.Json.JsonElement Versions() =>
+        System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "versions.json"))).RootElement;
+
+    [Fact]
+    public void A_file_changed_on_disk_refuses_the_save()
+    {
+        Sqlite.Use();
+        var file = Versions();
+        var source = file.GetProperty("file");
+        var refusal = file.GetProperty("refusal");
+        var folder = Directory.CreateTempSubdirectory("clarity-versions-");
+        try
+        {
+            var path = Path.Combine(folder.FullName, "lines.csv");
+            File.WriteAllText(path, source.GetProperty("text").GetString());
+            using var db = Db.Connect();
+            db.AddFile(new FileSource("lines", source.GetProperty("format").GetString()!, path, "", "line", "id", source.GetProperty("fields").GetRawText(), Readonly: false));
+            var first = db.All<VersionLine>()[0];
+            foreach (var step in source.GetProperty("steps").EnumerateArray())
+            {
+                switch (step.GetProperty("do").GetString())
+                {
+                    case "save":
+                        first.Name = step.GetProperty("name").GetString()!;
+                        var refused = step.TryGetProperty("expect", out var e) && e.GetString() == "refused";
+                        if (refused)
+                        {
+                            var said = Assert.Throws<RefusedException>(() => db.Save(first));
+                            Assert.Equal(refusal.GetProperty("key").GetString(), said.Text.Key);
+                            Assert.Equal(refusal.GetProperty("english").GetString(), said.Text.Template);
+                        }
+                        else
+                            db.Save(first);
+                        break;
+                    case "rewrite":
+                        var bytes = File.ReadAllBytes(path);
+                        // A later modification time, as a program writing the same bytes gives.
+                        Thread.Sleep(20);
+                        File.WriteAllBytes(path, bytes);
+                        break;
+                    case "write":
+                        File.WriteAllText(path, step.GetProperty("text").GetString());
+                        break;
+                    case "contents":
+                        Assert.Equal(step.GetProperty("text").GetString(), File.ReadAllText(path));
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+}

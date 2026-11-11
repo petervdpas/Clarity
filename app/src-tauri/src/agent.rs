@@ -376,13 +376,21 @@ pub struct AgentEnded {
     pub sign_in: bool,
 }
 
-/// The model of a connection: its kind, address, model, key and length limit.
-fn model_of(app: &AppHandle, connection: &str) -> Result<clarity_agent::anthropic::Anthropic, String> {
+/// The model of a connection: its kind, address, model, key and length
+/// limit. None when its Microsoft sign-in is missing (a `foundry` connection).
+fn model_of(app: &AppHandle, connection: &str) -> Result<Option<clarity_agent::anthropic::Anthropic>, String> {
     let vault = app.state::<super::vault::VaultState>();
     let field = |key: &str| super::vault::resolve(&vault, connection, key);
+    let max_tokens = field("maxTokens")?.trim().parse().unwrap_or(16384);
+    // How long the model keeps the conversation cached: 5m (the default) or 1h.
+    let ttl = field("cacheTtl")?;
+    let cache = clarity_agent::anthropic::Cache::from_field(&ttl).ok_or_else(|| format!("the connection {connection} has cacheTtl {ttl}; use 5m or 1h"))?;
     let kind = field("kind")?;
+    if kind.trim().eq_ignore_ascii_case("foundry") {
+        return crate::foundry::model(app, connection, max_tokens, cache);
+    }
     if !kind.is_empty() && !kind.eq_ignore_ascii_case("anthropic") {
-        return Err(format!("the connection {connection} is of kind {kind}; Clarity's agent speaks to Anthropic models for now"));
+        return Err(format!("the connection {connection} is of kind {kind}; Clarity's agent speaks to Anthropic models and Microsoft Foundry for now"));
     }
     let api_key = field("apikey")?;
     if api_key.is_empty() {
@@ -393,11 +401,7 @@ fn model_of(app: &AppHandle, connection: &str) -> Result<clarity_agent::anthropi
     if model.is_empty() {
         return Err(format!("the connection {connection} names no model"));
     }
-    let max_tokens = field("maxTokens")?.trim().parse().unwrap_or(16384);
-    // How long the model keeps the conversation cached: 5m (the default) or 1h.
-    let ttl = field("cacheTtl")?;
-    let cache = clarity_agent::anthropic::Cache::from_field(&ttl).ok_or_else(|| format!("the connection {connection} has cacheTtl {ttl}; use 5m or 1h"))?;
-    clarity_agent::anthropic::Anthropic::new(&base_url, &api_key, &model, max_tokens, cache)
+    clarity_agent::anthropic::Anthropic::new(&base_url, clarity_agent::anthropic::Auth::Key(api_key), &model, max_tokens, cache).map(Some)
 }
 
 /// The budget of a turn when the connection names none: tokens at full
@@ -437,7 +441,12 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
         return crate::acp::send(app, connection, vendor, text);
     }
     // The key is read before the turn starts, so a locked vault asks for its password first.
-    let mut model = model_of(&app, &connection)?;
+    let Some(mut model) = model_of(&app, &connection)? else {
+        // A Microsoft sign-in is missing: the panel offers Sign in, as for Codex and Copilot.
+        let _ = app.emit(AGENT_EVENT, &Event::Failed { message: format!("The connection {connection} is not signed in to Microsoft. Click Sign in, then ask again.") });
+        let _ = app.emit("agent-ended", &AgentEnded { opened: None, shown: None, diagram: None, changed: false, sign_in: true });
+        return Ok(());
+    };
     let budget = {
         let vault = app.state::<super::vault::VaultState>();
         turn_budget(&super::vault::resolve(&vault, &connection, "turnBudget")?).map_err(|err| format!("the connection {connection}: {err}"))?

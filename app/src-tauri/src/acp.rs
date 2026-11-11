@@ -356,7 +356,11 @@ pub fn forget(app: &AppHandle) {
 /// browser opens. Run only when the person asks for it (the panel's Sign in).
 #[tauri::command]
 pub async fn agent_sign_in(connection: String, app: AppHandle) -> Result<String, String> {
-    let vendor = vendor_of(&app, &connection).ok_or_else(|| format!("the connection {connection} is not an outside agent's; its kind is codex or copilot"))?;
+    // A Foundry connection signs in with the person's Microsoft work account (docs/FOUNDRY-PLAN.md).
+    if crate::foundry::is_foundry(&app, &connection) {
+        return tauri::async_runtime::spawn_blocking(move || crate::foundry::sign_in(&app, &connection)).await.map_err(|err| err.to_string())?;
+    }
+    let vendor = vendor_of(&app, &connection).ok_or_else(|| format!("the connection {connection} is not an outside agent's; its kind is codex, copilot or foundry"))?;
     let from_settings = {
         let vault = app.state::<super::vault::VaultState>();
         super::vault::resolve(&vault, &connection, "command").ok().filter(|c| !c.trim().is_empty()).map(PathBuf::from)

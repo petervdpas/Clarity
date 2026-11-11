@@ -63,6 +63,7 @@ fn shop() -> Settings {
         out: "out".into(),
         keeps: Vec::new(),
         keys_editable: false,
+        signin: None,
         engines_interpreted: false,
         port: None,
         row_height: None,

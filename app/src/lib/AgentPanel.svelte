@@ -55,8 +55,8 @@
         <option value={agent.connection}>{agent.connection}</option>
       {/each}
     </select>
-    {#if agent.outside.includes(agent.connection) && (agent.needsSignIn || agent.signingIn)}
-      <button onclick={() => agent.signIn()} disabled={agent.running || agent.signingIn} title="Sign in to your own agent program the vendor's way: a browser opens">{agent.signingIn ? "Signing in..." : "Sign in"}</button>
+    {#if agent.needsSignIn || agent.signingIn}
+      <button onclick={() => agent.signIn()} disabled={agent.running || agent.signingIn} title="Sign in the way this connection does (the agent program's vendor, or Microsoft): a browser opens">{agent.signingIn ? "Signing in..." : "Sign in"}</button>
     {/if}
     <button onclick={() => agent.forget()} disabled={agent.running || agent.items.length === 0} title="Start a new conversation">New</button>
     <button onclick={() => agent.toggle()} title="Hide the agent">&times;</button>

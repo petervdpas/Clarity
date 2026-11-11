@@ -59,6 +59,27 @@ fn a_program_with_a_file_source_carries_formats_and_sqlite() {
     }
 }
 
+/// A C++ program without the desktop's files still fetches Clarity.UI's
+/// folder, where Clarity.Formats lies, when CLARITY_UI names none.
+#[test]
+fn a_cpp_program_without_the_desktop_fetches_the_folder_of_clarity_formats() {
+    for cli in [false, true] {
+        let cpp = files(Backend::Cpp, cli);
+        assert!(cpp.iter().any(|f| f.path == "clarity-runtime/clarity_ui.cmake"), "cli {cli}: clarity_ui.cmake");
+        assert!(cpp.iter().any(|f| f.path == "CMakeLists.txt" && f.text.contains("set(CLARITY_UI_VERSION ")), "cli {cli}: the version it fetches");
+    }
+}
+
+/// A C program without the desktop's files fetches it too.
+#[test]
+fn a_c_program_without_the_desktop_fetches_the_folder_of_clarity_formats() {
+    for cli in [false, true] {
+        let c = files(Backend::C, cli);
+        assert!(c.iter().any(|f| f.path == "clarity-runtime/clarity_ui.cmake"), "cli {cli}: clarity_ui.cmake");
+        assert!(c.iter().any(|f| f.path == "CMakeLists.txt" && f.text.contains("set(CLARITY_UI_VERSION ")), "cli {cli}: the version it fetches");
+    }
+}
+
 const FEED: &str = "module feed\nsource feed\n\nentity Order\n    number: text(20), label @orderNumber\n    customer: text(100), label @orderCustomer\n    lines: list<Line>, label @orderLines\n\nentity Line\n    order: ref Order, label @lineOrder\n    product: text(80), label @lineProduct\n\nmapping OrderFeed of Order from xml\n    at \"shop/orders/order\"\n    number at \"@number\"\n    customer at \"customer/name\"\n    lines of Line at \"lines/line\"\n        order is \"..\"\n        product at \"@product\"\n    check \"orders.xsd\"\n    indent true\n\nfunction ordersIn(text: text) -> list<Order>\n    return read list<Order> from text using OrderFeed\n\nfunction written(orders: list<Order>) -> text\n    return text of orders using OrderFeed\n";
 
 /// The options object a mapping becomes, as every stack passes it to

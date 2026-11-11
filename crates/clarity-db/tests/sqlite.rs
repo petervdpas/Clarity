@@ -95,8 +95,36 @@ fn imports_tables_as_entities_mapped_onto_them() {
         std::iter::empty(),
         &[SourceRef::sql("main"), SourceRef::sql("erp").external()],
     );
-    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    // Without a version column its saves are not checked, which is said rather than guessed.
+    let messages: Vec<(Severity, &str)> = project.diagnostics.iter().map(|d| (d.severity, d.message.as_str())).collect();
+    assert_eq!(
+        messages,
+        [
+            (Severity::Warning, "Customers has no version column, so saves of it are not checked: name its column with version \"Column\", or write version none"),
+            (Severity::Warning, "Invoice has no version column, so saves of it are not checked: name its column with version \"Column\", or write version none"),
+        ]
+    );
     assert!(drift(&project, "erp", &schema).is_empty(), "{:#?}", drift(&project, "erp", &schema));
+    std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+}
+
+/// A table Clarity made keeps its version in row_version: imported as the
+/// entity's version, not as a field; a version column that is gone is drift.
+#[test]
+fn a_version_column_of_clarity_is_imported_as_the_version() {
+    let path = legacy("version");
+    rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT NOT NULL DEFAULT '', row_version INTEGER NOT NULL DEFAULT 1);").unwrap();
+    let schema = read_sqlite(&path).unwrap();
+    let result = import(&schema, &["note".to_string()], "erp", "erp", &[]);
+    assert!(result.text.contains("\nentity Note\n    version \"row_version\"\n    body: text, required\n"), "{}", result.text);
+    let project = load_in([("erp.clarity", result.text.as_str())], std::iter::empty(), &[SourceRef::sql("main"), SourceRef::sql("erp").external()]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    assert_eq!(project.version_column("Note").as_deref(), Some("row_version"));
+    assert!(drift(&project, "erp", &schema).is_empty(), "{:#?}", drift(&project, "erp", &schema));
+    let gone = result.text.replace("version \"row_version\"", "version \"Stamp\"");
+    let project = load_in([("erp.clarity", gone.as_str())], std::iter::empty(), &[SourceRef::sql("main"), SourceRef::sql("erp").external()]);
+    let found: Vec<String> = drift(&project, "erp", &schema).into_iter().map(|d| d.message).collect();
+    assert_eq!(found, ["Note: table 'note' has no column 'Stamp' for the version"]);
     std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
 }
 

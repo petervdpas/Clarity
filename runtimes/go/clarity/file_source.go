@@ -61,6 +61,47 @@ type fileDriver struct {
 	dirty    bool
 	// inTransaction is whether a transaction is open, so a change waits for its commit.
 	inTransaction bool
+	// seen is the file's size and modification time when it was last read
+	// or written: a change by another program refuses the next save.
+	seen fileStamp
+}
+
+// fileStamp is a file's size and modification time; zero when it is not there.
+type fileStamp struct {
+	size     int64
+	modified int64
+	there    bool
+}
+
+func stampOf(path string) fileStamp {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fileStamp{}
+	}
+	return fileStamp{info.Size(), info.ModTime().UnixNano(), true}
+}
+
+// unchangedOnDisk refuses a change when another program changed the file
+// since it was read or written: its size or modification time differ, and
+// so do its bytes.
+func (d *fileDriver) unchangedOnDisk() error {
+	if d.readonly {
+		return nil
+	}
+	now := stampOf(d.path)
+	if now == d.seen {
+		return nil
+	}
+	read, err := os.ReadFile(d.path)
+	if err != nil && !(os.IsNotExist(err) && len(d.original) == 0) {
+		return Refuse(SavedSinceText())
+	}
+	if !bytes.Equal(read, d.original) {
+		return Refuse(SavedSinceText())
+	}
+	// The same bytes written again: no change.
+	d.seen = now
+	return nil
 }
 
 // fileTable is one table read from the file and kept in SQLite.
@@ -248,6 +289,7 @@ func openFile(source FileSource, path string, read TableReader, write TableWrite
 		original:     original,
 		write:        write,
 		readonly:     source.Readonly,
+		seen:         stampOf(path),
 	}
 	// keys are the keys of each table's rows, in the order read, so a link to a place becomes a key.
 	keys := map[string][]int64{}
@@ -405,10 +447,14 @@ func (d *fileDriver) keep() error {
 		return &StorageError{What: fmt.Sprintf("cannot replace %s: %v", d.path, err), Err: err}
 	}
 	d.original = written
+	d.seen = stampOf(d.path)
 	return nil
 }
 
 func (d *fileDriver) execute(query string, params []any) (int64, error) {
+	if err := d.unchangedOnDisk(); err != nil {
+		return 0, err
+	}
 	changed, err := d.sqliteDriver.execute(query, params)
 	if err != nil {
 		return 0, err
@@ -418,6 +464,9 @@ func (d *fileDriver) execute(query string, params []any) (int64, error) {
 }
 
 func (d *fileDriver) insert(query string, params []any) (int64, error) {
+	if err := d.unchangedOnDisk(); err != nil {
+		return 0, err
+	}
 	id, err := d.sqliteDriver.insert(query, params)
 	if err != nil {
 		return 0, err
@@ -426,8 +475,17 @@ func (d *fileDriver) insert(query string, params []any) (int64, error) {
 	return id, d.keep()
 }
 
-// batch follows the transaction: its commit keeps what it changed, its rollback nothing.
+// batch follows the transaction: its commit keeps what it changed, its
+// rollback nothing; a file another program changed meanwhile rolls it back.
 func (d *fileDriver) batch(query string) error {
+	if query == Sqlite.commit() && d.dirty {
+		if err := d.unchangedOnDisk(); err != nil {
+			d.sqliteDriver.batch(Sqlite.rollback())
+			d.inTransaction = false
+			d.dirty = false
+			return err
+		}
+	}
 	if err := d.sqliteDriver.batch(query); err != nil {
 		return err
 	}

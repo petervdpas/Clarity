@@ -42,9 +42,9 @@ fn pending(project: &Project, source: &str) -> Vec<String> {
     migrate::pending(project, source, &[]).iter().map(migrate::op_text).collect()
 }
 
-const MAIN_STEP: &str = "migration \"Customers\"\n    add entity Customer\n        name: text(80)\n";
+const MAIN_STEP: &str = "migration \"Customers\"\n    add entity Customer\n        version\n        name: text(80)\n";
 const ERP_STEP: &str =
-    "migration \"Invoices\"\n    add entity Invoice\n        number: text(20)\n        customer: ref Customer\n";
+    "migration \"Invoices\"\n    add entity Invoice\n        version\n        number: text(20)\n        customer: ref Customer\n";
 
 #[test]
 fn a_module_names_its_data_source() {
@@ -80,7 +80,7 @@ fn the_source_must_be_a_source_of_the_project() {
 fn each_source_has_its_own_steps() {
     let project = load(ERP, &[("migrations/main/0001.clarity", MAIN_STEP)]);
     assert!(pending(&project, "main").is_empty());
-    assert_eq!(pending(&project, "erp"), ["add entity Invoice\n    number: text(20)\n    customer: ref Customer"]);
+    assert_eq!(pending(&project, "erp"), ["add entity Invoice\n    version\n    number: text(20)\n    customer: ref Customer"]);
     let warnings: Vec<&str> = project
         .diagnostics
         .iter()

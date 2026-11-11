@@ -8,6 +8,7 @@ pub mod backup;
 use std::path::Path;
 
 use clarity_spec::dictionary::{FieldSpec, field_line};
+use clarity_spec::migrate::VERSION_COLUMN;
 use clarity_spec::model::{Entity, FieldType, Modifiers, snake_case};
 use clarity_spec::{Diagnostic, Project};
 
@@ -301,8 +302,14 @@ pub fn import(schema: &LiveSchema, tables: &[String], module: &str, source: &str
         if key != "id" {
             text.push_str(&format!("    key {}\n", clarity_spec::lexer::quote(key)));
         }
+        // A table made by Clarity keeps its version where Clarity does; any
+        // other version column is named by hand, never guessed.
+        let version = table.columns.iter().find(|c| c.name == VERSION_COLUMN && kind(&c.declared) == Kind::Integer).map(|c| c.name.as_str());
+        if let Some(version) = version {
+            text.push_str(&format!("    version {}\n", clarity_spec::lexer::quote(version)));
+        }
         let mut left_out = Vec::new();
-        for column in table.columns.iter().filter(|c| c.name != key) {
+        for column in table.columns.iter().filter(|c| c.name != key && Some(c.name.as_str()) != version) {
             let referred = table.foreign_keys.iter().find(|(from, _)| *from == column.name);
             let target = referred.and_then(|(_, to)| chosen.iter().find(|(t, _)| t.name == *to));
             let type_text = match (target, kind(&column.declared)) {
@@ -373,6 +380,11 @@ fn entity_drift(entity: &Entity, source: &str, schema: &LiveSchema) -> Vec<Diagn
             entity.name.span,
         ));
     }
+    if let Some(version) = &entity.version
+        && table.column(version).is_none()
+    {
+        found.push(Diagnostic::error(format!("{name}: table '{table_name}' has no column '{version}' for the version"), entity.name.span));
+    }
     let stored: Vec<_> = entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. })).collect();
     for field in &stored {
         let column = entity.column_of(&field.name.name);
@@ -392,7 +404,7 @@ fn entity_drift(entity: &Entity, source: &str, schema: &LiveSchema) -> Vec<Diagn
         }
     }
     for live in &table.columns {
-        let filled = live.name == key || stored.iter().any(|f| entity.column_of(&f.name.name) == live.name);
+        let filled = live.name == key || entity.version.as_deref() == Some(live.name.as_str()) || stored.iter().any(|f| entity.column_of(&f.name.name) == live.name);
         if live.not_null && !live.has_default && !live.primary_key && !filled {
             found.push(Diagnostic::warning(
                 format!(

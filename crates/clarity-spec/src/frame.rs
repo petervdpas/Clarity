@@ -190,6 +190,31 @@ pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "
 /// the language or theme is for menus and toolbars.
 pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "keys", "undo", "redo", "back", "forward"];
 
+/// The click target that signs in with a strategy of the project file's
+/// `signin` block: `signin password` (docs/APP-CAPABILITIES-PLAN.md step 4).
+pub const SIGNIN_TARGET: &str = "signin";
+/// The click target that signs out who signed in: `signout`.
+pub const SIGNOUT_TARGET: &str = "signout";
+
+/// The strategy a click target signs in with: `password` for `signin password`.
+pub fn signin_strategy(target: &str) -> Option<&str> {
+    target.strip_prefix(SIGNIN_TARGET).and_then(|rest| rest.strip_prefix(' '))
+}
+
+/// Whether a click target signs in or out, which no window is.
+pub fn is_signin_target(target: &str) -> bool {
+    target == SIGNOUT_TARGET || signin_strategy(target).is_some()
+}
+
+/// Whether a part of `page` signs in (a sign-in part, or a button that
+/// clicks to `signin ...`): a splash holding one doubles as the sign-in window.
+pub fn page_signs_in(page: &crate::model::Page) -> bool {
+    fn walk(list: &[crate::model::Widget]) -> bool {
+        list.iter().any(|w| w.props.kind == crate::widgets::WidgetKind::Signin || w.props.on_click.as_deref().and_then(signin_strategy).is_some() || walk(&w.children) || w.pages.iter().any(|p| walk(&p.children)))
+    }
+    walk(&page.widgets)
+}
+
 pub fn command_keyword(kind: CommandKind) -> &'static str {
     match kind {
         CommandKind::Item => "item",
@@ -219,6 +244,8 @@ pub fn new_command(kind: CommandKind, caption: Option<String>) -> CommandProps {
         new_window: false,
         open_with: Vec::new(),
         handler: None,
+        allow: None,
+        allow_condition: None,
     }
 }
 
@@ -251,6 +278,10 @@ pub fn command_line(props: &CommandProps) -> String {
         if props.new_window {
             parts.push("in new window".to_string());
         }
+    }
+    // The condition runs to the end of the line.
+    if let Some(allow) = &props.allow {
+        parts.push(format!("allow when {allow}"));
     }
     parts.join(" ")
 }

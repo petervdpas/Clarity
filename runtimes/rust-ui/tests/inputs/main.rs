@@ -23,6 +23,7 @@ mod inputs_form_case;
 mod inputs_formats;
 mod inputs_input_parity;
 mod inputs_input_undo;
+mod inputs_record_keys;
 mod inputs_number;
 mod inputs_picture_field;
 mod inputs_radio;

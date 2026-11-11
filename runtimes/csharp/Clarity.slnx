@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Clarity.Audio/Clarity.Audio.csproj" />
+  <Project Path="Clarity.Auth/Clarity.Auth.csproj" />
   <Project Path="Clarity.Image/Clarity.Image.csproj" />
   <Project Path="Clarity.Formats/Clarity.Formats.csproj" />
   <Project Path="Clarity.Runtime.Engines/Clarity.Runtime.Engines.csproj" />

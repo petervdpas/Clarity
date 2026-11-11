@@ -120,9 +120,10 @@ Only a canvas's own draw handler draws on it, and the handlers it calls that not
 - `open CustomerForm` opens a window on top of this one. `open CustomerForm with customer = grid.selected` fills its data by name.
 - `close` closes this window. The window below then runs its `on return` handler, the place to read a list again.
 - `return` leaves the handler at once.
-- `reload customers` reads the window's data `customers` again: a list loads all its records, a record loads again by its id.
+- `reload customers` reads the window's data `customers` again: a list loads all its records, a record loads again by its id. `reload customer` of a local or a parameter reads that record again as it is stored now.
 - `filterChanged()` runs another handler of the same window or app.
 - `save` and `delete` store and remove records; see [Data events](code.data-events.md).
+- A save of a record someone else saved since it was read is refused: the handler stops and the person sees Clarity's `savedSince` text, or the entity's own (see [Entities](data.entities.md#a-save-never-overwrites-someone-elses-change)). Nothing is written. `reload customer` then shows their change, and the person decides. `save customer anyway` writes regardless of the version: overwriting on purpose, written out, never guessed. With sign-in, keep it to the people allowed with `allow when` on the action that does it.
 
 ```clarity
 code CustomerBrowse

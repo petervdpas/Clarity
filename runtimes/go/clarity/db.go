@@ -7,6 +7,7 @@ package clarity
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -37,6 +38,8 @@ type Db struct {
 	storeSettings map[string]storeSetting
 	// history is what undo takes back and redo does again (DESIGN 5.29).
 	history history
+	// people is who uses the program and how they sign in (signin.go); nil without a signin block.
+	people *people
 }
 
 // Connect opens a database per data source.
@@ -78,6 +81,15 @@ func (db *Db) source(source string) (*sourceDb, error) {
 		}
 	}
 	return nil, &StorageError{What: fmt.Sprintf("there is no data source '%s'", source)}
+}
+
+// Rows is the rows SQL reads in the database of source, for tools and tests.
+func (db *Db) Rows(source, sql string, params ...any) ([][]any, error) {
+	s, err := db.source(source)
+	if err != nil {
+		return nil, err
+	}
+	return s.driver.rows(sql, params)
 }
 
 // Batch runs SQL without parameters in the database of source, for tools and tests.
@@ -166,28 +178,74 @@ func (db *Db) atomic(source string, run func() error) error {
 	s.depth++
 	err = run()
 	s.depth--
-	if outer {
+	// A step that holds the transaction ends it itself.
+	if s.depth == 0 {
 		if err != nil {
 			// The error that made it roll back is the one to report.
 			s.driver.batch(d.rollback())
 			return err
 		}
-		return s.driver.batch(d.commit())
+		// A commit that fails leaves nothing half kept.
+		if err := s.driver.batch(d.commit()); err != nil {
+			s.driver.batch(d.rollback())
+			return err
+		}
 	}
 	return err
 }
 
+// SavedSinceText is why a save or a delete is refused: someone saved the
+// record since it was read (conformance/versions.json), in Clarity's own
+// words with their English.
+func SavedSinceText() Text {
+	return KeyedText("savedSince", "Someone else changed this record since you opened it. Reload it to see their change.")
+}
+
 // Save inserts a new record (and gives it its id) or updates a stored one,
 // with the entity's data events around it.
-// A record whose required field is empty is refused (required.go).
+// A record whose required field is empty is refused (required.go), and so
+// is one someone saved since it was read (SavedSinceText), changing nothing.
 func Save[R Record](db *Db, record R) error {
+	return saveWith(db, record, false)
+}
+
+// SaveAnyway saves a record regardless of its version (save ... anyway):
+// what someone saved since is written over, on purpose.
+func SaveAnyway[R Record](db *Db, record R) error {
+	return saveWith(db, record, true)
+}
+
+// Reload reads a record again as it is stored now, with its version.
+func Reload[T any, P interface {
+	*T
+	Record
+}](db *Db, record P) error {
+	found, err := Get[T, P](db, record.GetID())
+	if err != nil {
+		return err
+	}
+	*record = found
+	return nil
+}
+
+func saveWith[R Record](db *Db, record R, anyway bool) error {
+	// A person's secret changed by this save closes their other sessions (signin.go).
+	secrets := db.secretsOf(record.Table(), record.GetID())
+	err := saveRecord(db, record, anyway)
+	if err == nil {
+		db.secretsSaved(record.Table(), record.GetID(), secrets)
+	}
+	return err
+}
+
+func saveRecord[R Record](db *Db, record R, anyway bool) error {
 	if !hasEvents(record) {
 		if err := checkRequired(record); err != nil {
 			return err
 		}
-		return store(db, record)
+		return store(db, record, anyway)
 	}
-	id := record.GetID()
+	id, version := record.GetID(), versionValue(record)
 	err := db.atomic(sourceOf(record), func() error {
 		if e, ok := any(record).(BeforeSaver); ok {
 			if err := e.BeforeSave(db); err != nil {
@@ -198,7 +256,7 @@ func Save[R Record](db *Db, record R) error {
 		if err := checkRequired(record); err != nil {
 			return err
 		}
-		if err := store(db, record); err != nil {
+		if err := store(db, record, anyway); err != nil {
 			return err
 		}
 		if e, ok := any(record).(AfterSaver); ok {
@@ -206,11 +264,22 @@ func Save[R Record](db *Db, record R) error {
 		}
 		return nil
 	})
-	// Nothing was kept, so a new record is still new.
+	// Nothing was kept, so a new record is still new, at the version it was read with.
 	if err != nil {
 		record.SetID(id)
+		if v, ok := any(record).(Versioned); ok {
+			v.SetVersion(version)
+		}
 	}
 	return err
+}
+
+// versionValue is the version a record holds; 0 when it has none.
+func versionValue(r Record) int64 {
+	if v, ok := r.(Versioned); ok {
+		return v.GetVersion()
+	}
+	return 0
 }
 
 // unfit is a failed save: a reference to a record that is not there reads
@@ -223,30 +292,47 @@ func unfit(err error) error {
 	return err
 }
 
-func store(db *Db, record Record) error {
-	if db.history.recording == nil {
-		return storeRow(db, record)
+func store(db *Db, record Record, anyway bool) error {
+	if err := db.enlist(sourceOf(record)); err != nil {
+		return err
 	}
-	source, table, key, columns := sourceOf(record), record.Table(), keyOf(record), record.Columns()
-	var before []any
+	if db.history.recording == nil {
+		return storeRow(db, record, anyway)
+	}
+	c := change{source: sourceOf(record), table: record.Table(), key: keyOf(record), columns: record.Columns(), version: versionOf(record)}
 	if record.GetID() != 0 {
 		var err error
-		if before, err = db.row(source, table, key, columns, record.GetID()); err != nil {
+		if c.before, c.beforeVersion, err = db.state(c, record.GetID()); err != nil {
 			return err
 		}
 	}
-	if err := storeRow(db, record); err != nil {
+	if err := storeRow(db, record, anyway); err != nil {
 		return err
 	}
-	after, err := db.row(source, table, key, columns, record.GetID())
-	if err != nil {
+	c.id = record.GetID()
+	var err error
+	if c.after, c.afterVersion, err = db.state(c, c.id); err != nil {
 		return err
 	}
-	db.history.record(change{source, table, key, columns, record.GetID(), before, after})
+	db.history.record(c)
 	return nil
 }
 
-func storeRow(db *Db, record Record) error {
+// refusal is the refusal of a save or delete of a record someone saved
+// since, in its entity's words about the record as stored now.
+func (db *Db) refusal(record Record) error {
+	if _, own := record.(SavedSincer); own {
+		current := reflectNew(record)
+		if err := db.reread(current, record.GetID()); err == nil {
+			if words, ok := current.(SavedSincer); ok {
+				return Refuse(words.SavedSince(db))
+			}
+		}
+	}
+	return Refuse(SavedSinceText())
+}
+
+func storeRow(db *Db, record Record, anyway bool) error {
 	s, err := db.source(sourceOf(record))
 	if err != nil {
 		return err
@@ -274,11 +360,20 @@ func storeRow(db *Db, record Record) error {
 			names = append(names, c)
 			params = append(params, values[i])
 		}
+		// A new record starts at version 1.
+		version, versioned := any(record).(Versioned)
+		if versioned {
+			names = append(names, version.VersionColumn())
+			params = append(params, int64(1))
+		}
 		id, err := s.driver.insert(d.insert(table, key, names), params)
 		if err != nil {
 			return unfit(err)
 		}
 		record.SetID(id)
+		if versioned {
+			version.SetVersion(1)
+		}
 		return nil
 	}
 	// A kept picture stays as it is; an emptied one is set to NULL as text.
@@ -295,18 +390,49 @@ func storeRow(db *Db, record Record) error {
 		params = append(params, values[i])
 		sets = append(sets, d.Quote(c)+" = "+d.Mark(len(params)))
 	}
+	// Each save adds one to the version; a checked one writes only over the version it read.
+	version, versioned := any(record).(Versioned)
+	if versioned {
+		q := d.Quote(version.VersionColumn())
+		sets = append(sets, q+" = "+q+" + 1")
+	}
 	if len(sets) == 0 {
 		return exists(s.driver, d, table, key, record.GetID())
 	}
-	sql := "UPDATE " + d.Quote(table) + " SET " + strings.Join(sets, ", ") + " WHERE " + d.Quote(key) + " = " + d.Mark(len(params)+1)
-	changed, err := s.driver.execute(sql, append(params, record.GetID()))
+	params = append(params, record.GetID())
+	sql := "UPDATE " + d.Quote(table) + " SET " + strings.Join(sets, ", ") + " WHERE " + d.Quote(key) + " = " + d.Mark(len(params))
+	checked := versioned && !anyway
+	if checked {
+		params = append(params, version.GetVersion())
+		sql += " AND " + d.Quote(version.VersionColumn()) + " = " + d.Mark(len(params))
+	}
+	changed, err := s.driver.execute(sql, params)
 	if err != nil {
 		return unfit(err)
 	}
 	// MySQL counts only the rows whose values changed, so an update that
-	// changes nothing is told apart from a missing record.
+	// changes nothing is told apart from a missing record (one with a
+	// version always changes).
 	if changed == 0 {
-		return exists(s.driver, d, table, key, record.GetID())
+		if err := exists(s.driver, d, table, key, record.GetID()); err != nil {
+			return err
+		}
+		if checked {
+			return db.refusal(record)
+		}
+	}
+	switch {
+	case versioned && anyway:
+		rows, err := s.driver.rows("SELECT "+d.Quote(version.VersionColumn())+" FROM "+d.Quote(table)+" WHERE "+d.Quote(key)+" = "+d.Mark(1), []any{record.GetID()})
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			n, _ := integer(rows[0][0])
+			version.SetVersion(n)
+		}
+	case versioned:
+		version.SetVersion(version.GetVersion() + 1)
 	}
 	return nil
 }
@@ -351,18 +477,21 @@ func Delete[R Record](db *Db, record R) error {
 }
 
 func remove(db *Db, record Record) error {
+	if err := db.enlist(sourceOf(record)); err != nil {
+		return err
+	}
 	if db.history.recording == nil {
 		return removeRow(db, record)
 	}
-	source, table, key, columns := sourceOf(record), record.Table(), keyOf(record), record.Columns()
-	before, err := db.row(source, table, key, columns, record.GetID())
-	if err != nil {
+	c := change{source: sourceOf(record), table: record.Table(), key: keyOf(record), columns: record.Columns(), version: versionOf(record), id: record.GetID()}
+	var err error
+	if c.before, c.beforeVersion, err = db.state(c, c.id); err != nil {
 		return err
 	}
 	if err := removeRow(db, record); err != nil {
 		return err
 	}
-	db.history.record(change{source, table, key, columns, record.GetID(), before, nil})
+	db.history.record(c)
 	return nil
 }
 
@@ -372,10 +501,21 @@ func removeRow(db *Db, record Record) error {
 		return err
 	}
 	d := s.driver.dialect()
-	_, err = s.driver.execute("DELETE FROM "+d.Quote(record.Table())+" WHERE "+d.Quote(keyOf(record))+" = "+d.Mark(1), []any{record.GetID()})
+	sql := "DELETE FROM " + d.Quote(record.Table()) + " WHERE " + d.Quote(keyOf(record)) + " = " + d.Mark(1)
+	params := []any{record.GetID()}
+	// A record someone saved since it was read is not deleted.
+	version, versioned := any(record).(Versioned)
+	if versioned {
+		sql += " AND " + d.Quote(version.VersionColumn()) + " = " + d.Mark(2)
+		params = append(params, version.GetVersion())
+	}
+	changed, err := s.driver.execute(sql, params)
 	var reference *referenceFailure
 	if errors.As(err, &reference) {
 		return &InUseError{record.Table(), record.GetID()}
+	}
+	if err == nil && changed == 0 && versioned && exists(s.driver, d, record.Table(), keyOf(record), record.GetID()) == nil {
+		return db.refusal(record)
 	}
 	return err
 }
@@ -390,6 +530,10 @@ func selectColumns(d Dialect, record Record) string {
 			continue
 		}
 		columns = append(columns, d.Quote(c))
+	}
+	// The version last, read with every record.
+	if v := versionOf(record); v != "" {
+		columns = append(columns, d.Quote(v))
 	}
 	return strings.Join(columns, ", ")
 }
@@ -469,12 +613,53 @@ func records[T any, P interface {
 		if !ok {
 			return nil, &InvalidError{fmt.Sprintf("the key %v is no number", row[0])}
 		}
-		if err := P(&item).Load(id, row[1:]); err != nil {
+		if err := loadRow(P(&item), id, row[1:]); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
 	}
 	return out, nil
+}
+
+// loadRow fills a record from a row read with selectColumns: its values,
+// then its version, last.
+func loadRow(record Record, id int64, values []any) error {
+	v, versioned := record.(Versioned)
+	var version int64
+	if versioned && len(values) > 0 {
+		version, _ = integer(values[len(values)-1])
+		values = values[:len(values)-1]
+	}
+	if err := record.Load(id, values); err != nil {
+		return err
+	}
+	if versioned {
+		v.SetVersion(version)
+	}
+	return nil
+}
+
+// reread fills record with the record id as it is stored now.
+func (db *Db) reread(record Record, id int64) error {
+	s, err := db.source(sourceOf(record))
+	if err != nil {
+		return err
+	}
+	d := s.driver.dialect()
+	key := keyOf(record)
+	rows, err := s.driver.rows("SELECT "+selectColumns(d, record)+" FROM "+d.Quote(record.Table())+" WHERE "+d.Quote(key)+" = "+d.Mark(1), []any{id})
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return &NotFoundError{record.Table(), &id}
+	}
+	return loadRow(record, id, rows[0][1:])
+}
+
+// reflectNew is a new, empty record of the type of record.
+func reflectNew(record Record) Record {
+	return reflect.New(reflect.TypeOf(record).Elem()).Interface().(Record)
 }
 
 // Ref is the record a reference field points at, to work on in place.

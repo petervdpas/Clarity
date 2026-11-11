@@ -34,11 +34,13 @@ pub mod rename;
 mod field_rename;
 pub mod sample;
 pub mod shortcuts;
+pub mod signin;
 pub mod source;
 pub mod span;
 pub mod templates;
 pub mod trees;
 pub mod views;
+pub mod versions;
 pub mod widgets;
 pub mod xml;
 
@@ -90,6 +92,12 @@ pub fn load_converted<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>)
 }
 
 pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -> Project {
+    load_sources_signed(sources, None)
+}
+
+/// Like `load_sources`, for a project whose project file has a `signin`
+/// block: its entity of people is known while the code is checked.
+pub fn load_sources_signed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>, signin: Option<&signin::Signin>) -> Project {
     let mut files = Vec::new();
     let mut diagnostics = Vec::new();
     let mut markup = Vec::new();
@@ -116,7 +124,13 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     make_custom_grows(&mut files);
     make_graph_models(&mut files);
     make_hears(&mut files);
-    diagnostics.extend(check::check(&files));
+    if let Some(signin) = signin {
+        signin::mark_people(&mut files, signin);
+    }
+    diagnostics.extend(check::check(&files, signin));
+    if let Some(signin) = signin {
+        diagnostics.extend(signin::check(&files, signin));
+    }
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
     let mut project = Project {
         files,
@@ -132,6 +146,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         readme: None,
         resource_keys: Default::default(),
         keys_editable: false,
+        signin: signin.cloned(),
         row_height: layout::ROW_HEIGHT,
         engines: None,
         part_files: None,
@@ -515,6 +530,9 @@ pub struct SourceRef {
     /// The mapping a file source is laid over by (`using OrderFeed`,
     /// docs/FORMATS-PLAN.md step 4), which a module must declare.
     pub mapping: Option<String>,
+    /// A file in a format (docs/FORMATS-PLAN.md): external, kept in memory
+    /// while the program runs; the file is the unit a save checks.
+    pub file: bool,
 }
 
 impl SourceRef {
@@ -528,6 +546,7 @@ impl SourceRef {
             auth: None,
             paging: None,
             mapping: None,
+            file: false,
         }
     }
 
@@ -541,6 +560,7 @@ impl SourceRef {
             auth: None,
             paging: None,
             mapping: None,
+            file: false,
         }
     }
 
@@ -553,6 +573,13 @@ impl SourceRef {
 
     pub fn external(mut self) -> SourceRef {
         self.external = true;
+        self
+    }
+
+    /// A file source: external, a file in a format.
+    pub fn file(mut self) -> SourceRef {
+        self.external = true;
+        self.file = true;
         self
     }
 
@@ -635,7 +662,17 @@ pub fn load_in<'a>(
     migrations: impl IntoIterator<Item = (&'a str, &'a str)>,
     sources: &[SourceRef],
 ) -> Project {
-    let mut project = load_sources(files);
+    load_in_signed(files, migrations, sources, None)
+}
+
+/// Like `load_in`, with the project file's `signin` block.
+pub fn load_in_signed<'a>(
+    files: impl IntoIterator<Item = (&'a str, &'a str)>,
+    migrations: impl IntoIterator<Item = (&'a str, &'a str)>,
+    sources: &[SourceRef],
+    signin: Option<&signin::Signin>,
+) -> Project {
+    let mut project = load_sources_signed(files, signin);
     project.sources = if sources.is_empty() { vec![SourceRef::sql(DEFAULT_SOURCE)] } else { sources.to_vec() };
     let mut steps: BTreeMap<String, Vec<migrate::Migration>> = BTreeMap::new();
     for (path, text) in migrations {
@@ -653,8 +690,18 @@ pub fn load_in<'a>(
     code::check::check_readonly(&mut project);
     code::check::check_query_sources(&mut project);
     code::check::check_web_sources(&mut project);
+    versions::check(&mut project);
     migrate::check(&mut project);
+    keep_versions(&mut project);
     project
+}
+
+/// Notes on each stored entity the column its version is kept in, for the IDE.
+fn keep_versions(project: &mut Project) {
+    let kept: Vec<Option<String>> = project.files.iter().flat_map(|f| &f.entities).map(|e| project.version_column(&e.name.name)).collect();
+    for (entity, column) in project.files.iter_mut().flat_map(|f| f.entities.iter_mut()).zip(kept) {
+        entity.kept_version = column;
+    }
 }
 
 /// The folder of migration steps in a project's folder.
@@ -708,6 +755,11 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
 /// `language`: the default language the translations are checked against
 /// (English when it names none).
 pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef], language: Option<&str>) -> std::io::Result<Project> {
+    load_dir_signed(dir, replaced, sources, language, None)
+}
+
+/// Like `load_dir_for`, with the project file's `signin` block.
+pub fn load_dir_signed(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef], language: Option<&str>, signin: Option<&signin::Signin>) -> std::io::Result<Project> {
     let mut files = Vec::new();
     let mut paths = spec_files(dir)?;
     paths.extend(cxaml::page_files(dir, &paths, replaced)?);
@@ -719,10 +771,11 @@ pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef
         files.push((p.display().to_string(), content));
     }
     let steps = migration_sources(dir)?;
-    let mut project = load_in(
+    let mut project = load_in_signed(
         files.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         sources,
+        signin,
     );
     let translations = translation_sources(dir, replaced)?;
     if let Some(language) = language {

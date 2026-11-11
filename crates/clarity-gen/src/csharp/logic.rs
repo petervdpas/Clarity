@@ -38,6 +38,20 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
         }
     }
+    // An entity's `readable when` and `writable when`, with its record named as in its data events (step 4).
+    for entity in &file.entities {
+        let name = &entity.name.name;
+        for (word, condition) in [("Readable", &entity.readable), ("Writable", &entity.writable)] {
+            let Some(condition) = condition else { continue };
+            let mut emitter = Emitter::new(project, types, None, None);
+            let holds = emitter.value(condition);
+            if emitter.errors.is_empty() {
+                out.push_str(&format!("    public static bool {word}{name}(Db db, {name} {})\n    {{\n        return {holds};\n    }}\n\n", camel(&clarity_spec::code::record_name(name))));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("{} when of '{name}': {e}", word.to_lowercase())));
+            }
+        }
+    }
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -59,8 +73,12 @@ pub fn emit_commands(project: &Project, file: &clarity_spec::model::SpecFile, ty
         let mut params = vec!["Db db".to_string(), "CliSession cli".to_string()];
         for (name, ty) in command.params.iter().map(|p| (&p.name, &p.ty)).chain(command.options.iter().map(|o| (&o.name, &o.ty))) {
             params.push(format!("{} {}", value_type(&type_ref_info(project, ty)), camel(&name.name)));
+            emitter.declare(&name.name, type_ref_info(project, ty));
         }
         let mut body = String::new();
+        if let Some(allow) = &command.allow {
+            body.push_str(&emitter.allow(allow, 2));
+        }
         emitter.block(&command.body, 2, &mut body);
         // C# refuses code after a return, so the command's own last return stays the last.
         if !body.trim_end().lines().last().is_some_and(|l| l.trim_start().starts_with("return ")) {
@@ -110,6 +128,9 @@ pub struct WindowCtx {
 /// The body of a handler, as the method `On{Name}` of the ViewModel.
 pub fn handler(project: &Project, types: &FileTypes, ctx: &WindowCtx, decl: &HandlerDecl) -> Result<String, Vec<String>> {
     let mut emitter = Emitter::new(project, types, None, Some(ctx));
+    for param in &decl.params {
+        emitter.declare(&param.name.name, type_ref_info(project, &param.ty));
+    }
     let mut body = String::new();
     emitter.block(&decl.body, 2, &mut body);
     if !emitter.errors.is_empty() {
@@ -118,6 +139,13 @@ pub fn handler(project: &Project, types: &FileTypes, ctx: &WindowCtx, decl: &Han
     // The values a click gives it, typed.
     let params: Vec<String> = decl.params.iter().map(|p| format!("{} {}", value_type(&type_ref_info(project, &p.ty)), camel(&p.name.name))).collect();
     Ok(format!("    void {}({})\n    {{\n{body}    }}\n", on(&decl.name.name), params.join(", ")))
+}
+
+/// `allow when` of a window or a frame command (step 4) as C#, in a window's ViewModel.
+pub fn condition(project: &Project, types: &FileTypes, ctx: &WindowCtx, condition: &Expr) -> Result<String, Vec<String>> {
+    let mut emitter = Emitter::new(project, types, None, Some(ctx));
+    let holds = emitter.value(condition);
+    if emitter.errors.is_empty() { Ok(holds) } else { Err(emitter.errors) }
 }
 
 /// A value written in the design as C#, of the parameter's type.
@@ -219,20 +247,48 @@ struct Emitter<'a> {
     /// Whether this is a command of the command-line program (DESIGN 5.20):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
+    /// The parameters and locals in scope, each with the entity of the
+    /// record it holds: `reload` of one reads that record again (step 5).
+    locals: Vec<(String, Option<String>)>,
     errors: Vec<String>,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter {
+        let mut emitter = Emitter {
             project,
             types,
             decl,
             window,
             db: if window.is_some() { "Db" } else { "db" },
             command: false,
+            locals: Vec::new(),
             errors: Vec::new(),
+        };
+        for param in decl.map(|d| d.params.as_slice()).unwrap_or_default() {
+            emitter.declare(&param.name.name, type_ref_info(project, &param.ty));
         }
+        emitter
+    }
+
+    /// A parameter or local of type `ty` comes into scope.
+    fn declare(&mut self, name: &str, ty: TypeInfo) {
+        let entity = match ty {
+            TypeInfo::Record(entity) => Some(entity),
+            _ => None,
+        };
+        self.locals.push((name.to_string(), entity));
+    }
+
+    /// The parameter or local called `name`, with the entity of the record it holds.
+    fn local(&self, name: &str) -> Option<&(String, Option<String>)> {
+        self.locals.iter().rev().find(|(n, _)| n == name)
+    }
+
+    /// `allow when <condition>` at the start of a call: refused with notAllowed when it does not hold (step 4).
+    fn allow(&mut self, condition: &Expr, depth: usize) -> String {
+        let holds = self.value(condition);
+        format!("{}Clarity.Runtime.Signin.Allow({holds});\n", "    ".repeat(depth))
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -249,6 +305,9 @@ impl<'a> Emitter<'a> {
         }
         let ret = self.returns().map(|r| value_type(&r)).unwrap_or_else(|| "void".into());
         let mut out = format!("    public static {ret} {name}({})\n    {{\n", params.join(", "));
+        if let Some(allow) = &decl.allow {
+            out.push_str(&self.allow(allow, 2));
+        }
         for condition in &decl.requires {
             let holds = self.value(condition);
             out.push_str(&format!("        Contracts.Require({holds}, {});\n", string(&print::expr(condition))));
@@ -280,22 +339,29 @@ impl<'a> Emitter<'a> {
     /// A block in braces, as C# writes the body of an `if` or `foreach`.
     fn braced(&mut self, body: &[Stmt], depth: usize, out: &mut String) {
         let pad = "    ".repeat(depth);
+        let scope = self.locals.len();
         out.push_str(&format!("{pad}{{\n"));
         self.block(body, depth + 1, out);
         out.push_str(&format!("{pad}}}\n"));
+        self.locals.truncate(scope);
     }
 
     fn stmt(&mut self, stmt: &Stmt, depth: usize, out: &mut String) {
         let pad = "    ".repeat(depth);
         let db = self.db;
         match &stmt.kind {
-            StmtKind::Let { name, ty, value } => {
-                let value = self.value(value);
+            StmtKind::Let { name, ty, value: given } => {
+                let value = self.value(given);
+                let info = match ty {
+                    Some(declared) => type_ref_info(self.project, declared),
+                    None => self.types.type_of(given),
+                };
                 let ty = match ty {
-                    Some(declared) => value_type(&type_ref_info(self.project, declared)),
+                    Some(_) => value_type(&info),
                     None => "var".into(),
                 };
                 out.push_str(&format!("{pad}{ty} {} = {value};\n", camel(&name.name)));
+                self.declare(&name.name, info);
             }
             StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
                 let text = self.shown(value);
@@ -389,6 +455,15 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}Lists.Set({list}, {at}, {value});\n"));
                     return;
                 }
+                // Text given to a hashed field is kept as its hash, by its strategy's method (step 4).
+                if let Some(field) = self.field_of(target).filter(|f| f.modifiers.hashed) {
+                    let hashing = crate::signin::hashing(self.project, &field.name.name);
+                    let place = self.place(target);
+                    let text = self.value(value);
+                    let minimum = hashing.minimum.map_or("null".to_string(), |m| m.to_string());
+                    out.push_str(&format!("{pad}{place} = Clarity.Auth.Signins.Hashed({}, {text}, {minimum});\n", string(hashing.method)));
+                    return;
+                }
                 let place = self.place(target);
                 // A text value shows its text in the person's language and format, as a label does,
                 // and shows it again when the person picks another language.
@@ -422,9 +497,24 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::For { var, list, body } => {
+                let item = match self.types.type_of(list) {
+                    TypeInfo::List(entity) => TypeInfo::Record(entity),
+                    _ => TypeInfo::Unknown,
+                };
                 let list = self.value(list);
-                out.push_str(&format!("{pad}foreach (var {} in {list})\n", camel(&var.name)));
-                self.braced(body, depth, out);
+                let name = camel(&var.name);
+                let scope = self.locals.len();
+                self.declare(&var.name, item);
+                if reloads(body, &var.name) {
+                    // C# assigns no foreach variable, so one that is read again is a copy.
+                    out.push_str(&format!("{pad}foreach (var {name}_ in {list})\n{pad}{{\n{pad}    var {name} = {name}_;\n"));
+                    self.block(body, depth + 1, out);
+                    out.push_str(&format!("{pad}}}\n"));
+                } else {
+                    out.push_str(&format!("{pad}foreach (var {name} in {list})\n"));
+                    self.braced(body, depth, out);
+                }
+                self.locals.truncate(scope);
             }
             StmtKind::Return { value: Some(value) } => {
                 let value = self.value(value);
@@ -440,9 +530,11 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}_ = {code};\n"));
                 }
             }
-            StmtKind::Save { value } => {
+            StmtKind::Save { value, anyway } => {
                 let record = self.value(value);
-                out.push_str(&format!("{pad}{db}.Save({record});\n"));
+                // `anyway` writes over what someone saved since, on purpose (step 5).
+                let save = if *anyway { "SaveAnyway" } else { "Save" };
+                out.push_str(&format!("{pad}{db}.{save}({record});\n"));
             }
             StmtKind::Delete { value } => {
                 let record = self.value(value);
@@ -457,7 +549,9 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}cli.Message({text});\n"));
             }
-            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } | StmtKind::Reload { .. } if self.window.is_none() => {
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } | StmtKind::Reload { .. }
+                if self.window.is_none() && !matches!(&stmt.kind, StmtKind::Reload { data } if self.local(&data.name).is_some()) =>
+            {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
@@ -571,7 +665,7 @@ impl<'a> Emitter<'a> {
                         let choices = match word {
                             "enum" => format!("Choices.{of}"),
                             "record" => {
-                                let records = from.as_ref().map_or(format!("{db}.All<{of}>()"), |list| self.value(list));
+                                let records = from.as_ref().map_or_else(|| super::readable(self.project, &of, db, format!("{db}.All<{of}>()")), |list| self.value(list));
                                 let label = self.project.entity(&of).map_or("r.Id.ToString()".to_string(), super::windows::display);
                                 format!("{records}.Select(r => new Choice(r.Id, {label})).ToList()")
                             }
@@ -579,7 +673,7 @@ impl<'a> Emitter<'a> {
                         };
                         let start = default.as_ref().map_or("null".to_string(), |d| format!("(object?)({})", self.value(d)));
                         let answer = match word {
-                            "record" => format!("{db}.Get<{of}>((long)answer!)"),
+                            "record" => super::readable(self.project, &of, db, format!("{db}.Get<{of}>((long)answer!)")),
                             "enum" => format!("({of})answer!"),
                             "integer" | "duration" => "(long)answer!".to_string(),
                             "decimal" | "money" => "(decimal)answer!".to_string(),
@@ -612,13 +706,23 @@ impl<'a> Emitter<'a> {
             StmtKind::Exit { code } => out.push_str(&format!("{pad}return (int)({});\n", self.value(code))),
             StmtKind::Close => out.push_str(&format!("{pad}Close();\n")),
             StmtKind::CloseWith { value } => out.push_str(&format!("{pad}CloseWith({});\n", self.value(value))),
+            // A record variable is read again as it is stored now, with its version (step 5).
+            StmtKind::Reload { data } if self.local(&data.name).is_some() => match self.local(&data.name).cloned() {
+                Some((name, Some(entity))) => {
+                    let local = camel(&name);
+                    let read = super::readable(self.project, &entity, db, format!("{db}.Reload({local})"));
+                    out.push_str(&format!("{pad}{local} = {read};\n"));
+                }
+                _ => self.errors.push(format!("'reload' reads a record again, and {} holds none", data.name)),
+            },
             StmtKind::Reload { data } => {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {
-                    Some((name, entity, true)) => out.push_str(&format!("{pad}{} = {db}.All<{entity}>();\n", member(&name))),
+                    Some((name, entity, true)) => out.push_str(&format!("{pad}{} = {};\n", member(&name), super::readable(self.project, &entity, db, format!("{db}.All<{entity}>()")))),
                     Some((name, entity, false)) => {
                         let prop = member(&name);
-                        out.push_str(&format!("{pad}if ({prop}.Id != 0)\n{pad}    {prop} = {db}.Get<{entity}>({prop}.Id);\n"));
+                        let read = super::readable(self.project, &entity, db, format!("{db}.Get<{entity}>({prop}.Id)"));
+                        out.push_str(&format!("{pad}if ({prop}.Id != 0)\n{pad}    {prop} = {read};\n"));
                     }
                     None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
                 }
@@ -859,6 +963,14 @@ impl<'a> Emitter<'a> {
                 // A command has the settings as a window does: the one shared object.
                 Some(NameKind::Data) if self.command => format!("{}.Current", pascal(name)),
                 Some(NameKind::EnumValue(e)) => format!("{e}.{name}"),
+                // The person signed in for this call; refused with notAllowed when nobody is (step 4).
+                Some(NameKind::Me) => match self.types.type_of(expr) {
+                    TypeInfo::Record(people) => format!("{db}.Me<{people}>()"),
+                    _ => {
+                        self.errors.push("me without the entity of people".to_string());
+                        String::new()
+                    }
+                },
                 _ => {
                     self.errors.push(format!("'{name}' is a part; use one of its properties"));
                     String::new()
@@ -900,7 +1012,7 @@ impl<'a> Emitter<'a> {
                 let id = field.name == clarity_spec::code::check::RECORD_ID && self.field_type(&entity, &field.name).is_none();
                 let prop = if id { "Id".to_string() } else { property(&entity, &field.name) };
                 match self.field_type(&entity, &field.name) {
-                    Some(FieldType::Ref { entity: target }) => format!("{db}.Load<{}>({object}.{prop})", target.name),
+                    Some(FieldType::Ref { entity: target }) => super::readable(self.project, &target.name, db, format!("{db}.Load<{}>({object}.{prop})", target.name)),
                     Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
@@ -1194,6 +1306,14 @@ impl<'a> Emitter<'a> {
             let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };
             return format!("Numbers.{function}({value})");
         }
+        // A new token and new recovery codes, through Clarity.Auth (step 4).
+        if name == clarity_spec::code::check::NEW_TOKEN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            return "Clarity.Auth.Signins.NewToken()".into();
+        }
+        if name == clarity_spec::code::check::NEW_RECOVERY_CODES && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let count = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("Clarity.Auth.Signins.NewRecoveryCodes({count})");
+        }
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("Numbers.Round({})", values.join(", "));
@@ -1253,7 +1373,8 @@ impl<'a> Emitter<'a> {
                 query.push_str(&format!(".OrderThrough([{}], {column}, {}, {numeric})", hops.join(", "), key.descending));
             }
         }
-        format!("{}.Find<{entity}>({query})", self.db)
+        // `readable when`: each record found is checked, refused with notYours (step 4).
+        super::readable(self.project, entity, self.db, format!("{}.Find<{entity}>({query})", self.db))
     }
 
     /// `files f in store where ... order by ...`: the files of a store,
@@ -1416,4 +1537,15 @@ fn cs_pieces(pieces: &[crate::shape::Piece]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" + ")
+}
+
+/// Whether `body` reads the local `name` again (`reload name`), in any block of it.
+fn reloads(body: &[Stmt], name: &str) -> bool {
+    body.iter().any(|stmt| match &stmt.kind {
+        StmtKind::Reload { data } => data.name == name,
+        StmtKind::If { branches, otherwise } => branches.iter().any(|b| reloads(&b.body, name)) || otherwise.as_deref().is_some_and(|o| reloads(o, name)),
+        // A loop variable of the same name is another local.
+        StmtKind::For { var, body, .. } => var.name != name && reloads(body, name),
+        _ => false,
+    })
 }

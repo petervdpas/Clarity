@@ -23,7 +23,7 @@ impl Small {
 
 impl Program for Small {
     fn started(&self) -> Started {
-        Started { main: "Main".into(), unconnected: None }
+        Started { main: "Main".into(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         self.drawn(WindowState::new("", Map::new()))
@@ -193,6 +193,7 @@ fn why_the_databases_did_not_open_goes_with_the_start() {
     let started = Started {
         main: "Main".into(),
         unconnected: Some(program::Unconnected { handler: None, window: Some("Connection".into()), problem: clarity_runtime::unconnected_reason(&Error::NotKept("password".into())) }),
+        signin: None,
     };
     let unconnected = started.unconnected.unwrap();
     assert_eq!(unconnected.window.as_deref(), Some("Connection"));

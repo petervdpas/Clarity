@@ -1,6 +1,6 @@
 # App capabilities plan: data formats, encrypted storage, mail, sign-in, version check, background jobs
 
-Six things Clarity applications cannot do today, each added as a general concept on every stack rather than as a library one project writes for itself. Written 2026-11-10. Data formats (FORMATS-PLAN.md) step 1 released in Clarity 0.38.0 (JSON through Clarity.Formats); everything else not built.
+Six things Clarity applications cannot do today, each added as a general concept on every stack rather than as a library one project writes for itself. Written 2026-11-10. Data formats (FORMATS-PLAN.md) steps 1 to 5 released (JSON in Clarity 0.38.0; CSV, XML, mappings and YAML in 0.39.0). Steps 4, 5 and 6 designed as one slice and agreed 2026-11-12; step 4 (sign-in, with the sign-in part) and step 5 (row versions, and undo made one with it) built 2026-11-12 on all five stacks, unreleased (the todo example signs in on its splash; all 20 examples build); step 6 next; everything else not built.
 
 ## Goal
 
@@ -114,33 +114,95 @@ Not in this plan, noted so the shape fits them: `pop3`; a file store on a server
 
 Opens: help desks, CRM follow-up, notifications from any app, mail-in forms, the review's reply tracking.
 
+## Steps 4, 5 and 6 as one slice: programs used by more than one person
+
+The user, 2026-11-12: "after the sums and release I want to do 5 and 6", then "think it kinda combines with multi user app... so 4 too then?", and on sign-in: "are you going to use authentication strategies?"
+
+Built in the order 4, 5, 6, each step a complete slice, and released together. They meet in three places, and nowhere else:
+
+- **One person per call.** Step 4 gives every call a person: `me`, the signed-in record, in handlers, actions and data events. A background run of step 6 runs as the person who started it: `me` inside its calls is that person, and the run's `allow` is checked when it starts.
+- **One notion of "changed since".** Step 5's version decides it for a save, a delete, undo, the data browser and a background call alike. A background save that is refused is a failed call of its run.
+- **Who changed is the project's choice, not a built-in column.** Clarity adds no `changed_by` column. A project that wants it writes it per case with the data events that exist: `before save` sets `customer.changedBy = me`. The refusal of step 5 can then name that person, because its text may use the slots of the record as it is stored now (`savedSince @customerChangedSince` on the entity, `{current.changedBy.name}` in the text). Without such a line, Clarity's own `savedSince` text.
+
+Without sign-in nothing changes for a program: `me` is an error that says to add `signin`, versions and jobs work as before.
+
 ## Step 4: Who is using the program
 
-The app knows who is using it, on the web and, when asked, on the desktop.
+The app knows who is using it, on the web and, when the project asks, on the desktop and the command line. How a person proves who they are is a **strategy**, chosen per project, several at once, as C++ Builder's connection components were dropped per form: Clarity carries a catalog of strategies, and the project names the ones it uses.
+
+### The project names its people and its strategies
 
 ```clarity
-app Erasure
-    main Requests
-    signin Member by email password passwordHash
-    roles Role
+project Erasure
+    stack go desktop cli
+    signin Member on desktop web
+        password email passwordHash
+        maillink email from outbox
+        openid "https://accounts.example.com" client "setting:openidClient" match email
+        account login
+        token apiToken
+        session 8 hours
+        tries 5 per 15 minutes
 ```
 
 ```clarity
 entity Member
+    name: text(80), required
     email: email, unique, required
+    login: text(40), unique
     passwordHash: text, hashed
+    apiToken: text, hashed
     role: Role
 ```
 
-- `signin Entity by field password field` names the entity of people and the field they sign in with. No new type: `password` is already the input part, and `secret` is a setting type that an entity field may not have. A text field with the modifier `hashed` is stored as an Argon2id hash (the vault's crate): code assigns text to it (`member.passwordHash = typed`), which stores the hash, and never reads it back. The `password` part binds to it as to any text.
-- Served, every browser gets the sign-in page first (drawn by Clarity.UI, texts by Clarity's keys), then a session cookie (HTTP-only, SameSite, expiry). Failed tries slow down per address and per account.
-- `signin ... desktop` asks on the desktop too: one computer, several family members, each with their own records.
-- Code reads `me`, the signed-in record, and `me.role`. A window, view or command says who may open it: `allow Admin, Parent`; the designer shows it as a property of every page and command. The program refuses what is not allowed, whatever a browser sends.
-- Rows are not filtered by magic (determinism rule): code writes `where r.person.owner == me`. An entity can declare `readable by owner` so the program refuses records that are not the person's, as a check rather than a hidden filter.
-- First start with no records of the entity: the page makes the first account, with the first role value.
-- `clarity users project add|password|remove` from the command line, for a server without a browser at hand.
+- `signin Entity` names the entity of people; any entity, with any fields. `on desktop web cli` says on which of the project's targets people sign in (web alone without the words).
+- Each indented strategy line names the fields of that entity it matches, so nothing about people is fixed beforehand:
+  - `password field hashField`: a name and a password, the password kept in a `hashed` text field (Argon2id, the vault's crate). Code assigns text to a hashed field (`member.passwordHash = typed`), which stores the hash, and never reads it back.
+  - `maillink field from source`: a link sent to the address in that field through a mail source of step 3. Comes with or after step 3.
+  - `openid "issuer" client "setting:..." match field`: an outside identity provider (OpenID Connect: a company's, Google, Microsoft); the person whose field equals the claim of that name is signed in.
+  - `account field`: the computer's own account (the system user name) matches the field. Desktop and command line only; the plain way for a family laptop or an office.
+  - `token field`: a long random token Clarity makes, kept hashed: typed or pasted in the sign-in window (a key handed out, a badge), or sent as a bearer token by a program that calls a served program or its command line.
+- `session` (how long a sign-in lasts) and `tries` (how many failed tries per account and address before it slows down) are set per project; without them 8 hours and 5 per 15 minutes.
+- The catalog lives in one place, the shared Rust library `clarity-auth` (hashing, the strategies' checks, OpenID Connect, the mail link's one-time codes), with a C interface for the other stacks, as Clarity.Formats does. The checker, the IDE's Settings rows and the generators read the catalog (each strategy's name, its fields, its options, the targets it works on); nothing switches on a strategy's name. A strategy written in a library, in the project's own language, is a later step on the same line, as a library format is.
 
-Opens: anything used by more than one person: family tools, small team apps, a club's records.
+### The sign-in window is a window
+
+- Adding `signin` writes a window `SignIn` of the kind `signin` into the project, with a part per strategy the project names; the designer edits it as any window (its look, texts, layout, a logo). A button signs in with `on click -> signin password` (or `maillink`, `openid`, ...), and a failed try shows Clarity's text in the window's message area. The texts are the project's keys, with Clarity's defaults written into its translations.
+- First start with no records of the entity: the window makes the first account with the strategies that can (password, account).
+- Served: every browser gets the sign-in window first; then a session cookie (HTTP-only, SameSite, the `session` expiry) that the wire's calls carry beside the tab's `browser` id. Desktop: signed in for the run; `remember 30 days` on the `signin` block keeps it in the system's key store. Command line: `account` or `token`, or `--user` with a password asked on the terminal.
+- `signout` as a click target, and `me` is gone with it.
+
+### What code and windows can do with it
+
+- Code reads `me`, the signed-in record, with all its fields: `me.role`, `me.name`.
+- Who may open or run something is a condition per case, not a fixed role list: `allow when me.role == Admin or me.role == Parent` on a window, view, command or action; the designer shows it as a property of every page and command. The program refuses what is not allowed, whatever a browser sends.
+- Rows are not filtered by magic (determinism rule): code writes `where r.person.owner == me`. An entity can declare `readable when record.owner == me` and `writable when ...`, which the program checks on every find and save and refuses otherwise, as a check rather than a hidden filter.
+- `clarity users project add|password|token|remove` from the command line, for a server without a browser at hand.
+
+### Every stack, every target
+
+- Per runtime: the session in each stack's web server, the sign-in window's calls, `me` per call, `allow` and `readable`/`writable` checks; the strategies' work in `clarity-auth`. One conformance file, `conformance/signin.json`: each strategy's success and refusal, `tries`, session expiry, `allow`, `readable`.
+- Language and checker: `signin` and its lines from the catalog, `hashed` (only on text, never read), `me` (an error without `signin`), `allow when`, `readable when`, `writable when`.
+- IDE: Settings rows for `signin` and each strategy (from the catalog), the `signin` window kind in the designer, `allow` in every page's and command's properties.
+- Manual: a page `app.signin.md`, registered in `crates/clarity-tools/src/manual.rs`; LANGUAGE.md; agent reference; i18n for Clarity's own words.
+- Example: the todo example gets `signin Person on desktop` with `account` and `password`, so each person sees their own tasks.
+
+### How step 4 is built
+
+Agreed 2026-11-12 ("yes, build it"). The contract every part builds against:
+
+- **Clarity.Auth** (`runtimes/rust-auth`, `clarity-auth`; C interface `runtimes/rust-auth-ffi`, `clarity_auth.h`, `clarity_auth_api()`): one table with one `call(op, argsJson)`. Operations: `catalog`, `find {strategy, inputs}` gives `{role, equals}`, `check {strategy, inputs, stored: {role: value}}` gives bool, `hash {method, text}`, `newToken`, `triesAllowed {key, tries, window}`, `triesFailed {key}`, `triesCleared {key}`, `sessionOpen {record, seconds}` gives a token, `sessionFind {token}` gives the record or 0, `sessionClose {token}`, `sessionCloseAll {record}`. The first catalog: `password` (match, secret argon2id; inputs name, password), `account` (match; desktop and cli), `token` (secret sha256; inputs token; desktop, web and cli: typed or pasted in the sign-in window, or given by a calling program).
+- **Project file**: `signin Entity on desktop web cli` with indented lines: a strategy and its fields in the catalog's order, `session N minutes|hours|days` (8 hours), `tries N per M minutes` (5 per 15), `remember N days` (desktop, none without it). Kept as `Settings.signin` (clarity-project) and handed to `Project.signin` (clarity-spec).
+- **Language**: field modifier `hashed` (text only; assigning stores the strategy's hash, Argon2id for a field no strategy names; never read in code, never bound to a part); entity lines `readable when <condition>` and `writable when <condition>`, the record named as in its data events; `me` (the signed-in record; an error without `signin`); `newToken()`; `allow when <condition>` as a clause of an action and a CLI command, and `allow="<condition>"` on a window, view and command of the frame; window kind `signin` (`<SignIn>` in `.cxaml`); click targets `signin <strategy>` and `signout`. A `signin <strategy>` button takes the strategy's inputs from the parts of its window named as the inputs (`name`, `password`, `token`); the checker says which part is missing.
+- **Runtimes** (each in its own idiom): the program's start says whether sign-in comes first (`Started.signin`, as `Started.unconnected` does); the program answers `signin {strategy, inputs}` (tries per `account:<equals>` and, served, `address:<ip>`; `find`; look the record up by that field; `check`; a refusal is Clarity's `signinRefused` or `signinTooManyTries`) and `signout`. With no record of the entity yet, a strategy with `firstAccount` makes the first one from its inputs (the match field, the hash), the other fields at their defaults. `account` on the desktop signs in by itself at the start when the computer's user has a record. `me` is read per call from the database handle's current person: on the desktop one for the program, served the session of the call's cookie (`clarity_session`, HttpOnly, SameSite=Strict, Path=/, Max-Age of `session`). `allow` refuses with `notAllowed`; `readable`/`writable` refuse a find or save with `notYours`.
+- **The same on every stack** (settled 2026-11-12 after the five generators were built): `readable when` is checked on every path that hands a record out: `find`, a reference read, `reload`, a window's list data, dropdown options and pictures; a window whose list holds a record that is not the person's refuses to open (a check, not a filter: the project writes `where`). A frame command's `allow when` holds for what it runs or opens, checked there; commands that share a handler or a window share their conditions, stricter, never looser. A keyed refusal shows the project's translation, else Clarity's English it carries, else its key.
+- **Command line**: when `cli` is among the block's targets, a command signs in before it runs: `account` by itself when the computer's user has a record, `--token` (or `CLARITY_TOKEN`) for `token`, `--user name` with the password typed on the terminal without echo for `password`. A strategy applies on the block's targets it works on: the same `password` works on desktop, web and cli, against the same hashed field.
+- **Resets and password rules** (the user, 2026-11-12, choosing "1, totp right after step 4": `minimum`, signing out on a change, recovery codes and a reset by someone allowed in step 4): the catalog's fourth strategy `recovery field codesField` (match, secret `sha256-lines`; inputs name, code; every target) signs in once per code, and Clarity.Auth's `afterSignin {strategy, inputs, stored}` gives what to store after it (the code used up), which the runtime writes back. `newRecoveryCodes(count)` in code gives the codes as lines of text, shown once; assigned to the hashed field they are kept as their digests. `minimum N` indented under a strategy whose secret people choose (`password`): text assigned to that hashed field is checked first (`secretFits {text, minimum}`), refused with Clarity's `secretTooShort` (slot `{minimum}`). A save that changes a person's secret signs that person out everywhere else (`sessionCloseOthers {record, token}`; all of them when someone else changed it). A reset by someone allowed is code that assigns the field, in a window with `allow when`, or `clarity users`. Mail resets come with `maillink` after step 3; TOTP right after step 4.
+- **The splash doubles as the sign-in window** (the user, 2026-11-12: "ui wise... the splash screen can double for a login screen, right?", choosing "One window does both"): the app's splash may hold sign-in parts (the strategies' inputs and `-> signin <strategy>` buttons). It shows while `on start` runs, as a splash does; when start is done and sign-in comes first, it stays open and its sign-in parts work; after signing in it closes and the main window opens. Such a splash is the sign-in page (`Started.signin` names it), and the project needs no window of kind `signin`; having both is an error that says to keep one.
+- **The sign-in part** (the user, 2026-11-12: "this needs a signin part that can be put on it own window or the splash and should be configurable from the 'back-end' parts", and "Keep both" for the hand-built way): a part `signin`, on the sign-in window or the app's splash, at most one in a project. It draws itself from the project's `signin` block: per strategy what it needs (password: name, password and a Sign in button; recovery: a choice to use a recovery code, name and code; token: a token field; account: a button that uses the computer's account), in Clarity's own words, and shows a refusal inside itself. Its settings are the project's, not the part's (the user, 2026-11-12: "maybe the signin part needs it own config in a project?", choosing "Move them to the project"): `shows password, recovery, account` under `signin` says which strategies it offers, in that order, the first the default (all that work on the target, in block order, without the line); `remember 30 days when asked` gives it a "keep me signed in" box, and a person is remembered only when it is ticked. The part itself keeps only its place and look. A window or splash holding it signs in, as one with `signin <strategy>` buttons does; the hand-built way (parts named after a strategy's inputs and those buttons) stays for a layout of one's own. New window's sign-in window and the todo example's splash use the part.
+- **Clarity.UI**: shows the `signin` window before the main window when the start says so, as it shows the unconnected window; after a sign-in the main window; `signout` closes every window and shows the sign-in window again.
+
+Opens: anything used by more than one person: family tools, small team apps, a club's records, programs called by other programs.
 
 ## Step 5: A save never overwrites someone else's change
 
@@ -154,16 +216,21 @@ Today a save writes every field of the record as its window holds it (`UPDATE ..
 - A save of an existing record writes only when the version is still the one it read: `UPDATE ... SET ..., row_version = row_version + 1 WHERE id = ? AND row_version = ?`. No row changed while the record exists means someone saved it since: the save is refused and changes nothing.
 - A delete is checked the same way: deleting a record someone changed since is refused too.
 - A refused save behaves as a refused save does today: the handler stops and the person sees a message, Clarity's word `savedSince` ("Someone else changed this record since you opened it. Reload it to see their change."). Code that wants to do more catches nothing new: `reload customer` reads the current record, and the window shows it.
-- Overwriting on purpose is written out, never guessed (determinism): `save customer anyway` writes regardless of the version.
+- The text of the refusal is the entity's choice when it wants one: `savedSince @customerChangedSince` on the entity, a key whose text may use the slots of the record as stored now (`"{current.changedBy.name} changed this customer since you opened it"`, with `changedBy` set by the project's own `before save`). Without the line, Clarity's `savedSince`.
+- Overwriting on purpose is written out, never guessed (determinism): `save customer anyway` writes regardless of the version. With sign-in, `anyway` can be limited like anything else (`allow when` on the action that does it).
 - One record is one unit. No merging of fields (Anna's phone with Ben's address): a merge guesses which change wins, and that is the person's call after a reload.
 
 ### One mechanism, used everywhere
 
-- **Undo.** Undo already refuses when what it would take back was changed since (`undoChangedSince`). It uses the version too, so there is one notion of "changed since", not two.
+- **Undo.** Undo already refuses when what it would take back was changed since (`undoChangedSince`), today by comparing the whole row with how the step left it. It compares the version instead, so there is one notion of "changed since", not two.
 - **Background jobs (step 6).** A job's save that is refused is a failed call: `on failed` runs with the `savedSince` text, the other calls go on.
 - **Served programs.** Two browsers are exactly the case above; nothing extra.
 - **The IDE's data browser** saves through the same check, so an edit in Clarity while the program runs is refused rather than lost.
 - **Events on records** run inside the save, so a refused save runs none of its events' writes.
+
+### Undo, made one with the version check
+
+Built with step 5's runtime half (2026-11-12, at the user's request to the session that built it): a handler (a step) is one transaction per data source it changes, and a failure rolls all of it back, with no repair afterwards; Ctrl+Z on an edit of several steps takes back all of them or none, checked inside the transaction; only the last 100 steps are kept, and taking back an older one is refused with Clarity's `undoTooOld` ("This was done too long ago to take back"). Undo compares the version where an entity has one, the whole row where it has none.
 
 ### Where the version lives
 
@@ -232,6 +299,7 @@ code Requests
 - `start ... as sending` names the run, so code and parts can read it: `sending.total`, `sending.done`, `sending.failed`, `sending.running` (bool). A progress part binds to it (`progress bind sending.done max sending.total`).
 - `stop sending` lets running calls end and starts no new ones; `on finished` still runs.
 - A run belongs to the window that started it. Closing the window stops it as `stop` does; see open questions for runs that outlive their window.
+- A run runs as the person who started it (step 4): `me` in its calls is that person, the action's `allow when` is checked at `start` for every call, and `readable`/`writable` hold inside it. Signing out stops the person's runs as `stop` does.
 
 ### What runs in parallel: the smaller version
 
@@ -257,7 +325,7 @@ Opens: sending many mails or requests, importing and converting files, downloads
 
 - Person, Site, Account, Request entities; Status enum (sent, acknowledged, done, refused, noReply).
 - The password-manager export as a `csv` source (step 1), imported into Account; JustDeleteMe JSON through `http get` (exists); privacy contact found by a local model through `http post` with `plainText` (step 1).
-- `encrypted "setting:databaseKey"` on the database with `databaseKey: secret, forget` (2), one family member per sign-in on the desktop (4).
+- `encrypted "setting:databaseKey"` on the database with `databaseKey: secret, forget` (2), one family member per sign-in on the desktop with the `account` and `password` strategies (4).
 - Article 17 requests sent from each person's own address (3a), at most 4 at a time in the background with a progress bar (6), a save refused when another family member changed the record meanwhile (5), replies matched by `inReplyTo` (3b); the `mailto:` route with `encoded` stays for those without SMTP.
 - CLI command `requests overdue` for cron.
 
@@ -266,7 +334,7 @@ Opens: sending many mails or requests, importing and converting files, downloads
 1. Step 1, in the order and with the done lists of FORMATS-PLAN.md.
 2. Step 2 (format choice first: a spike that opens one SQLCipher file from Rust, Go, C#, C and the IDE).
 3. Step 3a, then 3b.
-4. Step 4.
+4. Steps 4, 5 and 6 as one slice, in that order, with a second factor by an authenticator app (TOTP, recovery codes as its backup) and SSO (the `openid` strategy) right after step 4, and passkeys after that (see "Steps 4, 5 and 6 as one slice"): step 4 with the strategies `password`, `account` and `token` first, `openid` next, `maillink` with or after step 3.
 5. Step 5 (before jobs, which make the same record saved from two places more common).
 6. Step 6.
 7. The example.
@@ -291,7 +359,7 @@ Formats and mail are written once, in Rust, and every stack uses that one implem
 - Each runtime keeps only what is its own: fitting rows to its records with the shared matching rules, a file source's find/save over the rows, and its secret settings. That part stays per runtime with a conformance file, as JSON reading is today.
 - A library `format` (FORMATS-PLAN.md, later step) stays in the project's own language, as every library does (custom-parts-are-libraries); its adapter hands rows to the runtime the same way the shared library does.
 - SQLite encryption (step 2) is not in a shared library: it lives in each runtime's own SQLite. File and file-store encryption uses the vault's scheme, so it can be one shared crate too (`clarity-crypt`, or part of `clarity-formats`); to decide in step 2.
-- Sign-in (step 4) lives in each stack's web server, which is per runtime; only Argon2id hashing could come from the shared library.
+- Sign-in (step 4): the session and the checks live in each stack's runtime and web server; the strategies (hashing, OpenID Connect, mail-link codes) in the shared Rust library `clarity-auth` with a C interface, as formats and mail.
 - The generator adds a library to a program only when the project uses it; for Rust a feature on clarity-runtime (as `pictures = ["dep:clarity-image"]`).
 - What a new C-interface library touches, from Clarity.Image and Clarity.Video:
   - `runtimes/rust-X` and `runtimes/rust-X-ffi` with `include/clarity_X.h` and a table function `clarity_X_api()`;
@@ -316,6 +384,8 @@ Checked 2026-11-10 against the language and the other plans:
 | Encrypted backups | BACKUP-PLAN.md (built) | Extends it |
 | `tcp`/`mqtt`/`websocket` | HARDWARE-PLAN.md transports | Left to that plan |
 | (dropped) `password` type | `password` part, `secret` setting type | `hashed` modifier on a text field |
+| (dropped) `app ... signin` | the project file's `project` block | `signin` is a project setting with indented strategies, as `datasource` has its options |
+| (dropped) `roles Role`, `allow Admin` | expressions, data events | `allow when <condition>` per case; who changed is set in `before save` |
 | `mails m in inbox` | `files f in store` | Same shape on purpose |
 | Library `format` | library functions, PARTS-LIBRARY-PLAN.md packages | An extra line in the same declaration; ships as any library |
 | Version check | undo's `undoChangedSince`, refused saves, external `key` mapping, migrations | Undo uses the same version; a refusal is a refused save; `version "Column"` maps like `key`; the column comes by an ordinary proposed step |
@@ -336,5 +406,9 @@ Checked 2026-11-10 against the language and the other plans:
 - Go: modernc.org/sqlite is pure Go and has no encryption. Options: cgo with SQLite3 Multiple Ciphers (loses pure Go and complicates cross builds), or ncruces/go-sqlite3 (its own encryption formats, which the IDE would then need to read). To decide after the spike.
 - C#: SQLitePCLRaw's `bundle_e_sqlcipher` is community-built; Zetetic's official SQLCipher for .NET is paid. Or ship SQLite3 Multiple Ciphers as the native SQLite of Clarity.Runtime.Sqlite.
 - Mail login with OAuth (Gmail, Outlook) now or later; Proton through Bridge needs only `basic`.
-- Sign-in methods beyond a password (passkeys, a link by mail once step 3 exists, an outside identity provider).
+- SSO: the user, 2026-11-12, asked "how are we dealing with sso?" and chose "Right after step 4" (with TOTP, before passkeys). The `openid` strategy (OpenID Connect: Entra ID, Google Workspace, Okta, Keycloak): `openid "issuer" client "setting:..." match field`, optionally `create` (a record made at a first sign-in from the claims; refused without it). Web: the browser goes to the provider and back to the served program, Clarity.Auth exchanges the code and checks the token against the provider's keys. Desktop: the system browser and a loopback address with PKCE. Command line: the device code flow. Open: SAML, and browser sign-in through a Windows domain (Kerberos); `account` covers the Windows user on the desktop already. Built ahead, 2026-11-12, at the user's ask to share it with the IDE's Microsoft sign-in for Foundry (docs/FOUNDRY-PLAN.md, "One sign-in for apps and the IDE"): the desktop flow in Clarity.Auth (`openid` module, feature `openid`: a provider by its endpoints or `Provider::entra`, PKCE, the loopback address, redeem and renew); the strategy line, the web and command-line flows and the runtimes come with the SSO step.
+- Passkeys: the user, 2026-11-12: "passkeys come later then". After step 4, as the next strategy of the catalog: web first (WebAuthn, the project names its domain, HTTPS or localhost), then the desktop (Windows Hello and macOS through their system APIs, security keys through libfido2 on Linux); several per person, so a `list<Passkey>` field, and a click target to add one once signed in.
+- Other strategies beyond the first catalog: a second factor (TOTP), LDAP for an office directory; and whether a project's library may add a strategy in step 4 or later.
+- Whether `me` may be read in a run with no person (started by the app or on a schedule), as an optional record, or such runs may not read it.
+- Whether a signed-in desktop program keeps one person for the run, or may switch person without restarting (a shared family computer).
 - Scheduled work inside a served application (`every day at 08:00 run overdueCheck`) versus the CLI target plus cron, which works today.

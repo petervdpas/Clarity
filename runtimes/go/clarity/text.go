@@ -107,6 +107,10 @@ type Text struct {
 // KeyText is the text of key, with its value in the person's language.
 func KeyText(key string) Text { return Text{Key: key} }
 
+// KeyedText is Clarity's own words: the text of key in the person's
+// language, and english where the program has no text for the key.
+func KeyedText(key, english string) Text { return Text{Key: key, Template: english} }
+
 // NewText is text as written in Clarity, before its slots get values.
 func NewText(template string) Text { return Text{Template: template} }
 
@@ -133,7 +137,13 @@ func (t Text) Show() string {
 	var out strings.Builder
 	rest := t.Template
 	if t.Key != "" {
-		rest = TextOf(t.Key)
+		rest = t.Key
+		if value, ok := KeyValue(t.Key); ok {
+			rest = value
+		} else if t.Template != "" {
+			// Clarity's own words carry their English.
+			rest = t.Template
+		}
 	}
 	for {
 		at := strings.IndexAny(rest, "{}")
@@ -175,10 +185,12 @@ func (t Text) Show() string {
 // key with its slot values, whose value the screen looks up.
 func (t Text) MarshalJSON() ([]byte, error) {
 	if t.Key != "" {
+		// Clarity's own words carry their English, shown where the language has no value.
 		return json.Marshal(struct {
 			Key    string          `json:"key"`
 			Values map[string]Slot `json:"values,omitempty"`
-		}{t.Key, t.Values})
+			Text   string          `json:"text,omitempty"`
+		}{t.Key, t.Values, t.Template})
 	}
 	if len(t.Values) == 0 {
 		return json.Marshal(t.Show())

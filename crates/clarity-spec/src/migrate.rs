@@ -8,6 +8,11 @@
 //!     rename field Customer.vat_number to vat
 //! ```
 //!
+//! An owned table carries a version column (`row_version`), which a save
+//! checks so it never overwrites someone else's change: a new entity gets it
+//! in its `add entity` (a line `version`), an existing table from
+//! `add version Customer` (docs/APP-CAPABILITIES-PLAN.md step 5).
+//!
 //! Replaying the steps in order gives the schema as last migrated, so no
 //! separate snapshot is kept. What the dictionary has and that schema does
 //! not are the pending changes, which become the next step.
@@ -84,6 +89,26 @@ impl Column {
     }
 }
 
+/// The column of an owned table that holds each record's version: a whole
+/// number, 1 for a new record, one more with each save.
+pub const VERSION_COLUMN: &str = "row_version";
+
+impl Column {
+    /// The version column, `row_version`: a whole number, 1 for the records
+    /// a step finds and for new ones.
+    pub fn version() -> Column {
+        Column {
+            name: VERSION_COLUMN.to_string(),
+            ty: FieldType::Integer,
+            unique: false,
+            search: false,
+            default: Some(Literal::Number("1".to_string())),
+            column: Some(VERSION_COLUMN.to_string()),
+            store: None,
+        }
+    }
+}
+
 /// The longest name of a file of a `file` field.
 pub const FILE_NAME_LENGTH: u32 = 255;
 
@@ -96,6 +121,8 @@ pub struct Table {
     pub table: Option<String>,
     /// The key column, when it is not `id`.
     pub key: Option<String>,
+    /// The table has the version column, `row_version`.
+    pub version: bool,
 }
 
 impl Table {
@@ -139,7 +166,12 @@ pub enum Op {
         columns: Vec<Column>,
         table: Option<String>,
         key: Option<String>,
+        /// With the version column, `row_version` (a line `version`).
+        version: bool,
     },
+    /// `add version Customer`: the table gets the version column, 1 for the
+    /// records already there.
+    AddVersion { entity: String },
     RemoveEntity { name: String },
     RenameEntity { from: String, to: String },
     AddField { entity: String, column: Column },
@@ -189,7 +221,8 @@ impl Op {
             | Op::RemoveSearch { entity, .. }
             | Op::MapTable { entity, .. }
             | Op::MapKey { entity, .. }
-            | Op::MapColumn { entity, .. } => entity,
+            | Op::MapColumn { entity, .. }
+            | Op::AddVersion { entity } => entity,
         }
     }
 }
@@ -209,7 +242,7 @@ impl Schema {
     /// Applies one change, or says why it does not fit this schema.
     pub fn apply(&mut self, op: &Op) -> Result<(), String> {
         match op {
-            Op::AddEntity { name, columns, table, key } => {
+            Op::AddEntity { name, columns, table, key, version } => {
                 if self.table(name).is_some() {
                     return Err(format!("there is already an entity '{name}'"));
                 }
@@ -218,7 +251,15 @@ impl Schema {
                     columns: columns.clone(),
                     table: table.clone(),
                     key: key.clone(),
+                    version: *version,
                 });
+            }
+            Op::AddVersion { entity } => {
+                let table = self.table_mut(entity)?;
+                if table.version {
+                    return Err(format!("{entity} has its version column already"));
+                }
+                table.version = true;
             }
             Op::MapTable { entity, table } => self.table_mut(entity)?.table = table.clone(),
             Op::MapKey { entity, key } => self.table_mut(entity)?.key = key.clone(),
@@ -377,15 +418,20 @@ fn expect_to(cursor: &mut Cursor) -> ParseResult<String> {
 fn parse_op(node: &Node) -> ParseResult<Op> {
     let mut cursor = Cursor::new(node.line);
     let verb = cursor.expect_ident("a migration step")?;
-    let what = cursor.expect_ident("'entity', 'field', 'unique' or 'search'")?;
+    let what = cursor.expect_ident("'entity', 'field', 'unique', 'search' or 'version'")?;
     let op = match (verb.name.as_str(), what.name.as_str()) {
         ("add", "entity") => {
             let name = cursor.expect_ident("an entity name")?.name;
             cursor.expect_end()?;
-            let (mut columns, mut table, mut key) = (Vec::new(), None, None);
+            let (mut columns, mut table, mut key, mut version) = (Vec::new(), None, None, false);
             for child in &node.children {
                 no_children(child)?;
                 let mut c = Cursor::new(child.line);
+                // `version`: the table has the version column.
+                if matches!(child.line.tokens.as_slice(), [word] if word.text == "version") {
+                    version = true;
+                    continue;
+                }
                 // `table "x"` and `key "x"`, as in an entity.
                 if let Some(word @ ("table" | "key")) = first_word(child)
                     && child.line.tokens.get(1).is_some_and(|t| t.kind == TokenKind::Str)
@@ -398,8 +444,11 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
                 }
                 columns.push(Column::from_field(&parse_field_at(&mut c, child.line.span)?));
             }
-            return Ok(Op::AddEntity { name, columns, table, key });
+            return Ok(Op::AddEntity { name, columns, table, key, version });
         }
+        ("add", "version") => Op::AddVersion {
+            entity: cursor.expect_ident("an entity, as in add version Customer")?.name,
+        },
         ("remove", "entity") => Op::RemoveEntity {
             name: cursor.expect_ident("an entity name")?.name,
         },
@@ -475,7 +524,7 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
         }
         ("add" | "remove" | "rename" | "change" | "map", _) => {
             return Err(Diagnostic::error(
-                format!("expected 'entity', 'field', 'unique' or 'search' after '{}'", verb.name),
+                format!("expected 'entity', 'field', 'unique', 'search' or 'version' after '{}'", verb.name),
                 what.span,
             ));
         }
@@ -546,6 +595,9 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
     let mut schema = schema(project, source);
     let entities: Vec<&Entity> = project.entities_in(source).collect();
     let in_dictionary = |name: &str| entities.iter().any(|e| e.name.name == name);
+    // Clarity keeps a version in the tables it owns; an external database's
+    // tables stay as they are, also in the baseline taking ownership writes.
+    let versioned = owned(project, source);
     let mut ops = Vec::new();
     let take = |schema: &mut Schema, op: Op, ops: &mut Vec<Op>| {
         if schema.apply(&op).is_ok() {
@@ -571,6 +623,7 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
                 columns,
                 table: entity.table.clone(),
                 key: entity.key.clone(),
+                version: versioned,
             };
             take(&mut schema, op, &mut ops);
             continue;
@@ -637,12 +690,22 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
                 take(&mut schema, op, &mut ops);
             }
         }
+        if versioned && !table.version {
+            take(&mut schema, Op::AddVersion { entity: name.clone() }, &mut ops);
+        }
     }
     let removed: Vec<String> = schema.tables.iter().map(|t| t.name.clone()).filter(|n| !in_dictionary(n)).collect();
     for name in removed {
         take(&mut schema, Op::RemoveEntity { name }, &mut ops);
     }
     ops
+}
+
+/// Whether Clarity owns the database of data source `source`: a SQL source
+/// that is not external, or the one source of a project loaded without its
+/// project file.
+pub(crate) fn owned(project: &Project, source: &str) -> bool {
+    project.sources.iter().find(|s| s.name == source).is_none_or(|s| s.sql && !s.external)
 }
 
 /// Renames worth proposing: an entity that went while one with mostly the
@@ -733,13 +796,16 @@ fn mapped_text(name: &Option<String>) -> String {
 /// A change as a line of a step (an added entity takes several lines).
 pub fn op_text(op: &Op) -> String {
     match op {
-        Op::AddEntity { name, columns, table, key } => {
+        Op::AddEntity { name, columns, table, key, version } => {
             let mut text = format!("add entity {name}");
             if let Some(table) = table {
                 text.push_str(&format!("\n    table {}", quote(table)));
             }
             if let Some(key) = key {
                 text.push_str(&format!("\n    key {}", quote(key)));
+            }
+            if *version {
+                text.push_str("\n    version");
             }
             for column in columns {
                 text.push_str(&format!("\n    {}", column_text(column)));
@@ -762,6 +828,7 @@ pub fn op_text(op: &Op) -> String {
         Op::MapTable { entity, table } => format!("map table {entity} {}", mapped_text(table)),
         Op::MapKey { entity, key } => format!("map key {entity} {}", mapped_text(key)),
         Op::MapColumn { entity, field, column } => format!("map column {entity}.{field} {}", mapped_text(column)),
+        Op::AddVersion { entity } => format!("add version {entity}"),
     }
 }
 
@@ -778,6 +845,7 @@ fn short_text(op: &Op) -> String {
         Op::RemoveSearch { field, .. } => format!("stop searching {field}"),
         Op::MapColumn { field, column: Some(column), .. } => format!("store {field} in column {}", quote(column)),
         Op::MapColumn { field, column: None, .. } => format!("store {field} in a column of its own name"),
+        Op::AddVersion { .. } => "add version".to_string(),
         other => op_text(other),
     }
 }
@@ -851,6 +919,9 @@ pub(crate) fn check(project: &mut Project) {
                 let message = match mine.as_slice() {
                     [] => continue,
                     [Op::AddEntity { .. }] => format!("entity '{name}' is not in a migration yet{place}"),
+                    [Op::AddVersion { .. }] => format!(
+                        "{name} has no version column yet{place}, so saves of it are not checked: write the next migration step, which adds it (add version {name})"
+                    ),
                     changes => format!(
                         "{name} has changes that are not in a migration yet{place}: {}",
                         changes.iter().map(|op| short_text(op)).collect::<Vec<_>>().join(", ")

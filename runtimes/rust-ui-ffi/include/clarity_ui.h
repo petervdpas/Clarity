@@ -145,9 +145,11 @@ CLARITY_API ClarityStatus clarity_translate(const char *key, size_t key_len, con
  * commands and their arguments are those of the web server's wire (DESIGN
  * 7.3, clarity-gen's served()), plus the desktop's own:
  *
- *   started        {}                      -> {"main": "Main", "unconnected": null | {"handler","window","problem": Text}}
+ *   started        {}                      -> {"main": "Main", "unconnected": null | {"handler","window","problem": Text}, "signin": null | "SignIn"}
  *   start_app      {}                      -> Reply
  *   connect        {}                      -> null
+ *   signin         {strategy, inputs: {name, password, token}} -> null, or {"error": Text} (signinRefused, signinTooManyTries)
+ *   signout        {}                      -> null
  *   open_window    {window, with}          -> Reply
  *   close_window   {state}                 -> Reply
  *   return_to      {state}                 -> Reply

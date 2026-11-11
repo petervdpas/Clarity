@@ -37,7 +37,40 @@ pub fn emit(project: &Project) -> (String, String) {
         header.push_str(&h);
         source.push_str(&s);
     }
+    // `readable when` and `writable when` (step 4), defined with the entity's module.
+    for entity in project.entities().filter(|e| !e.record && !e.settings) {
+        for (word, condition) in [("readable", &entity.readable), ("writable", &entity.writable)] {
+            if condition.is_some() {
+                let _ = writeln!(header, "/// `{word} when` of {}: refused with notYours when it does not hold.\n{};", entity.name.name, access_signature(entity, word, false));
+            }
+        }
+    }
     (header, source)
+}
+
+/// The function that checks `readable when` or `writable when` (`word`) of
+/// `entity` on a record, named as in its data events; `unused` marks its
+/// parameters, for the definition.
+pub fn access_signature(entity: &Entity, word: &str, unused: bool) -> String {
+    let maybe = if unused { "[[maybe_unused]] " } else { "" };
+    format!("void {}_{word}({maybe}clarity::Db& db, {maybe}const {}& {})", snake(&entity.name.name), entity.name.name, ident(&record_name(&entity.name.name)))
+}
+
+/// The record methods the database runs around a save or delete: the data
+/// events written for `entity`, and `before_save` and `before_delete` where
+/// `writable when` is checked.
+pub fn record_events(project: &Project, entity: &Entity) -> Vec<DataEvent> {
+    let name = &entity.name.name;
+    let mut events: Vec<DataEvent> =
+        project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
+    if entity.writable.is_some() && !entity.record && !entity.settings {
+        for event in [DataEvent::BeforeSave, DataEvent::BeforeDelete] {
+            if !events.contains(&event) {
+                events.push(event);
+            }
+        }
+    }
+    events
 }
 
 /// A record (DESIGN 5.12): a struct of its fields with their defaults and
@@ -227,8 +260,12 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if entity.key_column() != "id" {
         let _ = writeln!(statics, "    static constexpr const char* key = {};", string(entity.key_column()));
     }
-    let events: Vec<DataEvent> =
-        project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
+    // The version a save is checked by (conformance/versions.json), none where saves are not checked.
+    let version = project.version_column(name);
+    if let Some(column) = &version {
+        let _ = writeln!(statics, "    static constexpr const char* version_column = {};", string(column));
+    }
+    let events = record_events(project, entity);
     let mut methods = String::from(
         "    static const std::vector<std::string>& columns();\n    std::vector<clarity::SqlValue> values() const;\n    static ",
     );
@@ -242,6 +279,11 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !required.is_empty() {
         methods.push_str("    static std::vector<clarity::Required> required();\n");
     }
+    // The entity's own words for a refused save, filled from the record as stored now.
+    let saved_since = entity.saved_since.as_ref().filter(|_| version.is_some());
+    if saved_since.is_some() {
+        let _ = writeln!(methods, "    static clarity::Text saved_since(clarity::Db& db, const {name}& current);");
+    }
     for event in &events {
         let _ = writeln!(methods, "    void {}(clarity::Db& db);", event.word());
     }
@@ -250,8 +292,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !cascades.is_empty() {
         methods.push_str("    void cascade(clarity::Db& db) const;\n");
     }
+    let held = if version.is_some() { "    /// The version it was read or last saved with (conformance/versions.json); 0 for a new one.\n    int64_t version = 0;\n" } else { "" };
     let header = format!(
-        "struct {name} {{\n    int64_t id = 0;\n{fields}\n{statics}{methods}}};\nvoid to_json(nlohmann::json& out, const {name}& r);\nvoid from_json(const nlohmann::json& in, {name}& r);\n\n"
+        "struct {name} {{\n    int64_t id = 0;\n{fields}{held}\n{statics}{methods}}};\nvoid to_json(nlohmann::json& out, const {name}& r);\nvoid from_json(const nlohmann::json& in, {name}& r);\n\n"
     );
 
     let mut source = String::new();
@@ -287,8 +330,16 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !required.is_empty() {
         let _ = write!(source, "std::vector<clarity::Required> {name}::required() {{\n    return {{{}}};\n}}\n\n", required.join(", "));
     }
+    if let Some(key) = saved_since {
+        source.push_str(&saved_since_hook(project, entity, key));
+    }
     let mut to = String::new();
     let mut from = String::new();
+    // The version travels with the record, as a window's data does.
+    if version.is_some() {
+        to.push_str("    out[\"rowVersion\"] = r.version;\n");
+        from.push_str("    if (in.contains(\"rowVersion\") && in[\"rowVersion\"].is_number()) r.version = in[\"rowVersion\"].get<int64_t>();\n");
+    }
     for f in &entity.fields {
         let key = string(&f.name.name);
         let _ = writeln!(to, "    out[{key}] = {};", json_of(f));
@@ -305,6 +356,79 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
         source,
         "void to_json(nlohmann::json& out, const {name}& r) {{\n    out = nlohmann::json::object();\n    out[\"id\"] = r.id;\n{to}}}\n\nvoid from_json(const nlohmann::json& in, {name}& r) {{\n    r = {name}{{}};\n    if (in.contains(\"id\") && in[\"id\"].is_number()) r.id = in[\"id\"].get<int64_t>();\n{from}}}\n\n"
     );
-    let _ = record_name;
     (header, source)
+}
+
+/// The runtime's hook that words a refused save of `entity` with its own
+/// `savedSince` key: its slots filled from the record as stored now
+/// (clarity_spec::versions::saved_since_slots), and the fields of each
+/// record it refers to loaded through the database. A reference that is
+/// empty or leads nowhere leaves its slots empty; it never fails the refusal.
+fn saved_since_hook(project: &Project, entity: &Entity, key: &str) -> String {
+    let name = &entity.name.name;
+    let refs: Vec<(&Field, &Entity)> = stored(entity)
+        .filter_map(|f| match &f.ty {
+            FieldType::Ref { entity: target } => project.entity(&target.name).map(|t| (f, t)),
+            _ => None,
+        })
+        .collect();
+    let db = if refs.is_empty() { "[[maybe_unused]] clarity::Db& db" } else { "clarity::Db& db" };
+    let mut out = format!("clarity::Text {name}::saved_since({db}, const {name}& current) {{\n    auto text = clarity::Text::key({})", string(key));
+    for (path, slot) in record_slots(entity, "current", "current", true) {
+        let _ = write!(out, "\n        .with({}, {slot})", string(&path));
+    }
+    out.push_str(";\n");
+    for (field, target) in refs {
+        let member = format!("current.{}", ident(&field.name.name));
+        let base = format!("current.{}", field.name.name);
+        // Its id is the reference's own slot, filled above.
+        let own_id = format!("{base}.id");
+        let slots: Vec<(String, String)> = record_slots(target, "found", &base, false).into_iter().filter(|(p, _)| *p != own_id).collect();
+        let _ = write!(out, "    // The record {} refers to, as stored now.\n    text = text", field.name.name);
+        for (path, _) in &slots {
+            let _ = write!(out, "\n        .with({}, clarity::slot_text(\"\"))", string(path));
+        }
+        let _ = write!(out, ";\n    if ({member}) {{\n        try {{\n            const auto found = db.get<{}>(*{member});\n            text = text", target.name.name);
+        for (path, slot) in &slots {
+            let _ = write!(out, "\n                .with({}, {slot})", string(path));
+        }
+        out.push_str(";\n        } catch (const std::exception&) {\n            // Gone since: its slots stay empty.\n        }\n    }\n");
+    }
+    out.push_str("    return text;\n}\n\n");
+    out
+}
+
+/// The slots of a record `var` under `path`, each its path and value: its
+/// id, each stored field shown as a value, and a reference as its id (an
+/// empty one as empty text), with `.id` too where `ref_ids`. A hashed or
+/// secret field is never shown; pictures, files and lists are no text.
+fn record_slots(entity: &Entity, var: &str, path: &str, ref_ids: bool) -> Vec<(String, String)> {
+    let mut slots = vec![(format!("{path}.id"), format!("clarity::slot_integer({var}.id, \"\")"))];
+    for f in stored(entity).filter(|f| !f.modifiers.hashed) {
+        let value = format!("{var}.{}", ident(&f.name.name));
+        let format = string(f.modifiers.format.as_deref().unwrap_or_default());
+        let at = format!("{path}.{}", f.name.name);
+        let slot = match &f.ty {
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme => format!("clarity::slot_text({value})"),
+            FieldType::Integer | FieldType::Id => format!("clarity::slot_integer({value}, {format})"),
+            FieldType::Duration => format!("clarity::slot_duration({value})"),
+            FieldType::Decimal { scale, .. } => format!("clarity::slot_decimal({value}, {scale}, {format})"),
+            FieldType::Money => format!("clarity::slot_money({value}, {format})"),
+            FieldType::Date => format!("clarity::slot_date({value}, {format})"),
+            FieldType::DateTime => format!("clarity::slot_date_time({value}, {format})"),
+            FieldType::Bool => format!("clarity::slot_bool({value})"),
+            FieldType::Enum { name } => format!("clarity::slot_enum(name_of({value}), {})", string(&name.name)),
+            FieldType::Ref { .. } => {
+                let id = format!("({value} ? clarity::slot_integer(*{value}, \"\") : clarity::slot_text(\"\"))");
+                slots.push((at.clone(), id.clone()));
+                if ref_ids {
+                    slots.push((format!("{at}.id"), id));
+                }
+                continue;
+            }
+            FieldType::Secret | FieldType::Image | FieldType::File | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => continue,
+        };
+        slots.push((at, slot));
+    }
+    slots
 }

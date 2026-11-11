@@ -4,6 +4,7 @@
 #include "shell/serve.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -27,6 +28,7 @@ using Socket = int;
 #define SERVE_INVALID (-1)
 #endif
 
+#include "clarity/people.hpp"
 #include "clarity/splash.hpp"
 
 namespace clarity::shell {
@@ -36,8 +38,11 @@ namespace {
 /// The largest request the server reads: a command with a file in it.
 constexpr size_t largest_request = 64u * 1024u * 1024u;
 
-std::string reply(const std::string& status, const std::string& type, std::string_view body) {
-    std::string out = "HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\nContent-Length: " + std::to_string(body.size()) + "\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
+std::string reply(const std::string& status, const std::string& type, std::string_view body, const std::optional<std::string>& set_cookie = std::nullopt) {
+    std::string out = "HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\nContent-Length: " + std::to_string(body.size()) + "\r\nCache-Control: no-cache\r\n";
+    // A served sign-in's session, or its end (people.hpp, served).
+    if (set_cookie) out += "Set-Cookie: " + *set_cookie + "\r\n";
+    out += "Connection: close\r\n\r\n";
     out.append(body);
     return out;
 }
@@ -104,6 +109,22 @@ void send_all(Socket client, const std::string& text) {
     }
 }
 
+/// The value of header `name` (in lower case) of a request whose headers end at `end`; empty without it.
+std::string header_of(const std::string& request, size_t end, const std::string& name) {
+    for (size_t line = request.find("\r\n"); line != std::string::npos && line < end; line = request.find("\r\n", line + 2)) {
+        size_t from = line + 2, colon = request.find(':', from);
+        if (colon == std::string::npos || colon > end) continue;
+        std::string got = request.substr(from, colon - from);
+        std::transform(got.begin(), got.end(), got.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (got != name) continue;
+        size_t stop = request.find("\r\n", colon);
+        std::string value = request.substr(colon + 1, (stop == std::string::npos ? end : stop) - colon - 1);
+        value.erase(0, value.find_first_not_of(" \t"));
+        return value;
+    }
+    return "";
+}
+
 /// The settings record of a window's state in `holder`'s "state"; null when it has none.
 nlohmann::json window_settings(const nlohmann::json& holder) {
     if (!holder.is_object() || !holder.contains("state") || !holder["state"].is_object()) return nullptr;
@@ -123,6 +144,9 @@ nlohmann::json settings_changed(const nlohmann::json& before, const std::string&
         if (before.contains(name) && before[name] != value) return after;
     return nullptr;
 }
+
+/// The answer to one of the library's commands sent to invoke_path: none for the library's default.
+std::optional<std::string> invoked(Server& server, const nlohmann::json& sent, const std::string& command, const nlohmann::json& args);
 
 }  // namespace
 
@@ -149,7 +173,7 @@ nlohmann::json Server::keep_settings(const std::string& browser, const nlohmann:
     return settings;
 }
 
-std::string serve_answer(Server& server, const std::string& request) {
+std::string serve_answer(Server& server, const std::string& request, const std::string& address) {
     auto end = request.find("\r\n\r\n");
     auto first = request.find(' ');
     auto second = first == std::string::npos ? first : request.find(' ', first + 1);
@@ -162,49 +186,10 @@ std::string serve_answer(Server& server, const std::string& request) {
             return reply("200 OK", "application/json", nlohmann::json{{"error", "a command is JSON with its command and its args"}}.dump());
         auto command = sent["command"].get<std::string>();
         auto args = sent.contains("args") && sent["args"].is_object() ? sent["args"] : nlohmann::json::object();
-        auto number = [&args](const char* name) { return args.contains(name) && args[name].is_number_unsigned() ? args[name].get<uint64_t>() : uint64_t(0); };
-        // How far a long call is, and its Stop, beside the service.
-        if (command == "watches") return reply("200 OK", "application/json", nlohmann::json{{"value", server.service().options().watches}}.dump());
-        if (Watches::is_command(command)) return reply("200 OK", "application/json", server.watches().answer(command, number("id")).dump());
-        // What the splash page says is loading, while the app's on start runs.
-        if (command == "splash_status") {
-            auto said = clarity::splash::status();
-            return reply("200 OK", "application/json", nlohmann::json{{"value", said ? nlohmann::json(*said) : nlohmann::json(nullptr)}}.dump());
-        }
-        // Engines beside the screen run in the program, each canvas's by its number.
-        if (command.rfind("engine_", 0) == 0) {
-            const auto& engines = server.service().options().screen_engines;
-            auto answered = engines ? engines(command, args) : std::nullopt;
-            return reply("200 OK", "application/json", answered ? answered->dump() : nlohmann::json{{"error", "there is no command " + command}}.dump());
-        }
-        // The page that asks (one id per tab), with its person's settings as it keeps them; its language is its own.
-        std::string browser = sent.contains("browser") && sent["browser"].is_string() ? sent["browser"].get<std::string>() : "";
-        Page page = server.page(browser, sent.contains("settings") ? sent["settings"] : nlohmann::json(nullptr));
-        if (command == "set_language") {
-            const auto& language = args.contains("language") ? args["language"] : nlohmann::json(nullptr);
-            server.choose_language(browser, language.is_string() && !language.get<std::string>().empty() ? std::optional(language.get<std::string>()) : std::nullopt);
-            return reply("200 OK", "application/json", nlohmann::json{{"value", nullptr}}.dump());
-        }
-        // What the window had: the state's settings, or else the page's.
-        auto before = window_settings(args);
-        if (before.is_null()) before = page.settings;
-        // A handler's request that names its watch runs under it (the page sends no start_watch).
-        uint64_t watch = command == "dispatch_event" || command == "answer_event" ? number("watch") : 0;
-        if (watch) server.watches().enter(watch);
-        std::optional<std::string> answer;
-        {
-            AsPage as(page);
-            answer = wire_answer(server.service(), command, args);
-        }
-        if (watch) server.watches().leave();
-        // Settings the command changed go back to this page alone, for it to keep.
-        if (auto now = answer ? settings_changed(before, *answer) : nlohmann::json(nullptr); now.is_object()) {
-            auto answered = nlohmann::json::parse(*answer);
-            answered["settings"] = server.keep_settings(browser, now);
-            answer = answered.dump();
-        }
+        // The command runs as the person of the request's session cookie; without one, while people sign in on the web, only the sign-in window answers.
+        auto done = served(header_of(request, end, "cookie"), address, command, args, [&] { return invoked(server, sent, command, args); });
         // None reads as the service's error for a command it does not know, which the library takes as its default.
-        return reply("200 OK", "application/json", answer ? *answer : nlohmann::json{{"error", "there is no command " + command}}.dump());
+        return reply("200 OK", "application/json", done.answer ? *done.answer : nlohmann::json{{"error", "there is no command " + command}}.dump(), done.set_cookie);
     }
     // The browser files by their paths below browser/; the page at /.
     if (method == "GET" && !path.empty() && path[0] == '/') {
@@ -214,6 +199,55 @@ std::string serve_answer(Server& server, const std::string& request) {
     }
     return reply("404 Not Found", "text/plain", "");
 }
+
+namespace {
+
+std::optional<std::string> invoked(Server& server, const nlohmann::json& sent, const std::string& command, const nlohmann::json& args) {
+    auto number = [&args](const char* name) { return args.contains(name) && args[name].is_number_unsigned() ? args[name].get<uint64_t>() : uint64_t(0); };
+    // How far a long call is, and its Stop, beside the service.
+    if (command == "watches") return nlohmann::json{{"value", server.service().options().watches}}.dump();
+    if (Watches::is_command(command)) return server.watches().answer(command, number("id")).dump();
+    // What the splash page says is loading, while the app's on start runs.
+    if (command == "splash_status") {
+        auto said = clarity::splash::status();
+        return nlohmann::json{{"value", said ? nlohmann::json(*said) : nlohmann::json(nullptr)}}.dump();
+    }
+    // Engines beside the screen run in the program, each canvas's by its number.
+    if (command.rfind("engine_", 0) == 0) {
+        const auto& engines = server.service().options().screen_engines;
+        auto answered = engines ? engines(command, args) : std::nullopt;
+        return answered ? answered->dump() : nlohmann::json{{"error", "there is no command " + command}}.dump();
+    }
+    // The page that asks (one id per tab), with its person's settings as it keeps them; its language is its own.
+    std::string browser = sent.contains("browser") && sent["browser"].is_string() ? sent["browser"].get<std::string>() : "";
+    Page page = server.page(browser, sent.contains("settings") ? sent["settings"] : nlohmann::json(nullptr));
+    if (command == "set_language") {
+        const auto& language = args.contains("language") ? args["language"] : nlohmann::json(nullptr);
+        server.choose_language(browser, language.is_string() && !language.get<std::string>().empty() ? std::optional(language.get<std::string>()) : std::nullopt);
+        return nlohmann::json{{"value", nullptr}}.dump();
+    }
+    // What the window had: the state's settings, or else the page's.
+    auto before = window_settings(args);
+    if (before.is_null()) before = page.settings;
+    // A handler's request that names its watch runs under it (the page sends no start_watch).
+    uint64_t watch = command == "dispatch_event" || command == "answer_event" ? number("watch") : 0;
+    if (watch) server.watches().enter(watch);
+    std::optional<std::string> answer;
+    {
+        AsPage as(page);
+        answer = wire_answer(server.service(), command, args);
+    }
+    if (watch) server.watches().leave();
+    // Settings the command changed go back to this page alone, for it to keep.
+    if (auto now = answer ? settings_changed(before, *answer) : nlohmann::json(nullptr); now.is_object()) {
+        auto answered = nlohmann::json::parse(*answer);
+        answered["settings"] = server.keep_settings(browser, now);
+        answer = answered.dump();
+    }
+    return answer;
+}
+
+}  // namespace
 
 std::string serve_address(int argc, char** argv, const std::string& project) {
     for (int i = 1; i + 1 < argc; i++)
@@ -256,11 +290,16 @@ int serve(const Options& options, const std::string& address) {
     // Requests side by side, each on a thread of its own: a long call's
     // request stays open while the page asks how far it is.
     for (;;) {
-        Socket client = accept(listener, nullptr, nullptr);
+        sockaddr_storage peer{};
+        socklen_t peer_size = sizeof peer;
+        Socket client = accept(listener, reinterpret_cast<sockaddr*>(&peer), &peer_size);
         if (client == SERVE_INVALID) continue;
-        auto answer_one = [&server, client] {
+        // Where the request came from, as failed tries count per address.
+        char host_of[NI_MAXHOST] = {0};
+        std::string from = getnameinfo(reinterpret_cast<sockaddr*>(&peer), peer_size, host_of, sizeof host_of, nullptr, 0, NI_NUMERICHOST) == 0 ? host_of : "";
+        auto answer_one = [&server, client, from] {
             std::string request = read_request(client);
-            if (!request.empty()) send_all(client, serve_answer(server, request));
+            if (!request.empty()) send_all(client, serve_answer(server, request, from));
             SERVE_CLOSE(client);
         };
         try {

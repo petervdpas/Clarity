@@ -74,6 +74,7 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (m.computed, "computed"),
         (m.search, "search"),
         (m.cascade, "cascade"),
+        (m.hashed, "hashed"),
     ] {
         if on {
             parts.push(word.to_string());

@@ -43,7 +43,7 @@ impl Typed {
 
 impl Program for Typed {
     fn started(&self) -> Started {
-        Started { main: self.window.clone(), unconnected: None }
+        Started { main: self.window.clone(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         Ok(reply(WindowState::new("", Map::new())))

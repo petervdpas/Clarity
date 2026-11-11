@@ -37,6 +37,8 @@
 
   /** The project's settings, which a settings window shows (DESIGN 5.17). */
   const hasSettings = $derived(preview.project.files.some((f) => f.entities.some((e) => e.settings)));
+  /** A project whose people sign in, with no sign-in window yet, is offered one. */
+  const offersSignIn = $derived(!!preview.project.signin && !preview.project.files.some((f) => f.pages.some((p) => p.kind === "signin")));
   const entities = $derived(preview.project.files.flatMap((f) => f.entities.filter((e) => !e.settings).map((e) => e.name.name)));
 
   function submit(e: SubmitEvent) {
@@ -57,7 +59,9 @@
                 ? { kind: "splash" }
                 : kind === "toolbox"
                   ? { kind: "toolbox" }
-                  : { kind: "blank" };
+                  : kind === "signIn"
+                    ? { kind: "signIn" }
+                    : { kind: "blank" };
     onsubmit(target, name.trim(), template);
   }
 
@@ -80,6 +84,7 @@
         <option value="view">Blank view (shown in a content)</option>
         <option value="splash">Splash screen (shows while the app starts)</option>
         <option value="toolbox">Toolbox (the tools a canvas shows, designed as a view)</option>
+        {#if offersSignIn}<option value="signIn">Sign-in window (people sign in here first)</option>{/if}
         {#if hasSettings}<option value="settings">Settings window</option>{/if}
         {#each entities as entity (entity)}
           <option value="form:{entity}">Form for {entity}</option>

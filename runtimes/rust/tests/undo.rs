@@ -159,3 +159,79 @@ fn a_reply_carries_the_step_its_handler_made() {
     assert_eq!(saved.step, db.last_step());
     assert!(serde_json::to_string(&quiet).unwrap().find("\"step\"").is_none());
 }
+
+#[test]
+fn a_handler_is_one_transaction_kept_at_its_end() {
+    let db = db();
+    let mut a = shape(&db, "A", 1);
+    // A failure after two saves rolls both back, with the database's own rollback.
+    let failed: Result<()> = db.step(|| {
+        a.x = 2;
+        db.save(&mut a)?;
+        shape(&db, "B", 3);
+        Err(Error::Invalid("no".into()))
+    });
+    assert!(failed.is_err());
+    let names: Vec<(String, i64)> = db.all::<Shape>().unwrap().into_iter().map(|s| (s.name, s.x)).collect();
+    assert_eq!(names, vec![("A".to_string(), 1)]);
+    // While a handler runs, its changes are its own; at its end they are kept.
+    db.step(|| {
+        a.x = 5;
+        db.save(&mut a)
+    })
+    .unwrap();
+    assert_eq!(db.get::<Shape>(a.id).unwrap().x, 5);
+    db.batch("", "SELECT 1").unwrap();
+}
+
+#[test]
+fn the_steps_of_one_edit_are_undone_all_or_none() {
+    let db = db();
+    let mut a = shape(&db, "A", 1);
+    let mut b = shape(&db, "B", 1);
+    db.step(|| {
+        a.x = 2;
+        db.save(&mut a)
+    })
+    .unwrap();
+    let first = db.last_step();
+    db.step(|| {
+        b.x = 2;
+        db.save(&mut b)
+    })
+    .unwrap();
+    let second = db.last_step();
+    // B changed since the edit, so neither step is taken back.
+    let mut other = db.get::<Shape>(b.id).unwrap();
+    other.x = 9;
+    db.save(&mut other).unwrap();
+    let refused = db.replay_steps(&[second, first], true);
+    assert!(matches!(refused, Err(Error::Refused(ref text)) if text.key.as_deref() == Some("undoChangedSince")), "{refused:?}");
+    assert_eq!(db.get::<Shape>(a.id).unwrap().x, 2, "A was not taken back either");
+    // Without the change in between, both go back together.
+    other.x = 2;
+    db.save(&mut other).unwrap();
+    assert_eq!(db.replay_steps(&[second, first], true).unwrap(), true);
+    assert_eq!((db.get::<Shape>(a.id).unwrap().x, db.get::<Shape>(b.id).unwrap().x), (1, 1));
+}
+
+#[test]
+fn only_the_last_steps_are_kept() {
+    let db = db();
+    let mut a = shape(&db, "A", 0);
+    let mut first = 0;
+    for x in 1..=(clarity_runtime::UNDO_STEPS as i64 + 1) {
+        db.step(|| {
+            a.x = x;
+            db.save(&mut a)
+        })
+        .unwrap();
+        if x == 1 {
+            first = db.last_step();
+        }
+    }
+    let refused = db.undo(first);
+    assert!(matches!(refused, Err(Error::Refused(ref text)) if text.key.as_deref() == Some("undoTooOld")), "{refused:?}");
+    assert_eq!(db.undo(db.last_step()).unwrap(), true);
+    assert_eq!(db.get::<Shape>(a.id).unwrap().x, clarity_runtime::UNDO_STEPS as i64);
+}

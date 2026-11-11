@@ -61,6 +61,12 @@ Text Text::key(const std::string& key) {
     return t;
 }
 
+Text Text::keyed(const std::string& key, const std::string& english) {
+    Text t(english);
+    t.key_ = key;
+    return t;
+}
+
 Text Text::with(const std::string& path, Slot value) const {
     Text t = *this;
     t.values_[path] = std::move(value);
@@ -69,7 +75,7 @@ Text Text::with(const std::string& path, Slot value) const {
 
 std::string Text::show() const {
     std::string out;
-    const std::string t = key_ ? text_of(*key_) : template_;
+    const std::string t = key_ ? key_value(*key_).value_or(template_.empty() ? *key_ : template_) : template_;
     size_t i = 0;
     while (i < t.size()) {
         char c = t[i];
@@ -135,6 +141,7 @@ void to_json(nlohmann::json& out, const Text& text) {
     if (text.key()) {
         out = nlohmann::json::object();
         out["key"] = *text.key();
+        if (!text.text().empty()) out["text"] = text.text();
         if (!text.values().empty()) out["values"] = text.values();
         return;
     }
@@ -150,7 +157,7 @@ void from_json(const nlohmann::json& in, Text& text) {
         text = Text::plain(in.get<std::string>());
         return;
     }
-    Text t = in.contains("key") ? Text::key(in.at("key").get<std::string>()) : Text(in.at("text").get<std::string>());
+    Text t = in.contains("key") ? Text::keyed(in.at("key").get<std::string>(), in.value("text", "")) : Text(in.at("text").get<std::string>());
     // The values kept in a name of their own: items() refers into them.
     const nlohmann::json values = in.value("values", nlohmann::json::object());
     for (auto& [path, value] : values.items()) t = t.with(path, value.get<Slot>());

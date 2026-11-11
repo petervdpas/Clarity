@@ -126,10 +126,13 @@ impl Driver for Mysql {
     fn apply(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
         for (i, statement) in statements.iter().enumerate() {
             if let Err(err) = self.0.query_drop(statement) {
-                let failure = Failure::from(err);
-                let (Failure::Reference(what) | Failure::Other(what)) = &failure;
+                let what = match Failure::from(err) {
+                    Failure::Reference(what) | Failure::Other(what) => what,
+                    // Only a file source's file changes on disk; a database says why itself.
+                    Failure::Changed => crate::saved_since().text,
+                };
                 return Err(Failure::Other(if i == 0 {
-                    what.clone()
+                    what
                 } else {
                     format!("{what}; MySQL cannot undo the {i} statement(s) of step {version} that ran before it")
                 }));

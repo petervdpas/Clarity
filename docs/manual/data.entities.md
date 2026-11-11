@@ -56,7 +56,29 @@ A field whose type is an enum holds one of its values.
 - `store name`: for an `image`, keep its pictures as files in that file store.
 - `min value`, `max value` and `pattern "regex"`: limits a value must keep to.
 
-Each modifier appears at most once per field. The checker reports a default or a limit that does not fit the type. Entities of a database you do not own also use `table`, `key` and `column`; see [Data sources](data.sources.md). The full list is in [the language reference](../LANGUAGE.md).
+Each modifier appears at most once per field. The checker reports a default or a limit that does not fit the type. Entities of a database you do not own also use `table`, `key`, `column` and `version`; see [Data sources](data.sources.md). The full list is in [the language reference](../LANGUAGE.md).
+
+## A save never overwrites someone else's change
+
+Every record of an entity in a database Clarity owns carries a version, a whole number in a column of its own, `row_version`. Clarity keeps it: 1 for a new record, one more with each save, and you never set it. When two people (or two windows) open the same customer and Anna saves first, Ben's save is refused instead of writing Anna's old values back, and Ben sees "Someone else changed this record since you opened it. Reload it to see their change." A delete of a record someone changed since is refused the same way. What to do then is in [Handlers](code.handlers.md#messages-windows-and-data).
+
+The column comes from a migration step, which Clarity proposes; see [Migrations](data.migrations.md). Until that step is written, saves of the entity are not checked.
+
+An entity can show its own text for the refusal, by a key, with the slots of the record as it is stored now:
+
+```clarity
+entity Customer
+    name: text(80), label @customerNameLabel
+    changedBy: ref Person, label @customerChangedByLabel
+    savedSince @customerChangedSince
+```
+
+```clarity
+translation en
+    customerChangedSince "{current.changedBy.name} changed this customer since you opened it"
+```
+
+The slots are `current.` with a field, `current.id`, and a field of a record it refers to. Clarity keeps no "changed by" of its own: a `before save` that sets `customer.changedBy = me` does; see [Data events](code.data-events.md).
 
 ## The entity editor
 

@@ -41,9 +41,18 @@ impl Cache {
     }
 }
 
+/// How a request proves who sends it.
+pub enum Auth {
+    /// An API key, sent as `x-api-key` (Anthropic, or a Foundry key).
+    Key(String),
+    /// A token asked for before each request, sent as `Authorization: Bearer`:
+    /// a Microsoft sign-in for Foundry, which renews it when it runs out.
+    Token(Box<dyn FnMut() -> Result<String, String> + Send>),
+}
+
 pub struct Anthropic {
     pub base_url: String,
-    pub api_key: String,
+    pub auth: Auth,
     pub model: String,
     pub max_tokens: u32,
     pub cache: Cache,
@@ -51,7 +60,7 @@ pub struct Anthropic {
 }
 
 impl Anthropic {
-    pub fn new(base_url: &str, api_key: &str, model: &str, max_tokens: u32, cache: Cache) -> Result<Anthropic, String> {
+    pub fn new(base_url: &str, auth: Auth, model: &str, max_tokens: u32, cache: Cache) -> Result<Anthropic, String> {
         let client = reqwest::blocking::Client::builder()
             // A long answer streams for a while; only the connection itself has a limit.
             .connect_timeout(std::time::Duration::from_secs(20))
@@ -60,7 +69,7 @@ impl Anthropic {
             .map_err(|err| format!("cannot make the connection: {err}"))?;
         Ok(Anthropic {
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
+            auth,
             model: model.to_string(),
             max_tokens,
             cache,
@@ -71,10 +80,12 @@ impl Anthropic {
 
 impl Model for Anthropic {
     fn reply(&mut self, request: &Request, on_text: &mut dyn FnMut(&str)) -> Result<ModelReply, String> {
-        let response = self
-            .client
-            .post(format!("{}/v1/messages", self.base_url))
-            .header("x-api-key", &self.api_key)
+        let sent = self.client.post(format!("{}/v1/messages", self.base_url));
+        let sent = match &mut self.auth {
+            Auth::Key(key) => sent.header("x-api-key", key.as_str()),
+            Auth::Token(source) => sent.header("Authorization", format!("Bearer {}", source()?)),
+        };
+        let response = sent
             .header("anthropic-version", API_VERSION)
             .json(&body(request, &self.model, self.max_tokens, self.cache))
             .send()

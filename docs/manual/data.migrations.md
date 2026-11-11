@@ -34,12 +34,15 @@ migration "Phone and VAT"
 - `rename field Entity.old to new` renames a field; its values stay.
 - `change field Entity.name: type` changes a field's type and converts the values.
 - `add unique Entity.name` and `remove unique Entity.name` make a field unique, or not.
+- `add version Entity` gives the table its version column, `row_version`, at 1 for the records already there, so a save never overwrites someone else's change (see [Entities](data.entities.md#a-save-never-overwrites-someone-elses-change)). A new entity gets it from its first step: a line `version` in its `add entity`, which Clarity writes itself.
 
 Only what is stored counts in a step: the type, `unique`, `column`, and `default` for records that already exist. Labels, help texts and checks such as `min` belong to the entity alone. The `map table`, `map key` and `map column` changes are in [the language reference](../LANGUAGE.md).
 
 ## Pending changes
 
 Replaying the steps in order gives the schema as last migrated. What your entities have and the steps do not are the pending changes. The checker shows them as warnings on the entity, and Clarity will not generate the application until a step covers them.
+
+A table that has no version column yet is proposed `add version Entity`, one line per entity. That one alone does not hold the application back: it is generated as it is, and saves of the entity are not checked until the step exists. The baseline that Own writes leaves the version out, as the tables it describes have none; the next step adds it.
 
 ## The Migrations section
 

@@ -102,6 +102,71 @@ fn default_value(project: &Project, field: &Field) -> String {
     }
 }
 
+/// The refusal of a save someone saved since in the entity's own words
+/// (`savedSince @key`): the key, its slots filled from the record as stored
+/// now (`current.<field>`, `current.id`, a reference's id) and from each
+/// record it refers to, loaded through `db` (`current.<ref>.<field>`). A
+/// reference that is missing, or not the person's to read, leaves its
+/// slots empty, never failing the refusal. Nothing without the line, so the
+/// runtime says Clarity's `savedSince`.
+fn saved_since(project: &Project, entity: &Entity) -> String {
+    let Some(key) = &entity.saved_since else { return String::new() };
+    let mut slots = vec![("current.id".to_string(), "Slot::integer(current.id, None)".to_string())];
+    let mut referred = String::new();
+    for field in &entity.fields {
+        let path = format!("current.{}", field.name.name);
+        let var = format!("current.{}", ident(&field.name.name));
+        slots.extend(field_slots(field, &path, &var));
+        let FieldType::Ref { entity: target } = &field.ty else { continue };
+        let Some(target) = project.entities().find(|e| e.name.name == target.name) else { continue };
+        let Some(file) = project.files.iter().find(|f| f.entities.iter().any(|e| e.name.name == target.name.name)) else { continue };
+        let module = file.module.as_ref().map(|m| super::names::snake(&m.name)).unwrap_or_default();
+        let ty = format!("crate::modules::{module}::{}", target.name.name);
+        let local = format!("referred_{}", super::names::snake(&field.name.name));
+        let readable = if target.readable.is_some() { format!(".and_then(|r| {ty}::readable(db, r).ok())") } else { String::new() };
+        let with: String = target
+            .fields
+            .iter()
+            .flat_map(|f| field_slots(f, &format!("{path}.{}", f.name.name), &format!("{local}.{}", ident(&f.name.name))))
+            .map(|(p, slot)| format!("\n                .with({p:?}, {slot})"))
+            .collect();
+        referred.push_str(&format!(
+            "        // A missing reference leaves its slots empty.\n        if let Some({local}) = {var}.and_then(|id| db.get::<{ty}>(id).ok()){readable} {{\n            text = text{with};\n        }}\n"
+        ));
+    }
+    let with: String = slots.iter().map(|(path, slot)| format!("\n            .with({path:?}, {slot})")).collect();
+    let binding = if referred.is_empty() { "" } else { "mut " };
+    let db = if referred.is_empty() { "_db" } else { "db" };
+    format!("\n    fn saved_since({db}: &Db, current: &Self) -> Text {{\n        let {binding}text = Text::key({key:?}){with};\n{referred}        text\n    }}\n")
+}
+
+/// The slots of `field` read from `var` at slot `path`: one for a value, a
+/// reference's id as itself and as `.id`, none for pictures, files and lists.
+fn field_slots(field: &Field, path: &str, var: &str) -> Vec<(String, String)> {
+    let format = match field.modifiers.format.as_deref() {
+        Some(name) => format!("Some({name:?})"),
+        None => "None".to_string(),
+    };
+    let slot = match &field.ty {
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("Slot::text({var}.clone())"),
+        FieldType::Integer | FieldType::Id => format!("Slot::integer({var}, {format})"),
+        FieldType::Duration => format!("Slot::duration({var})"),
+        FieldType::Decimal { scale, .. } => format!("Slot::decimal({var}, Some({scale}), {format})"),
+        FieldType::Money => format!("Slot::money({var}, {format})"),
+        FieldType::Date => format!("Slot::date({var}, {format})"),
+        FieldType::DateTime => format!("Slot::date_time({var}, {format})"),
+        FieldType::Bool => format!("Slot::boolean({var})"),
+        FieldType::Enum { name } => format!("Slot::name(&{var}, {:?})", name.name),
+        // A reference shows the id of the record it refers to.
+        FieldType::Ref { .. } => {
+            let id = format!("Slot::integer({var}.unwrap_or(0), None)");
+            return vec![(path.to_string(), id.clone()), (format!("{path}.id"), id)];
+        }
+        FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => return Vec::new(),
+    };
+    vec![(path.to_string(), slot)]
+}
+
 fn to_sql(field: &Field) -> String {
     let value = format!("self.{}", ident(&field.name.name));
     match &field.ty {
@@ -196,20 +261,35 @@ fn settings_kept(project: &Project, entity: &Entity) -> String {
     )
 }
 
+/// The struct field that carries a versioned record's version
+/// (docs/APP-CAPABILITIES-PLAN.md step 5): snake_case, so no Clarity field
+/// (camelCase) has its name.
+const VERSION_FIELD: &str = "row_version";
+/// Its name on the wire to Clarity.UI, camelCase as every name there.
+const VERSION_WIRE: &str = "rowVersion";
+
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
+    // The column a save and a delete check; none where saves are not checked.
+    let version = project.version_column(name);
     let mut out = format!(
         "#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]\npub struct {name} {{\n    pub id: Id,\n"
     );
     for field in &entity.fields {
         out.push_str(&super::names::struct_field(&field.name.name, &field_type(&field.ty)));
     }
+    // A record a screen hands back without its version is a new one's, 0.
+    if version.is_some() {
+        out.push_str(&format!("    #[serde(default, rename = {VERSION_WIRE:?})]\n    pub {VERSION_FIELD}: i64,\n"));
+    }
     out.push_str("}\n\n");
 
+    let version_zero = if version.is_some() { format!("            {VERSION_FIELD}: 0,\n") } else { String::new() };
     out.push_str(&format!("impl Default for {name} {{\n    fn default() -> Self {{\n        {name} {{\n            id: 0,\n"));
     for field in &entity.fields {
         out.push_str(&format!("            {}: {},\n", ident(&field.name.name), default_value(project, field)));
     }
+    out.push_str(&version_zero);
     out.push_str("        }\n    }\n}\n\n");
     // The settings are kept per person, never in a database: a start takes
     // back of what was kept only what still fits (conformance/settings.json).
@@ -291,23 +371,42 @@ fn record(project: &Project, entity: &Entity) -> String {
         }
         hooks.push_str("        Ok(())\n    }\n");
     }
-    if !events.is_empty() {
+    // `writable when` (docs/APP-CAPABILITIES-PLAN.md step 4) is checked first,
+    // in the hooks before a save and a delete, so nothing of a refused one is kept.
+    let writable = entity.writable.is_some();
+    if !events.is_empty() || writable {
         hooks.push_str("\n    const EVENTS: bool = true;\n");
+        let checked = [DataEvent::BeforeSave, DataEvent::BeforeDelete];
+        for event in checked.iter().copied().filter(|e| writable && !events.contains(e)) {
+            hooks.push_str(&format!("\n    fn {}(&mut self, db: &Db) -> Result<()> {{\n        {name}::writable(db, self)\n    }}\n", event.word()));
+        }
         for event in events {
             let function = ident(&format!("{}_{}", event.word(), record_name(name)));
+            let check = if writable && checked.contains(&event) { format!("{name}::writable(db, self)?;\n        ") } else { String::new() };
             hooks.push_str(&format!(
-                "\n    fn {}(&mut self, db: &Db) -> Result<()> {{\n        {function}(db, self)\n    }}\n",
+                "\n    fn {}(&mut self, db: &Db) -> Result<()> {{\n        {check}{function}(db, self)\n    }}\n",
                 event.word()
             ));
         }
     }
+    // The version, read with every record and checked by every save and delete.
+    let (version_column, version_hooks) = match &version {
+        Some(column) => (
+            format!("    const VERSION: Option<&'static str> = Some({column:?});\n"),
+            format!(
+                "\n    fn version(&self) -> i64 {{\n        self.{VERSION_FIELD}\n    }}\n\n    fn set_version(&mut self, version: i64) {{\n        self.{VERSION_FIELD} = version;\n    }}\n{}",
+                saved_since(project, entity)
+            ),
+        ),
+        None => (String::new(), String::new()),
+    };
     out.push_str(&format!(
         "impl Record for {name} {{
     const SOURCE: &'static str = {source:?};
     const TABLE: &'static str = {table:?};
     const KEY: &'static str = {key:?};
     const COLUMNS: &'static [&'static str] = &[{columns}];
-{pictures}{required}
+{pictures}{required}{version_column}
     fn id(&self) -> Id {{
         self.id
     }}
@@ -324,9 +423,9 @@ fn record(project: &Project, entity: &Entity) -> String {
     fn from_values(id: Id, values: &[SqlValue]) -> Result<Self> {{
         Ok({name} {{
             id,
-{from_values}{lists}        }})
+{from_values}{lists}{version_zero}        }})
     }}
-{hooks}}}
+{version_hooks}{hooks}}}
 
 ",
         table = entity.table_name(),

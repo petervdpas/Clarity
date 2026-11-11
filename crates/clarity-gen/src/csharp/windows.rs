@@ -46,6 +46,23 @@ fn text(path: &str, body: String) -> OutFile {
     }
 }
 
+/// Every command of a frame: its menu's, its toolbar's and its ribbon's.
+fn frame_commands(frame: &clarity_spec::model::Frame) -> Vec<&Command> {
+    let mut commands = Vec::new();
+    if let Some(menu) = &frame.menu {
+        commands.extend(all_commands(&menu.items));
+    }
+    if let Some(toolbar) = &frame.toolbar {
+        commands.extend(all_commands(&toolbar.items));
+    }
+    if let Some(ribbon) = &frame.ribbon {
+        for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
+            commands.extend(all_commands(&group.items));
+        }
+    }
+    commands
+}
+
 /// Every part of a list of parts, nested ones included.
 fn all_parts(widgets: &[Widget]) -> Vec<&Widget> {
     let mut out = Vec::new();
@@ -212,6 +229,43 @@ impl<'a> Window<'a> {
         }
     }
 
+    /// The `allow when` of the commands, as C# conditions: by the window a
+    /// command opens, and by the handler it runs. A command of the app's
+    /// frame has its condition typed in the app's file.
+    #[allow(clippy::type_complexity)]
+    fn command_allows(&self, types: &FileTypes, ctx: &WindowCtx) -> Result<(BTreeMap<String, Vec<String>>, BTreeMap<String, Vec<String>>), Vec<String>> {
+        let (mut opens, mut handlers) = (BTreeMap::<String, Vec<String>>::new(), BTreeMap::<String, Vec<String>>::new());
+        let mut app_types: Option<FileTypes> = None;
+        let mut errors = Vec::new();
+        for command in &self.commands {
+            let Some(condition) = &command.props.allow_condition else { continue };
+            let of_app = self.app.is_some_and(|a| frame_commands(&a.frame).iter().any(|c| std::ptr::eq(*c, *command)));
+            let typed = if of_app {
+                app_types.get_or_insert_with(|| {
+                    let file = self.app.and_then(|a| self.project.files.iter().find(|f| f.apps.iter().any(|x| x.name.name == a.name.name)));
+                    file.and_then(|f| clarity_spec::code::check::types(&self.project.files).remove(&f.path)).unwrap_or_default()
+                })
+            } else {
+                types
+            };
+            match logic::condition(self.project, typed, ctx, condition) {
+                Ok(holds) => {
+                    if let Some(target) = &command.props.on_click {
+                        opens.entry(target.clone()).or_default().push(holds.clone());
+                    }
+                    if let Some(handler) = &command.props.handler {
+                        handlers.entry(handler.clone()).or_default().push(holds);
+                    }
+                }
+                Err(mut problems) => errors.append(&mut problems),
+            }
+        }
+        for conditions in opens.values_mut().chain(handlers.values_mut()) {
+            conditions.dedup();
+        }
+        if errors.is_empty() { Ok((opens, handlers)) } else { Err(errors) }
+    }
+
     /// A value of `entity.field`, written `value`, as the person reads it:
     /// an enum by its label, the rest in the person's format or the field's own.
     fn shown_text(&self, entity: &Entity, field: &str, value: &str) -> String {
@@ -321,7 +375,7 @@ impl<'a> Window<'a> {
             if *list {
                 // A list of records starts empty: code builds it (DESIGN 5.12).
                 if !self.project.entity(entity).is_some_and(|e| e.record) {
-                    let _ = writeln!(constructor, "        {field} = Db.All<{entity}>();");
+                    let _ = writeln!(constructor, "        {field} = {};", super::readable(self.project, entity, "Db", format!("Db.All<{entity}>()")));
                 }
                 let _ = write!(
                     properties,
@@ -372,7 +426,7 @@ impl<'a> Window<'a> {
             let fetcher = picture_fetch(data, field);
             fetches.insert(
                 fetcher.clone(),
-                ("Task<byte[]?>", format!("() => Fetched(nameof({fetcher}), () => Db.PictureOf<{}>({}.Id, {}))", entity.name.name, member(data), string(&entity.column_of(field)))),
+                ("Task<byte[]?>", format!("() => Fetched(nameof({fetcher}), () => Db.PictureOf<{}>({}.Id, {}))", entity.name.name, super::readable(self.project, &entity.name.name, "Db", member(data)), string(&entity.column_of(field)))),
             );
             if let Some(store) = entity.field(field).and_then(|f| f.modifiers.store.as_deref()) {
                 let fetcher = picture_file(data, field);
@@ -409,7 +463,7 @@ impl<'a> Window<'a> {
             }
         }
         for (entity, shown) in &choices {
-            let _ = writeln!(constructor, "        {entity}Choices = Choice.Of(Db.All<{entity}>(), r => {shown});");
+            let _ = writeln!(constructor, "        {entity}Choices = Choice.Of({}, r => {shown});", super::readable(self.project, entity, "Db", format!("Db.All<{entity}>()")));
             let _ = write!(properties, "    public Choice[] {entity}Choices {{ get; }} = [];\n\n");
         }
         // The dropdowns' options (U1c): the values a typed one's field has,
@@ -419,7 +473,7 @@ impl<'a> Window<'a> {
             let Some((entity, field)) = p.bind.as_deref().and_then(|b| self.bound_field(b)) else { continue };
             if p.typed {
                 let name = typed_values(entity, field);
-                let read = format!("        {name} = [.. Db.All<{}>().Select(r => r.{})];", entity.name.name, property(&entity.name.name, &field.name.name));
+                let read = format!("        {name} = [.. {}.Select(r => r.{})];", super::readable(self.project, &entity.name.name, "Db", format!("Db.All<{}>()", entity.name.name)), property(&entity.name.name, &field.name.name));
                 if lists.insert(name.clone(), read).is_none() {
                     let _ = write!(properties, "    public List<string> {name} {{ get; }} = [];\n\n");
                 }
@@ -435,7 +489,7 @@ impl<'a> Window<'a> {
                     .iter()
                     .map(|f| self.shown_text(target, f, &format!("r.{}", property(&target.name.name, f))))
                     .collect();
-                let read = format!("        {name} = Choice.Of(Db.All<{}>(), r => {}, r => [{}]);", target.name.name, display(target), cells.join(", "));
+                let read = format!("        {name} = Choice.Of({}, r => {}, r => [{}]);", super::readable(self.project, &target.name.name, "Db", format!("Db.All<{}>()", target.name.name)), display(target), cells.join(", "));
                 if lists.insert(name.clone(), read).is_none() {
                     let _ = write!(properties, "    public Choice[] {name} {{ get; }} = [];\n\n");
                 }
@@ -589,6 +643,16 @@ impl<'a> Window<'a> {
         }
 
         // Handlers: the window's own, and the app's for its frame.
+        // `allow when` of the frame's commands (step 4), checked when what the click runs runs:
+        // the window it opens, or the handler it runs; every condition of the commands that run it.
+        let (opens_allowed, handlers_allowed) = match self.command_allows(types, &ctx) {
+            Ok(allows) => allows,
+            Err(problems) => {
+                errors.extend(problems.into_iter().map(|e| format!("allow of a command of {name}: {e}")));
+                Default::default()
+            }
+        };
+        let allow_lines = |conditions: Option<&Vec<String>>, pad: &str| -> String { conditions.into_iter().flatten().map(|c| format!("{pad}Clarity.Runtime.Signin.Allow({c});\n")).collect() };
         let mut handlers = String::new();
         let mut own: Vec<&clarity_spec::code::HandlerDecl> = Vec::new();
         for block in self.project.files.iter().flat_map(|f| &f.code) {
@@ -599,7 +663,11 @@ impl<'a> Window<'a> {
         }
         for decl in &own {
             let method = command_method(&decl.name.name, &self.members);
-            match logic::handler(self.project, types, &ctx, decl) {
+            let handled = logic::handler(self.project, types, &ctx, decl).map(|body| {
+                let allowed = allow_lines(handlers_allowed.get(&decl.name.name), "        ");
+                if allowed.is_empty() { body } else { body.replacen("    {\n", &format!("    {{\n{allowed}"), 1) }
+            });
+            match handled {
                 // One that takes values runs through the commands of its calls.
                 Ok(body) if !decl.params.is_empty() => {
                     let _ = writeln!(handlers, "{body}");
@@ -719,7 +787,11 @@ impl<'a> Window<'a> {
         for (target, new_window) in &opens {
             let init: Vec<String> = filled.get(target).into_iter().flatten().map(|n| format!("{0} = {0}", super::names::pascal(n))).collect();
             let init = if init.is_empty() { String::new() } else { format!(" {{ {} }}", init.join(", ")) };
-            if *new_window {
+            let allowed = allow_lines(opens_allowed.get(target), "        ");
+            if !allowed.is_empty() {
+                let (command, more) = if *new_window { ("OpenNew", ", newWindow: true") } else { ("Open", "") };
+                let _ = write!(clicks, "    [RelayCommand]\n    void {command}_{target}() => Handle(() =>\n    {{\n{allowed}        Open(new {target}ViewModel(Db){init}{more});\n    }});\n\n");
+            } else if *new_window {
                 let _ = write!(
                     clicks,
                     "    [RelayCommand]\n    void OpenNew_{target}() => Handle(() => Open(new {target}ViewModel(Db){init}, newWindow: true));\n\n"
@@ -784,6 +856,13 @@ impl<'a> Window<'a> {
         }
         if let Some(size) = self.page.size {
             identity.push_str(&format!("\n    public override Extent? WindowSize => new({}, {});\n", size.width, size.height));
+        }
+        // `allow when` of the window (step 4): checked before it opens, refused with notAllowed.
+        if let Some(condition) = &self.page.allow_condition {
+            match logic::condition(self.project, types, &ctx, condition) {
+                Ok(holds) => identity.push_str(&format!("\n    public override void Allow() => Clarity.Runtime.Signin.Allow({holds});\n")),
+                Err(problems) => return Err(problems.into_iter().map(|e| format!("allow of {name}: {e}")).collect()),
+            }
         }
         let body = format!("{identity}\n{properties}{parts}\n{events}{clicks}{handlers}");
         Ok(format!(

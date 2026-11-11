@@ -75,6 +75,9 @@ internal sealed class FileDriver : IDriver
 
     bool dirty;
 
+    /// <summary>The file's size and modification time when it was last read or written: a change by another program refuses the next save.</summary>
+    (long Size, DateTime Modified)? seen;
+
     FileDriver(IDriver db, string path, FileSource source, List<FileTable> tables, bool several, byte[] original)
     {
         this.db = db;
@@ -83,6 +86,37 @@ internal sealed class FileDriver : IDriver
         this.tables = tables;
         this.several = several;
         this.original = original;
+        seen = Stamp(path);
+    }
+
+    /// <summary>A file's size and modification time, or null when it is not there.</summary>
+    static (long Size, DateTime Modified)? Stamp(string path)
+    {
+        var info = new FileInfo(path);
+        return info.Exists ? (info.Length, info.LastWriteTimeUtc) : null;
+    }
+
+    /// <summary>Refuses a change when another program changed the file since it was read or written: its size or modification time differ, and so do its bytes.</summary>
+    void UnchangedOnDisk()
+    {
+        if (source.Readonly)
+            return;
+        var now = Stamp(path);
+        if (now == seen)
+            return;
+        byte[] bytes;
+        try
+        {
+            bytes = now is null ? [] : File.ReadAllBytes(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new RefusedException(Db.SavedSinceText());
+        }
+        if (!bytes.AsSpan().SequenceEqual(original))
+            throw new RefusedException(Db.SavedSinceText());
+        // The same bytes written again: no change.
+        seen = now;
     }
 
     public Dialect Dialect => Dialect.Sqlite;
@@ -368,10 +402,12 @@ internal sealed class FileDriver : IDriver
             throw new StorageException($"cannot replace {path}: {e.Message}", e);
         }
         original = bytes;
+        seen = Stamp(path);
     }
 
     public int Execute(string sql, IReadOnlyList<object?> parameters)
     {
+        UnchangedOnDisk();
         var changed = db.Execute(sql, parameters);
         dirty |= changed > 0;
         Keep();
@@ -380,6 +416,7 @@ internal sealed class FileDriver : IDriver
 
     public long Insert(string sql, IReadOnlyList<object?> parameters)
     {
+        UnchangedOnDisk();
         var id = db.Insert(sql, parameters);
         dirty = true;
         Keep();
@@ -388,9 +425,22 @@ internal sealed class FileDriver : IDriver
 
     public List<object?[]> Rows(string sql, IReadOnlyList<object?> parameters) => db.Rows(sql, parameters);
 
-    /// <summary>A transaction's end keeps what it changed.</summary>
+    /// <summary>A transaction's end keeps what it changed; a file another program changed meanwhile rolls it back instead.</summary>
     public void Batch(string sql)
     {
+        if (dirty && sql == Dialect.Sqlite.Commit())
+        {
+            try
+            {
+                UnchangedOnDisk();
+            }
+            catch (RefusedException)
+            {
+                db.Batch(Dialect.Sqlite.Rollback());
+                dirty = false;
+                throw;
+            }
+        }
         db.Batch(sql);
         Keep();
     }

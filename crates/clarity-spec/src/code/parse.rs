@@ -289,13 +289,14 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
         requires: Vec::new(),
         ensures: Vec::new(),
         effects: Vec::new(),
+        allow: None,
         body: Vec::new(),
         span: node.span(),
     };
     let clauses = node
         .children
         .iter()
-        .take_while(|c| matches!(first_word(c), Some("require" | "ensure" | "effects")))
+        .take_while(|c| matches!(first_word(c), Some("require" | "ensure" | "effects" | "allow")))
         .count();
     for child in &node.children[..clauses] {
         if let Err(diag) = parse_clause(child, &mut decl) {
@@ -303,7 +304,7 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
         }
     }
     for child in &node.children[clauses..] {
-        if let Some(word @ ("require" | "ensure" | "effects")) = first_word(child) {
+        if let Some(word @ ("require" | "ensure" | "effects" | "allow")) = first_word(child) {
             diagnostics.push(Diagnostic::error(
                 format!("'{word}' goes before the statements"),
                 child.line.span,
@@ -314,11 +315,27 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
     Ok(decl)
 }
 
+/// `when <condition>` after `allow` (docs/APP-CAPABILITIES-PLAN.md step 4).
+fn parse_allow(cursor: &mut Cursor) -> ParseResult<Expr> {
+    if !cursor.eat_keyword("when") {
+        return Err(cursor.error_here("expected 'when' and a condition, as in 'allow when me.role == Admin'"));
+    }
+    parse_expr(cursor)
+}
+
 fn parse_clause(node: &Node, decl: &mut FunctionDecl) -> ParseResult<()> {
     let mut cursor = Cursor::new(node.line);
     let word = cursor.next().map(|t| t.text.as_str());
     match word {
         Some("require") => decl.requires.push(parse_expr(&mut cursor)?),
+        // `allow when me.role == Admin`: who may run it.
+        Some("allow") => {
+            let condition = parse_allow(&mut cursor)?;
+            if decl.allow.is_some() {
+                return Err(Diagnostic::error("'allow when' is written once; join the conditions with 'or'", node.line.span));
+            }
+            decl.allow = Some(condition);
+        }
         Some("ensure") => decl.ensures.push(parse_expr(&mut cursor)?),
         _ => loop {
             // `db.write`: names joined by dots.
@@ -628,9 +645,10 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
         }
         Some("save") => {
             cursor.next();
-            StmtKind::Save {
-                value: parse_expr(&mut cursor)?,
-            }
+            let value = parse_expr(&mut cursor)?;
+            // `save customer anyway`: regardless of the version.
+            let anyway = cursor.eat_keyword("anyway");
+            StmtKind::Save { value, anyway }
         }
         Some("reload") => {
             cursor.next();
@@ -794,13 +812,19 @@ pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
     };
     let params = if cursor.eat(TokenKind::LParen) { parse_params(&mut cursor)? } else { Vec::new() };
     cursor.expect_end()?;
-    let mut decl = CommandDecl { group, name, params, help: None, options: Vec::new(), body: Vec::new(), span: node.span() };
-    let clauses = node.children.iter().take_while(|c| matches!(first_word(c), Some("help" | "option"))).count();
+    let mut decl = CommandDecl { group, name, params, help: None, options: Vec::new(), allow: None, body: Vec::new(), span: node.span() };
+    let clauses = node.children.iter().take_while(|c| matches!(first_word(c), Some("help" | "option" | "allow"))).count();
     for child in &node.children[..clauses] {
         let parsed = (|| {
             let mut line = Cursor::new(child.line);
             if line.eat_keyword("help") {
                 decl.help = Some(parse_expr(&mut line)?);
+            } else if line.eat_keyword("allow") {
+                let condition = parse_allow(&mut line)?;
+                if decl.allow.is_some() {
+                    return Err(Diagnostic::error("'allow when' is written once; join the conditions with 'or'", child.line.span));
+                }
+                decl.allow = Some(condition);
             } else {
                 line.next();
                 decl.options.push(parse_option(&mut line, child.span())?);
@@ -813,7 +837,7 @@ pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
         }
     }
     for child in &node.children[clauses..] {
-        if let Some(word @ ("help" | "option")) = first_word(child) {
+        if let Some(word @ ("help" | "option" | "allow")) = first_word(child) {
             diagnostics.push(Diagnostic::error(format!("'{word}' goes before the statements"), child.line.span));
         }
     }

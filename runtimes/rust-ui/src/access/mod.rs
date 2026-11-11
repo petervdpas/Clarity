@@ -773,6 +773,12 @@ impl Builder {
                 }
                 n
             }
+            // The sign-in part: a group of its fields and buttons, its refusal said with it.
+            "signin" => {
+                let mut n = AccessNode::new(id, Role::Group, name_of(caption), b);
+                n.description = any.downcast_ref::<signin::SigninPart>().and_then(|s| s.own().refusal());
+                n
+            }
             "separator" | "sound" | "timer" => return None,
             _ => match any.downcast_ref::<MissingPart>() {
                 Some(missing) => AccessNode::new(id, Role::Label, missing.says(), b),

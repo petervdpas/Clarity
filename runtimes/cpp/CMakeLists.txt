@@ -30,6 +30,8 @@ target_compile_definitions(clarity_tests PRIVATE CLARITY_CONFORMANCE="${CMAKE_CU
 clarity_ui_beside(clarity_tests)
 # The data formats of code run on Clarity.Formats (formats_test.cpp).
 clarity_use_formats(clarity_tests)
+# Signing people in runs on Clarity.Auth (signin_test.cpp).
+clarity_use_auth(clarity_tests)
 add_test(NAME clarity_tests COMMAND clarity_tests)
 # Fetching Clarity.UI's library from its release (clarity_ui.cmake), from a release made in the test.
 add_test(NAME clarity_ui_fetch COMMAND ${CMAKE_COMMAND} -DWORK=${CMAKE_CURRENT_BINARY_DIR}/clarity_ui_fetch -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/clarity_ui_fetch.cmake)

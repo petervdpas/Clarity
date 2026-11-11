@@ -22,11 +22,17 @@
     <ProjectReference Include="../Clarity.Video/Clarity.Video.csproj" />
     <ProjectReference Include="../Clarity.Image/Clarity.Image.csproj" />
     <ProjectReference Include="../Clarity.Formats/Clarity.Formats.csproj" />
+    <!-- Who is using the program: people signing in through Clarity.Auth (SigninTests). -->
+    <ProjectReference Include="../Clarity.Auth/Clarity.Auth.csproj" />
     <!-- A file as a data source keeps its table in SQLite (FileSourceTests). -->
     <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Clarity.Ui" />
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The file case of conformance/versions.json (FileVersionTests). -->
+    <None Include="../../../conformance/versions.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

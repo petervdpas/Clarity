@@ -5,6 +5,7 @@ use ideas
 entity Person
     name: text(80), required, unique, label @personNameLabel
     color: color, default "#3b82f6", label @personColorLabel
+    passwordHash: text, hashed, label @personPasswordHashLabel
 
 entity Task
     title: text(120), required, search, label @taskTitleLabel
@@ -41,8 +42,12 @@ code MainView
         save task
         showTasks()
 
+    // A task ticked done is finished by who signed in.
     handler taskChanged
-        save grid.selected
+        let task = grid.selected
+        if task.done and task.finishedBy == none
+            task.finishedBy = me
+        save task
 
     handler deleteClicked
         let task = grid.selected

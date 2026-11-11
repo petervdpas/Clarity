@@ -65,13 +65,13 @@ jobs:
         with:
           key: library
       - name: Build the libraries
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi
       - name: Pack the folder
         run: |
           set -euo pipefail
           mkdir -p clarity-ui/include clarity-ui/lib
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h clarity-ui/include/
-          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so target/release/libclarity_formats.so clarity-ui/lib/
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h clarity-ui/include/
+          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so target/release/libclarity_formats.so target/release/libclarity_auth.so clarity-ui/lib/
           python3 .github/scripts/fetch_openh264.py linux-x64 clarity-ui/lib
           ls -lR clarity-ui
       - uses: actions/upload-artifact@v7
@@ -226,7 +226,7 @@ jobs:
       - name: Place the native libraries
         run: |
           set -euo pipefail
-          for part in ui audio video image formats; do
+          for part in ui audio video image formats auth; do
             Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
             dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
             mkdir -p "$dest"
@@ -280,7 +280,7 @@ jobs:
       - name: Place the native libraries for C#
         run: |
           set -euo pipefail
-          for part in ui audio video image formats; do
+          for part in ui audio video image formats auth; do
             Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
             dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
             mkdir -p "$dest"

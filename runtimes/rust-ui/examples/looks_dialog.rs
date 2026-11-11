@@ -46,7 +46,7 @@ impl Small {
 
 impl Program for Small {
     fn started(&self) -> Started {
-        Started { main: "Main".into(), unconnected: None }
+        Started { main: "Main".into(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         self.drawn(WindowState::new("Main", Map::new()))

@@ -42,8 +42,30 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     /// </summary>
     static virtual bool HasCascades => false;
 
+    /// <summary>
+    /// The column of the record's version (conformance/versions.json):
+    /// <c>row_version</c> for an owned entity, the column an external entity
+    /// names, or null for an entity whose saves are not checked.
+    /// </summary>
+    static virtual string? VersionColumn => null;
+
+    /// <summary>
+    /// Why a save or delete of a record someone saved since is refused, about
+    /// <paramref name="current"/>, the record as it is stored now, whose fields
+    /// an entity's own text may name, with <paramref name="db"/> to load what
+    /// they refer to (<c>{current.changedBy.name}</c>). Clarity's <c>savedSince</c> by default.
+    /// </summary>
+    static virtual Text SavedSince(Db db, TSelf current) => Db.SavedSinceText();
+
     /// <summary>The key of a stored record; 0 until it is saved for the first time.</summary>
     long Id { get; set; }
+
+    /// <summary>The version the record was read or last saved with; 0 for a new one.</summary>
+    long Version
+    {
+        get => 0;
+        set { }
+    }
 
     object?[] ToValues();
 

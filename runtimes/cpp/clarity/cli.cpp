@@ -8,8 +8,16 @@
 
 #ifdef _WIN32
 #include <io.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #define CLARITY_ISATTY _isatty
 #else
+#include <termios.h>
 #include <unistd.h>
 #define CLARITY_ISATTY isatty
 #endif
@@ -411,6 +419,28 @@ std::optional<std::string> Console::read_line() {
     std::string line;
     if (!std::getline(std::cin, line)) return std::nullopt;
     if (!line.empty() && line.back() == '\r') line.pop_back();
+    return line;
+}
+
+std::optional<std::string> Console::read_secret() {
+    // What is typed is not shown while the line is read, on a terminal; a pipe shows nothing anyway.
+#if defined(_WIN32)
+    HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode = 0;
+    bool hidden = GetConsoleMode(in, &mode) && SetConsoleMode(in, mode & ~DWORD(ENABLE_ECHO_INPUT));
+    auto line = read_line();
+    if (hidden) SetConsoleMode(in, mode);
+#else
+    termios before{};
+    bool hidden = tcgetattr(0, &before) == 0;
+    if (hidden) {
+        termios quiet = before;
+        quiet.c_lflag &= ~tcflag_t(ECHO);
+        hidden = tcsetattr(0, TCSANOW, &quiet) == 0;
+    }
+    auto line = read_line();
+    if (hidden) tcsetattr(0, TCSANOW, &before);
+#endif
     return line;
 }
 

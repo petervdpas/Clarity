@@ -12,7 +12,10 @@ path = "src/main.rs"
 [dependencies]
 clarity-spec.workspace = true
 # `clarity data migrate` applies the steps with the runtime the programs use.
-clarity-runtime = { path = "../../runtimes/rust" }
+clarity-runtime = { path = "../../runtimes/rust", features = ["auth"] }
+# `clarity users` keeps secrets as the programs do.
+clarity-auth = { path = "../../runtimes/rust-auth" }
+rusqlite = { version = "0.40", features = ["bundled"] }
 clarity-project.workspace = true
 clarity-db.workspace = true
 clarity-gen = { path = "../clarity-gen" }
@@ -22,3 +25,6 @@ clarity-tools.workspace = true
 clarity-mcp.workspace = true
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }

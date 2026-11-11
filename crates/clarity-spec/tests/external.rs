@@ -18,6 +18,7 @@ source erp
 entity Invoice
     table \"tblInvoice\"
     key \"InvoiceID\"
+    version \"RowVersion\"
     number: text(20), column \"InvNo\"
     customer: ref Customer, column \"CustID\"
     amount: money
@@ -28,7 +29,7 @@ action pay(invoice: Invoice)
     save invoice
 ";
 
-const MAIN_STEP: &str = "migration \"Customers\"\n    add entity Customer\n        name: text(80)\n";
+const MAIN_STEP: &str = "migration \"Customers\"\n    add entity Customer\n        version\n        name: text(80)\n";
 
 fn sources(readonly: bool) -> Vec<SourceRef> {
     let erp = SourceRef::sql("erp").external();
@@ -95,6 +96,14 @@ fn two_fields_cannot_share_a_column() {
         "{:#?}",
         project.diagnostics
     );
+    // The version column is a column of its own too.
+    for (version, message) in [
+        ("InvNo", "Invoice: its version column 'InvNo' is the column of field 'number'"),
+        ("InvoiceID", "Invoice: its version column 'InvoiceID' is the key"),
+    ] {
+        let project = load(SHOP, &ERP.replace("version \"RowVersion\"", &format!("version \"{version}\"")), false, &[]);
+        assert!(messages(&project, Severity::Error).iter().any(|m| m == message), "{:#?}", project.diagnostics);
+    }
 }
 
 #[test]

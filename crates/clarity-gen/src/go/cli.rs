@@ -109,6 +109,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::carries_formats(project, settings) {
         files.push(text("formats.go", super::FORMATS_GO.to_string()));
     }
+    // Signing people in (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth through cgo.
+    if crate::carries_auth(project) {
+        files.push(text("auth.go", super::AUTH_GO.to_string()));
+    }
     let mut direct = vec![RUNTIME_MODULE];
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
@@ -148,6 +152,7 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
         .iter()
         .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
         .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("\tif err := db.AddFile(clarity.FileSource{{Name: {}, Format: {}, Path: {}, Options: {}, Table: {}, Key: {}, Fields: {}, Readonly: {}}}, formatsReadTable, formatsWriteTable); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
+        .chain(std::iter::once(super::add_signin(project, settings)))
         .collect();
 
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
@@ -178,6 +183,17 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
         }
         None => ("// CommandData is what every command has as data of its own.\ntype CommandData struct{}\n", "\tdata := &CommandData{}\n".to_string(), String::new()),
     };
+    // People sign in on the command line (docs/APP-CAPABILITIES-PLAN.md step 4):
+    // --user and --token are taken out first, and a command signs in before it runs.
+    let signs_in = crate::signin::signin_plan(project).is_some_and(|p| p.targets.iter().any(|t| t == "cli"));
+    let (flags, signs) = if signs_in {
+        (
+            "\t// --user and --token sign in; the rest is the command line of the commands.\n\tsignin, args := clarity.CliSigninFlags(os.Args[1:])\n\tos.Args = append(os.Args[:1], args...)\n",
+            "\t\tif _, err := cli.Signin(db, signin); err != nil {\n\t\t\treturn 1, err\n\t\t}\n",
+        )
+    } else {
+        ("", "")
+    };
     let mut dispatch = String::new();
     for (i, c) in commands.iter().enumerate() {
         let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
@@ -185,7 +201,7 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
         dispatch.push_str(&format!("\t\tcase {i}:\n\t\t\treturn {}(db, cli, data{args})\n", logic::command_function(c.decl)));
     }
     format!(
-        "{}\npackage main\n\nimport (\n\t_ \"embed\"\n\t\"fmt\"\n\t\"os\"\n\n{imports})\n\n// texts are the texts the program shows, in every language the project has.\n//\n//go:embed texts.json\nvar texts []byte\n\n// program is the desktop program's name, which names the folder the\n// person's settings are kept in: both programs share them.\nconst program = {program}\n\n// databases is the database of each data source: its name, its kind and where it is.\nvar databases = []clarity.Source{{{sources}}}\n\n// stores is the folder of each file store.\nvar stores = map[string]string{{{stores}}}\n\n{data}\n// cliProgram is the program and its commands, as the command line reads them.\nfunc cliProgram() clarity.CliProgram {{\n\treturn clarity.CliProgram{{\n\t\tName: {name},\n\t\tHelp: {help},\n\t\tCommands: []clarity.CliCommand{{\n{listed}\t\t}},\n\t}}\n}}\n\n// openDatabases opens every database and applies the migration steps it has not had yet.\nfunc openDatabases() (*clarity.Db, error) {{\n\tdb, err := clarity.Connect(databases...)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tfor _, s := range Sources {{\n\t\tif _, err := db.MigrateSource(s.Source, s.Steps); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n\tfor name, at := range stores {{\n\t\tif err := db.AddStore(name, at); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n{folder_stores}\treturn db, nil\n}}\n\nfunc main() {{\n\tclarity.LoadTranslations(texts)\n\tlocale := \"\"\n\tfor _, name := range []string{{\"LC_ALL\", \"LC_MESSAGES\", \"LANG\"}} {{\n\t\tif locale = os.Getenv(name); locale != \"\" {{\n\t\t\tbreak\n\t\t}}\n\t}}\n\tclarity.SetLanguage(clarity.CliPickLanguage(locale, []string{{{languages}}}, {base}))\n{start}\tdb, err := openDatabases()\n\tif err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n\tcode := clarity.RunCliProgram(cliProgram(), func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n\t\tswitch command {{\n{dispatch}\t\t}}\n\t\treturn 2, nil\n\t}})\n{keep}\tdb.Close()\n\tos.Exit(code)\n}}\n",
+        "{}\npackage main\n\nimport (\n\t_ \"embed\"\n\t\"fmt\"\n\t\"os\"\n\n{imports})\n\n// texts are the texts the program shows, in every language the project has.\n//\n//go:embed texts.json\nvar texts []byte\n\n// program is the desktop program's name, which names the folder the\n// person's settings are kept in: both programs share them.\nconst program = {program}\n\n// databases is the database of each data source: its name, its kind and where it is.\nvar databases = []clarity.Source{{{sources}}}\n\n// stores is the folder of each file store.\nvar stores = map[string]string{{{stores}}}\n\n{data}\n// cliProgram is the program and its commands, as the command line reads them.\nfunc cliProgram() clarity.CliProgram {{\n\treturn clarity.CliProgram{{\n\t\tName: {name},\n\t\tHelp: {help},\n\t\tCommands: []clarity.CliCommand{{\n{listed}\t\t}},\n\t}}\n}}\n\n// openDatabases opens every database and applies the migration steps it has not had yet.\nfunc openDatabases() (*clarity.Db, error) {{\n\tdb, err := clarity.Connect(databases...)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tfor _, s := range Sources {{\n\t\tif _, err := db.MigrateSource(s.Source, s.Steps); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n\tfor name, at := range stores {{\n\t\tif err := db.AddStore(name, at); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n{folder_stores}\treturn db, nil\n}}\n\nfunc main() {{\n\tclarity.LoadTranslations(texts)\n\tlocale := \"\"\n\tfor _, name := range []string{{\"LC_ALL\", \"LC_MESSAGES\", \"LANG\"}} {{\n\t\tif locale = os.Getenv(name); locale != \"\" {{\n\t\t\tbreak\n\t\t}}\n\t}}\n\tclarity.SetLanguage(clarity.CliPickLanguage(locale, []string{{{languages}}}, {base}))\n{start}\tdb, err := openDatabases()\n\tif err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n{flags}\tcode := clarity.RunCliProgram(cliProgram(), func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n{signs}\t\tswitch command {{\n{dispatch}\t\t}}\n\t\treturn 2, nil\n\t}})\n{keep}\tdb.Close()\n\tos.Exit(code)\n}}\n",
         super::HEADER,
         program = string(&crate::settings_program(settings)),
         name = string(&crate::commands::program_name(settings)),

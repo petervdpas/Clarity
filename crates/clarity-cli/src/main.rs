@@ -4,6 +4,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use clarity_spec::{Preview, Severity};
 
+mod users;
+
 /// The release's version, which the installer's build names (CLARITY_VERSION, the
 /// IDE's version); the workspace's when built from source.
 const VERSION: &str = match option_env!("CLARITY_VERSION") {
@@ -97,6 +99,14 @@ enum Command {
         #[command(subcommand)]
         command: DataCommand,
     },
+    /// The people of a project that signs people in: list, add, give a
+    /// password, a token or recovery codes, remove (docs/APP-CAPABILITIES-PLAN.md, step 4).
+    Users {
+        /// The project file, like club.clarity.
+        project: PathBuf,
+        #[command(subcommand)]
+        command: UsersCommand,
+    },
     /// Look for the build tools of every stack, and say what to install.
     Tools,
     /// Serve Clarity's tools to an AI agent over MCP on stdin and stdout, on the
@@ -108,8 +118,34 @@ enum Command {
         #[arg(long)]
         turn: Option<PathBuf>,
     },
-    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
+    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
     Libraries,
+}
+
+#[derive(Subcommand)]
+enum UsersCommand {
+    /// List the people, by the field they are found by.
+    List,
+    /// Add a person; with a password strategy, asks their password.
+    Add {
+        name: String,
+        /// Read the password from standard input instead of asking it.
+        #[arg(long)]
+        stdin: bool,
+    },
+    /// Give a person a new password, asked without showing it.
+    Password {
+        name: String,
+        /// Read the password from standard input instead of asking it.
+        #[arg(long)]
+        stdin: bool,
+    },
+    /// Give a person a new token, shown once.
+    Token { name: String },
+    /// Give a person new recovery codes, shown once.
+    Codes { name: String },
+    /// Remove a person.
+    Remove { name: String },
 }
 
 #[derive(Subcommand)]
@@ -234,6 +270,33 @@ fn main() -> ExitCode {
         } => import(&project, &source, module, tables, list, schema),
         Command::Own { project, source } => own(&project, &source),
         Command::Data { command } => data(command),
+        Command::Users { project, command } => {
+            let (action, stdin) = match command {
+                UsersCommand::List => (users::Action::List, false),
+                UsersCommand::Add { name, stdin } => (users::Action::Add(name), stdin),
+                UsersCommand::Password { name, stdin } => (users::Action::Password(name), stdin),
+                UsersCommand::Token { name } => (users::Action::Token(name), false),
+                UsersCommand::Codes { name } => (users::Action::Codes(name), false),
+                UsersCommand::Remove { name } => (users::Action::Remove(name), false),
+            };
+            let mut password = move || {
+                if stdin {
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line).ok()?;
+                    let line = line.trim_end_matches(['\r', '\n']).to_string();
+                    (!line.is_empty()).then_some(line)
+                } else {
+                    clarity_runtime::cli::read_password("Password: ")
+                }
+            };
+            match users::run(&project, action, &mut password, &mut std::io::stdout(), &mut std::io::stderr()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(why) => {
+                    eprintln!("clarity: {why}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Libraries => {
             let here = std::env::current_dir().unwrap_or_default();
             let Some(repo) = clarity_gen::repository_of(&here) else {
@@ -586,8 +649,9 @@ fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, n
     }
     let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
     let mut pending_any = false;
-    // Each SQL data source has its own steps.
-    for source in project.sources.iter().filter(|s| s.sql).map(|s| s.name.as_str()) {
+    // Each SQL data source Clarity owns has its own steps; an external one (a
+    // database or a file it does not own) has none.
+    for source in project.sources.iter().filter(|s| s.sql && !s.external).map(|s| s.name.as_str()) {
         let renames = if no_renames { Vec::new() } else { migrate::proposed_renames(&project, source) };
         let ops = migrate::pending(&project, source, &renames);
         if ops.is_empty() {

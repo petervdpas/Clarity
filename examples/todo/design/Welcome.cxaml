@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The splash screen while the app starts: its picture, its name, and what loads. -->
-<Splash class="todo.Welcome" width="560" height="290" columns="56" cell="10" style="splashBack">
+<!-- The splash screen while the app starts: its picture, its name, and what loads.
+     It is the sign-in window too: once the app has started, people sign in here. -->
+<Splash class="todo.Welcome" width="560" height="400" columns="56" cell="10" style="splashBack">
   <Image name="logo" at="6,7" span="17" rows="17" source="todo.svg" />
   <Heading name="titleHeading" at="28,7" span="23" rows="6" caption="@todoTitle" style="splashTitle" />
   <Label name="tagline" at="28,14" span="24" rows="3" caption="@welcomeTagline" style="splashTagline" />
   <Label name="versionLabel" at="28,17" span="23" rows="3" caption="@welcomeVersion" style="splashStatus" />
   <Busy name="status" at="28,21" span="23" rows="3" caption="@welcomeStarting" style="splashStatus" />
+  <Signin name="signIn" at="28,25" span="23" rows="12" />
 </Splash>

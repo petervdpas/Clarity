@@ -62,7 +62,7 @@ impl Fake {
 
 impl Program for Fake {
     fn started(&self) -> Started {
-        Started { main: "Main".into(), unconnected: None }
+        Started { main: "Main".into(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         self.said("start".into());

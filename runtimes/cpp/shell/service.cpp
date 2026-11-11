@@ -190,7 +190,19 @@ json Service::answer(const std::string& command, const json& args) {
             if (options_.unconnected) {
                 started["unconnected"] = {{"handler", or_null(options_.unconnected_handler)}, {"window", or_null(options_.unconnected_window)}, {"problem", json(*options_.unconnected)}};
             }
+            // The sign-in window first, when the program's people sign in where it runs and nobody is signed in yet.
+            if (auto signin = db.signin_first()) started["signin"] = *signin;
             return value(started);
+        }
+        // Signing in and out (step 4), in a program whose people sign in; a refusal is Clarity's own words.
+        if ((command == "signin" || command == "signout") && !db.people()) return {{"error", "there is no command " + command}};
+        if (command == "signin") {
+            db.signin(text_of(args, "strategy"), args.contains("inputs") && args["inputs"].is_object() ? args["inputs"] : json::object());
+            return value(nullptr);
+        }
+        if (command == "signout") {
+            db.signout();
+            return value(nullptr);
         }
         // The databases again, as when the person has kept their connection.
         if (command == "connect") {
@@ -359,12 +371,9 @@ json Service::answer(const std::string& command, const json& args) {
         if (command == "undo_edit") {
             // Ctrl+Z (back) or Ctrl+Y on a scope: its last edit taken back or done
             // again, with its database steps, and the window as it was.
-            auto data = edits_of(state.instance)->undo(text_of(args, "scope"), edit_data(state), args.value("back", false), [&](const std::vector<int64_t>& steps, bool back) {
-                for (int64_t step : steps) {
-                    if (back) db.undo(step);
-                    else db.redo(step);
-                }
-            });
+            // All of the edit's steps, or none of them.
+            auto data = edits_of(state.instance)->undo(text_of(args, "scope"), edit_data(state), args.value("back", false),
+                                                       [&](const std::vector<int64_t>& steps, bool back) { db.replay_steps(steps, back); });
             return answered(drawn(data ? with_edit_data(state, *data) : state));
         }
         if (command == "answer_event") {
@@ -546,6 +555,7 @@ std::optional<std::string> wire_answer(Service& service, const std::string& comm
         if (!started.contains("value")) return started.dump();
         started["value"].erase("model");
         if (!started["value"].contains("unconnected")) started["value"]["unconnected"] = nullptr;
+        if (!started["value"].contains("signin")) started["value"]["signin"] = nullptr;
         return started.dump();
     }
     // A record's file as base64: the service's file_data.

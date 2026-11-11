@@ -132,6 +132,7 @@ public:
         } catch (const json::exception&) {
             throw about("the table read is no table");
         }
+        seen_ = stamp(path_);
         several_ = read.is_object() && read.contains("tables") && read["tables"].is_array();
         json tables = several_ ? read["tables"] : json::array({read});
         json fields = json::parse(source.fields, nullptr, false);
@@ -203,6 +204,7 @@ public:
     Dialect dialect() const override { return Dialect::Sqlite; }
 
     int64_t execute(const std::string& sql, const std::vector<SqlValue>& params) override {
+        unchanged_on_disk();
         int64_t changed = db_->execute(sql, params);
         dirty_ = dirty_ || changed > 0;
         keep();
@@ -210,6 +212,7 @@ public:
     }
 
     int64_t insert(const std::string& sql, const std::vector<SqlValue>& params) override {
+        unchanged_on_disk();
         int64_t id = db_->insert(sql, params);
         dirty_ = true;
         keep();
@@ -218,8 +221,18 @@ public:
 
     std::vector<Row> rows(const std::string& sql, const std::vector<SqlValue>& params) override { return db_->rows(sql, params); }
 
-    /// A transaction's end keeps what it changed.
+    /// A transaction's end keeps what it changed; a file another program
+    /// changed meanwhile rolls it back instead.
     void batch(const std::string& sql) override {
+        if (dirty_ && sql == commit(Dialect::Sqlite)) {
+            try {
+                unchanged_on_disk();
+            } catch (...) {
+                db_->batch(rollback(Dialect::Sqlite));
+                dirty_ = false;
+                throw;
+            }
+        }
         db_->batch(sql);
         keep();
     }
@@ -228,6 +241,37 @@ public:
     void apply(int, const std::vector<std::string>&) override {}
 
 private:
+    /// A file's size and modification time; none when it is not there.
+    using Stamp = std::optional<std::pair<std::uintmax_t, fs::file_time_type>>;
+
+    static Stamp stamp(const fs::path& path) {
+        std::error_code failed;
+        auto size = fs::file_size(path, failed);
+        if (failed) return std::nullopt;
+        auto time = fs::last_write_time(path, failed);
+        if (failed) return std::nullopt;
+        return std::pair{size, time};
+    }
+
+    /// Refuses a change when another program changed the file since it was
+    /// read or written: its size or modification time differ, and so do its bytes.
+    void unchanged_on_disk() {
+        if (readonly_) return;
+        Stamp now = stamp(path_);
+        if (now == seen_) return;
+        std::string bytes;
+        if (now) {
+            try {
+                bytes = read_file(path_);
+            } catch (const StorageError&) {
+                throw SavedSinceError();
+            }
+        }
+        if (bytes != original_) throw SavedSinceError();
+        // The same bytes written again: no change.
+        seen_ = now;
+    }
+
     /// Writes the table back when a change is kept: to a new file beside the old one, which then replaces it.
     void keep() {
         if (!dirty_ || readonly_ || !sqlite_autocommit(*db_)) return;
@@ -279,6 +323,7 @@ private:
         fs::rename(written, path_, failed);
         if (failed) throw StorageError("cannot replace " + path_.string() + ": " + failed.message());
         original_ = std::move(bytes);
+        seen_ = stamp(path_);
     }
 
     std::unique_ptr<Driver> db_;
@@ -292,6 +337,9 @@ private:
     std::string original_;
     bool readonly_ = false;
     bool dirty_ = false;
+    /// The file's size and modification time when it was last read or
+    /// written: a change by another program refuses the next save.
+    Stamp seen_;
 };
 
 }  // namespace

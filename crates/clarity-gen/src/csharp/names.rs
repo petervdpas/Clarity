@@ -44,8 +44,12 @@ pub fn function(project: &Project, name: &str) -> String {
 const TAKEN: [&str; 1] = ["db"];
 
 /// Members every record has, which a field cannot be called.
-const RECORD_MEMBERS: [&str; 23] = [
+const RECORD_MEMBERS: [&str; 26] = [
     "Id",
+    // The version of a save's check (step 5).
+    "Version",
+    "VersionColumn",
+    "SavedSince",
     // The settings' own members (model::settings_class).
     "Current",
     "Start",
@@ -114,8 +118,8 @@ pub fn property(entity: &str, field: &str) -> String {
 /// protected ones, ObservableObject's and object's), which data, a part or a
 /// handler's command cannot be called. Clarity.Runtime.Tests checks that the
 /// list holds every member WindowViewModel has.
-pub const VIEW_MODEL_MEMBERS: [&str; 56] = [
-    "Answer", "AppSettings", "Ask", "AskRequested", "CanvasEvent", "Changed", "Close", "CloseRequested", "CloseWith", "Closing", "Copy",
+pub const VIEW_MODEL_MEMBERS: [&str; 57] = [
+    "Allow", "Answer", "AppSettings", "Ask", "AskRequested", "CanvasEvent", "Changed", "Close", "CloseRequested", "CloseWith", "Closing", "Copy",
     "CopyRequested", "Db", "DrawAnew", "Edited", "EditOf", "Edits", "Fetched", "FocusedScope", "Handle", "Instance", "IsDialog",
     "LongCall", "Messages", "OnClose", "OnOpen", "OnReturn", "Open", "Opened", "OpenRequested", "QuitApplication", "Redraw",
     "Reshow", "Returned", "RunUnconnected", "SameRow", "Say", "Selected", "ShowKeys", "ShowText", "Title", "UndoEdit", "UndoFocused",

@@ -462,6 +462,18 @@ fn parse_variant(node: &Node) -> ParseResult<EnumVariant> {
 fn parse_record(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
     for child in &node.children {
+        if let Some(word @ ("readable" | "writable")) = first_word(child)
+            && child.line.tokens.get(1).is_some_and(|t| t.text == "when")
+        {
+            diagnostics.push(Diagnostic::error(format!("a record is never stored, so it has no '{word} when'"), child.line.span));
+            continue;
+        }
+        if let Some(word @ ("version" | "savedSince")) = first_word(child)
+            && child.line.tokens.get(1).is_some_and(|t| t.kind != TokenKind::Colon)
+        {
+            diagnostics.push(Diagnostic::error(format!("a record is never stored, so it has no '{word}'"), child.line.span));
+            continue;
+        }
         let field = no_children(child).and_then(|_| {
             let mut cursor = Cursor::new(child.line);
             parse_field_typed(&mut cursor, child.line.span, true)
@@ -474,13 +486,36 @@ fn parse_record(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
     if node.children.is_empty() {
         diagnostics.push(Diagnostic::error(format!("record '{}' has no fields", name.name), name.span));
     }
-    Entity { name, fields, table: None, key: None, settings: false, record: true, span: node.span() }
+    Entity { name, fields, table: None, key: None, settings: false, record: true, people: false, readable: None, writable: None, version: None, version_none: false, saved_since: None, kept_version: None, span: node.span() }
 }
 
 fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
     let (mut table, mut key) = (None, None);
+    let (mut readable, mut writable) = (None, None);
+    let (mut version, mut version_none, mut saved_since) = (None, false, None);
     for child in &node.children {
+        // `readable when <condition>` and `writable when <condition>`: who may read or change a record.
+        if let Some(word @ ("readable" | "writable")) = first_word(child)
+            && child.line.tokens.get(1).is_some_and(|t| t.text == "when")
+        {
+            let slot = if word == "readable" { &mut readable } else { &mut writable };
+            if let Err(diag) = parse_access(child, word, slot) {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
+        // `version "RowVersion"`, `version none` and `savedSince @key`:
+        // how a save is checked; field lines have a colon after the name.
+        if let Some(word @ ("version" | "savedSince")) = first_word(child)
+            && child.line.tokens.get(1).is_some_and(|t| t.kind != TokenKind::Colon)
+        {
+            let result = if word == "version" { parse_version(child, &mut version, &mut version_none) } else { parse_saved_since(child, &name.name, &mut saved_since) };
+            if let Err(diag) = result {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
         // `table "tblInvoice"` and `key "InvoiceID"` map the entity onto an
         // existing table; field lines have a colon after the name.
         let setting = match first_word(child) {
@@ -523,8 +558,65 @@ fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
         key,
         settings: false,
         record: false,
+        people: false,
+        readable,
+        writable,
+        version,
+        version_none,
+        saved_since,
+        kept_version: None,
         span: node.span(),
     }
+}
+
+/// `version "RowVersion"` or `version none` of an entity.
+fn parse_version(node: &Node, version: &mut Option<String>, none: &mut bool) -> ParseResult<()> {
+    no_children(node)?;
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let named = if cursor.eat_keyword("none") { None } else { Some(cursor.expect_string("the version column in quotes, as in version \"RowVersion\", or none")?) };
+    cursor.expect_end()?;
+    if version.is_some() || *none {
+        return Err(Diagnostic::error("duplicate 'version'", node.line.span));
+    }
+    match named {
+        Some(column) => *version = Some(column),
+        None => *none = true,
+    }
+    Ok(())
+}
+
+/// `savedSince @customerChangedSince` of an entity: a key, as every text people read.
+fn parse_saved_since(node: &Node, entity: &str, slot: &mut Option<String>) -> ParseResult<()> {
+    no_children(node)?;
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    if cursor.peek_kind() != Some(TokenKind::Key) {
+        let key = crate::names::camel_case(&format!("{entity} changed since"));
+        return Err(cursor.error_here(format!("the text of savedSince is a key: write savedSince @{key}, with its text in the language files")));
+    }
+    let key = cursor.expect(TokenKind::Key, "a key")?.text.clone();
+    cursor.expect_end()?;
+    if slot.is_some() {
+        return Err(Diagnostic::error("duplicate 'savedSince'", node.line.span));
+    }
+    *slot = Some(key);
+    Ok(())
+}
+
+/// `readable when <condition>` or `writable when <condition>` of an entity.
+fn parse_access(node: &Node, word: &str, slot: &mut Option<crate::code::Expr>) -> ParseResult<()> {
+    no_children(node)?;
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    cursor.next();
+    let condition = crate::code::parse::parse_expr(&mut cursor)?;
+    cursor.expect_end()?;
+    if slot.is_some() {
+        return Err(Diagnostic::error(format!("'{word} when' is written twice; join the conditions with 'or'"), node.line.span));
+    }
+    *slot = Some(condition);
+    Ok(())
 }
 
 /// The `settings` block (DESIGN 5.17): fields as an entity's, and Clarity's
@@ -565,6 +657,13 @@ fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
         key: None,
         settings: true,
         record: false,
+        people: false,
+        readable: None,
+        writable: None,
+        version: None,
+        version_none: false,
+        saved_since: None,
+        kept_version: None,
         span,
     }
 }
@@ -713,6 +812,7 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "computed" => flag(&mut modifiers.computed, duplicate),
         "search" => flag(&mut modifiers.search, duplicate),
         "cascade" => flag(&mut modifiers.cascade, duplicate),
+        "hashed" => flag(&mut modifiers.hashed, duplicate),
         "min" => set(&mut modifiers.min, parse_literal(cursor)?, duplicate),
         "max" => set(&mut modifiers.max, parse_literal(cursor)?, duplicate),
         "default" => set(&mut modifiers.default, parse_literal(cursor)?, duplicate),
@@ -796,6 +896,36 @@ pub(crate) fn starts_with_keyword(
 // ---------------------------------------------------------------------------
 // Pages
 
+/// A click target after `->`: a window or a command word, and the strategy
+/// after `signin` (`signin password`).
+fn click_target(cursor: &mut Cursor, expected: &str) -> ParseResult<String> {
+    let target = cursor.expect_ident(expected)?.name;
+    if target == frame::SIGNIN_TARGET {
+        let strategy = cursor.expect_ident("a strategy of the project file's signin, as in 'signin password'")?;
+        return Ok(format!("{target} {}", strategy.name));
+    }
+    Ok(target)
+}
+
+/// An `allow when <condition>` to the end of the line: the condition as
+/// written again and as read.
+fn allow_clause(cursor: &mut Cursor) -> ParseResult<(String, crate::code::Expr)> {
+    if !cursor.eat_keyword("when") {
+        return Err(cursor.error_here("expected 'when' and a condition, as in 'allow when me.role == Admin'".to_string()));
+    }
+    let condition = crate::code::parse::parse_expr(cursor)?;
+    Ok((crate::code::print::expr(&condition), condition))
+}
+
+/// A condition written in an attribute: `me.role == Admin`.
+pub(crate) fn condition_value(text: &str, at: Span) -> ParseResult<crate::code::Expr> {
+    let line = value_line(text, at)?;
+    let mut cursor = Cursor::new(&line);
+    let condition = crate::code::parse::parse_expr(&mut cursor)?;
+    cursor.expect_end()?;
+    Ok(condition)
+}
+
 /// Page settings (`title`, `size`, `style`, `data`, `grid`) as opposed to widget lines.
 pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
@@ -805,6 +935,7 @@ pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
         || starts_with_keyword(tokens, "grid", Some(TokenKind::Number))
         || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "tells", Some(TokenKind::Ident))
+        || starts_with_keyword(tokens, "allow", Some(TokenKind::Ident))
 }
 
 fn parse_page(
@@ -817,16 +948,17 @@ fn parse_page(
         TokenKind::Colon,
         "':' and a page kind, as in 'page X: window'",
     )?;
-    let kind_ident = cursor.expect_ident("a page kind ('window', 'dialog', 'view' or 'splash')")?;
+    let kind_ident = cursor.expect_ident("a page kind ('window', 'dialog', 'view', 'splash', 'toolbox' or 'signin')")?;
     let kind = match kind_ident.name.as_str() {
         "window" => PageKind::Window,
         "dialog" => PageKind::Dialog,
         "view" => PageKind::View,
         "splash" => PageKind::Splash,
         "toolbox" => PageKind::Toolbox,
+        "signin" => PageKind::Signin,
         other => {
             return Err(Diagnostic::error(
-                format!("unknown page kind '{other}', expected 'window', 'dialog', 'view', 'splash' or 'toolbox'"),
+                format!("unknown page kind '{other}', expected 'window', 'dialog', 'view', 'splash', 'toolbox' or 'signin'"),
                 kind_ident.span,
             ));
         }
@@ -849,6 +981,8 @@ fn parse_page(
         handlers: Vec::new(),
         gives,
         tells: Vec::new(),
+        allow: None,
+        allow_condition: None,
         span: node.span(),
     };
     let mut grid_seen = false;
@@ -928,6 +1062,15 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
         }
         "data" => {
             page.data.push(parse_data(&mut cursor, node.line.span)?);
+        }
+        // `allow when me.role == Admin`: who may open it.
+        "allow" => {
+            if page.allow.is_some() {
+                return Err(Diagnostic::error("duplicate 'allow'", node.line.span));
+            }
+            let (written, condition) = allow_clause(&mut cursor)?;
+            page.allow = Some(written);
+            page.allow_condition = Some(condition);
         }
         // What a view tells its window: `tells saved(name: text)`.
         "tells" => {
@@ -1503,6 +1646,12 @@ fn parse_command(
         seen.push(clause.name.clone());
         match clause.name.as_str() {
             "icon" => props.icon = Some(cursor.expect_string("an icon name")?),
+            // `allow when me.role == Admin`, to the end of the line.
+            "allow" => {
+                let (written, condition) = allow_clause(&mut cursor)?;
+                props.allow = Some(written);
+                props.allow_condition = Some(condition);
+            }
             "key" => {
                 let text = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
                 let shortcut = cursor.expect_string("a shortcut, as in key \"Ctrl+N\"")?;
@@ -1524,7 +1673,7 @@ fn parse_command(
                     continue;
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
-                props.on_click = Some(cursor.expect_ident("a page, screen or command")?.name);
+                props.on_click = Some(click_target(&mut cursor, "a page, screen or command")?);
                 // `with book, chapter`: the opened window's data, from the data of the same name here.
                 if cursor.eat_keyword("with") {
                     loop {
@@ -2171,7 +2320,7 @@ fn parse_widget_props(
                     ));
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
-                props.on_click = Some(cursor.expect_ident("a window")?.name);
+                props.on_click = Some(click_target(cursor, "a window")?);
                 // `with book, chapter`: the opened window's data, from the data of the same name here.
                 if cursor.eat_keyword("with") {
                     loop {

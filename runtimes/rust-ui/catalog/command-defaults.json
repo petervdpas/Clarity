@@ -8,5 +8,6 @@
   "onClick": null,
   "newWindow": false,
   "openWith": [],
-  "handler": null
+  "handler": null,
+  "allow": null
 }

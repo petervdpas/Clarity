@@ -53,6 +53,9 @@ pub enum WidgetKind {
     Textbox,
     Memo,
     Password,
+    /// Signs in with the project's `signin` block: per strategy its inputs
+    /// and button, in Clarity's own words (docs/APP-CAPABILITIES-PLAN.md step 4).
+    Signin,
     Number,
     Checkbox,
     Switch,
@@ -671,6 +674,23 @@ const ENTRIES: &[Entry] = &[
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TEXT_BOX),
     input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], MEMO_EVENTS, MEMO),
     input(WidgetKind::Password, "password", "Password", (4, 1), &["text", "secret"], INPUT_EVENTS, TYPED),
+    // Signs in with the project's signin block, drawn from its strategies; on the sign-in window or the app's splash.
+    Entry {
+        kind: WidgetKind::Signin,
+        keyword: "signin",
+        name: "Sign-in",
+        category: Category::BasicInput,
+        size: (8, 6),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        // Only its place and look: the project's signin block says what it offers.
+        properties: &[],
+    },
     input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
         caption: Some("Check box"),

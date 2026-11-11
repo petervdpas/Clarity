@@ -185,6 +185,10 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut language = None;
     let mut currency = None;
     let mut keys_editable = None;
+    let mut signin: Option<clarity_spec::signin::Signin> = None;
+    // Whether the indented lines that follow belong to the signin block.
+    let mut in_signin = false;
+    let mut strategy_indent: Option<usize> = None;
     let mut engines_interpreted = None;
     let mut port = None;
     let mut row_height = None;
@@ -198,6 +202,15 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         let keyword = entry.tokens.first().and_then(word).unwrap_or("");
         if entry.indent == 0 {
             return Err(format!("line {line}: a project file holds one project; indent its settings"));
+        }
+        // A strategy or an option under `signin`.
+        if entry.indent > setting_indent && in_signin {
+            let block = signin.as_mut().expect("in a signin block");
+            crate::signin_file::line(block, line, entry.indent, &mut strategy_indent, keyword, &args(entry))?;
+            continue;
+        }
+        if entry.indent <= setting_indent {
+            in_signin = false;
         }
         // `openapi "forms.yaml"`, `pick "listTemplates", ...` and `pick schema
         // "Entry"` under a web API data source (DESIGN 5.23).
@@ -328,6 +341,12 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: {problem}"));
                 }
                 language = Some(tag);
+            }
+            "signin" => {
+                once(signin.is_some())?;
+                signin = Some(crate::signin_file::header(line, &a)?);
+                in_signin = true;
+                strategy_indent = None;
             }
             "keys" => {
                 once(keys_editable.is_some())?;
@@ -544,7 +563,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource, filestore and codec"
+                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec"
                 ));
             }
         }
@@ -552,6 +571,9 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let Some(stack) = stack else {
         return Err("the project needs a 'stack' line, like: stack rust desktop".to_string());
     };
+    if let Some(block) = &signin {
+        crate::signin_file::finish(block, Some(&stack))?;
+    }
     Ok(Settings {
         name,
         title,
@@ -567,6 +589,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
+        signin,
         engines_interpreted: engines_interpreted.unwrap_or(false),
         port,
         row_height,
@@ -626,11 +649,22 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
         let raw: Vec<&str> = text.lines().collect();
         let mut next = 0;
         let mut source: Option<String> = None;
+        // The indent of the signin line while its block is being read.
+        let mut signin_indent: Option<usize> = None;
         for entry in entries(text)? {
             let index = entry.line as usize - 1;
-            let key = key(&entry, source.as_deref());
+            if signin_indent.is_some_and(|i| entry.indent <= i) {
+                signin_indent = None;
+            }
+            let key = match signin_indent {
+                Some(_) => format!("signin {}", entry.tokens.first().map(|t| t.text.as_str()).unwrap_or("")),
+                None => key(&entry, source.as_deref()),
+            };
             if key.starts_with("datasource ") {
                 source = entry.tokens.get(1).map(|t| t.text.clone());
+            }
+            if key == "signin" {
+                signin_indent = Some(entry.indent);
             }
             kept.insert(
                 key,
@@ -676,6 +710,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if !settings.themes.is_empty() {
         lines.push(("theme".into(), 1, format!("theme {}", settings.themes.join(" "))));
+    }
+    if let Some(signin) = &settings.signin {
+        lines.extend(crate::signin_file::lines(signin));
     }
     if settings.keys_editable {
         lines.push(("keys".into(), 1, "keys editable".to_string()));

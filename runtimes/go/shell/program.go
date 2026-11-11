@@ -91,7 +91,7 @@ var forwarded = map[string]bool{
 	"dispatch_event": true, "edit_event": true, "undo_edit": true, "reorder_event": true, "item_event": true,
 	"range_event": true, "canvas_event": true, "step_event": true, "view_event": true, "answer_event": true,
 	"ref_options": true, "field_values": true, "find_options": true, "read_settings": true, "keep_settings": true,
-	"set_language": true,
+	"set_language": true, "signin": true, "signout": true,
 }
 
 // value is the answer {"value": v}.
@@ -158,6 +158,10 @@ func (p *Program) answerIn(ctx context.Context, command string, args []byte, thr
 		}
 		return value(json.RawMessage(p.options.Facts))
 	case "engine_open", "engine_hears", "engine_frame", "engine_close":
+		// Served while people sign in, an engine runs only for a call with a session.
+		if !p.service.signedInOrOpen(ctx) {
+			return wired(failed(clarity.NotAllowed()))
+		}
 		return p.engine(command, args)
 	case "field_bytes":
 		// A record's file or picture, as base64.
@@ -189,7 +193,11 @@ func (p *Program) started(ctx context.Context) []byte {
 		return wired(answered)
 	}
 	start, _ := answered.Value.(map[string]any)
-	return value(map[string]any{"main": start["main"], "unconnected": start["unconnected"]})
+	started := map[string]any{"main": start["main"], "unconnected": start["unconnected"]}
+	if signin, ok := start["signin"]; ok {
+		started["signin"] = signin
+	}
+	return value(started)
 }
 
 // -- Long calls (clarity_ui.h): a handler runs on the library's worker

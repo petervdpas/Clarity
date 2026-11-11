@@ -43,7 +43,7 @@ fn reply(state: WindowState) -> Reply {
 
 impl Program for Cases {
     fn started(&self) -> Started {
-        Started { main: self.start.clone(), unconnected: None }
+        Started { main: self.start.clone(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         Ok(reply(WindowState::new("", Map::new())))

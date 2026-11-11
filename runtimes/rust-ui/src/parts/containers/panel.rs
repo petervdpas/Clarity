@@ -186,14 +186,20 @@ impl Part for PanelPart {
     }
 }
 
-/// Enter in an input: the form it is in runs its `on submit`. False when it
-/// is in no form, or the form has no submit. `from` is the input, in the
+/// Enter in an input: the form it is in runs its `on submit`, or the
+/// sign-in part it is in signs in with the input's strategy. False when it
+/// is in neither, or the form has no submit. `from` is the input, in the
 /// tree of `root`; the nearest form around it is the one.
 pub fn submit(root: &dyn Element, from: ElementId) -> bool {
     let Some(ids) = element::chain(root, from) else { return false };
     for id in ids.iter().rev().skip(1) {
         let Some(part) = element::find(root, *id).and_then(|e| e.as_part()) else { continue };
         let base = part.base();
+        // In a sign-in part, Enter signs in with the strategy of the input.
+        if base.spec.kind == "signin" {
+            let field = element::find(root, from).and_then(|e| e.as_part()).and_then(|p| p.base().name().map(str::to_string));
+            return crate::parts::signin::enter(part, field.as_deref());
+        }
         if base.spec.kind == "form" {
             if base.spec.on("submit").next().is_none() {
                 return false;

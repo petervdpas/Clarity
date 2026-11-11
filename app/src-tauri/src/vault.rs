@@ -176,6 +176,20 @@ impl Store {
         self.secrets()
     }
 
+    /// The secret under (category, key), or None when there is none; a locked vault is an error.
+    pub fn secret(&mut self, category: &str, key: &str) -> Result<Option<String>, String> {
+        match self.open()?.get(category, key) {
+            Ok(value) => Ok(Some(value)),
+            Err(VaultError::SecretNotFound) => Ok(None),
+            Err(err) => Err(said(err)),
+        }
+    }
+
+    /// Stores a secret Clarity keeps itself (a sign-in's refresh token), over the one already there.
+    pub fn keep_secret(&mut self, category: &str, key: &str, value: &str, description: &str) -> Result<(), String> {
+        self.open()?.put(category, key, value, description).map(|_| ()).map_err(said)
+    }
+
     pub fn delete_secret(&mut self, name: &SecretName) -> Result<Vec<SecretRow>, String> {
         self.open()?.delete(&name.category, &name.key).map_err(said)?;
         self.secrets()
@@ -282,6 +296,16 @@ impl Store {
 /// The value of field `key` of a connection, for the rest of Clarity.
 pub fn resolve(state: &VaultState, connection: &str, key: &str) -> Result<String, String> {
     with(state, |s| s.resolve(connection, key))
+}
+
+/// The secret under (category, key) for the rest of Clarity, or None when there is none.
+pub fn secret(state: &VaultState, category: &str, key: &str) -> Result<Option<String>, String> {
+    with(state, |s| s.secret(category, key))
+}
+
+/// Keeps a secret of Clarity's own, for the rest of Clarity.
+pub fn keep_secret(state: &VaultState, category: &str, key: &str, value: &str, description: &str) -> Result<(), String> {
+    with(state, |s| s.keep_secret(category, key, value, description))
 }
 
 /// Clarity's vault and connections, for the commands.

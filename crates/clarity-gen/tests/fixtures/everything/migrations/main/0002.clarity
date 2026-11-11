@@ -1,0 +1,10 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Step 2"
+    add version Friend
+    add entity Member
+        version
+        email: email, unique
+        passwordHash: text
+    add version Folder
+    add version Album

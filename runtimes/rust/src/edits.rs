@@ -339,12 +339,8 @@ pub fn guarded(
 /// again, with its database steps; `draw` answers with the window as it is then.
 pub fn undo(db: &Db, state: WindowState, scope: &str, back: bool, draw: impl FnOnce(WindowState) -> Result<Reply>) -> Result<Reply> {
     let data = edit_data(&state);
-    let after = buses().entry(state.instance).or_default().undo(scope, &data, back, |steps, back| {
-        for step in steps {
-            if back { db.undo(*step)? } else { db.redo(*step)? };
-        }
-        Ok(())
-    })?;
+    // All of the edit's steps, or none of them.
+    let after = buses().entry(state.instance).or_default().undo(scope, &data, back, |steps, back| db.replay_steps(steps, back).map(|_| ()))?;
     match after {
         Some(data) => draw(with_edit_data(state, data)),
         None => draw(state),

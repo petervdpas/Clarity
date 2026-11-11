@@ -35,6 +35,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>The size its desktop window opens at (<c>size 320 x 460</c>); none for the standard size.</summary>
     public virtual Extent? WindowSize => null;
 
+    /// <summary>
+    /// The window's <c>allow when</c> (step 4), checked before it opens: refuses with
+    /// Clarity's <c>notAllowed</c> (<see cref="Signin.Allow"/>) when it does not hold.
+    /// </summary>
+    public virtual void Allow() { }
+
     /// <summary>The messages on screen, newest last; the shell's, once it shows the window.</summary>
     public ObservableCollection<Message> Messages { get; internal set; } = [];
 

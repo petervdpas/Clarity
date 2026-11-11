@@ -33,6 +33,8 @@
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
     <!-- A file as a data source, kept in SQLite (docs/FORMATS-PLAN.md). -->
     <InternalsVisibleTo Include="Clarity.Formats" />
+    <!-- Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4): its people read from the databases. -->
+    <InternalsVisibleTo Include="Clarity.Auth" />
     <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
     <InternalsVisibleTo Include="Clarity.Ui" />
     <!-- The program answering Clarity.UI's commands (Program/ProgramWire.cs): the desktop's and the web server's. -->

@@ -34,4 +34,8 @@ openWith: Array<string>,
 /**
  * Handler in the code behind that runs on click.
  */
-handler: string | null, };
+handler: string | null, 
+/**
+ * `allow="me.role == Admin"`: who may pick it, as written; none for everyone.
+ */
+allow: string | null, };

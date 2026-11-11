@@ -46,6 +46,8 @@ pub mod screen;
 pub mod secrets;
 pub mod serve;
 pub mod settings;
+#[cfg(feature = "auth")]
+pub mod signin;
 pub mod splash;
 pub mod sql;
 pub mod steps;
@@ -206,6 +208,21 @@ pub fn undo_changed_since() -> ui::Text {
     ui::Text::keyed("undoChangedSince", "This was changed since, so it cannot be taken back")
 }
 
+/// Why an undo is refused when its step is older than the ones kept (`UNDO_STEPS`).
+pub fn undo_too_old() -> ui::Text {
+    ui::Text::keyed("undoTooOld", "This was done too long ago to take back")
+}
+
+/// Why a save or a delete is refused: someone saved the record since it was
+/// read (conformance/versions.json), in Clarity's own words with their English.
+pub fn saved_since() -> ui::Text {
+    ui::Text::keyed("savedSince", "Someone else changed this record since you opened it. Reload it to see their change.")
+}
+
+/// How many undo steps are kept: the oldest goes when a newer one comes, so a
+/// long session does not keep every row it ever changed.
+pub const UNDO_STEPS: usize = 100;
+
 /// Whether a record may be saved: none of its `required` fields (`required`,
 /// each column and label as written) is empty in `values` (by `columns`).
 /// No value and empty text are empty; 0 and false are values. The first
@@ -307,11 +324,27 @@ pub trait Record: Sized + Clone {
     /// key with its `@`, or the text): a save refuses the record while one
     /// is empty (conformance/required.json).
     const REQUIRED: &'static [(&'static str, &'static str)] = &[];
+    /// The column of the record's version (conformance/versions.json):
+    /// `row_version` for an owned entity, the column an external entity
+    /// names, or None for an entity whose saves are not checked.
+    const VERSION: Option<&'static str> = None;
     fn id(&self) -> Id;
     fn set_id(&mut self, id: Id);
     fn to_values(&self) -> Vec<SqlValue>;
     /// Builds a record from values in `COLUMNS` order.
     fn from_values(id: Id, values: &[SqlValue]) -> Result<Self>;
+    /// The version the record was read or last saved with; 0 for a new one.
+    fn version(&self) -> i64 {
+        0
+    }
+    fn set_version(&mut self, _version: i64) {}
+    /// Why a save or delete of this record is refused when someone saved it
+    /// since: `current` is the record as it is stored now, whose fields an
+    /// entity's own text may name, and `db` loads what they refer to
+    /// (`{current.changedBy.name}`). Clarity's `savedSince` by default.
+    fn saved_since(_db: &Db, _current: &Self) -> ui::Text {
+        saved_since()
+    }
 
     /// Whether the entity has data events. A save or delete then runs
     /// with its events in one transaction: when an event fails, nothing
@@ -429,6 +462,9 @@ pub struct Db {
     stores: Vec<(String, StorePlace)>,
     /// What undo takes back and redo does again (DESIGN 5.29).
     history: RefCell<History>,
+    /// Who is using the program and how people sign in (crate::signin).
+    #[cfg(feature = "auth")]
+    people: signin::People,
 }
 
 /// A row of a table as it was before a change and as the change left it;
@@ -438,9 +474,15 @@ struct Change {
     table: &'static str,
     key: &'static str,
     columns: &'static [&'static str],
+    /// The version column of a versioned entity: undo then compares the
+    /// version, not the whole row.
+    version: Option<&'static str>,
     id: Id,
     before: Option<Vec<SqlValue>>,
     after: Option<Vec<SqlValue>>,
+    /// The version of the row as it was before the change and as it left it.
+    before_version: Option<i64>,
+    after_version: Option<i64>,
 }
 
 /// The database side of undo (DESIGN 5.29): the changes of each handler
@@ -455,6 +497,9 @@ struct History {
     steps: std::collections::BTreeMap<u64, (Vec<Change>, bool)>,
     /// The id of the last step kept.
     last: u64,
+    /// The sources the running step holds a transaction in, by name: what
+    /// one handler changes is kept or left whole.
+    held: Vec<String>,
 }
 
 impl Db {
@@ -476,6 +521,8 @@ impl Db {
             sources: vec![Source::new("", driver)],
             stores: Vec::new(),
             history: RefCell::default(),
+            #[cfg(feature = "auth")]
+            people: Default::default(),
         }
     }
 
@@ -487,7 +534,13 @@ impl Db {
             .iter()
             .map(|(name, dialect, at)| Ok(Source::new(name, store::open(*dialect, at)?)))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Db { sources, stores: Vec::new(), history: RefCell::default() })
+        Ok(Db {
+            sources,
+            stores: Vec::new(),
+            history: RefCell::default(),
+            #[cfg(feature = "auth")]
+            people: Default::default(),
+        })
     }
 
     /// Adds the data source that is a file in a format (`datasource logins
@@ -657,11 +710,18 @@ impl Db {
         at.depth.set(at.depth.get() + 1);
         let result = run();
         at.depth.set(at.depth.get() - 1);
-        if outer {
+        // A step that holds the transaction ends it itself.
+        if at.depth.get() == 0 {
             let mut conn = at.conn.borrow_mut();
             let d = conn.dialect();
             match &result {
-                Ok(_) => conn.batch(d.commit())?,
+                Ok(_) => {
+                    // A commit that fails leaves nothing half kept.
+                    if let Err(failure) = conn.batch(d.commit()) {
+                        let _ = conn.batch(d.rollback());
+                        return Err(failure.into());
+                    }
+                }
                 // The error that made it roll back is the one to report.
                 Err(_) => {
                     let _ = conn.batch(d.rollback());
@@ -675,6 +735,11 @@ impl Db {
     /// and tests; generated code reads and writes through records.
     pub fn batch(&self, source: &str, sql: &str) -> Result<()> {
         Ok(self.conn(source)?.batch(sql)?)
+    }
+
+    /// The rows SQL reads in the database of `source`, for tools and tests.
+    pub fn rows(&self, source: &str, sql: &str, params: &[SqlValue]) -> Result<Vec<Vec<SqlValue>>> {
+        Ok(self.conn(source)?.rows(sql, params)?)
     }
 
     /// The kind of database `source` is.
@@ -708,40 +773,72 @@ impl Db {
     }
 
     /// Inserts a new record (and gives it its id) or updates a stored one,
-    /// with the entity's data events around it.
+    /// with the entity's data events around it. A record someone saved
+    /// since it was read is refused, changing nothing (`savedSince`).
     pub fn save<R: Record>(&self, record: &mut R) -> Result<()> {
-        if !R::EVENTS {
-            return self.store(record);
-        }
-        let id = record.id();
-        let saved = self.atomic(R::SOURCE, || {
-            record.before_save(self)?;
-            self.store(record)?;
-            record.after_save(self)
-        });
-        // Nothing was kept, so a new record is still new.
-        if saved.is_err() {
-            record.set_id(id);
+        self.save_with(record, false)
+    }
+
+    /// Saves a record regardless of its version (`save ... anyway`): what
+    /// someone saved since is written over, on purpose.
+    pub fn save_anyway<R: Record>(&self, record: &mut R) -> Result<()> {
+        self.save_with(record, true)
+    }
+
+    /// Reads a record again as it is stored now, with its version.
+    pub fn reload<R: Record>(&self, record: &mut R) -> Result<()> {
+        *record = self.get(record.id())?;
+        Ok(())
+    }
+
+    fn save_with<R: Record>(&self, record: &mut R, anyway: bool) -> Result<()> {
+        // A person's secret changed by this save closes their other sessions (crate::signin).
+        #[cfg(feature = "auth")]
+        let secrets = self.secrets_of(R::TABLE, record.id());
+        let saved = self.save_record(record, anyway);
+        #[cfg(feature = "auth")]
+        if saved.is_ok() {
+            self.secrets_saved(R::TABLE, record.id(), secrets);
         }
         saved
     }
 
-    fn store<R: Record>(&self, record: &mut R) -> Result<()> {
+    fn save_record<R: Record>(&self, record: &mut R, anyway: bool) -> Result<()> {
+        if !R::EVENTS {
+            return self.store(record, anyway);
+        }
+        let (id, version) = (record.id(), record.version());
+        let saved = self.atomic(R::SOURCE, || {
+            record.before_save(self)?;
+            self.store(record, anyway)?;
+            record.after_save(self)
+        });
+        // Nothing was kept, so a new record is still new, at the version it was read with.
+        if saved.is_err() {
+            record.set_id(id);
+            record.set_version(version);
+        }
+        saved
+    }
+
+    fn store<R: Record>(&self, record: &mut R, anyway: bool) -> Result<()> {
         // A refusal says which record and column, so a window shows it at the input bound to it.
         if let Some((column, text)) = first_required_empty(R::REQUIRED, R::COLUMNS, &record.to_values()) {
             return Err(Error::Required { table: R::TABLE, id: record.id(), column, text });
         }
+        self.enlist(R::SOURCE)?;
         let recording = self.history.borrow().recording.is_some();
-        let before = if recording && record.id() != 0 { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
-        self.store_row(record)?;
+        let (before, before_version) = if recording && record.id() != 0 { self.state(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, R::VERSION, record.id())? } else { (None, None) };
+        self.store_row(record, anyway)?;
         if recording {
-            let after = self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())?;
-            self.record(Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, id: record.id(), before, after });
+            let (after, after_version) = self.state(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, R::VERSION, record.id())?;
+            let change = Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, version: R::VERSION, id: record.id(), before, after, before_version, after_version };
+            self.record(change);
         }
         Ok(())
     }
 
-    fn store_row<R: Record>(&self, record: &mut R) -> Result<()> {
+    fn store_row<R: Record>(&self, record: &mut R, anyway: bool) -> Result<()> {
         let values = self.saved_values(record)?;
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
@@ -749,14 +846,22 @@ impl Db {
         if record.id() == 0 {
             // An empty or kept picture is left to the column's NULL, so no
             // NULL is bound to a binary column (SQL Server refuses that).
-            let (columns, values): (Vec<&str>, Vec<SqlValue>) = R::COLUMNS
+            let (mut columns, mut values): (Vec<&str>, Vec<SqlValue>) = R::COLUMNS
                 .iter()
                 .zip(values)
                 .filter(|(c, v)| !(picture(c) && matches!(v, SqlValue::Null | SqlValue::Kept)))
                 .map(|(c, v)| (*c, v))
                 .unzip();
+            // A new record starts at version 1.
+            if let Some(version) = R::VERSION {
+                columns.push(version);
+                values.push(SqlValue::Integer(1));
+            }
             let id = conn.insert(&d.insert(R::TABLE, R::KEY, &columns), &values).map_err(unfit)?;
             record.set_id(id);
+            if R::VERSION.is_some() {
+                record.set_version(1);
+            }
             return Ok(());
         }
         // A kept picture stays as it is; an emptied one is set to NULL as text.
@@ -772,26 +877,50 @@ impl Db {
                 }
             }
         }
+        // Each save adds one to the version; a checked one writes only over the version it read.
+        if let Some(version) = R::VERSION {
+            sets.push(format!("{0} = {0} + 1", d.quote(version)));
+        }
         if sets.is_empty() {
             return if exists::<R>(&mut **conn, record.id())? { Ok(()) } else { Err(Error::NotFound { table: R::TABLE, id: Some(record.id()) }) };
         }
-        let sql = format!(
-            "UPDATE {} SET {} WHERE {} = {}",
-            d.quote(R::TABLE),
-            sets.join(", "),
-            d.quote(R::KEY),
-            d.mark(params.len() + 1)
-        );
+        let mut sql = format!("UPDATE {} SET {} WHERE {} = {}", d.quote(R::TABLE), sets.join(", "), d.quote(R::KEY), d.mark(params.len() + 1));
         params.push(SqlValue::Integer(record.id()));
+        let checked = R::VERSION.filter(|_| !anyway);
+        if let Some(version) = checked {
+            params.push(SqlValue::Integer(record.version()));
+            sql.push_str(&format!(" AND {} = {}", d.quote(version), d.mark(params.len())));
+        }
         // MySQL counts only the rows whose values changed, so an update
-        // that changes nothing is told apart from a missing record.
-        if conn.execute(&sql, &params).map_err(unfit)? == 0 && !exists::<R>(&mut **conn, record.id())? {
-            return Err(Error::NotFound {
-                table: R::TABLE,
-                id: Some(record.id()),
-            });
+        // that changes nothing is told apart from a missing record (one
+        // with a version always changes).
+        if conn.execute(&sql, &params).map_err(unfit)? == 0 {
+            if !exists::<R>(&mut **conn, record.id())? {
+                return Err(Error::NotFound { table: R::TABLE, id: Some(record.id()) });
+            }
+            if checked.is_some() {
+                drop(conn);
+                return Err(self.refusal::<R>(record.id()));
+            }
+        }
+        match R::VERSION {
+            Some(_) if anyway => {
+                let stored = stored_version::<R>(&mut **conn, record.id())?;
+                record.set_version(stored);
+            }
+            Some(_) => record.set_version(record.version() + 1),
+            None => {}
         }
         Ok(())
+    }
+
+    /// The refusal of a save or delete of record `id` that someone saved
+    /// since, in the entity's words about the record as stored now.
+    fn refusal<R: Record>(&self, id: Id) -> Error {
+        match self.get::<R>(id) {
+            Ok(current) => Error::Refused(R::saved_since(self, &current)),
+            Err(_) => Error::Refused(saved_since()),
+        }
     }
 
     /// Removes a stored record, with the entity's data events around it.
@@ -810,11 +939,13 @@ impl Db {
     }
 
     fn remove<R: Record>(&self, record: &R) -> Result<()> {
+        self.enlist(R::SOURCE)?;
         let recording = self.history.borrow().recording.is_some();
-        let before = if recording { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
+        let (before, before_version) = if recording { self.state(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, R::VERSION, record.id())? } else { (None, None) };
         self.remove_row(record)?;
         if recording {
-            self.record(Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, id: record.id(), before, after: None });
+            let change = Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, version: R::VERSION, id: record.id(), before, after: None, before_version, after_version: None };
+            self.record(change);
         }
         Ok(())
     }
@@ -822,8 +953,18 @@ impl Db {
     fn remove_row<R: Record>(&self, record: &R) -> Result<()> {
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
-        let sql = format!("DELETE FROM {} WHERE {} = {}", d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));
-        match conn.execute(&sql, &[SqlValue::Integer(record.id())]) {
+        let mut sql = format!("DELETE FROM {} WHERE {} = {}", d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));
+        let mut params = vec![SqlValue::Integer(record.id())];
+        // A record someone saved since it was read is not deleted.
+        if let Some(version) = R::VERSION {
+            sql.push_str(&format!(" AND {} = {}", d.quote(version), d.mark(2)));
+            params.push(SqlValue::Integer(record.version()));
+        }
+        match conn.execute(&sql, &params) {
+            Ok(0) if R::VERSION.is_some() && exists::<R>(&mut **conn, record.id())? => {
+                drop(conn);
+                Err(self.refusal::<R>(record.id()))
+            }
             Ok(_) => Ok(()),
             Err(Failure::Reference(_)) => Err(Error::InUse {
                 table: R::TABLE,
@@ -834,31 +975,80 @@ impl Db {
     }
 
     /// Runs a handler as one step, which undo takes back whole (DESIGN
-    /// 5.29): its id, when it changed anything, is `last_step`. When it
-    /// fails, what it changed is put back at once, so it leaves nothing
-    /// behind. A step inside a step is part of it.
+    /// 5.29): its id, when it changed anything, is `last_step`. Everything
+    /// it changes is one transaction in each source it changes: kept when
+    /// it ends, left whole when it fails, so it leaves nothing behind. A
+    /// step inside a step is part of it. The last `UNDO_STEPS` are kept.
     pub fn step<T>(&self, run: impl FnOnce() -> Result<T>) -> Result<T> {
         if self.history.borrow().recording.is_some() {
             return run();
         }
         self.history.borrow_mut().recording = Some(Vec::new());
-        let result = run();
-        let changes = self.history.borrow_mut().recording.take().unwrap_or_default();
-        match &result {
-            Err(_) => {
-                for change in changes.iter().rev() {
-                    let _ = self.put(change, change.before.as_deref());
-                }
-            }
-            Ok(_) if changes.is_empty() => {}
-            Ok(_) => {
-                let mut history = self.history.borrow_mut();
-                history.last += 1;
-                let id = history.last;
-                history.steps.insert(id, (changes, false));
+        let mut result = run();
+        let (changes, held) = {
+            let mut history = self.history.borrow_mut();
+            (history.recording.take().unwrap_or_default(), std::mem::take(&mut history.held))
+        };
+        let kept = self.release(&held, result.is_ok());
+        if let (Ok(_), Err(failed)) = (&result, kept) {
+            result = Err(failed);
+        }
+        if result.is_ok() && !changes.is_empty() {
+            let mut history = self.history.borrow_mut();
+            history.last += 1;
+            let id = history.last;
+            history.steps.insert(id, (changes, false));
+            while history.steps.len() > UNDO_STEPS {
+                history.steps.pop_first();
             }
         }
         result
+    }
+
+    /// Makes the running step hold a transaction in `source`, from its first
+    /// change there; outside a step, nothing.
+    fn enlist(&self, source: &str) -> Result<()> {
+        let at = self.source(source)?;
+        {
+            let history = self.history.borrow();
+            if history.recording.is_none() || history.held.contains(&at.name) {
+                return Ok(());
+            }
+        }
+        if at.depth.get() == 0 {
+            let mut conn = at.conn.borrow_mut();
+            let begin = conn.dialect().begin();
+            conn.batch(begin)?;
+        }
+        at.depth.set(at.depth.get() + 1);
+        self.history.borrow_mut().held.push(at.name.clone());
+        Ok(())
+    }
+
+    /// Ends the transactions a step held: kept (`keep`) or rolled back. When
+    /// one cannot be kept, the ones not kept yet are rolled back too.
+    fn release(&self, held: &[String], keep: bool) -> Result<()> {
+        let mut keep = keep;
+        let mut failed = Ok(());
+        for name in held {
+            let Ok(at) = self.source(name) else { continue };
+            at.depth.set(at.depth.get().saturating_sub(1));
+            if at.depth.get() > 0 {
+                continue;
+            }
+            let mut conn = at.conn.borrow_mut();
+            let d = conn.dialect();
+            if keep {
+                if let Err(err) = conn.batch(d.commit()) {
+                    let _ = conn.batch(d.rollback());
+                    keep = false;
+                    failed = Err(err.into());
+                }
+            } else {
+                let _ = conn.batch(d.rollback());
+            }
+        }
+        failed
     }
 
     /// The id of the last step a handler made, to undo it later by; 0 before any.
@@ -870,28 +1060,52 @@ impl Db {
     /// id. Refused, changing nothing, when one of its rows changed since;
     /// false when there is no such step, or it is undone already.
     pub fn undo(&self, id: u64) -> Result<bool> {
-        self.replay_step(id, true)
+        self.replay_steps(&[id], true)
     }
 
     /// Does step `id` again after an undo; false when it is not undone.
     pub fn redo(&self, id: u64) -> Result<bool> {
-        self.replay_step(id, false)
+        self.replay_steps(&[id], false)
     }
 
-    fn replay_step(&self, id: u64, back: bool) -> Result<bool> {
-        let step = {
+    /// Takes back (`back`) or does again the steps of one edit, in the order
+    /// given, as one: all of them or, refused, none. A step older than the
+    /// ones kept is refused (`undoTooOld`); false when none of them is in
+    /// the state to be replayed.
+    pub fn replay_steps(&self, ids: &[u64], back: bool) -> Result<bool> {
+        let mut taken: Vec<(u64, Vec<Change>)> = Vec::new();
+        {
             let mut history = self.history.borrow_mut();
-            match history.steps.get_mut(&id) {
-                Some((changes, undone)) if *undone != back => std::mem::take(changes),
-                _ => return Ok(false),
+            let last = history.last;
+            for id in ids {
+                match history.steps.get_mut(id) {
+                    Some((changes, undone)) if *undone != back => taken.push((*id, std::mem::take(changes))),
+                    Some(_) => {}
+                    // A step never made is nothing to replay; one made and no longer kept is refused.
+                    None if *id != 0 && *id <= last => {
+                        // Put back what was taken, and refuse.
+                        for (id, changes) in taken.drain(..) {
+                            if let Some((kept, _)) = history.steps.get_mut(&id) {
+                                *kept = changes;
+                            }
+                        }
+                        return Err(Error::Refused(undo_too_old()));
+                    }
+                    None => {}
+                }
             }
-        };
-        let replayed = self.replay(&step, back);
+        }
+        if taken.is_empty() {
+            return Ok(false);
+        }
+        let replayed = self.replay(&mut taken, back);
         let mut history = self.history.borrow_mut();
-        if let Some((changes, undone)) = history.steps.get_mut(&id) {
-            *changes = step;
-            if replayed.is_ok() {
-                *undone = back;
+        for (id, changes) in taken {
+            if let Some((kept, undone)) = history.steps.get_mut(&id) {
+                *kept = changes;
+                if replayed.is_ok() {
+                    *undone = back;
+                }
             }
         }
         replayed.map(|()| true)
@@ -903,29 +1117,65 @@ impl Db {
         }
     }
 
-    /// Puts a step's rows back (`back`) or forward, after checking that each
-    /// row is still as the step left it, all in one transaction per source.
-    fn replay(&self, step: &[Change], back: bool) -> Result<()> {
-        // Each row as the step left it (its last change undone, its first redone) must still be so.
-        let mut seen = Vec::new();
-        let order: Vec<&Change> = if back { step.iter().rev().collect() } else { step.iter().collect() };
-        for change in &order {
-            let at = (change.source.as_str(), change.table, change.id);
-            if seen.contains(&at) {
-                continue;
+    /// Puts the rows of steps back (`back`) or forward, after checking that
+    /// each row is still as the steps left it (by its version, or the whole
+    /// row where there is none), all in one transaction per source, checks
+    /// included. Each row's new version is noted where the next replay checks it.
+    fn replay(&self, steps: &mut [(u64, Vec<Change>)], back: bool) -> Result<()> {
+        // The changes in the order they are replayed: the steps as given, each one's changes backwards for an undo.
+        let mut order: Vec<(usize, usize)> = Vec::new();
+        for (s, (_, changes)) in steps.iter().enumerate() {
+            let mut indices: Vec<usize> = (0..changes.len()).collect();
+            if back {
+                indices.reverse();
             }
-            seen.push(at);
-            let expected = if back { &change.after } else { &change.before };
-            if &self.row(&change.source, change.table, change.key, change.columns, change.id)? != expected {
-                return Err(Error::Refused(undo_changed_since()));
-            }
+            order.extend(indices.into_iter().map(|c| (s, c)));
         }
-        let mut sources: Vec<&str> = step.iter().map(|c| c.source.as_str()).collect();
+        let mut sources: Vec<String> = steps.iter().flat_map(|(_, changes)| changes.iter().map(|c| c.source.clone())).collect();
         sources.sort();
         sources.dedup();
+        let sources: Vec<&str> = sources.iter().map(String::as_str).collect();
+        let changes = std::cell::RefCell::new(steps);
         self.within(&sources, &|| {
-            for change in &order {
-                self.put(change, if back { change.before.as_deref() } else { change.after.as_deref() })?;
+            let mut steps = changes.borrow_mut();
+            // Each row as the steps left it (its last change undone, its first redone) must still be so.
+            let mut seen = Vec::new();
+            for &(s, c) in &order {
+                let change = &steps[s].1[c];
+                let at = (change.source.clone(), change.table, change.id);
+                if seen.contains(&at) {
+                    continue;
+                }
+                seen.push(at);
+                let (row, version) = self.state(&change.source, change.table, change.key, change.columns, change.version, change.id)?;
+                let unchanged = match change.version {
+                    Some(_) => version == if back { change.after_version } else { change.before_version },
+                    None => &row == if back { &change.after } else { &change.before },
+                };
+                if !unchanged {
+                    return Err(Error::Refused(undo_changed_since()));
+                }
+            }
+            for &(s, c) in &order {
+                let change = &steps[s].1[c];
+                self.put(change, if back { change.before.as_deref() } else { change.after.as_deref() }, if back { change.before_version } else { change.after_version })?;
+            }
+            // The version each row has now is what the next replay finds: noted on its last change in this order.
+            let mut noted = Vec::new();
+            for &(s, c) in order.iter().rev() {
+                let change = &steps[s].1[c];
+                let at = (change.source.clone(), change.table, change.id);
+                if change.version.is_none() || noted.contains(&at) {
+                    continue;
+                }
+                noted.push(at);
+                let (_, version) = self.state(&change.source, change.table, change.key, change.columns, change.version, change.id)?;
+                let change = &mut steps[s].1[c];
+                if back {
+                    change.before_version = version;
+                } else {
+                    change.after_version = version;
+                }
             }
             Ok(())
         })
@@ -939,19 +1189,38 @@ impl Db {
         }
     }
 
-    /// A row's raw values (its columns, by `columns`), or `None` when it is not there.
-    fn row(&self, source: &str, table: &str, key: &str, columns: &[&str], id: Id) -> Result<Option<Vec<SqlValue>>> {
+    /// A row's raw values (its columns, by `columns`) and its version (by
+    /// `version`), or `None` when it is not there.
+    #[allow(clippy::too_many_arguments)]
+    fn state(&self, source: &str, table: &str, key: &str, columns: &[&str], version: Option<&str>, id: Id) -> Result<(Option<Vec<SqlValue>>, Option<i64>)> {
         let mut conn = self.conn(source)?;
         let d = conn.dialect();
-        let names = if columns.is_empty() { d.quote(key) } else { columns.iter().map(|c| d.quote(c)).collect::<Vec<_>>().join(", ") };
-        let sql = format!("SELECT {names} FROM {} WHERE {} = {}", d.quote(table), d.quote(key), d.mark(1));
+        let mut names: Vec<String> = std::iter::once(key).chain(columns.iter().copied()).map(|c| d.quote(c)).collect();
+        if let Some(version) = version {
+            names.push(d.quote(version));
+        }
+        let sql = format!("SELECT {} FROM {} WHERE {} = {}", names.join(", "), d.quote(table), d.quote(key), d.mark(1));
         let mut rows = conn.rows(&sql, &[SqlValue::Integer(id)])?;
-        Ok(if rows.is_empty() { None } else { Some(if columns.is_empty() { Vec::new() } else { rows.remove(0) }) })
+        if rows.is_empty() {
+            return Ok((None, None));
+        }
+        let mut row = rows.remove(0);
+        let stored = match version {
+            Some(_) => Some(sql::get_integer("version", &row.pop().unwrap_or(SqlValue::Null))?),
+            None => None,
+        };
+        row.remove(0);
+        Ok((Some(row), stored))
     }
 
     /// Makes a row so: gone, or with these values and its own id.
-    fn put(&self, change: &Change, values: Option<&[SqlValue]>) -> Result<()> {
-        let there = self.row(&change.source, change.table, change.key, change.columns, change.id)?.is_some();
+    /// A versioned row put back gets a version past both its current one
+    /// and `version`, the one of the state it returns to, so a copy read
+    /// before is refused.
+    fn put(&self, change: &Change, values: Option<&[SqlValue]>, version: Option<i64>) -> Result<()> {
+        let (row, current) = self.state(&change.source, change.table, change.key, change.columns, change.version, change.id)?;
+        let there = row.is_some();
+        let next = current.max(version).unwrap_or(0) + 1;
         let mut conn = self.conn(&change.source)?;
         let d = conn.dialect();
         let table = d.quote(change.table);
@@ -963,18 +1232,27 @@ impl Db {
             }
             None => {}
             Some(values) if there => {
-                if !change.columns.is_empty() {
-                    let sets = change.columns.iter().enumerate().map(|(i, c)| format!("{} = {}", d.quote(c), d.mark(i + 1))).collect::<Vec<_>>().join(", ");
-                    let mut params = values.to_vec();
+                let mut sets: Vec<String> = change.columns.iter().enumerate().map(|(i, c)| format!("{} = {}", d.quote(c), d.mark(i + 1))).collect();
+                let mut params = values.to_vec();
+                if let Some(column) = change.version {
+                    params.push(SqlValue::Integer(next));
+                    sets.push(format!("{} = {}", d.quote(column), d.mark(params.len())));
+                }
+                if !sets.is_empty() {
                     params.push(id);
-                    conn.execute(&format!("UPDATE {table} SET {sets} WHERE {key} = {}", d.mark(params.len())), &params)?;
+                    conn.execute(&format!("UPDATE {table} SET {} WHERE {key} = {}", sets.join(", "), d.mark(params.len())), &params)?;
                 }
             }
             Some(values) => {
-                let names = std::iter::once(key.clone()).chain(change.columns.iter().map(|c| d.quote(c))).collect::<Vec<_>>().join(", ");
-                let marks = (1..=change.columns.len() + 1).map(|i| d.mark(i)).collect::<Vec<_>>().join(", ");
+                let mut names: Vec<String> = std::iter::once(key.clone()).chain(change.columns.iter().map(|c| d.quote(c))).collect();
                 let mut params = vec![id];
                 params.extend(values.iter().cloned());
+                if let Some(column) = change.version {
+                    names.push(d.quote(column));
+                    params.push(SqlValue::Integer(next));
+                }
+                let marks = (1..=params.len()).map(|i| d.mark(i)).collect::<Vec<_>>().join(", ");
+                let names = names.join(", ");
                 let insert = format!("INSERT INTO {table} ({names}) VALUES ({marks})");
                 // SQL Server takes a key of its own counting only when asked to.
                 if d == Dialect::Mssql {
@@ -1038,6 +1316,7 @@ fn unfit(failure: Failure) -> Error {
 }
 
 /// The key and the stored columns of a record, for SELECT.
+/// The key, the stored columns and the version of a record, for SELECT.
 fn select_columns<R: Record>(d: Dialect) -> String {
     std::iter::once(d.quote(R::KEY))
         .chain(R::COLUMNS.iter().map(|c| match R::PICTURES.iter().find(|p| p.column == *c) {
@@ -1045,6 +1324,7 @@ fn select_columns<R: Record>(d: Dialect) -> String {
             Some(p) if p.store.is_none() => picture::presence(d, c),
             _ => d.quote(c),
         }))
+        .chain(R::VERSION.map(|v| d.quote(v)))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -1054,9 +1334,22 @@ fn records<R: Record>(conn: &mut dyn Driver, sql: &str, params: &[SqlValue]) -> 
         .into_iter()
         .map(|row| {
             let id = sql::get_integer(R::KEY, row.first().unwrap_or(&SqlValue::Null))?;
-            R::from_values(id, &row[1..])
+            let mut record = R::from_values(id, &row[1..=R::COLUMNS.len().min(row.len() - 1)])?;
+            if R::VERSION.is_some() {
+                record.set_version(sql::get_integer("version", row.last().unwrap_or(&SqlValue::Null))?);
+            }
+            Ok(record)
         })
         .collect()
+}
+
+/// The version record `id` is stored with now.
+fn stored_version<R: Record>(conn: &mut dyn Driver, id: Id) -> Result<i64> {
+    let Some(version) = R::VERSION else { return Ok(0) };
+    let d = conn.dialect();
+    let sql = format!("SELECT {} FROM {} WHERE {} = {}", d.quote(version), d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));
+    let rows = conn.rows(&sql, &[SqlValue::Integer(id)])?;
+    sql::get_integer("version", rows.first().and_then(|r| r.first()).unwrap_or(&SqlValue::Null))
 }
 
 fn exists<R: Record>(conn: &mut dyn Driver, id: Id) -> Result<bool> {

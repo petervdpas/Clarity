@@ -13,6 +13,7 @@ pub mod code_colors;
 pub mod heading;
 pub mod label;
 pub mod markdown_memo;
+pub mod signin;
 pub mod sound;
 pub mod video;
 pub mod text_box;
@@ -250,6 +251,20 @@ pub trait PartHost {
     /// The name of the window the parts are in (`Main`); none when the host has no window (a test).
     fn window_name(&self) -> Option<String> {
         None
+    }
+
+    /// The project's `signin` block, which a sign-in part draws itself from; none without one.
+    fn signin(&self) -> Option<crate::facts::SigninFacts> {
+        None
+    }
+
+    /// Signs in with `strategy` and its `inputs` (docs/APP-CAPABILITIES-PLAN.md
+    /// step 4), as a `signin <strategy>` button does: on success the sign-in
+    /// window closes and the main window opens; a refusal is given back, for
+    /// the part to show. A host without a program refuses.
+    fn sign_in(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
+        let _ = (strategy, inputs);
+        Err(Text::keyed("signinRefused", "Signing in did not work. Check what you typed and try again."))
     }
 
 }
@@ -555,7 +570,7 @@ macro_rules! part_element {
 pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
 
 /// The kinds Clarity.UI draws, each with the module that makes it.
-const DRAWN: [(&str, MakePart); 18] = [
+const DRAWN: [(&str, MakePart); 19] = [
     ("label", label::make),
     ("heading", heading::make),
     ("button", button::make),
@@ -568,6 +583,7 @@ const DRAWN: [(&str, MakePart); 18] = [
     ("sound", sound::make),
     ("video", video::make),
     ("timer", timer::make),
+    ("signin", signin::make),
     // The parts of a toolbox (`page Painting: toolbox`).
     ("tool", tools::make_tool),
     ("toolGroup", tools::make_group),

@@ -38,6 +38,8 @@ translation en
     cancel \"Cancel\"
     dismiss \"Dismiss\"
     undoChangedSince \"This was changed since, so it cannot be taken back\"
+    undoTooOld \"This was done too long ago to take back\"
+    savedSince \"Someone else changed this record since you opened it. Reload it to see their change.\"
     cutText \"Cut\"
     copyText \"Copy\"
     pasteText \"Paste\"
@@ -61,6 +63,8 @@ translation nl
     cancel \"Annuleren\"
     dismiss \"Sluiten\"
     undoChangedSince \"Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt\"
+    undoTooOld \"Dit is te lang geleden gedaan om terug te nemen\"
+    savedSince \"Iemand anders heeft dit record gewijzigd sinds je het opende. Laad het opnieuw om de wijziging te zien.\"
     cutText \"Knippen\"
     copyText \"Kopiëren\"
     pasteText \"Plakken\"
@@ -213,7 +217,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
     let mut project = load_converted([("calc.clarity", calc)]);
-    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n")]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    undoTooOld \"This was done too long ago to take back\"\n    savedSince \"Someone else changed this record since you opened it. Reload it to see their change.\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 

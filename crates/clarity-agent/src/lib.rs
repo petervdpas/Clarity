@@ -9,6 +9,7 @@
 //! the open project.
 
 pub mod anthropic;
+pub mod foundry;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

@@ -44,6 +44,8 @@ translation en
     removeRowAsk "Remove {row}?"
     selectAllText "Select all"
     undoChangedSince "This was changed since, so it cannot be taken back"
+    undoTooOld "This was done too long ago to take back"
+    savedSince "Someone else changed this record since you opened it. Reload it to see their change."
     yes "Yes"
     dishNamePlaceholder "The dish, as in Lentil soup"
     dishCoursePlaceholder "Choose a course"

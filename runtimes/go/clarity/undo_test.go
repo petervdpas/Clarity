@@ -180,3 +180,85 @@ func TestAnUndoWhoseRowsChangedSinceIsRefused(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestAHandlerIsOneTransactionKeptAtItsEnd(t *testing.T) {
+	db := drawn(t)
+	a := newShape(t, db, "A", 1)
+	// A failure after two saves rolls both back, with the database's own rollback.
+	err := db.Step(func() error {
+		a.X = 2
+		if err := Save(db, a); err != nil {
+			return err
+		}
+		newShape(t, db, "B", 3)
+		return errors.New("no")
+	})
+	if err == nil {
+		t.Fatal("the step went")
+	}
+	if got := shapes(t, db); len(got) != 1 || got[0].X != 1 {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestTheStepsOfOneEditAreUndoneAllOrNone(t *testing.T) {
+	db := drawn(t)
+	a, b := newShape(t, db, "A", 1), newShape(t, db, "B", 1)
+	if err := db.Step(func() error { a.X = 2; return Save(db, a) }); err != nil {
+		t.Fatal(err)
+	}
+	first := db.LastStep()
+	if err := db.Step(func() error { b.X = 2; return Save(db, b) }); err != nil {
+		t.Fatal(err)
+	}
+	second := db.LastStep()
+	// B changed since the edit, so neither step is taken back.
+	other, _ := Get[shape](db, b.ID)
+	other.X = 9
+	if err := Save(db, &other); err != nil {
+		t.Fatal(err)
+	}
+	var refused *RefusedError
+	if _, err := db.ReplaySteps([]int64{second, first}, true); !errors.As(err, &refused) || refused.Text.Key != "undoChangedSince" {
+		t.Fatalf("not refused: %v", err)
+	}
+	if got, _ := Get[shape](db, a.ID); got.X != 2 {
+		t.Fatalf("A was taken back: %v", got)
+	}
+	other.X = 2
+	if err := Save(db, &other); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := db.ReplaySteps([]int64{second, first}, true); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	ga, _ := Get[shape](db, a.ID)
+	gb, _ := Get[shape](db, b.ID)
+	if ga.X != 1 || gb.X != 1 {
+		t.Fatalf("%v %v", ga, gb)
+	}
+}
+
+func TestOnlyTheLastStepsAreKept(t *testing.T) {
+	db := drawn(t)
+	a := newShape(t, db, "A", 0)
+	var first int64
+	for x := int64(1); x <= UndoSteps+1; x++ {
+		if err := db.Step(func() error { a.X = x; return Save(db, a) }); err != nil {
+			t.Fatal(err)
+		}
+		if x == 1 {
+			first = db.LastStep()
+		}
+	}
+	var refused *RefusedError
+	if _, err := db.Undo(first); !errors.As(err, &refused) || refused.Text.Key != "undoTooOld" {
+		t.Fatalf("not refused: %v", err)
+	}
+	if ok, err := db.Undo(db.LastStep()); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if got, _ := Get[shape](db, a.ID); got.X != UndoSteps {
+		t.Fatalf("%v", got)
+	}
+}

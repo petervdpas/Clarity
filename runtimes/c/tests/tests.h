@@ -64,6 +64,12 @@
     X(a_delete_with_its_cascade_comes_back_whole)                 \
     X(a_handler_that_fails_leaves_nothing_and_is_no_step)         \
     X(an_undo_whose_rows_changed_since_is_refused)                \
+    X(versions_are_checked_as_every_runtime_does)                 \
+    X(a_file_changed_on_disk_refuses_the_save)                    \
+    X(a_handler_is_one_transaction_kept_at_its_end)               \
+    X(the_steps_of_one_edit_are_undone_all_or_none)               \
+    X(only_the_last_steps_are_kept)                               \
+    X(an_entity_words_the_refusal_with_the_database_at_hand)      \
     X(events_run_around_a_delete)                                 \
     X(the_server_scenario_on_sqlite)                              \
     X(a_handler_replies_as_the_other_runtimes_do)                 \
@@ -71,6 +77,7 @@
     X(code_selects_a_row_and_none)                                \
     X(a_reply_carries_the_texts_shown_in_text_values)             \
     X(code_texts_are_translated_as_every_runtime_does)            \
+    X(a_keyed_text_without_translation_shows_its_english_then_its_key) \
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_service_answers_the_wires_commands)                     \
     X(the_layer_answers_the_librarys_commands)                    \
@@ -145,7 +152,13 @@
     X(an_open_says_new_window_only_when_asked) \
     X(code_quits_and_opens_the_keys_window_through_the_layer) \
     X(backups_are_named_and_pruned_as_every_stack_does) \
-    X(a_database_with_a_schema_is_backed_up_before_new_steps)
+    X(a_database_with_a_schema_is_backed_up_before_new_steps) \
+    X(signing_in_is_as_every_runtime_does) \
+    X(allow_readable_and_hashed_say_clarity_words) \
+    X(a_command_line_signs_in_before_its_command) \
+    X(a_served_program_signs_in_with_a_session_cookie) \
+    X(a_chosen_secret_has_its_minimum_and_a_recovery_code_is_used_once) \
+    X(a_changed_secret_signs_the_person_out_elsewhere)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

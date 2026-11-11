@@ -182,6 +182,20 @@ void code_texts_are_translated_as_every_runtime_does(void) {
     clarity_set_language(NULL);
 }
 
+// A keyed text the project has no translation for shows the English it came
+// with (Clarity's own words), else its key: translation, English, key.
+void a_keyed_text_without_translation_shows_its_english_then_its_key(void) {
+    clarity_load_translations("{\"project\":{\"translations\":{\"en\":{\"save\":\"Save\"}}}}");
+    ClarityText* translated = clarity_key_text("save");
+    translated->text = "Keep";
+    CHECK_TEXT(clarity_text_show(translated), "Save");
+    ClarityText* english = clarity_key_text("signinRefused");
+    english->text = "Signing in did not work.";
+    CHECK_TEXT(clarity_text_show(english), "Signing in did not work.");
+    CHECK_TEXT(clarity_text_show(clarity_key_text("nothingAtAll")), "nothingAtAll");
+    clarity_load_translations("{}");
+}
+
 void a_question_travels_in_the_reply_as_from_the_other_runtimes(void) {
     ClarityWindowState state = {.window = "Albums", .data = cJSON_CreateObject()};
     ClarityUi* ui = clarity_ui(&state);

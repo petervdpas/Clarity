@@ -27,6 +27,30 @@ type Record interface {
 	Load(id int64, values []any) error
 }
 
+// Versioned is a record whose saves and deletes are checked by its version
+// (conformance/versions.json): VersionColumn is row_version for an owned
+// entity, or the column an external entity names. Its version is the one
+// it was read or last saved with; 0 for a new record.
+type Versioned interface {
+	VersionColumn() string
+	GetVersion() int64
+	SetVersion(version int64)
+}
+
+// SavedSincer is a record whose entity words the refusal of a save or delete
+// someone saved since itself: SavedSince is called on the record as it is
+// stored now, whose fields the text may name, with db to load what they
+// refer to ({current.changedBy.name}).
+type SavedSincer interface{ SavedSince(db *Db) Text }
+
+// versionOf is the version column of a record, or "" when its saves are not checked.
+func versionOf(r Record) string {
+	if v, ok := r.(Versioned); ok {
+		return v.VersionColumn()
+	}
+	return ""
+}
+
 // Sourced is a record of a data source other than the default one.
 type Sourced interface{ Source() string }
 

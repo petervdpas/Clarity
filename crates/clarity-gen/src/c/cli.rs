@@ -144,18 +144,21 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, settings, &snake(&program));
+    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, settings, &snake(&program)) + &super::auth_cmake_lines(project, &snake(&program));
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the desktop layer: no window.
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
+    let auth_files = super::AUTH_FILES.iter().filter(|_| crate::carries_auth(project)).chain(super::library_folder_files(project, settings, false));
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_c) = model::emit(project);
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" }, records_h.trim_end().to_string() + "\n")));
+    let (accesses_h, accesses_c) = super::accesses(project, &types)?;
+    let (records_h, records_c) = (records_h + &accesses_h, records_c + &accesses_c);
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}{}{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" }, super::auth_include(project), records_h.trim_end().to_string() + "\n")));
     files.push(text("src/records.c", format!("{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"app.h\"\n\n{}", records_c.trim_end().to_string() + "\n")));
 
     let mut errors = Vec::new();
@@ -243,6 +246,25 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     stores.extend(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| {
         format!("    if (!clarity_db_add_file(db, &(ClarityFileSource){{.name = {}, .format = {}, .path = {}, .options = {}, .table = {}, .key = {}, .fields = {}, .readonly = {}}})) return failed(db);", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)
     }));
+    // The people who sign in, named after the databases open.
+    let (signin_data, add_signin) = super::signin_source(project, &crate::settings_program(settings), "return failed(db);");
+    // A command signs its person in first when people sign in on the command line:
+    // `--user` and `--token` are the sign-in's, not the command's.
+    let on_cli = crate::signin::signin_plan(project).is_some_and(|p| p.targets.iter().any(|t| t == "cli"));
+    let (given, given_count, sign_in) = if on_cli {
+        (
+            "given".to_string(),
+            "given_count".to_string(),
+            "    // The person signs in before the command runs: --token, --user with the password typed, or the computer's account.\n    ClarityText* asked = clarity_key_text(\"cliPassword\");\n    asked->text = \"Password\";\n    int64_t me = 0;\n    bool signed_in = false;\n    if (!clarity_signin_cli(db, &signin, clarity_read_password, clarity_format(\"%s: \", clarity_text_show(asked)), &me, &signed_in)) {\n        clarity_cli_failed();\n        clarity_db_close(db);\n        return 1;\n    }\n    (void)me;\n    (void)signed_in;\n".to_string(),
+        )
+    } else {
+        ("(const char* const*)(argv + 1)".to_string(), "(size_t)(argc - 1)".to_string(), String::new())
+    };
+    let given_args = if on_cli {
+        "    ClarityCliSignin signin = clarity_cli_signin_args(argc, argv);\n    const char** given = CLARITY_NEW(const char*, argc > 1 ? argc : 1);\n    size_t given_count = 0;\n    for (int i = 1; i < argc; i++) {\n        if ((strcmp(argv[i], \"--user\") == 0 || strcmp(argv[i], \"--token\") == 0) && i + 1 < argc) {\n            i++;\n            continue;\n        }\n        given[given_count++] = argv[i];\n    }\n"
+    } else {
+        ""
+    };
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let mut described = String::new();
@@ -315,7 +337,7 @@ static const char* texts(void) {{
     return clarity_buffer_text(&all);
 }}
 
-{kept_settings}/// The program and its commands, as the command line reads them.
+{signin_data}{kept_settings}/// The program and its commands, as the command line reads them.
 static ClarityCliProgram program(void) {{
     ClarityCliCommand* commands = CLARITY_NEW(ClarityCliCommand, {count});
 {described}    return (ClarityCliProgram){{.name = {name}, .help = {help}, .commands = commands, .command_count = {count}}};
@@ -344,8 +366,8 @@ static int failed(ClarityDb* db) {{
     for (size_t i = 0; i < count; i++)
         if (!clarity_migrate(db, sources[i].source, sources[i].steps, sources[i].count, NULL)) return failed(db);
 {stores}
-    ClarityCliProgram described = program();
-    ClarityCliParsed parsed = clarity_cli_parse(&described, (size_t)(argc - 1), (const char* const*)(argv + 1), clarity_cli_words());
+{add_signin}{given_args}    ClarityCliProgram described = program();
+    ClarityCliParsed parsed = clarity_cli_parse(&described, {given_count}, {given}, clarity_cli_words());
     if (parsed.outcome == CLARITY_CLI_HELP) {{
         fputs(parsed.help, stdout);
         clarity_db_close(db);
@@ -356,7 +378,7 @@ static int failed(ClarityDb* db) {{
         clarity_db_close(db);
         return 2;
     }}
-    int code = 0;
+{sign_in}    int code = 0;
     bool worked = false;
     switch (parsed.command) {{
 {dispatch}    }}

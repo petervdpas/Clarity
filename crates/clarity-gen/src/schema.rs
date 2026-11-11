@@ -95,6 +95,10 @@ impl Writer<'_> {
         let mut lines = vec![self.sql.key(table.key_column())];
         // A file's name has a column beside it.
         lines.extend(table.columns.iter().flat_map(|c| std::iter::once(c.clone()).chain(c.name_column())).map(|c| self.column_sql(&c)));
+        // The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5).
+        if table.version {
+            lines.push(self.column_sql(&Column::version()));
+        }
         let missing = if self.baseline { " IF NOT EXISTS" } else { "" };
         format!("CREATE TABLE{missing} {} (\n    {}\n);", self.q(table_name), lines.join(",\n    "))
     }
@@ -139,6 +143,11 @@ impl Writer<'_> {
                 targets.push(self.q(&name_now.stored()));
                 sources.push(self.q(&name_was.stored()));
             }
+        }
+        if before.version && after.version {
+            let version = self.q(migrate::VERSION_COLUMN);
+            targets.push(version.clone());
+            sources.push(version);
         }
         self.push(format!(
             "INSERT INTO {} ({}) SELECT {} FROM {};",
@@ -326,6 +335,11 @@ impl Writer<'_> {
             }
             // The index is built again at the end of the step.
             Op::AddSearch { .. } | Op::RemoveSearch { .. } => {}
+            // The records there start at version 1.
+            Op::AddVersion { entity } => {
+                let table_after = after(entity);
+                self.push(self.sql.add_column(&table_after.table_name(), &self.column_sql(&Column::version())));
+            }
         }
     }
 
@@ -368,7 +382,13 @@ fn source_steps(project: &Project, source: &str) -> Result<Vec<Step>, String> {
     let Some(migrations) = &project.migrations else {
         return Ok(vec![("the schema from the data dictionary".to_string(), false, migrate::pending(project, source, &[]))]);
     };
-    let pending = migrate::pending(project, source, &migrate::proposed_renames(project, source));
+    // A table without its version column yet is written as it is: its saves
+    // stay unchecked (`Project::version_column` is none) until the step that
+    // adds the column exists, so it does not hold the application back.
+    let pending: Vec<Op> = migrate::pending(project, source, &migrate::proposed_renames(project, source))
+        .into_iter()
+        .filter(|op| !matches!(op, Op::AddVersion { .. }))
+        .collect();
     if !pending.is_empty() {
         let changes: Vec<String> = pending.iter().map(|op| migrate::op_text(op).lines().next().unwrap_or_default().to_string()).collect();
         return Err(format!(

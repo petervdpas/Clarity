@@ -17,6 +17,8 @@ mod ddl;
 pub(crate) mod go;
 mod cpp;
 mod shape;
+mod signin;
+pub use signin::carries_auth;
 use clarity_spec::code::print;
 mod query;
 mod readme;
@@ -1444,9 +1446,10 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
 }
 
 /// The crates of the base libraries every Go, C, C++ and Rust desktop program
-/// links: Clarity.UI and Clarity.Audio, Clarity.Video, Clarity.Image and
-/// Clarity.Formats beside it (a program of any target whose code uses a format links Clarity.Formats too).
-pub const BASE_LIBRARIES: [&str; 5] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi"];
+/// links: Clarity.UI and Clarity.Audio, Clarity.Video, Clarity.Image,
+/// Clarity.Formats and Clarity.Auth beside it (a program of any target whose
+/// code uses a format links Clarity.Formats too, one that signs people in Clarity.Auth).
+pub const BASE_LIBRARIES: [&str; 6] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi", "clarity-auth-ffi"];
 
 /// Clarity's repository holding `from` or a folder above it; none outside one.
 pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -1480,7 +1483,9 @@ pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathB
 pub fn needs_library_folder(project: &Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> bool {
     let draws = target == clarity_project::Target::Desktop && uses_clarity_ui(settings);
     let formats = carries_formats(project, settings) && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
-    draws || formats
+    // A program that signs people in links Clarity.Auth from beside Clarity.UI's library.
+    let auth = carries_auth(project) && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
+    draws || formats || auth
 }
 
 pub fn uses_clarity_ui(settings: &clarity_project::Settings) -> bool {

@@ -129,9 +129,52 @@ internal sealed class ProgramWire : IDesktop
     /// does, with that browser's settings (<paramref name="settings"/>, as its
     /// page keeps them; none keeps those it had) and language. Also gives the
     /// browser's settings when the command changed them, for its page to keep;
-    /// none when it did not.
+    /// none when it did not. When the program's people sign in (step 4), the
+    /// command runs as the person of the session in <paramref name="cookie"/>
+    /// (the request's Cookie header), failed tries counted per
+    /// <paramref name="address"/>; without a session only the sign-in window
+    /// and its commands are answered. <c>SetCookie</c> is the reply's
+    /// Set-Cookie when the command signed in or out.
     /// </summary>
-    public (JsonObject? Answer, JsonObject? Settings) AnswerFor(string browser, JsonObject? settings, string command, string args)
+    public (JsonObject? Answer, JsonObject? Settings, string? SetCookie) AnswerFor(string browser, JsonObject? settings, string command, string args, string? cookie = null, string address = "")
+    {
+        var people = db;
+        if (people is null)
+        {
+            var (answer, changed) = AnswerForBrowser(browser, settings, command, args);
+            return (answer, changed, null);
+        }
+        var ((given, kept), setCookie) = people.Served(cookie, address, () =>
+            people.ServedPage is { } page && !OpenWithoutSignin(command, args, page)
+                ? ((JsonObject?)WireJson.Error(Clarity.Runtime.Signin.NotAllowed()), (JsonObject?)null)
+                : AnswerForBrowser(browser, settings, command, args));
+        return (given, kept, setCookie);
+    }
+
+    /// <summary>Whether a served call without a session may run: the program's start, its language and facts, signing in and out, and the sign-in window <paramref name="page"/> itself.</summary>
+    bool OpenWithoutSignin(string command, string args, string page)
+    {
+        if (Db.OpenWithoutSession(command))
+            return true;
+        JsonObject? given;
+        try
+        {
+            given = JsonNode.Parse(args.Length == 0 ? "{}" : args) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        if (command == "open_window")
+            return given?["window"] is JsonValue w && w.TryGetValue<string>(out var name) && name == page;
+        // A window's command: the window the program has open by that instance, not the name the browser sends.
+        if (given?["state"]?["instance"] is not JsonValue i || !i.TryGetValue<long>(out var instance))
+            return false;
+        lock (gate)
+            return windows.TryGetValue(instance, out var window) && Handlers.WindowName(window.Model) == page;
+    }
+
+    (JsonObject? Answer, JsonObject? Settings) AnswerForBrowser(string browser, JsonObject? settings, string command, string args)
     {
         Browser asked;
         lock (browsers)
@@ -352,6 +395,11 @@ internal sealed class ProgramWire : IDesktop
                 else if (given["language"]?.GetValue<string>() is { Length: > 0 } language && language != Locale.Current)
                     Locale.Choose(language);
                 return Value(null);
+            case "signin":
+                return Signin(given);
+            case "signout":
+                (db ?? throw new StorageException("the program names no people who sign in")).Signout();
+                return Value(null);
             case "facts":
                 return Facts() is { } facts ? Value(facts) : null;
             case "engine_open":
@@ -365,12 +413,30 @@ internal sealed class ProgramWire : IDesktop
         }
     }
 
+    /// <summary>
+    /// <c>signin {strategy, inputs}</c>: signs the person in (step 4); a refusal is Clarity's
+    /// words by key (<c>signinRefused</c>, <c>signinTooManyTries</c>).
+    /// </summary>
+    JsonObject Signin(JsonObject given)
+    {
+        var strategy = given["strategy"] is JsonValue s && s.TryGetValue<string>(out var named) ? named : "";
+        try
+        {
+            (db ?? throw new StorageException("the program names no people who sign in")).Signin(strategy, Db.Inputs(given["inputs"]));
+        }
+        catch (RefusedException refused)
+        {
+            return WireJson.Error(refused.Text);
+        }
+        return Value(null);
+    }
+
     // -- Windows ---------------------------------------------------------------------
 
     JsonObject Started()
     {
         if (unconnected is null || problem is null)
-            return new JsonObject { ["main"] = main is null ? "" : Handlers.WindowName(main), ["unconnected"] = null };
+            return new JsonObject { ["main"] = main is null ? "" : Handlers.WindowName(main), ["unconnected"] = null, ["signin"] = db?.SigninFirst() };
         var mainName = MainType() is { } type ? Handlers.WindowName(type) : "Main";
         memory ??= unconnected.Empty();
         string? window = null;
@@ -418,10 +484,11 @@ internal sealed class ProgramWire : IDesktop
     {
         WindowViewModel? model = null;
         var opened = false;
+        var keepsConnection = false;
         if (with?[WindowToken]?.GetValue<string>() is { } token && handed.Remove(token, out var given))
             (model, opened) = (given, true);
         else if (handed.Remove($"unconnected:{name}", out var keeps))
-            model = keeps;
+            (model, keepsConnection) = (keeps, true);
         else if (main is not null && !mainShown && Handlers.WindowName(main) == name)
         {
             model = main;
@@ -431,6 +498,18 @@ internal sealed class ProgramWire : IDesktop
             model = Make(name);
         if (model is null)
             return WireJson.Error(Text.Plain($"the program has no window {name}"));
+        // Who may open it (step 4): the window's allow when, before it opens; the window that keeps the connection has nobody to ask.
+        if (!keepsConnection)
+        {
+            try
+            {
+                model.Allow();
+            }
+            catch (RefusedException refused)
+            {
+                return WireJson.Error(refused.Text);
+            }
+        }
         // The windows share one long call: while it runs, none of them runs another handler.
         // Served, a browser's first window starts its own, which the windows it opens share.
         if (!Served)

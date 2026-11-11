@@ -1,0 +1,18 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Record versions"
+    add version Project
+    add version Domain
+    add version DataObject
+    add version ClassDefinition
+    add version AdapterTable
+    add version AdapterColumn
+    add version ApiVersion
+    add version ApiView
+    add version ApiRelation
+    add version ApiEnum
+    add version Property
+    add version EnumType
+    add version EnumValue
+    add version EventDefinition
+    add version EventField

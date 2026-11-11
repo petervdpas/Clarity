@@ -1,11 +1,17 @@
-// Runs every test; the exit status is the number of failures.
+// Runs every test, or those whose name holds the word given
+// (`clarity_tests signin`); the exit status is the number of failures.
 
 #include <exception>
+#include <string>
 
 #include "check.hpp"
 
-int main() {
+int main(int argc, char** argv) {
+    std::string only = argc > 1 ? argv[1] : "";
+    size_t ran = 0;
     for (const auto& test : check::tests()) {
+        if (!only.empty() && std::string(test.name).find(only) == std::string::npos) continue;
+        ++ran;
         int before = check::failures();
         try {
             test.run();
@@ -15,6 +21,6 @@ int main() {
         }
         std::cout << (check::failures() == before ? "ok   " : "FAIL ") << test.name << "\n";
     }
-    std::cout << check::tests().size() << " tests, " << check::failures() << " failures\n";
+    std::cout << ran << " tests, " << check::failures() << " failures\n";
     return check::failures() == 0 ? 0 : 1;
 }

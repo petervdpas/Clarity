@@ -85,6 +85,7 @@ project Shop
 | `engines interpreted` | no | How the engines written in Clarity run: `engines compiled` (the default, without the line) turns their code into WebAssembly; `engines interpreted` carries their code in the file and runs it with Clarity's interpreter. Both give the same answers on every stack. |
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`, and `csv`, `json`, `xml` or `yaml` for a file in that format (always `external`, its format's options on indented lines, such as `separator ";"`; its records are read when the program starts and the file is written again after each change). "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
+| `signin Entity on desktop web cli` | no | Who is using the program: the entity of people, and the targets people sign in on (`web` alone without `on`). Indented under it, the strategies the project uses and their options; see [Signing in](#signing-in). |
 | `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine; `"setting:name"` takes it from a folder setting each person chooses while the application runs (see [Folder settings](#folder-settings)). |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"setting:name"`, a secret setting the system's keychain keeps; it is never written into the file itself. A generated application reads it from `env:NAME` or from the secret setting `name` (see [Secret settings](#secret-settings)). |
 | `paging kind ...` | no | Indented under a web API's `datasource` line: how it hands out a long list, for `every page`. `paging page "page" size "per_page" 100` sends page numbers from 1, `paging offset "offset" size "limit" 100` offsets from 0, `paging cursor "after" next "meta.next"` the cursor each page names at that path, and `paging link` follows the `Link` header's next address. `items "data"` at the end says where a page's items are in its JSON. |
@@ -92,6 +93,74 @@ project Shop
 | `pick "operationId", ...` | no | Indented under a web API with an `openapi` line: the operations the application uses. Each becomes an action, and the schemas it takes or gives entities. `pick schema "Name", ...` makes schemas entities on their own. A pick the description does not have is a warning. |
 
 Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
+
+### Signing in
+
+A program used by more than one person knows who is using it. The project file names the entity of people and how they prove who they are, each way a strategy of Clarity's catalog, several at once:
+
+```text
+project Club
+    stack go desktop web cli
+    signin Member on desktop web cli
+        password email passwordHash
+            minimum 12
+        recovery email recoveryCodes
+        account login
+        token apiToken
+        session 8 hours
+        tries 5 per 15 minutes
+        remember 30 days
+```
+
+| Line | Meaning |
+|---|---|
+| `password field hashField` | A name and a password: the person whose `field` equals the name, with the password checked against the `hashed` field (Argon2id). The sign-in window's parts `name` and `password` give them. |
+| `minimum 12` | Indented under a strategy whose secret people choose: text assigned to its hashed field has at least that many characters, else the save is refused with Clarity's `secretTooShort`. |
+| `recovery field codesField` | A recovery code, once each: the codes are kept in the hashed field as their digests, and a sign-in uses one up. The parts `name` and `code` give them. |
+| `account field` | The computer's own account: the person whose `field` equals the system user name. Desktop and command line. |
+| `token field` | A token, kept hashed (SHA-256). The part `token` gives it. |
+| `session N minutes\|hours\|days` | How long a sign-in lasts; 8 hours without the line. |
+| `tries N per M minutes` | Failed tries per account and address before it slows down; 5 per 15 minutes without the line. |
+| `remember N days` | On the desktop, the program keeps a sign-in that long in the system's key store. With `when asked` (`remember 30 days when asked`) only when the person ticks the sign-in part's Keep me signed in box (Clarity's `signinRemember`). |
+| `shows password, recovery, account` | The strategies the sign-in part offers, in that order, the first being the default; only strategies the block names. Without it, every strategy of the block that works on the target, in the block's order. |
+
+Each field a strategy names is a field of the entity, of a type the strategy takes (text or email for a name); a secret is `hashed`. A strategy that can make the first account (password, account) makes it from what was typed when there is no record yet, the other fields at their defaults: a required field without a default is an error that names it. People who sign in on the desktop or the web need a sign-in window: a page of the kind `signin` (`<SignIn>`), at most one and only with `signin`, or the app's splash holding the sign-in parts, which then stays open until someone signs in. Both at once is an error that says to keep one.
+
+The sign-in part `signin` draws the sign-in from the project's block, in Clarity's own words: per strategy what it takes (password: a name, a password and a Sign in button; recovery: a choice to use a recovery code, then a name and the code; token: a token field; account: a button that uses the computer's account), and a refusal inside itself. It keeps only its place and look: the block's `shows` line names what it offers, and its `remember ... when asked` the box that keeps a person signed in. A window or splash holding it signs in, as one with `signin <strategy>` buttons does, and needs no other sign-in parts:
+
+```clarity
+page SignIn: signin
+    signin name signIn at 1,1 span 12 rows 6
+```
+
+The part goes on the sign-in window or the app's splash, at most one in a project and only with `signin`. New window's sign-in window starts with it. Building the sign-in by hand stays: parts named after a strategy's inputs and buttons that click to `signin <strategy>`, for a layout of one's own.
+
+In the language:
+
+- `hashed` on a text field of an entity: assigning text stores its hash (`member.passwordHash = typed`); code never reads it and no part shows it.
+- `me` is the record of who signed in, in handlers, actions, data events and commands: `me.name`, `me.role`. It cannot be set, and a function, which takes values only, does not read it. Without `signin` it is an error that says to add the line.
+- `allow when <condition>` on an action or a command, before its statements, and `allow="<condition>"` on a window, a view and a command of a menu, toolbar or ribbon: who may run or open it. The condition is bool and reads `me`; the program refuses what is not allowed with Clarity's `notAllowed`.
+- `readable when <condition>` and `writable when <condition>` on lines of an entity, with its record named as in its data events: the program refuses a find or a save of a record that does not fit with Clarity's `notYours`. Rows are never filtered by these lines; code writes `where n.owner == me`.
+- `newToken()` gives a new random token as text, and `newRecoveryCodes(10)` that many recovery codes as lines of text, to show the person once and assign to the hashed field.
+- On the sign-in window a button signs in with `on click -> signin password` (in a `.cxaml` file `opens="signin password"`), taking each input of the strategy from the part of that name; `on click -> signout` in a menu, toolbar or button signs out.
+
+```clarity
+entity Member
+    name: text(80)
+    email: email, unique, required
+    passwordHash: text, hashed
+    role: Role, default Plain
+    readable when me.role == Admin or member.id == me.id
+    writable when me.role == Admin
+```
+
+```clarity
+action promote(member: Member)
+    allow when me.role == Admin
+    effects db.write
+    member.role = Admin
+    save member
+```
 
 Five stacks are generated today: C#, Rust and Go with Clarity.UI, and C and C++ with the shared screen (webview; SQLite only for now).
 
@@ -288,12 +357,30 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `help @key` | A help text, by its key, shown next to the field's input in windows. |
 | `format name` | How the value is shown, by name; see [Formats](#formats). |
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
+| `hashed` | For text of an entity: assigning stores the hash the project's sign-in names for it (Argon2id when none does); code never reads it and no part shows it. Text without a length or of at least 128 characters; no `search`, `default`, `pattern`, `min`, `max` or `format`. See [Signing in](#signing-in). |
 | `cascade` | For a `ref Entity`: deleting the record it refers to deletes this one first, with its own cascades and data events, all in the transaction of that delete. When one of them refuses, nothing is deleted. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
 | `column "Name"` | The existing column the field is stored in, for an entity of an external database. |
 | `store name` | For an `image`: its pictures are files in that file store of the project settings, not in the database. |
 
 Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
+
+**Versions: a save never overwrites someone else's change**
+
+Every record of an entity in a database Clarity owns carries a version, a whole number in a column of its own, `row_version`, which Clarity keeps: 1 for a new record, one more with each save. Code never sets it; `find` reads it with the record. A save writes only when the version is still the one it read, and a delete is checked the same way. When someone (another person, window or background job) saved the record since, the save is refused and changes nothing: the handler stops and the person sees Clarity's word `savedSince`, "Someone else changed this record since you opened it. Reload it to see their change." `reload customer` reads the record as it is stored now, and `save customer anyway` writes regardless of the version (see [Statements](#statements)). One record is one unit: fields are never merged.
+
+The column comes from a migration step (`add version Customer`, or `version` in an `add entity`; see [Migrations](#migrations)); until that step exists, saves of the entity are not checked. An entity of an external database names its own column with `version "Column"`; see [External databases](#external-databases).
+
+The text of the refusal can be the entity's own, by a key, written on the entity:
+
+```clarity
+entity Customer
+    name: text(80), label @customerNameLabel
+    changedBy: ref Person, label @customerChangedByLabel
+    savedSince @customerChangedSince
+```
+
+Its text may use the slots of the record as it is stored now: `current.` and a field (`{current.name}`), its `{current.id}`, and a field of a record it refers to (`{current.changedBy.name}`), as in `customerChangedSince "{current.changedBy.name} changed this customer since you opened it"`. Who changed a record is the project's choice: Clarity adds no such column, and a `before save` that sets `customer.changedBy = me` keeps it (see [Data events](#data-events) and [Signing in](#signing-in)). A record type never has `savedSince`, as it is never stored.
 
 ### Pictures in records
 
@@ -401,11 +488,18 @@ migration "Phone and VAT"
 | `map table Entity to "name"` | stores the entity in a table of another name (renames the table); `to default` goes back to the entity's name |
 | `map key Entity to "name"` | names the key column (renames it); `to default` is `id` |
 | `map column Entity.field to "name"` | stores a field in a column of another name (renames the column); `to default` is the field's name in snake case |
+| `add version Entity` | gives the entity's table its version column, `row_version`, at 1 for the records already there, so saves of it are checked (see [Entities](#entities)) |
 
-Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, `column`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone. An added entity can name its table and key with `table` and `key` lines, as in the dictionary; renaming a field whose column is mapped changes nothing in the database.
+Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, `column`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone. An added entity can name its table and key with `table` and `key` lines, as in the dictionary; renaming a field whose column is mapped changes nothing in the database. A line `version` in an added entity gives its table the version column from the start. Clarity writes it in every entity it adds to a database it owns, and proposes `add version Entity` for each table that does not have the column yet, one line per entity; the baseline step of Take ownership leaves it out, as the tables it describes have no such column, and the next step adds it.
+
+```clarity
+migration "Versions"
+    add version Customer
+    add version Order
+```
 
 - **Replaying the steps** in order gives the schema as last migrated. Each step must fit the schema the steps before it made; one that renames a field that does not exist is an error.
-- **Pending changes** are what the dictionary has and the steps do not. The checker reports them as warnings on the entity, and the generator refuses to write the application until a step covers them.
+- **Pending changes** are what the dictionary has and the steps do not. The checker reports them as warnings on the entity, and the generator refuses to write the application until a step covers them. A missing version column alone does not hold the application back: the table is written as it is and its saves stay unchecked until the step that adds the column exists, which the checker's warning says.
 - **Writing a step.** The Project tab lists the pending changes and writes them as the next step; `clarity migrate shop.clarity` does the same from the command line. Clarity proposes a rename when a field disappears and a field of the same type appears in the same entity, or an entity disappears and one with mostly the same fields appears. You confirm it or take it as a removal and an addition. Changes that can lose data (removing, changing a type) need a confirmation.
 - **Running.** The generated application applies the steps its database does not have yet when it starts, each in a transaction where the database allows it (see Databases below). On SQLite, which does not enforce references while it builds a table again, it checks the references between records before a step is kept.
 - **A backup first.** Before it applies steps to an SQLite database that already has a schema, the application backs it up beside it, in `backups/` (`data/backups/shop-20261105T205905Z-before-migration-0006.db`, the time in UTC), and keeps the newest ten of those. When it cannot back up, it does not migrate. The Database section of the Project tab takes a backup by hand and restores or deletes one; `clarity data backup shop.clarity`, `clarity data backups shop.clarity` and `clarity data restore shop.clarity <file>` do the same from the command line. A restore first backs up what it replaces. Server databases are backed up by their administrator for now (docs/BACKUP-PLAN.md).
@@ -445,7 +539,7 @@ How fields are stored:
 | `datetime` | TEXT | TIMESTAMP | DATETIME | DATETIME2 |
 | an enum | TEXT | TEXT | VARCHAR(100) | NVARCHAR(100) |
 
-SQLite keeps decimals and dates as text, so no precision is lost. The key is an integer the database counts up, and a `ref` field gets a foreign key when its entity is in the same database.
+SQLite keeps decimals and dates as text, so no precision is lost. The key is an integer the database counts up, and a `ref` field gets a foreign key when its entity is in the same database. The version column is stored as an integer, `row_version INTEGER NOT NULL DEFAULT 1` on SQLite and `BIGINT NOT NULL DEFAULT 1` on the others.
 
 What differs between the databases:
 
@@ -478,12 +572,13 @@ entity Invoice
 - `table` names the existing table; without it, the table is the entity's name in snake case (`invoice`).
 - `key` names the integer column that identifies a record; without it, that column is `id`. Tables whose key is not one integer column cannot be used yet.
 - `column` names the existing column of a field; without it, the column has the field's name.
-- Two fields cannot share a column, and no field can use the key column. The mapping is meant for existing tables; it stays when Clarity takes ownership (below).
+- `version "RowVersion"` names the column that holds each record's version, a whole number the database keeps as Clarity's own `row_version`: a save writes only when it is still the one read, and adds one. `version none` says the entity's saves are not checked. Without either line the checker warns, "Invoice has no version column, so saves of it are not checked: name its column with version \"Column\", or write version none", so an unchecked entity is a choice and not an accident; a `readonly` source needs neither. `version` is only for external databases: a database Clarity owns has `row_version`, a file source's file is its own version, and a web API has no such column.
+- Two fields cannot share a column, no field can use the key column, and the version column is neither the key nor a field's column. The mapping is meant for existing tables; it stays when Clarity takes ownership (below).
 
 Clarity reads and writes the records of an external database, but never changes its tables: it writes no migration steps for it, and the generated application never migrates it.
 
-- **Import.** The Import button of an external SQLite source on the Project tab, or `clarity import shop.clarity erp`, writes the chosen tables as a new module of mapped entities. Names follow Clarity's style (`tblCustomers` becomes `Customers`, `CustName` becomes `cust_name`), column types become field types, foreign keys become `ref` fields when both tables are imported, `NOT NULL` becomes `required` and a unique index `unique`. Binary columns are left out.
-- **Checking.** Each time the project loads, Clarity compares the entities with the tables of the database. A missing table or column is an error; a column whose type does not fit the field, and a required column that no field fills (so new records cannot be saved), are warnings. When the database cannot be read, a warning says its tables were not checked.
+- **Import.** The Import button of an external SQLite source on the Project tab, or `clarity import shop.clarity erp`, writes the chosen tables as a new module of mapped entities. Names follow Clarity's style (`tblCustomers` becomes `Customers`, `CustName` becomes `cust_name`), column types become field types, foreign keys become `ref` fields when both tables are imported, `NOT NULL` becomes `required` and a unique index `unique`. Binary columns are left out. An integer column named `row_version`, as in a table Clarity made, becomes the entity's `version "row_version"`; any other version column is named by hand, never guessed.
+- **Checking.** Each time the project loads, Clarity compares the entities with the tables of the database. A missing table or column, the version column included, is an error; a column whose type does not fit the field, and a required column that no field fills (so new records cannot be saved), are warnings. When the database cannot be read, a warning says its tables were not checked.
 - **Read-only.** With `readonly` on the data source, `save` and `delete` of its records are errors.
 - **Take ownership.** The Own button of an external source on the Project tab, or `clarity own shop.clarity erp`, makes Clarity the owner. It writes the source's first step, a `baseline`, which describes the mapped tables as they are and creates only what is missing, so it changes nothing in the database it was taken from (and a new, empty database gets the tables). Then it removes `external`. From there on the dictionary drives the tables through ordinary steps, and the mapped names stay: `table`, `key` and `column` work on owned entities too.
 
@@ -608,6 +703,9 @@ The root element is the page's kind:
 | `<View>` | a piece of a window, shown in a content (see [Views](#views)) |
 | `<Splash>` | the splash screen the app shows while it starts (see [Splash screen](#splash-screen)) |
 | `<Toolbox>` | the tools a canvas or memo shows, designed as a view (see [Canvas modes](#canvas-modes)) |
+| `<SignIn>` | the sign-in window the program shows before the main window when people sign in; nothing opens it, it has no frame and no `allow` (see [Signing in](#signing-in)) |
+
+A window, dialog or view may say who may open it: `allow="me.role == Admin"`, a condition on `me`.
 
 Only a `Window` has frame regions of its own, written as elements in its file: `<Menu>`, `<Toolbar>`, `<Ribbon>`, `<Sidebar>` and `<Footer>`.
 
@@ -645,6 +743,7 @@ code Shop
 - As in Avalonia, the generated markup says it: the generated program's window file for the splash (`windows/Welcome.cxaml`) declares its window, `<Window name="Welcome" width="480" height="280" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">` (Avalonia's Width, Height, SystemDecorations, WindowStartupLocation, CanResize, Topmost and ShowInTaskbar, and none of the app's menu, toolbar or ribbon, as an Avalonia window holds only what its XAML holds), and the app's markup names it, `<App name="Shop" splash="Welcome" splashFor="2">`. A splash page without `width` and `height` is 480 by 280.
 - The application shows and closes it: nothing opens it (`on click -> Welcome` is refused), it has no events of its own, and it cannot be the main window. A splash page no app names is warned about.
 - When the databases did not open, the app starts without its splash and shows what keeps the connection.
+- The app's splash may double as the sign-in window: with a sign-in part on it, or the strategies' inputs and `-> signin <strategy>` buttons, it stays open once `on start` is done until someone signs in, then the main window opens (see [Signing in](#signing-in)).
 
 ### Views
 
@@ -853,6 +952,7 @@ In the samples a window shows its parts in a view, as every window does (see [Vi
 | `textbox` | text, email, url | `placeholder`, `copy`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `memo` | text (several lines) | `placeholder`, `code csharp`, `markdown`, `copy`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `password` | text (hidden while typed; an eye beside it shows it or hides it again, and a button copies it) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `signin` | nothing: it signs in with the project's `signin` block, on the sign-in window or the app's splash | none: the block's `shows` and `remember ... when asked` say what it offers; see [Signing in](#signing-in) | none |
 | `number` | integer, decimal, money, id | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `checkbox` | bool | `readonly`, `taborder` | `change` |
 | `switch` | bool | `readonly`, `taborder` | `change` |
@@ -1264,7 +1364,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target with book, chapter` fills the opened window's data of those names from the data of the same names of the window the click is in, as `open Target with book = book` does in a handler; from a menu or toolbar of the app that is the window showing, and data that window does not have starts new. On a button the window must hold the data, of the same entity. `on click -> Target in new window` (in a `.cxaml` file `opens="Target" newWindow="true"`) opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window, `quit` ends the application, and `undo` and `redo` take back or do again the last edit of the part that had the focus (see [Undo](#undo)). `back` and `forward` go through the places the person was in the window, as a browser does: each place is the chosen row of its lists, tables and trees and the open section, tab or step of its accordions, tabs and steps, noted once the person's click or key is done. Going back chooses those rows and opens those sections again, and their `select` and `change` handlers run as when the person did it; Alt+Left and Alt+Right do the same, unless the part with the focus takes those keys (a tree that reorders). In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target with book, chapter` fills the opened window's data of those names from the data of the same names of the window the click is in, as `open Target with book = book` does in a handler; from a menu or toolbar of the app that is the window showing, and data that window does not have starts new. On a button the window must hold the data, of the same entity. `on click -> Target in new window` (in a `.cxaml` file `opens="Target" newWindow="true"`) opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window, `quit` ends the application, and `undo` and `redo` take back or do again the last edit of the part that had the focus (see [Undo](#undo)). `back` and `forward` go through the places the person was in the window, as a browser does: each place is the chosen row of its lists, tables and trees and the open section, tab or step of its accordions, tabs and steps, noted once the person's click or key is done. Going back chooses those rows and opens those sections again, and their `select` and `change` handlers run as when the person did it; Alt+Left and Alt+Right do the same, unless the part with the focus takes those keys (a tree that reorders). `signin password` on a button of the sign-in window signs in with that strategy, and `signout` signs out (see [Signing in](#signing-in)). In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -1776,7 +1876,7 @@ Every part the person edits takes back its own edits with Ctrl+Z, and does them 
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
 - **`no undo`** on a part's line switches it off there.
 - **The whole window.** An undo also puts back what the edit's handler set on parts: a caption, visible, enabled, readonly, an error, and each value of a custom part (`board.count = count` in a slider's `on change`), value by value.
-- **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing.
+- **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing. It compares the record's version where its entity has one (see [Entities](#entities)), the whole row where it has none.
 
 ### What a handler sees
 
@@ -2182,6 +2282,7 @@ action approve(order: Order)
 
 - **The signature** is `name(param: type, ...)`, optionally followed by `-> type` for the result. The types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum, and `list<Entity>`.
 - **A default** makes a parameter optional: `limit: integer = 0`. It is a value written out (a number, a text, `true` or `false`, `none` or an enum's value), and the parameters with one come after those without. A call leaves them out, or gives any of them by name after the values in order: `list_templates("published")`, `list_templates("published", limit: 10)`, `greeting(times: 2, name: "Bo")`. Each parameter is given once, and every one without a default is given. Handlers, built-in calls and an engine's functions take their values in order, without names.
+- **`allow when expr`** on an action says who may run it, reading `me` (see [Signing in](#signing-in)); it comes before the statements.
 - **`require expr`** checks the arguments before the body runs. **`ensure expr`** checks the result after it, as `result`. Both must be bool, and both come before the statements.
 - **`effects`** lists what an action does to data and the world: `db.read`, `db.write`, `files.read`, `files.write` and `net`, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`; one that lists or reads files declares `files.read`, one that writes a file `files.write`, and one that calls a web API `net`. A function cannot reach files or the network at all; handlers can, as they can save.
 - **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
@@ -2498,10 +2599,12 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
 | `close` | Closes this window. | handlers |
 | `close with expr` | Closes this dialog with a value of the type it gives, for the handler that asked for it. | handlers of a dialog that gives one |
-| `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions, data events |
+| `save expr` | Stores a record in its data source. A new record gets its id. A record someone saved since it was read is refused with `savedSince` (see [Entities](#entities)). | handlers, actions, data events |
+| `save expr anyway` | Stores a record regardless of its version: overwriting on purpose, never guessed. With sign-in, the action that does it can be limited with `allow when`. | handlers, actions, data events |
 | `delete expr` | Removes a record from its data source. | handlers, actions, data events |
 | `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
 | `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). A table or list showing a list read again has no row selected afterwards, as when the list is given new rows (`orders = find ...`): they are other records. | handlers |
+| `reload record` | Reads a record variable (a local or a parameter) again as it is stored now, with its version, as after a refused save. Locals never share a name with the window's data, so the name says which `reload` it is. | handlers, functions, actions, data events, commands |
 | `write expr to store "path"` | Writes text as a file of a file store, at a path inside it, making its folders. See [Files](#files). | handlers, actions with `files.write` |
 | `print expr` | Writes a line to standard output; `print list columns a, b` writes the records as a table. See [Commands](#commands). | commands |
 | `exit expr` | Ends the command-line program with this exit code, 0 to 255. | commands |

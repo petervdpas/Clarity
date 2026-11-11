@@ -53,10 +53,20 @@ fn param(p: &ParamSpec) -> String {
     )
 }
 
-fn command(c: &CommandSpec) -> String {
+/// The options a person signs in with on the command line (docs/APP-CAPABILITIES-PLAN.md
+/// step 4), which every command takes when people sign in there: `--user` and `--token`.
+const SIGNIN_OPTIONS: [&str; 2] = ["user", "token"];
+
+fn command(c: &CommandSpec, signs_in: bool) -> String {
     let line: Vec<String> = c.line.iter().map(|w| format!("{w:?}.into()")).collect();
     let arguments: Vec<String> = c.arguments.iter().map(param).collect();
-    let options: Vec<String> = c.options.iter().map(param).collect();
+    let mut options: Vec<String> = c.options.iter().map(param).collect();
+    // After the command's own, so their values stay where the command reads them.
+    if signs_in {
+        for name in SIGNIN_OPTIONS.iter().filter(|n| !c.options.iter().any(|o| o.name == **n)) {
+            options.push(format!("Param {{ name: {name:?}.to_string(), kind: Kind::Text, values: vec![], default: None, min: None, max: None, required: false, help: None }}"));
+        }
+    }
     format!(
         "        Command {{\n            line: vec![{}],\n            help: {},\n            arguments: vec![{}],\n            options: vec![{}],\n        }},\n",
         line.join(", "),
@@ -94,6 +104,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // A data source that is a file: an in-memory SQLite table filled through Clarity.Formats.
     if !crate::file_sources(project, settings)?.is_empty() {
         features.extend(["sqlite", "formats"]);
+    }
+    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth.
+    if crate::signin::carries_auth(project) {
+        features.push("auth");
     }
     features.sort();
     features.dedup();
@@ -163,7 +177,15 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
         .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}.to_string()")).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
-    let listed: String = commands.iter().map(command).collect();
+    // When people sign in on the command line, a command signs in before it runs.
+    let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
+    let listed: String = commands.iter().map(|c| command(c, signs_in)).collect();
+    let signin = if signs_in {
+        "        db.signin_cli(&clarity_runtime::signin::CliSignin::from_args(&std::env::args().skip(1).collect::<Vec<String>>()), &mut || clarity_runtime::cli::read_password(&format!(\"{}: \", Text::keyed(\"cliPassword\", \"Password\").show())))?;\n"
+    } else {
+        ""
+    };
+    let add_signin = crate::signin::signin_plan(project).map(|plan| format!("    db.add_signin({});\n", super::signin_source(&plan))).unwrap_or_default();
     // The settings, which a command reads and sets as a window does.
     let kept = project.files.iter().find_map(|f| f.entities.iter().find(|e| e.settings).map(|e| (f, e)));
     let (data, start, keep, language) = match kept {
@@ -194,7 +216,7 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
             .map(|(at, p)| format!("typed::<{}>(Kind::{}, values[{at}].as_deref())", super::names::value_type(&p.ty), kind(p.kind)))
             .collect();
         let args: String = values.iter().map(|v| format!(", {v}")).collect();
-        dispatch.push_str(&format!("        {i} => modules::{}::{}(&db, cli, &mut data{args}),\n", snake(&c.module), logic::command_function(c.decl)));
+        dispatch.push_str(&format!("            {i} => modules::{}::{}(&db, cli, &mut data{args}),\n", snake(&c.module), logic::command_function(c.decl)));
     }
     let engines_mod = if crate::engines(project).is_empty() { "" } else { "mod engines;\n" };
     // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
@@ -273,8 +295,10 @@ fn main() -> std::process::ExitCode {{
             return std::process::ExitCode::from(1);
         }}
     }}
-{folder_stores}    let code = clarity_runtime::cli::run_program(&program(), |cli, command, values| match command {{
-{dispatch}        _ => Ok(2),
+{folder_stores}{add_signin}    let code = clarity_runtime::cli::run_program(&program(), |cli, command, values| {{
+{signin}        match command {{
+{dispatch}            _ => Ok(2),
+        }}
     }});
 {keep}    code
 }}

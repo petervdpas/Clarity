@@ -118,15 +118,25 @@ struct Checker<'a> {
     diagnostics: Vec<Diagnostic>,
     /// The popovers and slide-outs of the window being checked: a menu item's click opens them too.
     overlays: HashSet<&'a str>,
+    /// The project file's `signin` block (docs/APP-CAPABILITIES-PLAN.md step 4); none without it.
+    signin: Option<&'a crate::signin::Signin>,
+    /// The page being checked, for the parts a `signin` button reads.
+    page: Option<&'a Page>,
 }
 
-pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
+/// The fewest characters a hashed field keeps: an Argon2id hash as text is
+/// about a hundred.
+pub const HASH_LENGTH: u32 = 128;
+
+pub fn check<'a>(files: &'a [SpecFile], signin: Option<&'a crate::signin::Signin>) -> Vec<Diagnostic> {
     let mut checker = Checker {
         files,
         modules: HashMap::new(),
         decls: HashMap::new(),
         diagnostics: Vec::new(),
         overlays: HashSet::new(),
+        signin,
+        page: None,
     };
     checker.collect();
     checker.check_single_app();
@@ -360,6 +370,7 @@ impl<'a> Checker<'a> {
                     self.error(file_index, problem, field.name.span);
                 }
                 self.check_field(file_index, field);
+                self.check_hashed(file_index, !entity.settings, field);
             }
         }
 
@@ -385,6 +396,7 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 self.check_field(file_index, field);
+                self.check_hashed(file_index, false, field);
             }
             if record.table.is_some() || record.key.is_some() {
                 self.error(file_index, format!("record {} belongs to no table, so it has no 'table' or 'key'", record.name.name), record.name.span);
@@ -404,6 +416,10 @@ impl<'a> Checker<'a> {
     // -- pages ------------------------------------------------------------
 
     fn check_page(&mut self, file: usize, page: &'a Page) {
+        self.page = Some(page);
+        if page.kind == PageKind::Signin {
+            self.check_signin_page(file, page);
+        }
         if page.kind == PageKind::Splash {
             // Optional, but a splash page is there to be shown: one no app names is said.
             let shown = self.files.iter().flat_map(|f| &f.apps).any(|a| a.splash.as_ref().is_some_and(|s| s.name == page.name.name));
@@ -447,10 +463,10 @@ impl<'a> Checker<'a> {
         self.check_drops(file, &page.widgets);
         self.check_tools(file, &page.widgets, page.kind == PageKind::Toolbox, false);
         if page.kind != PageKind::Window && !page.frame.is_empty() {
-            let kind = if page.kind == PageKind::Dialog {
-                "dialog"
-            } else {
-                "view"
+            let kind = match page.kind {
+                PageKind::Dialog => "dialog",
+                PageKind::Signin => "sign-in window",
+                _ => "view",
             };
             self.error(
                 file,
@@ -471,6 +487,99 @@ impl<'a> Checker<'a> {
         self.check_forms(file, &page.widgets, None);
         for sidebar in &page.frame.sidebars {
             self.check_forms(file, &sidebar.widgets, None);
+        }
+    }
+
+    /// A sign-in window: one at most, in a project whose file has `signin`,
+    /// shown by the program before anyone signs in.
+    fn check_signin_page(&mut self, file: usize, page: &'a Page) {
+        let first = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin);
+        if let Some(first) = first.filter(|f| !std::ptr::eq(*f, page)) {
+            self.error(file, format!("there is already a sign-in window, {}; a project has one", first.name.name), page.name.span);
+        }
+        if self.signin.is_none() {
+            self.error(file, format!("{} is a sign-in window, which needs signin in the project file, like: signin Member", page.name.name), page.name.span);
+        }
+        if page.allow.is_some() {
+            self.error(file, format!("{} shows before anyone signs in, so it has no 'allow'", page.name.name), page.name.span);
+        }
+        if let Some(splash) = crate::signin::app_splash(self.files).filter(|s| crate::frame::page_signs_in(s)) {
+            self.error(file, format!("both {} and the splash {} sign in; keep one: the window of the kind signin, or the sign-in parts on the splash", page.name.name, splash.name.name), page.name.span);
+        }
+    }
+
+    /// A click that signs in (`signin password`) or out (`signout`): the
+    /// project file has `signin`; signing in is a button of the sign-in
+    /// window, with a strategy the project names and a part per input.
+    fn check_signin_target(&mut self, file: usize, target: &str, button: bool, new_window: bool, span: Span) {
+        if new_window {
+            self.error(file, "only a window opens in a new window", span);
+        }
+        let Some(strategy) = crate::frame::signin_strategy(target) else {
+            if self.signin.is_none() {
+                self.error(file, "signout signs out who signed in, which needs signin in the project file, like: signin Member", span);
+            }
+            return;
+        };
+        let Some(signin) = self.signin else {
+            self.error(file, format!("{target} signs in, which needs signin in the project file, like: signin Member"), span);
+            return;
+        };
+        let signs_in = |p: &&Page| p.kind == PageKind::Signin || crate::signin::app_splash(self.files).is_some_and(|s| std::ptr::eq(s, *p));
+        let page = self.page.filter(signs_in);
+        let Some(page) = page.filter(|_| button) else {
+            let window = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin).or_else(|| crate::signin::app_splash(self.files));
+            let message = match window {
+                Some(window) => format!("a button signs in on the sign-in window, {}", window.name.name),
+                None => "a button signs in on the sign-in window: add a window of the kind signin".to_string(),
+            };
+            self.error(file, message, span);
+            return;
+        };
+        if signin.strategy(strategy).is_none() {
+            let names: Vec<&str> = signin.strategies.iter().map(|s| s.name.as_str()).collect();
+            self.error(file, format!("the project signs in with {}, not {strategy}", names.join(", ")), span);
+            return;
+        }
+        let Some(info) = crate::signin::strategy_info(strategy) else { return };
+        let mut names = Vec::new();
+        crate::resources::each_widget(&page.widgets, &mut |w| names.extend(w.props.name.clone()));
+        for input in info.inputs {
+            if !names.iter().any(|n| n == input) {
+                self.error(file, format!("signin {strategy} takes the {input} from a part named {input}; {} has none", page.name.name), span);
+            }
+        }
+    }
+
+    /// A sign-in part: the project file has `signin`; the part is on the
+    /// sign-in window or the app's splash, as a sign-in button is; one in the
+    /// project. What it offers is the block's (`shows`), checked with it.
+    fn check_signin_part(&mut self, file: usize, widget: &Widget) {
+        if self.signin.is_none() {
+            self.error(file, "a signin part signs in, which needs signin in the project file, like: signin Member", widget.span);
+            return;
+        }
+        let splash = crate::signin::app_splash(self.files);
+        let signs_in = |page: &&Page| page.kind == PageKind::Signin || splash.is_some_and(|s| std::ptr::eq(s, *page));
+        if self.page.filter(signs_in).is_none() {
+            let window = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin).or(splash);
+            let message = match window {
+                Some(window) => format!("a signin part signs in on the sign-in window, {}", window.name.name),
+                None => "a signin part signs in on the sign-in window: add a window of the kind signin, or put it on the app's splash".to_string(),
+            };
+            self.error(file, message, widget.span);
+        }
+        // The first in the project, in the order of the files and their pages.
+        let mut first: Option<(&Page, *const Widget)> = None;
+        for page in self.files.iter().flat_map(|f| &f.pages) {
+            crate::resources::each_widget(&page.widgets, &mut |w| {
+                if first.is_none() && w.props.kind == WidgetKind::Signin {
+                    first = Some((page, std::ptr::from_ref(w)));
+                }
+            });
+        }
+        if let Some((page, _)) = first.filter(|(_, w)| !std::ptr::eq(*w, widget)) {
+            self.error(file, format!("there is already a signin part, on {}; a project has one", page.name.name), widget.span);
         }
     }
 
@@ -1180,7 +1289,9 @@ impl<'a> Checker<'a> {
             {
                 self.error(file, "only a window opens in a new window", command.span);
             }
-            if let Some(target) = &p.on_click
+            if let Some(target) = p.on_click.as_deref().filter(|t| frame::is_signin_target(t)) {
+                self.check_signin_target(file, target, false, p.new_window, command.span);
+            } else if let Some(target) = &p.on_click
                 && !frame::BUILT_IN_COMMANDS.contains(&target.as_str())
             {
                 self.check_click_target(file, target, &p.open_with, None, command.span);
@@ -1437,11 +1548,16 @@ impl<'a> Checker<'a> {
                 );
             }
             self.check_binding(file, page, widget);
+            if p.kind == WidgetKind::Signin {
+                self.check_signin_part(file, widget);
+            }
             if let Some(target) = &p.on_click {
                 if p.new_window && frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
                     self.error(file, "only a window opens in a new window", widget.span);
                 }
-                if frame::BUTTON_COMMANDS.contains(&target.as_str()) {
+                if frame::is_signin_target(target) {
+                    self.check_signin_target(file, target, p.kind == WidgetKind::Button, p.new_window, widget.span);
+                } else if frame::BUTTON_COMMANDS.contains(&target.as_str()) {
                     // A button closes its window or quits like a menu item.
                 } else if frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
                     self.error(file, format!("'{target}' picks in a menu or a toolbar; a button can close its window or quit"), widget.span);
@@ -1650,6 +1766,12 @@ impl<'a> Checker<'a> {
             }
         };
         let Some(entity) = entity else { return };
+        // A hashed field keeps a hash, which no one reads (docs/APP-CAPABILITIES-PLAN.md step 4).
+        let named = field_name.into_iter().chain(p.columns.iter().chain(&p.edit).chain(&p.show).map(String::as_str));
+        if let Some(hashed) = named.filter(|f| entity.field(f).is_some_and(|f| f.modifiers.hashed)).next() {
+            self.error(file, format!("{at}: {hashed} is hashed, so no part shows it"), widget.span);
+            return;
+        }
 
         match info.bind {
             BindTarget::Nothing => {}
@@ -2325,6 +2447,11 @@ impl<'a> Checker<'a> {
             self.error(file, format!("{target} is the splash screen, which the application shows itself as it starts; nothing opens it"), span);
             return;
         }
+        // So is the sign-in window, before anyone signs in and after a sign-out.
+        if self.files.iter().flat_map(|f| &f.pages).any(|p| p.name.name == target && p.kind == PageKind::Signin) {
+            self.error(file, format!("{target} is the sign-in window, which the program shows itself; nothing opens it"), span);
+            return;
+        }
         let visible = self.visible_modules(file);
         let kinds: Vec<DeclKind> = self
             .decls
@@ -2352,6 +2479,38 @@ impl<'a> Checker<'a> {
                 ),
                 span,
             );
+        }
+    }
+
+    /// `hashed` (docs/APP-CAPABILITIES-PLAN.md step 4): text of a stored
+    /// entity, long enough for a hash, and none of what reads or shows its
+    /// value: a hash is never searched, has no default, pattern, bounds or format.
+    fn check_hashed(&mut self, file: usize, stored: bool, field: &Field) {
+        let m = &field.modifiers;
+        if !m.hashed {
+            return;
+        }
+        let name = &field.name.name;
+        if !stored {
+            self.error(file, format!("{name}: only a stored entity's field is hashed; a record or a setting keeps its value as it is"), field.span);
+            return;
+        }
+        match field.ty {
+            FieldType::Text { max_length: Some(n) } if n < HASH_LENGTH => {
+                self.error(file, format!("{name}: a hash is longer than {n} characters; write text without a length"), field.span);
+            }
+            FieldType::Text { .. } => {}
+            _ => self.error(file, format!("{name}: only text is hashed, not {}", crate::dictionary::type_text(&field.ty)), field.span),
+        }
+        if m.search {
+            self.error(file, format!("{name}: a hashed field is not searched; take 'search' away"), field.span);
+        }
+        if m.computed {
+            self.error(file, format!("{name}: a hashed field is set by code, not computed; take 'computed' away"), field.span);
+        }
+        let shown = [(m.default.is_some(), "default"), (m.pattern.is_some(), "pattern"), (m.min.is_some(), "min"), (m.max.is_some(), "max"), (m.format.is_some(), "format")];
+        for (_, word) in shown.iter().filter(|(given, _)| *given) {
+            self.error(file, format!("{name}: a hashed field has no {word}; its value is a hash"), field.span);
         }
     }
 

@@ -35,6 +35,7 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
                         command: false,
             writing: false,
             refs: vec![HashSet::new()],
+            locals: vec![HashMap::new()],
             errors: Vec::new(),
         };
         let code = emitter.function();
@@ -44,7 +45,45 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
         }
     }
+    for entity in file.entities.iter().filter(|e| e.readable.is_some() || e.writable.is_some()) {
+        match accesses(project, types, entity) {
+            Ok(code) => out.push_str(&code),
+            Err(problems) => errors.extend(problems.into_iter().map(|e| format!("entity '{}': {e}", entity.name.name))),
+        }
+    }
     if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+/// An entity's `readable when` and `writable when` (docs/APP-CAPABILITIES-PLAN.md
+/// step 4), refused with notYours as a check rather than a hidden filter:
+/// readable on each stored record code reads, writable before a save or a
+/// delete (the record's hooks), on the record as code holds it and as it is stored.
+fn accesses(project: &Project, types: &FileTypes, entity: &clarity_spec::model::Entity) -> Result<String, Vec<String>> {
+    let name = &entity.name.name;
+    let record = clarity_spec::code::record_name(name);
+    let var = ident(&record);
+    let mut emitter = Emitter::new(project, types, None);
+    emitter.refs[0].insert(record.clone());
+    let mut out = format!("impl {name} {{\n");
+    if let Some(condition) = &entity.readable {
+        let holds = emitter.value(condition);
+        out.push_str(&format!(
+            "    /// `readable when {}`: refused with notYours when it does not hold.\n    pub fn readable(db: &Db, {var}: {name}) -> Result<{name}> {{\n        if {var}.id != 0 {{\n            let {var} = &{var};\n            clarity_runtime::signin::yours({holds})?;\n        }}\n        Ok({var})\n    }}\n\n    /// Each record found, checked as `readable` checks it.\n    pub fn readable_all(db: &Db, found: Vec<{name}>) -> Result<Vec<{name}>> {{\n        found.into_iter().map(|r| {name}::readable(db, r)).collect()\n    }}\n",
+            print::expr(condition)
+        ));
+    }
+    if let Some(condition) = &entity.writable {
+        let holds = emitter.value(condition);
+        if entity.readable.is_some() {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "    /// `writable when {}`: refused with notYours when it does not hold, for the\n    /// record as code holds it and, once stored, as it is stored.\n    pub fn writable(db: &Db, {var}: &{name}) -> Result<()> {{\n        clarity_runtime::signin::yours({holds})?;\n        if {var}.id != 0 {{\n            let {var} = &db.get::<{name}>({var}.id)?;\n            clarity_runtime::signin::yours({holds})?;\n        }}\n        Ok(())\n    }}\n",
+            print::expr(condition)
+        ));
+    }
+    out.push_str("}\n\n");
+    if emitter.errors.is_empty() { Ok(out) } else { Err(emitter.errors) }
 }
 
 pub(crate) use crate::type_ref_info;
@@ -86,16 +125,31 @@ struct Emitter<'a> {
     /// Locals that hold a borrowed record or list (parameters and `for`
     /// variables), per block.
     refs: Vec<HashSet<String>>,
+    /// The locals (parameters, `for` variables and `let`s) with their
+    /// types, per block: `reload` of one reads its record again.
+    locals: Vec<HashMap<String, TypeInfo>>,
     errors: Vec<String>,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>) -> Self {
-        Emitter { project, types, decl, window: None, command: false, writing: false, refs: vec![HashSet::new()], errors: Vec::new() }
+        Emitter { project, types, decl, window: None, command: false, writing: false, refs: vec![HashSet::new()], locals: vec![HashMap::new()], errors: Vec::new() }
     }
 
     fn is_ref(&self, name: &str) -> bool {
         self.refs.iter().any(|scope| scope.contains(name))
+    }
+
+    /// The type of local `name` (a parameter, a `for` variable or a `let`),
+    /// which hides window data of the same name; None when it is no local.
+    fn local(&self, name: &str) -> Option<&TypeInfo> {
+        self.locals.iter().rev().find_map(|scope| scope.get(name))
+    }
+
+    fn define(&mut self, name: &str, ty: TypeInfo) {
+        if let Some(scope) = self.locals.last_mut() {
+            scope.insert(name.to_string(), ty);
+        }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -106,6 +160,7 @@ impl<'a> Emitter<'a> {
         let decl = self.decl.expect("a function or action");
         let action = decl.kind != FunctionKind::Function;
         let mut params = vec!["db: &Db".to_string()];
+        let mut copies = String::new();
         let name = ident(&decl.name.name);
         for (index, param) in decl.params.iter().enumerate() {
             let info = type_ref_info(self.project, &param.ty);
@@ -117,13 +172,22 @@ impl<'a> Emitter<'a> {
                 TypeInfo::List(e) => format!("&[{e}]"),
                 other => value_type(other),
             };
-            if matches!(info, TypeInfo::Record(_) | TypeInfo::List(_)) {
+            // A function reads the record it is given; one it reads again (`reload`) is its own copy.
+            if matches!(info, TypeInfo::Record(_)) && !action && changes(&decl.body, &param.name.name) {
+                copies.push_str(&format!("    let mut {name} = {name}.clone();\n"));
+            } else if matches!(info, TypeInfo::Record(_) | TypeInfo::List(_)) {
                 self.refs[0].insert(param.name.name.clone());
             }
+            self.define(&param.name.name, info.clone());
             params.push(format!("{name}: {ty}"));
         }
         let ret = self.returns().map(|r| value_type(&r)).unwrap_or_else(|| "()".into());
         let mut out = format!("pub fn {name}({}) -> Result<{ret}> {{\n", params.join(", "));
+        // `allow when`: refused with notAllowed before anything runs.
+        if let Some(allow) = &decl.allow {
+            out.push_str(&format!("    clarity_runtime::signin::allow({})?;\n", self.value(allow)));
+        }
+        out.push_str(&copies);
         for condition in &decl.requires {
             out.push_str(&format!(
                 "    require({}, {:?})?;\n",
@@ -156,9 +220,11 @@ impl<'a> Emitter<'a> {
 
     fn block(&mut self, body: &[Stmt], depth: usize, out: &mut String) {
         self.refs.push(HashSet::new());
+        self.locals.push(HashMap::new());
         for stmt in body {
             self.stmt(stmt, depth, out);
         }
+        self.locals.pop();
         self.refs.pop();
     }
 
@@ -167,6 +233,7 @@ impl<'a> Emitter<'a> {
         match &stmt.kind {
             StmtKind::Let { name, ty, value } => {
                 let from = self.types.type_of(value);
+                let held = ty.as_ref().map_or_else(|| from.clone(), |declared| type_ref_info(self.project, declared));
                 let code = match ty {
                     Some(declared) => {
                         let to = type_ref_info(self.project, declared);
@@ -179,6 +246,7 @@ impl<'a> Emitter<'a> {
                     }
                     None => format!("let mut {} = {};", ident(&name.name), self.value(value)),
                 };
+                self.define(&name.name, held);
                 out.push_str(&format!("{pad}{code}\n"));
             }
             StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
@@ -267,6 +335,14 @@ impl<'a> Emitter<'a> {
                 self.writing = true;
                 let place = self.place(target);
                 self.writing = false;
+                // Text given to a hashed field keeps its hash, by its strategy's method and minimum.
+                if let Some(field) = self.field_of(target).filter(|f| f.modifiers.hashed) {
+                    let crate::signin::Hashing { method, minimum } = crate::signin::hashing(self.project, &field.name.name);
+                    let minimum = minimum.map_or("None".to_string(), |m| format!("Some({m})"));
+                    let text = self.value(value);
+                    out.push_str(&format!("{pad}{place} = clarity_runtime::signin::hashed({method:?}, &{text}, {minimum})?;\n"));
+                    return;
+                }
                 let code = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {code};\n"));
                 if let ExprKind::Name { name } = &target.kind {
@@ -333,7 +409,13 @@ impl<'a> Emitter<'a> {
                 let source = if runs_handler && !changed && source.starts_with("w.") { format!("{source}.clone()") } else { source };
                 out.push_str(&format!("{pad}for {} in {source}.{each}() {{\n", ident(&var.name)));
                 self.refs.push(HashSet::from([var.name.clone()]));
+                let item = match self.types.type_of(list) {
+                    TypeInfo::List(entity) => TypeInfo::Record(entity),
+                    _ => TypeInfo::Unknown,
+                };
+                self.locals.push(HashMap::from([(var.name.clone(), item)]));
                 self.block(body, depth + 1, out);
+                self.locals.pop();
                 self.refs.pop();
                 out.push_str(&format!("{pad}}}\n"));
             }
@@ -353,9 +435,11 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}let _ = {code};\n"));
                 }
             }
-            StmtKind::Save { value } => {
+            // `anyway` writes over what someone saved since, on purpose.
+            StmtKind::Save { value, anyway } => {
                 let record = self.record_mut(value);
-                out.push_str(&format!("{pad}db.save({record})?;\n"));
+                let save = if *anyway { "save_anyway" } else { "save" };
+                out.push_str(&format!("{pad}db.{save}({record})?;\n"));
             }
             StmtKind::Delete { value } => {
                 let record = self.record_mut(value);
@@ -461,16 +545,31 @@ impl<'a> Emitter<'a> {
             StmtKind::Exit { code } => out.push_str(&format!("{pad}return Ok(({}) as i32);\n", self.value(code))),
             StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
             StmtKind::CloseWith { value } => out.push_str(&format!("{pad}ui.close_with(to_value(&{})?);\n", self.value(value))),
+            // A record variable is read again as it is stored now, with its version.
+            StmtKind::Reload { data } if self.local(&data.name).is_some() => {
+                let place = if self.is_ref(&data.name) { ident(&data.name) } else { format!("&mut {}", ident(&data.name)) };
+                out.push_str(&format!("{pad}db.reload({place})?;\n"));
+                // Read again, it is checked as any record read is.
+                if let Some(TypeInfo::Record(entity)) = self.local(&data.name).cloned()
+                    && self.project.entity(&entity).is_some_and(|e| e.readable.is_some())
+                {
+                    let var = ident(&data.name);
+                    let held = if self.is_ref(&data.name) { format!("*{var}") } else { var };
+                    out.push_str(&format!("{pad}{held} = {entity}::readable(db, {held}.clone())?;\n"));
+                }
+            }
             StmtKind::Reload { data } => {
                 let found = self.window.as_ref().and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name).cloned());
                 match found {
                     Some((name, entity, true)) => {
-                        out.push_str(&format!("{pad}w.{} = db.all::<{entity}>()?;\n", ident(&name)));
+                        let all = self.readable_all(&entity, format!("db.all::<{entity}>()?"));
+                        out.push_str(&format!("{pad}w.{} = {all};\n", ident(&name)));
                         out.push_str(&self.deselect(&name, &pad));
                     }
                     Some((name, entity, false)) => {
                         let field = format!("w.{}", ident(&name));
-                        out.push_str(&format!("{pad}if {field}.id != 0 {{\n{pad}    {field} = db.get::<{entity}>({field}.id)?;\n{pad}}}\n"));
+                        let got = self.readable_one(&entity, format!("db.get::<{entity}>({field}.id)?"));
+                        out.push_str(&format!("{pad}if {field}.id != 0 {{\n{pad}    {field} = {got};\n{pad}}}\n"));
                     }
                     None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
                 }
@@ -719,6 +818,14 @@ impl<'a> Emitter<'a> {
                 Some(NameKind::Local) => ident(name),
                 Some(NameKind::Data) => format!("w.{}", ident(name)),
                 Some(NameKind::EnumValue(e)) => format!("{e}::{name}"),
+                // `me`: the record signed in now, refused with notAllowed when nobody is.
+                Some(NameKind::Me) => match self.types.type_of(expr) {
+                    TypeInfo::Record(people) => format!("db.me::<{people}>()?"),
+                    _ => {
+                        self.errors.push("'me' names no entity of people".into());
+                        String::new()
+                    }
+                },
                 _ => {
                     self.errors.push(format!("'{name}' is a part; use one of its properties"));
                     String::new()
@@ -772,11 +879,25 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
+                // `me.id`: the id signed in, without reading the record.
+                if member.name == "id" && is_me(self.types, object) {
+                    return format!("({ME_ID})");
+                }
+                // The id of a referenced record is the reference itself: nothing is read (none is not found, as a read says).
+                if member.name == "id"
+                    && let ExprKind::Member { object: holder, member: reference } = &object.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(holder)
+                    && let Some(FieldType::Ref { entity: target }) = self.field_type(&owner, &reference.name)
+                {
+                    let table = self.project.entity(&target.name).map(|e| e.table_name()).unwrap_or_default();
+                    return format!("{}.{}.ok_or(Error::NotFound {{ table: {table:?}, id: None }})?", self.object(holder), ident(&reference.name));
+                }
                 let field = self.project.entity(&entity).and_then(|e| e.field(&member.name)).map(|f| f.ty.clone());
                 let object = self.object(object);
                 match field {
                     Some(FieldType::Ref { entity: target }) => {
-                        format!("db.load::<{}>({object}.{})?", target.name, ident(&member.name))
+                        let loaded = format!("db.load::<{}>({object}.{})?", target.name, ident(&member.name));
+                        self.readable_one(&target.name, loaded)
                     }
                     Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
@@ -1164,7 +1285,18 @@ impl<'a> Emitter<'a> {
                 query.push_str(&format!(".order_through(&[{}], {column:?}, {}, {numeric})", hops.join(", "), key.descending));
             }
         }
-        format!("db.find::<{entity}>(&{query})?")
+        self.readable_all(entity, format!("db.find::<{entity}>(&{query})?"))
+    }
+
+    /// Records of `entity` read from the database, each checked against its
+    /// `readable when` (refused with notYours); as they are without one.
+    fn readable_all(&self, entity: &str, found: String) -> String {
+        if self.project.entity(entity).is_some_and(|e| e.readable.is_some()) { format!("{entity}::readable_all(db, {found})?") } else { found }
+    }
+
+    /// One record of `entity` read from the database, checked as `readable_all` checks.
+    fn readable_one(&self, entity: &str, found: String) -> String {
+        if self.project.entity(entity).is_some_and(|e| e.readable.is_some()) { format!("{entity}::readable(db, {found})?") } else { found }
     }
 
     fn field_type(&self, entity: &str, field: &str) -> Option<FieldType> {
@@ -1292,6 +1424,7 @@ impl<'a> Emitter<'a> {
                 };
                 match stored_ref {
                     Some(id) => format!("sql::reference({id})"),
+                    None if is_me(self.types, value) => format!("sql::reference(Some({ME_ID}))"),
                     None => format!("sql::reference(Some({}.id))", self.object(value)),
                 }
             }
@@ -1414,6 +1547,15 @@ impl<'a> Emitter<'a> {
         if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let (list, separator) = (args.first().map(|a| self.value(a)).unwrap_or_default(), args.get(1).map(|a| self.value(a)).unwrap_or_default());
             return format!("{list}.join({separator}.as_str())");
+        }
+        // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): a token and recovery codes from Clarity.Auth.
+        let own = |n: &str| self.project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == n);
+        if name == clarity_spec::code::check::NEW_TOKEN && !own(name) {
+            return "clarity_runtime::signin::new_token()?".to_string();
+        }
+        if name == clarity_spec::code::check::NEW_RECOVERY_CODES && !own(name) {
+            let count = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity_runtime::signin::new_recovery_codes({count})?");
         }
         if name == "count" {
             let list = match args.first() {
@@ -1623,6 +1765,14 @@ pub struct Owner {
     /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
     /// Rust function, and for each value whether it is a record.
     pub answers: Vec<(String, String, Vec<bool>)>,
+    /// Whether the window has `allow when`, checked before it opens (its struct's `allowed`).
+    pub allowed: bool,
+    /// The handlers a frame command with `allow when` runs, each with the
+    /// Rust function that checks them all when the handler runs.
+    pub guarded: Vec<(String, String)>,
+    /// The windows a frame command with `allow when` opens, each with the
+    /// Rust function that checks those commands' conditions when it opens.
+    pub opens_guarded: Vec<(String, String)>,
 }
 
 /// The struct and handlers of every window and the app in `file`.
@@ -1689,6 +1839,7 @@ pub fn emit_windows(
                     DataKind::Record { entity } => format!("{}::default()", entity.name),
                     // A list of records starts empty: code builds it (DESIGN 5.12).
                     DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => "Vec::new()".to_string(),
+                    DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.readable.is_some()) => format!("{e}::readable_all(db, db.all::<{e}>()?)?", e = entity.name),
                     DataKind::List { entity } => format!("db.all::<{}>()?", entity.name),
                     DataKind::Value { ty, default: Some(value) } => literal(project, ty, value),
                     DataKind::Value { default: None, .. } => "Default::default()".into(),
@@ -1713,6 +1864,46 @@ impl {struct_name} {{
 "
         ));
 
+        // `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): a window's, decided before it opens.
+        let mut access = Emitter::new(project, types, None);
+        let allowed = page.and_then(|p| p.allow_condition.as_ref()).map(|condition| {
+            let holds = access.value(condition);
+            out.push_str(&format!(
+                "impl {struct_name} {{\n    /// `allow when {}`: checked before the window opens.\n    pub fn allowed(db: &Db) -> Result<()> {{\n        clarity_runtime::signin::allow({holds})\n    }}\n}}\n\n",
+                print::expr(condition)
+            ));
+        });
+        // A frame command's, checked when the handler it runs runs: every command's that runs it.
+        let frame = page.map(|p| &p.frame).or(app.map(|a| &a.frame));
+        // One that opens a window: checked when that window opens, since the wire does not say which command opened it.
+        let mut guards: Vec<(String, Vec<&Expr>)> = Vec::new();
+        let mut opening: Vec<(String, Vec<&Expr>)> = Vec::new();
+        for command in frame.map(|f| allowed_commands(f, page.map(|p| p.widgets.as_slice()).unwrap_or_default())).unwrap_or_default() {
+            let Some(condition) = command.props.allow_condition.as_ref() else { continue };
+            let opened = command.props.on_click.as_ref().filter(|t| project.pages().any(|p| p.name.name == **t));
+            if let Some(handler) = &command.props.handler {
+                add_condition(&mut guards, handler, condition);
+            }
+            if let Some(window) = opened {
+                add_condition(&mut opening, window, condition);
+            }
+        }
+        let mut opens_guarded = Vec::new();
+        for (window, conditions) in opening {
+            let function = format!("{}__opens__{}__allowed", super::names::snake(name), super::names::snake(&window));
+            let checks: String = conditions.iter().map(|c| format!("    // `allow when {}`\n    clarity_runtime::signin::allow({})?;\n", print::expr(c), access.value(c))).collect();
+            out.push_str(&format!("/// Who may pick the commands of {name} that open {window}.\npub fn {function}(db: &Db) -> Result<()> {{\n{checks}    Ok(())\n}}\n\n"));
+            opens_guarded.push((window, function));
+        }
+        let mut guarded = Vec::new();
+        for (handler, conditions) in guards {
+            let function = format!("{}__{}__allowed", super::names::snake(name), super::names::snake(&handler));
+            let checks: String = conditions.iter().map(|c| format!("    // `allow when {}`\n    clarity_runtime::signin::allow({})?;\n", print::expr(c), access.value(c))).collect();
+            out.push_str(&format!("/// Who may pick the commands that run {handler}.\npub fn {function}(db: &Db) -> Result<()> {{\n{checks}    Ok(())\n}}\n\n"));
+            guarded.push((handler, function));
+        }
+        errors.extend(access.errors.into_iter().map(|e| format!("'allow when' of {name}: {e}")));
+
         let mut handlers = Vec::new();
         for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
             let function = format!("{}__{}", super::names::snake(name), super::names::snake(&handler.name.name));
@@ -1735,6 +1926,7 @@ impl {struct_name} {{
                                 command: false,
                 writing: false,
                 refs: vec![HashSet::new()],
+                locals: vec![handler.params.iter().map(|p| (p.name.name.clone(), type_ref_info(project, &p.ty))).collect()],
                 errors: Vec::new(),
             };
             let mut body = String::new();
@@ -1775,9 +1967,59 @@ impl {struct_name} {{
             events,
             draws,
             answers,
+            allowed: allowed.is_some(),
+            guarded,
+            opens_guarded,
         });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
+}
+
+/// `condition` among those of `target` (a handler or a window): shared, all of them hold.
+fn add_condition<'e>(into: &mut Vec<(String, Vec<&'e Expr>)>, target: &str, condition: &'e Expr) {
+    match into.iter_mut().find(|(t, _)| t == target) {
+        Some((_, conditions)) => conditions.push(condition),
+        None => into.push((target.to_string(), vec![condition])),
+    }
+}
+
+/// Every command of a frame and of the menus of `widgets`, in and under each other.
+fn allowed_commands<'f>(frame: &'f Frame, widgets: &'f [Widget]) -> Vec<&'f Command> {
+    fn add<'f>(commands: &'f [Command], out: &mut Vec<&'f Command>) {
+        for command in commands {
+            out.push(command);
+            add(&command.items, out);
+        }
+    }
+    fn in_widgets<'f>(widgets: &'f [Widget], out: &mut Vec<&'f Command>) {
+        for widget in widgets {
+            if let Some(menu) = &widget.menu {
+                add(&menu.items, out);
+            }
+            in_widgets(&widget.children, out);
+            for page in &widget.pages {
+                in_widgets(&page.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(menu) = &frame.menu {
+        add(&menu.items, &mut out);
+    }
+    if let Some(toolbar) = &frame.toolbar {
+        add(&toolbar.items, &mut out);
+    }
+    for group in frame.ribbon.iter().flat_map(|r| &r.tabs).flat_map(|t| &t.groups) {
+        add(&group.items, &mut out);
+    }
+    in_widgets(widgets, &mut out);
+    for sidebar in &frame.sidebars {
+        in_widgets(&sidebar.widgets, &mut out);
+    }
+    if let Some(footer) = &frame.footer {
+        in_widgets(&footer.widgets, &mut out);
+    }
+    out
 }
 
 /// A value written in the design as Rust, of the parameter's type.
@@ -1796,6 +2038,10 @@ pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> R
             params.push_str(&format!(", {}: {}", ident(&name.name), value_type(&type_ref_info(project, ty))));
         }
         let mut body = String::new();
+        // `allow when`: refused with notAllowed before the command runs.
+        if let Some(allow) = &command.allow {
+            body.push_str(&format!("    clarity_runtime::signin::allow({})?;\n", emitter.value(allow)));
+        }
         emitter.block(&command.body, 1, &mut body);
         if emitter.errors.is_empty() {
             out.push_str(&format!(
@@ -1935,7 +2181,8 @@ fn changes(body: &[Stmt], var: &str) -> bool {
     }
     body.iter().any(|stmt| match &stmt.kind {
         StmtKind::Assign { target, .. } => matches!(&target.kind, ExprKind::Member { .. }) && root(target) == Some(var),
-        StmtKind::Save { value } | StmtKind::Delete { value } => root(value) == Some(var),
+        StmtKind::Save { value, .. } | StmtKind::Delete { value } => root(value) == Some(var),
+        StmtKind::Reload { data } => data.name == var,
         StmtKind::If { branches, otherwise } => {
             branches.iter().any(|b| changes(&b.body, var)) || otherwise.as_deref().is_some_and(|o| changes(o, var))
         }
@@ -1947,6 +2194,14 @@ fn changes(body: &[Stmt], var: &str) -> bool {
 
 /// A kind's or options' pieces (crate::shape) as a Rust expression of a `String`: a base
 /// is a new record as serde writes it, a piece of code is already JSON text.
+/// `me`'s id: refused with notAllowed when nobody is signed in.
+const ME_ID: &str = "db.me_id().ok_or_else(|| Error::Refused(clarity_runtime::signin::not_allowed()))?";
+
+/// Whether `expr` is `me`, the record signed in.
+fn is_me(types: &FileTypes, expr: &Expr) -> bool {
+    matches!(expr.kind, ExprKind::Name { .. }) && types.name_of(expr) == Some(&NameKind::Me)
+}
+
 fn rust_pieces(pieces: &[crate::shape::Piece]) -> String {
     use crate::shape::Piece;
     if pieces.is_empty() {

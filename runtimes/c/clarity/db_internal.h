@@ -33,6 +33,9 @@ typedef struct {
     bool had, has;
     ClarityValue* before;
     ClarityValue* after;
+    /// The row's version in each state, for a versioned entity (0 where it
+    /// was not there): undo then compares the version, not the whole row.
+    int64_t before_version, after_version;
 } ClarityChange;
 
 typedef struct {
@@ -45,6 +48,8 @@ typedef struct {
 typedef struct {
     ClarityChanges changes;
     bool undone;
+    /// Whether it is older than the steps kept, its changes freed.
+    bool forgotten;
 } ClarityDone;
 
 struct ClarityDb {
@@ -55,9 +60,18 @@ struct ClarityDb {
     /// Whether a step runs, and the changes it made so far.
     bool recording;
     ClarityChanges changes;
-    /// Each step by its id, counted from 1; kept until the database closes.
+    /// Each step by its id, counted from 1; the changes of the last
+    /// CLARITY_UNDO_STEPS kept.
     ClarityDone* steps;
     size_t step_count;
+    /// The sources the running step holds a transaction in, by their place
+    /// in `sources`: what one handler changes is kept or left whole.
+    size_t* held;
+    size_t held_count;
+    /// Who signs in and who is signed in (auth/auth.c); NULL when the
+    /// program names no people. `forget_people` frees it with the database.
+    struct ClarityPeople* people;
+    void (*forget_people)(struct ClarityPeople* people);
 };
 
 /// A copy that outlives the scratch arena, to free.

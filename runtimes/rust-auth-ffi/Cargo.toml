@@ -1,0 +1,19 @@
+[package]
+name = "clarity-auth-ffi"
+description = "The C interface of Clarity.Auth: the sign-in of the programs C#, Go, C and C++ make with Clarity"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+# Shipped as a native library beside Clarity.UI's, not on crates.io.
+publish = false
+
+# The library's file is clarity_auth on every system: libclarity_auth.so,
+# clarity_auth.dll, libclarity_auth.dylib.
+[lib]
+name = "clarity_auth"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+auth = { package = "clarity-auth", path = "../rust-auth" }

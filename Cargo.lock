@@ -1170,6 +1170,7 @@ dependencies = [
 name = "clarity-agent"
 version = "0.1.0"
 dependencies = [
+ "clarity-auth",
  "reqwest",
  "serde",
  "serde_json",
@@ -1192,10 +1193,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-auth"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "getrandom 0.3.4",
+ "libc",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "ureq",
+]
+
+[[package]]
+name = "clarity-auth-ffi"
+version = "0.1.0"
+dependencies = [
+ "clarity-auth",
+]
+
+[[package]]
 name = "clarity-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "clarity-auth",
  "clarity-db",
  "clarity-gen",
  "clarity-mcp",
@@ -1203,6 +1226,7 @@ dependencies = [
  "clarity-runtime",
  "clarity-spec",
  "clarity-tools",
+ "rusqlite",
  "serde_json",
 ]
 
@@ -1330,6 +1354,7 @@ dependencies = [
 name = "clarity-project"
 version = "0.1.0"
 dependencies = [
+ "clarity-auth",
  "clarity-db",
  "clarity-formats",
  "clarity-spec",
@@ -1343,11 +1368,12 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.55.0"
+version = "0.56.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "clarity-auth",
  "clarity-formats",
  "clarity-image",
  "keyring",
@@ -1371,6 +1397,7 @@ name = "clarity-spec"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "clarity-auth",
  "clarity-formats",
  "clarity-project",
  "serde",
@@ -1394,13 +1421,14 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
  "arboard",
  "base64 0.22.1",
  "clarity-audio",
+ "clarity-auth",
  "clarity-graph",
  "clarity-image",
  "clarity-runtime",
@@ -1426,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui-ffi"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-audio-ffi",

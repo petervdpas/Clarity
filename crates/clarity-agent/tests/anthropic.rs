@@ -99,3 +99,69 @@ fn an_error_in_the_stream_is_said() {
     let stream = "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n";
     assert_eq!(read_stream(stream.as_bytes(), &mut |_| {}).unwrap_err(), "the model said: Overloaded (overloaded_error)");
 }
+
+/// A Messages API that answers one request with a short stream and gives back its headers.
+fn messages_server() -> (String, std::thread::JoinHandle<Vec<String>>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://127.0.0.1:{}/anthropic", listener.local_addr().unwrap().port());
+    let served = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut headers = Vec::new();
+        let mut length = 0;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            if line.trim().is_empty() {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                length = value.trim().parse().unwrap();
+            }
+            headers.push(line.trim().to_string());
+        }
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body).unwrap();
+        let stream = concat!(
+            "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\n",
+            "data: {\"type\":\"message_stop\"}\n\n"
+        );
+        write!(reader.get_mut(), "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{stream}", stream.len()).unwrap();
+        headers
+    });
+    (base, served)
+}
+
+fn ask(model: &mut clarity_agent::anthropic::Anthropic) {
+    use clarity_agent::Model;
+    let request = Request { system: "s".into(), messages: vec![Message { role: Role::User, content: vec![Block::Text { text: "hi".into() }] }], tools: vec![] };
+    model.reply(&request, &mut |_| {}).unwrap();
+}
+
+#[test]
+fn a_key_goes_in_x_api_key() {
+    use clarity_agent::anthropic::{Anthropic, Auth};
+    let (base, served) = messages_server();
+    ask(&mut Anthropic::new(&base, Auth::Key("sk-1".into()), "claude-sonnet-5-5", 100, Cache::Minutes).unwrap());
+    let headers = served.join().unwrap();
+    assert!(headers.iter().any(|h| h.starts_with("POST /anthropic/v1/messages ")), "{headers:?}");
+    assert!(headers.iter().any(|h| h == "x-api-key: sk-1"), "{headers:?}");
+    assert!(!headers.iter().any(|h| h.to_ascii_lowercase().starts_with("authorization:")), "{headers:?}");
+}
+
+#[test]
+fn a_microsoft_sign_in_sends_its_token_as_bearer() {
+    use clarity_agent::anthropic::{Anthropic, Auth};
+    let (base, served) = messages_server();
+    let mut asked = 0;
+    let source = move || {
+        asked += 1;
+        Ok(format!("token-{asked}"))
+    };
+    ask(&mut Anthropic::new(&base, Auth::Token(Box::new(source)), "my-deployment", 100, Cache::Minutes).unwrap());
+    let headers = served.join().unwrap();
+    assert!(headers.iter().any(|h| h == "authorization: Bearer token-1"), "{headers:?}");
+    assert!(!headers.iter().any(|h| h.starts_with("x-api-key")), "{headers:?}");
+}

@@ -100,8 +100,11 @@ public sealed class WebServer
         + "<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { display: block; width: 100vw; height: 100vh; touch-action: none; }</style>\n"
         + "</head>\n<body>\n<canvas id=\"clarity-ui\"></canvas>\n<script src=\"clarity-ui-page.js\"></script>\n</body>\n</html>\n";
 
-    /// <summary>A reply: its status, the kind of its body, the body, and how the body is compressed (none when it is not).</summary>
-    public readonly record struct Reply(int Status, string Type, byte[] Body, string? Encoding = null);
+    /// <summary>
+    /// A reply: its status, the kind of its body, the body, how the body is compressed (none when
+    /// it is not), and the Set-Cookie of a command that signed in or out (none when it did not).
+    /// </summary>
+    public readonly record struct Reply(int Status, string Type, byte[] Body, string? Encoding = null, string? SetCookie = null);
 
     /// <summary>The encodings the server compresses with, the smaller first.</summary>
     static readonly string[] Encodings = ["br", "gzip"];
@@ -135,15 +138,20 @@ public sealed class WebServer
 
     static Reply Text(int status, string type, string body) => new(status, type, Encoding.UTF8.GetBytes(body));
 
-    /// <summary>The reply to one request; <paramref name="accepts"/> is its Accept-Encoding.</summary>
-    public Reply Answer(string method, string path, string body, string? accepts = null)
+    /// <summary>
+    /// The reply to one request; <paramref name="accepts"/> is its Accept-Encoding,
+    /// <paramref name="cookie"/> its Cookie (the session of a person signed in) and
+    /// <paramref name="address"/> where it came from (failed tries count per address).
+    /// </summary>
+    public Reply Answer(string method, string path, string body, string? accepts = null, string? cookie = null, string address = "")
     {
         var file = Uri.UnescapeDataString(path.Split('?')[0]);
         if (file == InvokePath)
         {
             if (method != "POST")
                 return Text(405, "text/plain", "ask the program with POST");
-            return Text(200, "application/json", Invoke(body).ToJsonString());
+            var (answer, setCookie) = Invoke(body, cookie, address);
+            return Text(200, "application/json", answer.ToJsonString()) with { SetCookie = setCookie };
         }
         if (method is not ("GET" or "HEAD"))
             return Text(405, "text/plain", "");
@@ -179,9 +187,10 @@ public sealed class WebServer
     /// <c>settings</c> are its person's settings as the page keeps them: the
     /// handler sees those, in that page's language, and what it asks of the
     /// screen goes to that page alone. The answer brings the page's settings
-    /// back (<c>"settings"</c>) when the command changed them, for the page to keep.
+    /// back (<c>"settings"</c>) when the command changed them, for the page to keep,
+    /// and the Set-Cookie of a command that signed in or out.
     /// </summary>
-    JsonObject Invoke(string body)
+    (JsonObject Answer, string? SetCookie) Invoke(string body, string? cookie, string address)
     {
         JsonObject asked;
         try
@@ -190,11 +199,11 @@ public sealed class WebServer
         }
         catch (JsonException e)
         {
-            return new JsonObject { ["error"] = e.Message };
+            return (new JsonObject { ["error"] = e.Message }, null);
         }
         var command = asked["command"] is JsonValue c && c.TryGetValue<string>(out var named) ? named : "";
         if (command == "")
-            return new JsonObject { ["error"] = "a command has its name" };
+            return (new JsonObject { ["error"] = "a command has its name" }, null);
         var args = asked["args"] switch
         {
             null => "{}",
@@ -203,11 +212,11 @@ public sealed class WebServer
         };
         var browser = asked["browser"] is JsonValue b && b.TryGetValue<string>(out var page) ? page : "";
         var sent = asked["settings"] as JsonObject;
-        var (answer, settings) = wire.AnswerFor(browser, sent, command, args);
+        var (answer, settings, setCookie) = wire.AnswerFor(browser, sent, command, args, cookie, address);
         var reply = answer ?? [];
         if (settings is not null)
             reply["settings"] = settings;
-        return reply;
+        return (reply, setCookie);
     }
 
     /// <summary><paramref name="bytes"/>, compressed once, to a browser that takes it.</summary>
@@ -374,7 +383,8 @@ public sealed class WebServer
                 Array.Copy(buffer, used, buffer, 0, filled - used);
                 filled -= used;
                 // The program answers one command at a time (ProgramWire); files come meanwhile.
-                var reply = Answer(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"));
+                var address = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString() ?? "";
+                var reply = Answer(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"), headers.GetValueOrDefault("Cookie"), address);
                 var close = start[2] == "HTTP/1.0" || headers.GetValueOrDefault("Connection")?.Equals("close", StringComparison.OrdinalIgnoreCase) == true;
                 var head = new StringBuilder()
                     .Append(CultureInfo.InvariantCulture, $"HTTP/1.1 {reply.Status} {Reason(reply.Status)}\r\n")
@@ -384,6 +394,8 @@ public sealed class WebServer
                     .Append("Vary: Accept-Encoding\r\n");
                 if (reply.Encoding is { } encoding)
                     head.Append(CultureInfo.InvariantCulture, $"Content-Encoding: {encoding}\r\n");
+                if (reply.SetCookie is { } setCookie)
+                    head.Append(CultureInfo.InvariantCulture, $"Set-Cookie: {setCookie}\r\n");
                 if (close)
                     head.Append("Connection: close\r\n");
                 head.Append("\r\n");

@@ -18,6 +18,8 @@ translation en
     cancel "Cancel"
     dismiss "Dismiss"
     undoChangedSince "This was changed since, so it cannot be taken back"
+    undoTooOld "This was done too long ago to take back"
+    savedSince "Someone else changed this record since you opened it. Reload it to see their change."
     cutText "Cut"
     copyText "Copy"
     pasteText "Paste"

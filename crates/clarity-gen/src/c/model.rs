@@ -275,10 +275,16 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     for f in &entity.fields {
         let _ = writeln!(fields, "    {} {};", field_type(&f.ty), ident(&f.name.name));
     }
+    // The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5), kept
+    // beside the fields; none where saves are not checked.
+    let version = project.version_column(name);
+    if version.is_some() {
+        fields.push_str("    int64_t row_version;\n");
+    }
     let events: Vec<DataEvent> =
         project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
     let header = format!(
-        "struct {name} {{\n    int64_t id;\n{fields}}};\n\n/// How the runtime reads and writes records of {name}.\nextern const ClarityEntity {p}_entity;\n/// A new record, with the defaults of its fields.\n{name} {p}_new(void);\n/// Inserts a new record (and gives it its id) or updates a stored one.\nbool {p}_save(ClarityDb* db, {name}* record);\nbool {p}_delete(ClarityDb* db, const {name}* record);\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out);\nbool {p}_all(ClarityDb* db, {list}* out);\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out);\n/// The record a reference field points at.\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out);\ncJSON* {p}_json(const {name}* record);\n/// The JSON of a new record, which JSON read into a record held inside keeps.\ncJSON* {p}_json_new(void);\n/// A list of `count` records, copied into the scratch arena: a list code builds.\n{list} {p}_list_of(size_t count, const {name}* items);\n/// `xs + ys` in code: a new list of the records of both.\n{list} {p}_list_join({list} a, {list} b);\nbool {p}_from_json(const cJSON* in, {name}* out);\ncJSON* {p}_list_json(const {list}* list);\nbool {p}_list_from_json(const cJSON* in, {list}* out);\n\n"
+        "struct {name} {{\n    int64_t id;\n{fields}}};\n\n/// How the runtime reads and writes records of {name}.\nextern const ClarityEntity {p}_entity;\n/// A new record, with the defaults of its fields.\n{name} {p}_new(void);\n/// Inserts a new record (and gives it its id) or updates a stored one.\nbool {p}_save(ClarityDb* db, {name}* record);\n/// `save ... anyway`: saved regardless of what someone saved since.\nbool {p}_save_anyway(ClarityDb* db, {name}* record);\n/// `reload`: the record read again as it is stored now.\nbool {p}_reload(ClarityDb* db, {name}* record);\nbool {p}_delete(ClarityDb* db, const {name}* record);\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out);\nbool {p}_all(ClarityDb* db, {list}* out);\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out);\n/// The record a reference field points at.\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out);\ncJSON* {p}_json(const {name}* record);\n/// The JSON of a new record, which JSON read into a record held inside keeps.\ncJSON* {p}_json_new(void);\n/// A list of `count` records, copied into the scratch arena: a list code builds.\n{list} {p}_list_of(size_t count, const {name}* items);\n/// `xs + ys` in code: a new list of the records of both.\n{list} {p}_list_join({list} a, {list} b);\nbool {p}_from_json(const cJSON* in, {name}* out);\ncJSON* {p}_list_json(const {list}* list);\nbool {p}_list_from_json(const cJSON* in, {list}* out);\n\n"
     );
 
     let mut source = String::new();
@@ -358,6 +364,10 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
         }
         source.push_str("    return true;\n}\n\n");
     }
+    let saved_since = entity.saved_since.as_deref().filter(|_| version.is_some());
+    if let Some(key) = saved_since {
+        source.push_str(&saved_since_hook(project, entity, key));
+    }
     let source_name = project.source_of(name).unwrap_or_default();
     let source_name = if source_name.is_empty() || source_name == project.default_source() { "" } else { source_name };
     let mut descriptor = format!(
@@ -383,14 +393,32 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !cascades.is_empty() {
         let _ = writeln!(descriptor, "    .cascade = {p}_cascade,");
     }
+    if let Some(column) = &version {
+        let _ = writeln!(descriptor, "    .version = {},\n    .version_at = offsetof({name}, row_version),", string(column));
+    }
+    if saved_since.is_some() {
+        let _ = writeln!(descriptor, "    .saved_since = {p}_saved_since,");
+    }
     descriptor.push_str("};\n\n");
     source.push_str(&descriptor);
 
+    // `readable when` on every record a find gives back, `writable when` before a save and a delete (logic::emit_accesses).
+    let writes = |call: &str| if entity.writable.is_some() { format!("return {p}_writable(db, record) && {call};") } else { format!("return {call};") };
+    let (save, delete) = (writes(&format!("clarity_save(db, &{p}_entity, record)")), writes(&format!("clarity_delete(db, &{p}_entity, record)")));
+    let anyway = writes(&format!("clarity_save_anyway(db, &{p}_entity, record)"));
+    let readable = entity.readable.is_some();
+    let found = if readable { format!("    for (size_t i = 0; i < out->count; i++)\n        if (!{p}_readable(db, &out->items[i])) return false;\n") } else { String::new() };
+    let reload = if readable { format!("clarity_reload(db, &{p}_entity, record) && {p}_readable(db, record)") } else { format!("clarity_reload(db, &{p}_entity, record)") };
+    let (get, load) = if readable {
+        (format!("clarity_get(db, &{p}_entity, id, out) && {p}_readable(db, out)"), format!("clarity_load(db, &{p}_entity, reference, out) && (out->id == 0 || {p}_readable(db, out))"))
+    } else {
+        (format!("clarity_get(db, &{p}_entity, id, out)"), format!("clarity_load(db, &{p}_entity, reference, out)"))
+    };
     let defaults: Vec<String> = entity.fields.iter().filter_map(|f| initial(project, f).map(|v| format!("        .{} = {v},", ident(&f.name.name)))).collect();
     let new = if defaults.is_empty() { format!("    return ({name}){{0}};\n") } else { format!("    return ({name}){{\n{}\n    }};\n", defaults.join("\n")) };
     let _ = write!(
         source,
-        "{name} {p}_new(void) {{\n{new}}}\n\nbool {p}_save(ClarityDb* db, {name}* record) {{ return clarity_save(db, &{p}_entity, record); }}\n\nbool {p}_delete(ClarityDb* db, const {name}* record) {{ return clarity_delete(db, &{p}_entity, record); }}\n\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out) {{\n    void* items = NULL;\n    size_t count = 0;\n    if (!clarity_find(db, &{p}_entity, query, &items, &count)) return false;\n    *out = ({list}){{items, count}};\n    return true;\n}}\n\nbool {p}_all(ClarityDb* db, {list}* out) {{ return {p}_find(db, clarity_query(), out); }}\n\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out) {{ return clarity_get(db, &{p}_entity, id, out); }}\n\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out) {{ return clarity_load(db, &{p}_entity, reference, out); }}\n\n"
+        "{name} {p}_new(void) {{\n{new}}}\n\nbool {p}_save(ClarityDb* db, {name}* record) {{ {save} }}\n\nbool {p}_save_anyway(ClarityDb* db, {name}* record) {{ {anyway} }}\n\nbool {p}_reload(ClarityDb* db, {name}* record) {{ return {reload}; }}\n\nbool {p}_delete(ClarityDb* db, const {name}* record) {{ {delete} }}\n\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out) {{\n    void* items = NULL;\n    size_t count = 0;\n    if (!clarity_find(db, &{p}_entity, query, &items, &count)) return false;\n    *out = ({list}){{items, count}};\n{found}    return true;\n}}\n\nbool {p}_all(ClarityDb* db, {list}* out) {{ return {p}_find(db, clarity_query(), out); }}\n\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out) {{ return {get}; }}\n\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out) {{ return {load}; }}\n\n"
     );
     let mut to = String::new();
     let mut from = String::new();
@@ -398,9 +426,77 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
         let _ = writeln!(to, "    cJSON_AddItemToObject(out, {}, {});", string(&f.name.name), json_of(f));
         from.push_str(&json_read(f));
     }
+    // The version read travels with the record, so a window's copy saves over that one.
+    if version.is_some() {
+        to.push_str("    cJSON_AddItemToObject(out, \"rowVersion\", clarity_json_integer(r->row_version));\n");
+        from.push_str("    if (!clarity_json_get_integer(in, \"rowVersion\", &r->row_version)) return false;\n");
+    }
     let _ = write!(
         source,
         "cJSON* {p}_json_new(void) {{\n    {name} r = {p}_new();\n    return {p}_json(&r);\n}}\n\n{list} {p}_list_of(size_t count, const {name}* items) {{\n    {list} list = {{CLARITY_NEW({name}, count ? count : 1), count}};\n    if (count) memcpy(list.items, items, sizeof({name}) * count);\n    return list;\n}}\n\n{list} {p}_list_join({list} a, {list} b) {{\n    {list} list = {{CLARITY_NEW({name}, a.count + b.count ? a.count + b.count : 1), a.count + b.count}};\n    if (a.count) memcpy(list.items, a.items, sizeof({name}) * a.count);\n    if (b.count) memcpy(list.items + a.count, b.items, sizeof({name}) * b.count);\n    return list;\n}}\n\ncJSON* {p}_json(const {name}* r) {{\n    cJSON* out = cJSON_CreateObject();\n    cJSON_AddItemToObject(out, \"id\", clarity_json_integer(r->id));\n{to}    return out;\n}}\n\nbool {p}_from_json(const cJSON* in, {name}* r) {{\n    *r = {p}_new();\n    if (!clarity_json_get_integer(in, \"id\", &r->id)) return false;\n{from}    return true;\n}}\n\ncJSON* {p}_list_json(const {list}* list) {{\n    cJSON* out = cJSON_CreateArray();\n    for (size_t i = 0; i < list->count; i++) cJSON_AddItemToArray(out, {p}_json(&list->items[i]));\n    return out;\n}}\n\nbool {p}_list_from_json(const cJSON* in, {list}* out) {{\n    size_t count = (size_t)cJSON_GetArraySize(in);\n    {name}* items = CLARITY_NEW({name}, count);\n    size_t i = 0;\n    const cJSON* item;\n    cJSON_ArrayForEach(item, in) {{\n        if (!{p}_from_json(item, &items[i++])) return false;\n    }}\n    *out = ({list}){{items, count}};\n    return true;\n}}\n\n"
     );
     (header, source)
+}
+
+/// `savedSince @key` of a versioned entity: the refusal of a save someone
+/// saved since, in the entity's words, its slots filled from the record as it
+/// is stored now (`clarity_spec::versions::saved_since_slots`): its id, its
+/// fields, the id of each record it refers to and that record's fields, read
+/// through the database. A reference that is empty or not found leaves its
+/// slots empty; the refusal itself never fails. A field whose value no slot
+/// shows (a picture, a file, a list, a secret) fills none.
+fn saved_since_hook(project: &Project, entity: &Entity, key: &str) -> String {
+    let name = &entity.name.name;
+    let mut with = String::from("    text = clarity_text_with(text, \"current.id\", clarity_slot_integer(current->id, NULL));\n");
+    let line = |path: &str, slot: &str| format!("    text = clarity_text_with(text, {}, {slot});\n", string(path));
+    for f in &entity.fields {
+        let value = format!("current->{}", ident(&f.name.name));
+        let path = format!("current.{}", f.name.name);
+        if let FieldType::Ref { entity: target } = &f.ty {
+            let slot = format!("clarity_slot_integer({value}, NULL)");
+            with.push_str(&line(&path, &slot));
+            with.push_str(&line(&format!("{path}.id"), &slot));
+            let Some(target) = project.entity(&target.name) else { continue };
+            let held = format!("{}_ref", ident(&f.name.name));
+            let mut inner = String::new();
+            for tf in &target.fields {
+                if let Some(slot) = slot_of(tf, &format!("{held}.{}", ident(&tf.name.name))) {
+                    inner.push_str(&format!("    {}", line(&format!("{path}.{}", tf.name.name), &slot)));
+                }
+            }
+            if !inner.is_empty() {
+                let t = &target.name.name;
+                let _ = write!(with, "    {t} {held} = {{0}};\n    if ({value} != 0 && {}_load(db, {value}, &{held})) {{\n{inner}    }}\n", prefix(t));
+            }
+            continue;
+        }
+        if let Some(slot) = slot_of(f, &value) {
+            with.push_str(&line(&path, &slot));
+        }
+    }
+    let used = if with.contains("_load(db,") { "" } else { "    (void)db;\n" };
+    format!(
+        "/// Why a save of a {name} someone saved since is refused, in its words about it as stored now.\nstatic bool {p}_saved_since(ClarityDb* db, const void* record) {{\n{used}    const {name}* current = record;\n    ClarityText* text = clarity_key_text({});\n{with}    return clarity_refuse(text);\n}}\n\n",
+        string(key),
+        p = prefix(name)
+    )
+}
+
+/// A field's value as a slot of a text, in its format and decimals; a
+/// reference by the id it holds (0 for none); none for what no slot shows.
+fn slot_of(f: &Field, value: &str) -> Option<String> {
+    let format = string_or_null(f.modifiers.format.as_deref());
+    Some(match &f.ty {
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme => format!("clarity_slot_text({value})"),
+        FieldType::Integer | FieldType::Id => format!("clarity_slot_integer({value}, {format})"),
+        FieldType::Ref { .. } => format!("clarity_slot_integer({value}, NULL)"),
+        FieldType::Duration => format!("clarity_slot_duration({value})"),
+        FieldType::Decimal { scale, .. } => format!("clarity_slot_decimal({value}, {scale}, {format})"),
+        FieldType::Money => format!("clarity_slot_money({value}, {format})"),
+        FieldType::Date => format!("clarity_slot_date({value}, {format})"),
+        FieldType::DateTime => format!("clarity_slot_date_time({value}, {format})"),
+        FieldType::Bool => format!("clarity_slot_bool({value})"),
+        FieldType::Enum { name } => format!("clarity_slot_enum({}_name({value}), {})", prefix(&name.name), string(&name.name)),
+        FieldType::Secret | FieldType::Image | FieldType::File | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => return None,
+    })
 }

@@ -6,6 +6,7 @@ mod fail_safe;
 mod build;
 mod logging;
 mod links;
+mod foundry;
 mod diagrams;
 mod resources;
 mod engines;

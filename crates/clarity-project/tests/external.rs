@@ -9,7 +9,7 @@ const PROJECT: &str = "project Shop\n    stack rust desktop\n    datasource main
 const ERP: &str = "module erp\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\", label @invoiceNumberLabel\n";
 
 /// The default language, with the keys ERP uses.
-const EN: &str = "translation en\n    invoiceNumberLabel \"Number\"\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n";
+const EN: &str = "translation en\n    invoiceNumberLabel \"Number\"\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    undoTooOld \"This was done too long ago to take back\"\n    savedSince \"Someone else changed this record since you opened it. Reload it to see their change.\"\n";
 
 #[test]
 fn loading_checks_external_tables() {
@@ -63,7 +63,9 @@ fn importing_writes_a_module_of_mapped_entities() {
     let done = clarity_project::import_tables(&dir, "erp", "erp", &["tblInvoice".to_string()], None).unwrap();
     assert_eq!(done.path, dir.join("erp.clarity"));
     let project = load_modules(&dir).unwrap();
-    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    // Its saves are not checked until its version column is named, which is said.
+    let messages: Vec<&str> = project.diagnostics.iter().map(|d| d.message.as_str()).collect();
+    assert_eq!(messages, ["Invoice has no version column, so saves of it are not checked: name its column with version \"Column\", or write version none"]);
     assert_eq!(project.source_of("Invoice"), Some("erp"));
 
     // The module is not written over.
@@ -99,9 +101,10 @@ fn taking_ownership_writes_a_baseline_and_drops_external() {
 
     let settings = clarity_project::load(&root.join("shop.clarity")).settings.unwrap();
     assert!(!settings.datasources[1].external);
-    // The project is in step with its database: nothing pending, no problems.
+    // The project is in step with its database; the next step gives the table its version column.
     let project = load_modules(&dir).unwrap();
-    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let messages: Vec<&str> = project.diagnostics.iter().map(|d| d.message.as_str()).collect();
+    assert_eq!(messages, ["Invoice has no version column yet (data source erp), so saves of it are not checked: write the next migration step, which adds it (add version Invoice)"]);
 
     let again = clarity_project::take_ownership(&dir, "erp").unwrap_err();
     assert!(again.contains("is not external"), "{again}");

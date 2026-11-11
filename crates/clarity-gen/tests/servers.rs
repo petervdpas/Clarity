@@ -47,6 +47,7 @@ const FIRST: &str = "migration \"First\"
         since: date
         notes: text
     add entity Order
+        version
         number: text(12)
         customer: ref Customer
         total: integer
@@ -68,6 +69,7 @@ const SECOND: &str = "migration \"Second\"
     change field Order.paid: integer
     change field Order.code: integer
     rename entity Order to Purchase
+    add version Customer
 ";
 
 /// The statements of both steps for a database of `kind`.
@@ -408,6 +410,31 @@ fn unique_text_needs_a_length_where_the_database_asks_for_one() {
     assert!(clarity_gen::migration_sql(&project, "main", SourceKind::Mssql).is_err());
 }
 
+/// The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5): in a
+/// new table from its first step, added to an existing one at 1 for the
+/// records there, and kept when SQLite builds a table again.
+#[test]
+fn the_version_column_is_written_in_every_dialect() {
+    for (kind, column, add) in [
+        (SourceKind::Sqlite, "\"row_version\" INTEGER NOT NULL DEFAULT 1", "ALTER TABLE \"customer\" ADD COLUMN \"row_version\" INTEGER NOT NULL DEFAULT 1;"),
+        (SourceKind::Postgres, "\"row_version\" BIGINT NOT NULL DEFAULT 1", "ALTER TABLE \"customer\" ADD COLUMN \"row_version\" BIGINT NOT NULL DEFAULT 1;"),
+        (SourceKind::Mysql, "`row_version` BIGINT NOT NULL DEFAULT 1", "ALTER TABLE `customer` ADD COLUMN `row_version` BIGINT NOT NULL DEFAULT 1;"),
+        (SourceKind::Mssql, "[row_version] BIGINT NOT NULL DEFAULT 1", "ALTER TABLE [customer] ADD [row_version] BIGINT NOT NULL DEFAULT 1;"),
+    ] {
+        let steps = steps(kind);
+        let order = steps[0].iter().find(|s| s.contains("CREATE TABLE") && s.contains("order")).unwrap();
+        assert!(order.ends_with(&format!(",\n    {column}\n);")), "{kind:?}: {order}");
+        assert!(!steps[0][0].contains("row_version"), "{kind:?}: the customer has no version in the first step");
+        assert_eq!(steps[1].last().map(String::as_str), Some(add), "{kind:?}");
+    }
+    let sqlite = steps(SourceKind::Sqlite);
+    assert!(
+        sqlite[1].iter().any(|s| s.starts_with("INSERT INTO \"order__new\"") && s.contains(", \"row_version\") SELECT ") && s.ends_with(", \"row_version\" FROM \"order\";")),
+        "{:#?}",
+        sqlite[1]
+    );
+}
+
 /// The steps of the scenario above per database, kept in
 /// conformance/migrations.json for the C# runtime's server tests, so both
 /// runtimes run the same SQL. `CLARITY_WRITE_CONFORMANCE=1` writes the file
@@ -419,7 +446,7 @@ fn the_shared_migration_steps_are_current() {
         databases.insert(name.to_string(), serde_json::json!(steps(kind)));
     }
     let cases = serde_json::json!({
-        "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. The Rust runtime runs them from the generator; the C# and Go runtimes' tests read them here (Clarity.Runtime.Tests/ServerTests.cs, runtimes/go/clarity/server_test.go).",
+        "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. Order has its version column (row_version) from its first step, Customer gets it at the end of the second. The Rust runtime runs them from the generator; the C# and Go runtimes' tests read them here (Clarity.Runtime.Tests/ServerTests.cs, runtimes/go/clarity/server_test.go).",
         "steps": databases,
     });
     let text = serde_json::to_string_pretty(&cases).unwrap() + "\n";

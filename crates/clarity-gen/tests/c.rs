@@ -125,7 +125,7 @@ fn enums_and_entities_become_c_types() {
     let records = file(&files, "src/records.h");
     has(records, "typedef enum { ORDER_STATUS_PENDING, ORDER_STATUS_APPROVED } OrderStatus;");
     has(records, "typedef struct {\n    Order* items;\n    size_t count;\n} OrderList;");
-    has(records, "struct Customer {\n    int64_t id;\n    const char* name;\n    ClarityDecimal creditLimit;\n    bool active;\n    ClarityDate since;\n};");
+    has(records, "struct Customer {\n    int64_t id;\n    const char* name;\n    ClarityDecimal creditLimit;\n    bool active;\n    ClarityDate since;\n    int64_t row_version;\n};");
     has(records, "bool order_save(ClarityDb* db, Order* record);");
     has(records, "bool order_find(ClarityDb* db, const ClarityQuery* query, OrderList* out);");
     let source = file(&files, "src/records.c");

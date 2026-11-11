@@ -3,6 +3,7 @@ import type { Diagnostic } from "./Diagnostic";
 import type { DiagramFile } from "./DiagramFile";
 import type { Locale } from "./Locale";
 import type { Resources } from "./Resources";
+import type { Signin } from "./Signin";
 import type { SpecFile } from "./SpecFile";
 
 /**
@@ -42,6 +43,11 @@ resource_keys: { [key in string]: { [key in string]: string } },
  * as the project file says (`keys editable`, DESIGN 5.28).
  */
 keysEditable: boolean, 
+/**
+ * Who is using the program, as the project file says (`signin Member
+ * ...`, docs/APP-CAPABILITIES-PLAN.md step 4); none without the block.
+ */
+signin: Signin | null, 
 /**
  * How high a row of the windows' grid is, in pixels, as the project
  * file says (`row height 30`); `layout::ROW_HEIGHT` without the line.

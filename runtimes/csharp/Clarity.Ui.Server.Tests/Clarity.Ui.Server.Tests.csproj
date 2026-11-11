@@ -17,6 +17,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui.Server/Clarity.Ui.Server.csproj" />
+    <!-- A served program whose people sign in (WebServerSigninTests): its session cookie. -->
+    <ProjectReference Include="../Clarity.Auth/Clarity.Auth.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- What a generated application carries: the windows' markup, a theme,

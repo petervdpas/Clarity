@@ -242,9 +242,16 @@ func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.R
 // person's settings as the page keeps them and the language its
 // set_language chose. A command asked with one in its context runs in that
 // language, and a window it opens starts from those settings.
+//
+// Signing in (docs/APP-CAPABILITIES-PLAN.md, step 4): Session is the token
+// of the request's clarity_session cookie and Address where it came from;
+// SetCookie is what the command sets of that cookie, for the server to send.
 type Page struct {
-	Settings map[string]any
-	Language *string
+	Settings  map[string]any
+	Language  *string
+	Session   string
+	Address   string
+	SetCookie string
 }
 
 type pageKey struct{}
@@ -410,6 +417,9 @@ type Args struct {
 	Units *[2]int `json:"units"`
 	Grid  int     `json:"grid"`
 	Snap  bool    `json:"snap"`
+	// Signing in (signin): the strategy and its inputs by name (name, password, token).
+	Strategy string            `json:"strategy"`
+	Inputs   map[string]string `json:"inputs"`
 }
 
 // watched are the commands that run a handler, which may make a long engine call.
@@ -451,6 +461,56 @@ func (c *Service) invoke(ctx context.Context, command string, a Args) (answer An
 	if page := pageOf(ctx); page != nil {
 		clarity.SetLanguage(page.Language)
 	}
+	// Served, the command runs as the person of its session (Db.Served).
+	if page := pageOf(ctx); page != nil {
+		page.SetCookie = c.options.Db.Served(page.Session, page.Address, func(me int64) bool {
+			if signin := c.options.Db.SigninPage(); signin != "" && me == 0 && !openWithoutSession(command, a, signin) {
+				answer = failed(clarity.NotAllowed())
+			} else {
+				answer = c.watchedAnswer(ctx, command, a)
+			}
+			return answer.Error == nil
+		})
+		return answer
+	}
+	return c.watchedAnswer(ctx, command, a)
+}
+
+// signedInOrOpen is whether a call answered beside the service may run:
+// off the web always; served, when people do not sign in on the web or the
+// call's session names someone.
+func (c *Service) signedInOrOpen(ctx context.Context) bool {
+	page := pageOf(ctx)
+	if page == nil {
+		return true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.options.Db.SigninPage() == "" {
+		return true
+	}
+	signedIn := false
+	c.options.Db.Served(page.Session, page.Address, func(me int64) bool { signedIn = me != 0; return true })
+	return signedIn
+}
+
+// openWithoutSession is whether a served call without a session may run
+// while people sign in on the web: the program's start, its settings,
+// signing in and out, and the sign-in window itself (fail safe: the rest is
+// refused with notAllowed, whatever a browser sends).
+func openWithoutSession(command string, a Args, page string) bool {
+	switch command {
+	case "start", "read_settings", "set_language", "signin", "signout":
+		return true
+	case "open_window":
+		return a.Window == page
+	}
+	return a.State.Window == page
+}
+
+// watchedAnswer answers command, holding mu; a handler's engine calls say
+// how far they are on a desktop that shows it.
+func (c *Service) watchedAnswer(ctx context.Context, command string, a Args) (answer Answer) {
 	screen, shows := c.desktop.(Screen)
 	if !watched[command] || !shows {
 		return c.answer(ctx, command, a)
@@ -525,8 +585,17 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		if u := c.options.Unconnected; u != nil {
 			c.toScreen.Store(true)
 			start["unconnected"] = map[string]any{"handler": orNull(u.Handler), "window": orNull(u.Window), "problem": u.Problem}
+		} else if page := db.SigninFirst(); page != "" {
+			// Sign-in comes first (step 4): the window of the kind signin.
+			start["signin"] = page
 		}
 		return Answer{Value: start}
+	case "signin":
+		// The person signs in with a strategy and its inputs: the record signed in, or Clarity's refusal.
+		return answer(db.Signin(a.Strategy, a.Inputs))
+	case "signout":
+		db.Signout()
+		return Answer{}
 	case "connect":
 		// The databases again, as when the person has kept their connection.
 		if c.options.Connect == nil {
@@ -644,19 +713,10 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 	case "undo_edit":
 		// Ctrl+Z (Back) or Ctrl+Y on a scope: its last edit taken back or done
 		// again, with its database steps, and the window as it was.
+		// All of the edit's steps, or none of them.
 		data, found, err := clarity.EditsOf(a.State.Instance).Undo(a.Scope, clarity.EditData(a.State), a.Back, func(steps []int64, back bool) error {
-			for _, step := range steps {
-				var err error
-				if back {
-					_, err = db.Undo(step)
-				} else {
-					_, err = db.Redo(step)
-				}
-				if err != nil {
-					return err
-				}
-			}
-			return nil
+			_, err := db.ReplaySteps(steps, back)
+			return err
 		})
 		if err != nil {
 			return failed(err)

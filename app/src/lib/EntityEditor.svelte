@@ -109,6 +109,7 @@
       cascade: false,
       computed: false,
       search: false,
+      hashed: false,
       min: null,
       max: null,
       pattern: null,
@@ -146,6 +147,7 @@
           <th title="A value is required">Req.</th>
           <th title="No two records have the same value">Unique</th>
           <th title="In the full-text index that 'where a matches x' looks in: text and lists of text">Search</th>
+          <th title="Kept as a hash: code assigns text to it and never reads it back, as a sign-in strategy's secret is">Hashed</th>
           <th>Label</th>
           <th>Default</th>
           {#if hasFormat}<th title="How values are shown, in every locale">Format</th>{/if}
@@ -177,6 +179,11 @@
             <td class="center">
               {#if searchable(field.type) || m.search}
                 <input type="checkbox" checked={m.search} onchange={(e) => update(field, { modifiers: { search: e.currentTarget.checked } })} />
+              {/if}
+            </td>
+            <td class="center">
+              {#if field.typeText.startsWith("text") || m.hashed}
+                <input type="checkbox" checked={m.hashed} onchange={(e) => update(field, { modifiers: { hashed: e.currentTarget.checked } })} />
               {/if}
             </td>
             <td><TextField {preview} {onapplied} text={m.label} placeholder={tr(preview, field.label)} onwrite={(text) => update(field, { modifiers: { label: text } })} /></td>
@@ -219,6 +226,10 @@
       </tbody>
     </table>
   </div>
+  {#if entity.keptVersion}
+    <!-- The version is Clarity's, never a field (docs/APP-CAPABILITIES-PLAN.md step 5). -->
+    <p class="muted">Clarity keeps a version of each record in <code>{entity.keptVersion}</code>: a save of a record someone else saved since it was read is refused, and <code>save ... anyway</code> writes regardless.</p>
+  {/if}
 
   <form class="add" onsubmit={addField}>
     <input class="mono" bind:value={newName} placeholder="newField" spellcheck="false" />

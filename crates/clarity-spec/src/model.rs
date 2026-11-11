@@ -93,6 +93,40 @@ pub struct Entity {
     /// table, never stored; kept in the module's `records`, not its entities.
     #[serde(default)]
     pub record: bool,
+    /// The entity of people the project file's `signin` names
+    /// (docs/APP-CAPABILITIES-PLAN.md step 4): `me` is one of its records.
+    #[serde(default)]
+    pub people: bool,
+    /// `readable when <condition>`: who may read one of its records, the
+    /// record named as in its data events (`member`), beside `me`; checked on
+    /// every find, a refusal rather than a filter. None without the line.
+    pub readable: Option<crate::code::Expr>,
+    /// `writable when <condition>`: who may save or delete one of its records.
+    pub writable: Option<crate::code::Expr>,
+    /// `version "RowVersion"`: the column of an external database's table
+    /// that holds each record's version (docs/APP-CAPABILITIES-PLAN.md step
+    /// 5). An owned entity has none written: Clarity keeps `row_version`
+    /// itself; `Project::version_column` gives the column either way.
+    pub version: Option<String>,
+    /// `version none`: an external entity whose saves are not checked, said
+    /// on purpose.
+    #[serde(rename = "versionNone", default)]
+    #[ts(rename = "versionNone")]
+    pub version_none: bool,
+    /// `savedSince @customerChangedSince`: the key of the text a refused save
+    /// shows, without the `@`; its slots are the record as stored now
+    /// (`{current.name}`, `{current.changedBy.name}`). None for Clarity's
+    /// own `savedSince`.
+    #[serde(rename = "savedSince")]
+    #[ts(rename = "savedSince")]
+    pub saved_since: Option<String>,
+    /// The column the runtime keeps each record's version in, once the
+    /// project's steps or `version "Col"` give one (docs/APP-CAPABILITIES-PLAN.md
+    /// step 5); none while saves of it are not checked. Set after loading, for
+    /// the IDE to show: the version is Clarity's, never a field.
+    #[serde(rename = "keptVersion", default)]
+    #[ts(rename = "keptVersion")]
+    pub kept_version: Option<String>,
     pub span: Span,
 }
 
@@ -453,6 +487,11 @@ pub struct Modifiers {
     /// `store photos`: an image field keeps its pictures as files in this
     /// file store of the project settings, not in the database.
     pub store: Option<String>,
+    /// `hashed`, on a text field of a stored entity: assigning text stores
+    /// its hash (the hash of the sign-in strategy that names the field,
+    /// `Signin::hash_of`); code never reads it and no part shows it.
+    #[serde(default)]
+    pub hashed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -478,6 +517,8 @@ pub enum PageKind {
     Splash,
     /// A toolbox (docs/IMAGE-PLAN.md): designed as a view, its parts the tools a canvas that names it shows (`toolbox Painting`).
     Toolbox,
+    /// The sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4): the program shows it before the main window when people sign in.
+    Signin,
 }
 
 impl PageKind {
@@ -489,6 +530,7 @@ impl PageKind {
             PageKind::View => "view",
             PageKind::Splash => "splash",
             PageKind::Toolbox => "toolbox",
+            PageKind::Signin => "signin",
         }
     }
 }
@@ -530,6 +572,13 @@ pub struct Page {
     /// it on the slide-out or section that shows it (`on saved: handler`).
     #[serde(default)]
     pub tells: Vec<crate::code::PartMessage>,
+    /// `allow="me.role == Admin"`: who may open it, as written; none for everyone.
+    pub allow: Option<String>,
+    /// The `allow` condition, read where it is written; the checker types it
+    /// in the code's types of the page's file, by its spans.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub allow_condition: Option<crate::code::Expr>,
     pub span: Span,
 }
 
@@ -1430,6 +1479,14 @@ pub struct CommandProps {
     pub open_with: Vec<String>,
     /// Handler in the code behind that runs on click.
     pub handler: Option<String>,
+    /// `allow="me.role == Admin"`: who may pick it, as written; none for everyone.
+    #[serde(default)]
+    pub allow: Option<String>,
+    /// The `allow` condition, read where it is written; the checker types it
+    /// in the code's types of the page's file, by its spans.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub allow_condition: Option<crate::code::Expr>,
 }
 
 /// All spec files of a project plus every diagnostic from lexing, parsing
@@ -1474,6 +1531,10 @@ pub struct Project {
     #[serde(rename = "keysEditable")]
     #[ts(rename = "keysEditable")]
     pub keys_editable: bool,
+    /// Who is using the program, as the project file says (`signin Member
+    /// ...`, docs/APP-CAPABILITIES-PLAN.md step 4); none without the block.
+    #[serde(default)]
+    pub signin: Option<crate::signin::Signin>,
     /// How high a row of the windows' grid is, in pixels, as the project
     /// file says (`row height 30`); `layout::ROW_HEIGHT` without the line.
     #[serde(rename = "rowHeight")]
@@ -1675,6 +1736,15 @@ impl Project {
 
     pub fn entity(&self, name: &str) -> Option<&Entity> {
         self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
+    }
+
+    /// The column that holds the version of each record of entity `name`,
+    /// which a save and a delete check (docs/APP-CAPABILITIES-PLAN.md step 5):
+    /// `row_version` in a database Clarity owns once its steps add it, the
+    /// `version "Column"` of an external one; none where saves are not
+    /// checked (no step yet, `version none`, a file, a web API, a record).
+    pub fn version_column(&self, name: &str) -> Option<String> {
+        crate::versions::version_column(self, name)
     }
 
     /// The records of every module (DESIGN 5.12): values with fields, never stored.

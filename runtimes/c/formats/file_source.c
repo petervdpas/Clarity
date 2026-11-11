@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "clarity/db_internal.h"
 #include "clarity/disk.h"
@@ -41,7 +42,38 @@ typedef struct {
     size_t original_size;
     bool readonly;
     bool dirty;
+    /// The file's size and modification time when it was last read or
+    /// written: a change by another program refuses the next save.
+    long long seen_size;
+    long long seen_time;
+    bool seen;
 } FileDriver;
+
+/* The file's size and modification time; false when it is not there. */
+static bool stamp(const char* path, long long* size, long long* time) {
+    struct stat info;
+    if (stat(path, &info) != 0) return false;
+    *size = (long long)info.st_size;
+    *time = (long long)info.st_mtime;
+    return true;
+}
+
+static void note_stamp(FileDriver* f) { f->seen = stamp(f->path, &f->seen_size, &f->seen_time); }
+
+/* Refuses a change when another program changed the file since it was read
+   or written: its size or modification time differ, and so do its bytes. */
+static bool unchanged_on_disk(FileDriver* f) {
+    if (f->readonly) return true;
+    long long size = 0, time = 0;
+    bool there = stamp(f->path, &size, &time);
+    if (there == f->seen && (!there || (size == f->seen_size && time == f->seen_time))) return true;
+    ClarityBytes bytes = {0};
+    if (there && !clarity_read_file(f->path, &bytes)) return clarity_refuse(clarity_saved_since());
+    if (bytes.size != f->original_size || (bytes.size && memcmp(bytes.data, f->original, bytes.size) != 0)) return clarity_refuse(clarity_saved_since());
+    // The same bytes written again: no change.
+    note_stamp(f);
+    return true;
+}
 
 /* The keys of a table's rows, in their order (ascending: the key is the rowid). */
 typedef struct {
@@ -255,12 +287,14 @@ static bool keep(FileDriver* f) {
     free(f->original);
     f->original = kept;
     f->original_size = bytes.size;
+    note_stamp(f);
     return true;
 }
 
 static bool execute(ClarityDriver* driver, const char* sql, const ClarityValues* params, int64_t* changed) {
     FileDriver* f = file_of(driver);
     int64_t count = 0;
+    if (!unchanged_on_disk(f)) return false;
     if (!f->db->execute(f->db, sql, params, &count)) return false;
     if (changed) *changed = count;
     f->dirty = f->dirty || count > 0;
@@ -269,6 +303,7 @@ static bool execute(ClarityDriver* driver, const char* sql, const ClarityValues*
 
 static bool insert(ClarityDriver* driver, const char* sql, const ClarityValues* params, int64_t* key) {
     FileDriver* f = file_of(driver);
+    if (!unchanged_on_disk(f)) return false;
     if (!f->db->insert(f->db, sql, params, key)) return false;
     f->dirty = true;
     return keep(f);
@@ -279,9 +314,17 @@ static bool rows(ClarityDriver* driver, const char* sql, const ClarityValues* pa
     return f->db->rows(f->db, sql, params, out);
 }
 
-/* A transaction's end keeps what it changed. */
+/* A transaction's end keeps what it changed; a file another program
+   changed meanwhile rolls it back instead. */
 static bool batch(ClarityDriver* driver, const char* sql) {
     FileDriver* f = file_of(driver);
+    if (f->dirty && strcmp(sql, clarity_commit_sql(CLARITY_SQLITE)) == 0 && !unchanged_on_disk(f)) {
+        ClarityError refused = *clarity_error();
+        f->db->batch(f->db, clarity_rollback_sql(CLARITY_SQLITE));
+        f->dirty = false;
+        clarity_set_error(&refused);
+        return false;
+    }
     return f->db->batch(f->db, sql) && keep(f);
 }
 
@@ -439,6 +482,7 @@ static bool open_file(const ClarityFileSource* source, const char* path, Clarity
     f->original = malloc(original.size ? original.size : 1);
     if (f->original && original.size) memcpy(f->original, original.data, original.size);
     f->original_size = original.size;
+    if (f->path) note_stamp(f);
     if (!f->path || !f->format || !f->options || !f->fields || !f->original) {
         close_driver(&f->driver);
         return clarity_fail(CLARITY_STORAGE, "out of memory");

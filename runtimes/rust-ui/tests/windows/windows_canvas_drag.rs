@@ -131,7 +131,7 @@ fn draw(state: &mut WindowState) {
 
 impl Program for Board {
     fn started(&self) -> Started {
-        Started { main: "Main".into(), unconnected: None }
+        Started { main: "Main".into(), unconnected: None, signin: None }
     }
     fn start_app(&self) -> Answer<Reply> {
         Ok(reply(WindowState::new("", Map::new())))

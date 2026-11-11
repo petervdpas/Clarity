@@ -187,9 +187,11 @@ const STEPS: [(&str, &str); 2] = [
         "0001.clarity",
         "migration \"First\"
     add entity Customer
+        version
         name: text(80)
         limit: money, default 100
     add entity Order
+        version
         number: text(12)
         status: OrderStatus
         customer: ref Customer

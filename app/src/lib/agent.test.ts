@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { addUsage, agentConnections, outsideAgents, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
+import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
 
 test("text pieces join the answer, and tools show with their results", () => {
@@ -72,15 +72,14 @@ test("the agent picks from connections that name a model kind, anthropic first",
   assert.deepEqual(agentConnections([]), []);
 });
 
-test("connections of kind codex or copilot are outside agents, signed in their own way", () => {
+test("connections of kind codex or copilot are in the picker", () => {
   const rows = [
     { name: "anthropic", fields: [["apikey", { mode: "vault", category: "AI", key: "anthropic" }]] },
     { name: "codex", fields: [["kind", { mode: "plain", value: "Codex" }]] },
     { name: "work", fields: [["kind", { mode: "plain", value: " copilot " }], ["command", { mode: "plain", value: "/opt/copilot" }]] },
     { name: "secret", fields: [["kind", { mode: "vault", category: "AI", key: "kind" }]] },
   ] as ConnectionRow[];
-  assert.deepEqual(outsideAgents(rows), ["codex", "work"]);
-  assert.deepEqual(agentConnections(rows), ["anthropic", "codex", "work", "secret"], "they are in the picker too");
+  assert.deepEqual(agentConnections(rows), ["anthropic", "codex", "work", "secret"]);
 });
 
 test("reading the design document shows which part", () => {

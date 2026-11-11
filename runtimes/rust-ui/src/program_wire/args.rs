@@ -182,7 +182,8 @@ pub fn step(at: &WindowState, step: &StepPress) -> Map<String, Value> {
     }))
 }
 
-/// What `started` answers: the main window, and what to show when the databases did not open.
+/// What `started` answers: the main window, what to show when the databases
+/// did not open, and the sign-in window when people sign in first.
 pub fn started(value: &Value) -> Started {
     let main = value.get("main").and_then(Value::as_str).unwrap_or("Main").to_string();
     let unconnected = value.get("unconnected").filter(|u| u.is_object()).map(|u| Unconnected {
@@ -190,7 +191,8 @@ pub fn started(value: &Value) -> Started {
         window: u.get("window").and_then(Value::as_str).map(str::to_string),
         problem: u.get("problem").cloned().and_then(|p| serde_json::from_value::<Text>(p).ok()).unwrap_or_default(),
     });
-    Started { main, unconnected }
+    let signin = value.get("signin").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
+    Started { main, unconnected, signin }
 }
 
 /// An engine's input as JSON: `{"pointer":{kind,x,y}}`, `{"key":{kind,name}}`, `{"hear":{name,values}}`.

@@ -412,6 +412,9 @@ fn check_command(env: &Env, command: &CommandDecl, out: &mut Output) {
     for (option, ty) in command.options.iter().zip(options) {
         scope_of.insert(option.name.name.clone(), ty);
     }
+    if let Some(allow) = &command.allow {
+        checker.access("allow", allow);
+    }
     checker.block(&command.body);
 }
 
@@ -571,6 +574,8 @@ pub enum NameKind {
     Kept,
     /// A constant: `const lives = 3` (DESIGN 5.12).
     Const,
+    /// `me`, the record of who signed in (docs/APP-CAPABILITIES-PLAN.md step 4).
+    Me,
 }
 
 /// Types and names of one file, keyed by the span (start, end) of each
@@ -621,6 +626,8 @@ struct Env<'a> {
     earlier_functions: Vec<&'a FunctionDecl>,
     /// Whether an app shows a splash screen, whose status code can set.
     splash: bool,
+    /// The entity of people the project file's `signin` names: `me` is one of its records.
+    people: Option<&'a Entity>,
 }
 
 impl<'a> Env<'a> {
@@ -645,6 +652,7 @@ impl<'a> Env<'a> {
             settings: files.iter().flat_map(|f| &f.entities).find(|e| e.settings),
             earlier_functions,
             splash: files.iter().flat_map(|f| &f.apps).any(|a| a.splash.is_some()),
+            people: files.iter().flat_map(|f| &f.entities).find(|e| e.people),
         }
     }
 
@@ -1272,8 +1280,93 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
     owners
 }
 
+/// Every command of a frame and of the parts' menus, submenus within.
+pub fn all_commands<'f>(frame: &'f Frame, widgets: &'f [Widget]) -> Vec<&'f Command> {
+    fn add<'f>(commands: &'f [Command], out: &mut Vec<&'f Command>) {
+        for command in commands {
+            out.push(command);
+            add(&command.items, out);
+        }
+    }
+    fn in_widgets<'f>(widgets: &'f [Widget], out: &mut Vec<&'f Command>) {
+        for w in widgets {
+            if let Some(menu) = &w.menu {
+                add(&menu.items, out);
+            }
+            in_widgets(&w.children, out);
+            for page in &w.pages {
+                in_widgets(&page.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(menu) = &frame.menu {
+        add(&menu.items, &mut out);
+    }
+    if let Some(toolbar) = &frame.toolbar {
+        add(&toolbar.items, &mut out);
+    }
+    for group in frame.ribbon.iter().flat_map(|r| &r.tabs).flat_map(|t| &t.groups) {
+        add(&group.items, &mut out);
+    }
+    in_widgets(widgets, &mut out);
+    for sidebar in &frame.sidebars {
+        in_widgets(&sidebar.widgets, &mut out);
+    }
+    out
+}
+
+/// A condition of who may (docs/APP-CAPABILITIES-PLAN.md step 4), outside
+/// any body: `scope` holds what it names beside `me`.
+fn check_access<'a>(env: &Env<'a>, word: &str, condition: &Expr, scope: HashMap<String, Ty<'a>>, out: &mut Output) {
+    let mut checker = BodyChecker {
+        env,
+        owner: None,
+        handlers: &[],
+        decl: None,
+        handler: None,
+        event: None,
+        returns: None,
+        scopes: vec![scope],
+        saves_reported: false,
+        engine: None,
+        command: None,
+        out,
+    };
+    checker.access(word, condition);
+}
+
+/// An entity's `readable when` and `writable when`, with its record named
+/// as in its data events; a page's `allow` and its commands', which are
+/// decided before the window's data is there: they read `me`.
+fn check_accesses(env: &Env, file: &SpecFile, out: &mut Output) {
+    for entity in file.entities.iter().filter(|e| !e.record && !e.settings) {
+        let Some(found) = env.entity(&entity.name.name) else { continue };
+        for (word, condition) in [("readable", &entity.readable), ("writable", &entity.writable)] {
+            if let Some(condition) = condition {
+                let scope = HashMap::from([(super::record_name(&entity.name.name), Ty::Record(found))]);
+                check_access(env, word, condition, scope, out);
+            }
+        }
+    }
+    let frames = file.pages.iter().map(|p| (&p.frame, p.widgets.as_slice())).chain(file.apps.iter().map(|a| (&a.frame, &[][..])));
+    for page in &file.pages {
+        if let Some(condition) = &page.allow_condition {
+            check_access(env, "allow", condition, HashMap::new(), out);
+        }
+    }
+    for (frame, widgets) in frames {
+        for command in all_commands(frame, widgets) {
+            if let Some(condition) = &command.props.allow_condition {
+                check_access(env, "allow", condition, HashMap::new(), out);
+            }
+        }
+    }
+}
+
 fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_consts(env, &file.consts, None, out);
+    check_accesses(env, file, out);
     check_functions(env, file, out);
     for command in &file.commands {
         check_command(env, command, out);
@@ -1908,6 +2001,12 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
     for condition in &decl.requires {
         checker.condition(condition);
     }
+    if let Some(allow) = &decl.allow {
+        if decl.kind != FunctionKind::Action {
+            checker.error(format!("only an action has 'allow when', not {name}"), allow.span);
+        }
+        checker.access("allow", allow);
+    }
     if let Some(result) = returns {
         checker.scopes.push(HashMap::from([("result".to_string(), result)]));
         for condition in &decl.ensures {
@@ -2054,6 +2153,20 @@ pub fn text_function(name: &str) -> Option<(&'static [BuiltInValue], BuiltInValu
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
 pub const TODAY: &str = "today";
+
+/// `newToken()`: a new random token as text (docs/APP-CAPABILITIES-PLAN.md
+/// step 4), which code gives a person and keeps in a hashed field.
+pub const NEW_TOKEN: &str = "newToken";
+
+/// `newRecoveryCodes(count)`: that many new recovery codes as lines of
+/// text, shown to the person once and kept in a hashed field as their digests.
+pub const NEW_RECOVERY_CODES: &str = "newRecoveryCodes";
+
+/// `me`: the record of who signed in.
+pub const ME: &str = "me";
+
+/// What `me` says without `signin` in the project file.
+pub const ME_NEEDS_SIGNIN: &str = "me is who signed in: write signin and the entity of people in the project file, like: signin Member";
 pub const NOW: &str = "now";
 
 /// The built-in `round(value, places)`: a decimal or money with at most
@@ -2653,6 +2766,37 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+    /// The entity of people, for `me`: there is one when the project file
+    /// has `signin`; a function and an engine are called with values only.
+    fn me(&mut self, span: Span) -> Option<&'a Entity> {
+        if let Some(engine) = self.engine {
+            self.error(format!("engine {} runs without a person; pass what it needs from me as values", engine.name.name), span);
+            return None;
+        }
+        if self.decl.is_some_and(|d| d.kind == FunctionKind::Function) {
+            self.error("'me' is not allowed in a function; make it an action", span);
+            return None;
+        }
+        if self.env.people.is_none() {
+            self.error(ME_NEEDS_SIGNIN, span);
+        }
+        self.env.people
+    }
+
+    /// An `allow when`, `readable when` or `writable when`: a bool, about
+    /// who signed in, so the project file has `signin`.
+    fn access(&mut self, word: &str, condition: &Expr) {
+        if self.env.people.is_none() {
+            let before = self.out.len();
+            self.condition(condition);
+            // Its `me` says the same; once is enough.
+            self.out.truncate(before);
+            self.error(format!("'{word} when' says who may: write signin and the entity of people in the project file, like: signin Member"), condition.span);
+            return;
+        }
+        self.condition(condition);
+    }
+
     /// `require`, `ensure` and `if` conditions must be bool.
     fn condition(&mut self, condition: &Expr) {
         let ty = self.expr(condition, Some(Ty::Bool));
@@ -2751,6 +2895,17 @@ impl<'a> BodyChecker<'_, 'a> {
             StmtKind::Close => self.ui_only("close", stmt.span),
             StmtKind::CloseWith { value } => self.check_close_with(stmt.span, value),
             StmtKind::Reload { data } => {
+                // A record variable is read again as it is stored now.
+                if self.engine.is_none()
+                    && let Some(ty) = self.local(&data.name)
+                {
+                    self.reload_record(data, ty);
+                    return;
+                }
+                if self.engine.is_none() && (self.decl.is_some() || self.command.is_some()) {
+                    self.error(format!("unknown name '{}': outside a window's handlers, reload reads a record variable again", data.name), data.span);
+                    return;
+                }
                 self.ui_only("reload", stmt.span);
                 match self.data(&data.name) {
                     None if self.decl.is_none() && self.command.is_none() => {
@@ -2819,7 +2974,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     }
                 }
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } => {
+            StmtKind::Save { value, .. } | StmtKind::Delete { value } => {
                 let word = if matches!(stmt.kind, StmtKind::Save { .. }) { "save" } else { "delete" };
                 self.check_write(word, stmt.span);
                 let ty = self.expr(value, None);
@@ -2839,6 +2994,18 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("'refuse' needs text or a value, not {}", ty.name()), text.span);
                 }
             }
+        }
+    }
+
+    /// `reload customer` of a local or a parameter: a record of a stored
+    /// entity, read again as it is stored now.
+    fn reload_record(&mut self, data: &Ident, ty: Ty<'a>) {
+        match ty {
+            Ty::Record(entity) if entity.record => {
+                self.error(format!("{} is a record, which is never stored, so 'reload' has nothing to read", entity.name.name), data.span);
+            }
+            Ty::Record(_) | Ty::Unknown => {}
+            other => self.error(format!("'reload' reads a record again, and {} is {}", data.name, other.name()), data.span),
         }
     }
 
@@ -3460,6 +3627,11 @@ impl<'a> BodyChecker<'_, 'a> {
                     let kept = self.engine.is_some() && self.decl.is_some() && self.scopes.iter().rposition(|s| s.contains_key(name)) == Some(0);
                     self.name_is(expr, if kept { NameKind::Kept } else { NameKind::Local });
                     return Some(Place::Value { ty, writable: Ok(()) });
+                }
+                if name == ME {
+                    let people = self.me(expr.span)?;
+                    self.name_is(expr, NameKind::Me);
+                    return Some(Place::Value { ty: Ty::Record(people), writable: Err("me is the person signed in and cannot be set".to_string()) });
                 }
                 // A command has the settings as data of its own, as every window does.
                 if self.command.is_some()
@@ -4087,6 +4259,8 @@ impl<'a> BodyChecker<'_, 'a> {
         };
         // Only functions and actions take values by name.
         let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str())
+            || (function.name == NEW_TOKEN && self.env.function(NEW_TOKEN).is_none())
+            || (function.name == NEW_RECOVERY_CODES && self.env.function(NEW_RECOVERY_CODES).is_none())
             || (function.name == RANDOM && self.env.function(RANDOM).is_none())
             || (built_in_function(&function.name).is_some() && self.env.function(&function.name).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
@@ -4193,6 +4367,32 @@ impl<'a> BodyChecker<'_, 'a> {
                     Ty::Decimal
                 }
             });
+        }
+        if function.name == NEW_TOKEN && self.env.function(NEW_TOKEN).is_none() {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            if !args.is_empty() {
+                self.error(format!("'{NEW_TOKEN}' takes no arguments"), expr.span);
+            }
+            return Some(Ty::Text);
+        }
+        if function.name == NEW_RECOVERY_CODES && self.env.function(NEW_RECOVERY_CODES).is_none() {
+            match args.as_slice() {
+                [count] => {
+                    let given = self.expr(count, Some(Ty::Integer));
+                    if !matches!(given, Ty::Integer | Ty::Unknown) {
+                        self.error(format!("'{NEW_RECOVERY_CODES}' takes how many codes, a whole number, not {}", given.name()), count.span);
+                    }
+                }
+                _ => {
+                    for arg in args {
+                        self.expr(arg, None);
+                    }
+                    self.error(format!("'{NEW_RECOVERY_CODES}' takes how many codes: {NEW_RECOVERY_CODES}(10)"), expr.span);
+                }
+            }
+            return Some(Ty::Text);
         }
         if function.name == TODAY || function.name == NOW {
             for arg in args {
@@ -4606,7 +4806,20 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// The value a name or path reads.
     fn value_of(&mut self, expr: &Expr) -> Ty<'a> {
-        match self.place(expr) {
+        let place = self.place(expr);
+        // A hashed field is set, never read (docs/APP-CAPABILITIES-PLAN.md step 4).
+        if matches!(place, Some(Place::Value { .. }))
+            && let Some(field) = self.field_of(expr).filter(|f| f.modifiers.hashed)
+        {
+            let name = &field.name.name;
+            let record = match &expr.kind {
+                ExprKind::Member { object, .. } => super::path_text(object),
+                _ => String::new(),
+            };
+            self.error(format!("{name} is hashed: code sets it ({record}.{name} = typed) and never reads it"), expr.span);
+            return Ty::Unknown;
+        }
+        match place {
             Some(Place::Value { ty, .. }) => ty,
             Some(Place::Part(part, name)) => {
                 self.error(format!("{} '{name}' is a part, not a value", part.keyword()), expr.span);
@@ -5243,7 +5456,7 @@ pub(crate) fn code_stores(project: &crate::model::Project) -> Vec<(String, Ident
 fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
     for stmt in body {
         match &stmt.kind {
-            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } => each_expr(value, found),
+            StmtKind::Let { value, .. } | StmtKind::Save { value, .. } | StmtKind::Delete { value } => each_expr(value, found),
             StmtKind::Assign { target, value } => {
                 each_expr(target, found);
                 each_expr(value, found);
@@ -5404,7 +5617,7 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
 fn writes(body: &[Stmt], found: &mut impl FnMut(&Stmt, &Expr, &str)) {
     for stmt in body {
         match &stmt.kind {
-            StmtKind::Save { value } => found(stmt, value, "saved"),
+            StmtKind::Save { value, .. } => found(stmt, value, "saved"),
             StmtKind::Delete { value } => found(stmt, value, "deleted"),
             StmtKind::If { branches, otherwise } => {
                 for branch in branches {

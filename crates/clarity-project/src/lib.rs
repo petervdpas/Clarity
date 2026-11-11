@@ -8,6 +8,7 @@ pub mod browse;
 pub mod engines;
 mod file;
 mod file_import;
+mod signin_file;
 pub mod folders;
 pub mod mappings;
 pub mod ide;
@@ -257,6 +258,10 @@ pub struct Settings {
     /// themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
     #[serde(default)]
     pub keys_editable: bool,
+    /// Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4):
+    /// `signin Member on desktop web` with its strategies; none without it.
+    #[serde(default)]
+    pub signin: Option<clarity_spec::signin::Signin>,
     /// Whether the engines written in Clarity are run by the interpreter
     /// rather than compiled (DESIGN 5.12): `engines interpreted`.
     #[serde(default)]
@@ -421,6 +426,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         out: DEFAULT_OUT.to_string(),
         keeps: Vec::new(),
         keys_editable: false,
+        signin: None,
         engines_interpreted: false,
         port: None,
         row_height: None,
@@ -733,6 +739,70 @@ pub struct Catalog {
     pub auths: Vec<Choice<AuthKind>>,
     /// The formats a data source can be a file in, with their options.
     pub formats: Vec<FormatChoice>,
+    /// The sign-in strategies of Clarity.Auth's catalog, for the signin block.
+    pub strategies: Vec<StrategyChoice>,
+}
+
+/// A sign-in strategy as Settings offers it under `signin`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StrategyChoice {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub help: &'static str,
+    /// The fields of the entity of people it names, in the order written.
+    pub roles: Vec<RoleChoice>,
+    /// The targets it works on.
+    pub targets: Vec<&'static str>,
+    /// Whether people choose its secret, so it can have a `minimum`.
+    pub minimum: bool,
+}
+
+/// A field a strategy names, by its role.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RoleChoice {
+    pub role: &'static str,
+    pub label: &'static str,
+    /// The field types it may have.
+    pub kinds: Vec<&'static str>,
+    /// Whether the field is kept hashed (it needs the `hashed` modifier).
+    pub hashed: bool,
+}
+
+/// The label and help of each strategy of Clarity.Auth's catalog, by name.
+const STRATEGY_TEXTS: [(&str, &str, &str); 4] = [
+    ("password", "Password", "A name and a password; the password is kept as an Argon2id hash"),
+    ("account", "Computer account", "The user signed in on the computer; on the desktop it signs in by itself when that user has a record"),
+    ("token", "Token", "A long random token Clarity makes, typed or pasted in the sign-in window or given by a program that calls this one; kept as a hash"),
+    ("recovery", "Recovery codes", "One-time codes shown once; each signs in once, for a person who lost their password or second factor"),
+];
+
+/// The label of each role a strategy's field has.
+const ROLE_TEXTS: [(&str, &str); 2] = [("match", "Found by"), ("secret", "Kept hashed in")];
+
+/// The strategies of Clarity.Auth's catalog, for the signin block.
+pub fn strategy_choices() -> Vec<StrategyChoice> {
+    clarity_auth::catalog()
+        .iter()
+        .map(|s| {
+            let (label, help) = STRATEGY_TEXTS.iter().find(|(name, _, _)| *name == s.name).map(|(_, l, h)| (*l, *h)).unwrap_or((s.name, ""));
+            StrategyChoice {
+                name: s.name,
+                label,
+                help,
+                roles: s
+                    .fields
+                    .iter()
+                    .map(|f| RoleChoice { role: f.role, label: ROLE_TEXTS.iter().find(|(r, _)| *r == f.role).map(|(_, l)| *l).unwrap_or(f.role), kinds: f.kinds.to_vec(), hashed: f.hash.is_some() })
+                    .collect(),
+                targets: s.targets.to_vec(),
+                minimum: s.fields.iter().any(|f| f.hash == Some("argon2id")),
+            }
+        })
+        .collect()
 }
 
 /// A format of Clarity's catalog as Settings offers it for a file source.
@@ -864,6 +934,7 @@ pub fn catalog() -> Catalog {
             Choice { id: AuthKind::Basic, label: "User and password" },
         ],
         formats: format_choices(),
+        strategies: strategy_choices(),
     }
 }
 
@@ -884,6 +955,7 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
                 // Its connection, which may name a secret setting (DESIGN 5.27).
                 address: s.url.clone(),
                 mapping: s.file.as_ref().and_then(|f| f.mapping.clone()),
+                file: s.file.is_some(),
                 ..clarity_spec::SourceRef::sql(&s.name)
             },
         })
@@ -895,6 +967,13 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
 pub fn sources_of(dir: &Path) -> Vec<clarity_spec::SourceRef> {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
     load(&file).settings.as_ref().map(source_refs).unwrap_or_default()
+}
+
+/// The `signin` block of the project file next to the modules in `dir`;
+/// none without one or when the file cannot be read.
+pub fn signin_of(dir: &Path) -> Option<clarity_spec::signin::Signin> {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    load(&file).settings.and_then(|s| s.signin)
 }
 
 /// Fails, saying what the folder must be called, when the module folder
@@ -925,7 +1004,7 @@ fn language_of(dir: &Path) -> Option<String> {
 /// the project's data sources and the tables of its external databases.
 pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
     module_folder_there(dir)?;
-    let mut project = clarity_spec::load_dir_for(dir, &[], &sources_of(dir), language_of(dir).as_deref())?;
+    let mut project = clarity_spec::load_dir_signed(dir, &[], &sources_of(dir), language_of(dir).as_deref(), signin_of(dir).as_ref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
@@ -935,14 +1014,14 @@ pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
 /// Like `load_modules_with`, with several files in place of what the folder
 /// holds: a module and the language files an edit writes beside it.
 pub fn load_modules_with_files(dir: &Path, replaced: &[(&Path, &str)]) -> std::io::Result<clarity_spec::Project> {
-    let mut project = clarity_spec::load_dir_for(dir, replaced, &sources_of(dir), language_of(dir).as_deref())?;
+    let mut project = clarity_spec::load_dir_signed(dir, replaced, &sources_of(dir), language_of(dir).as_deref(), signin_of(dir).as_ref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
 }
 
 pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
-    let mut project = clarity_spec::load_dir_for(dir, &[(path, text)], &sources_of(dir), language_of(dir).as_deref())?;
+    let mut project = clarity_spec::load_dir_signed(dir, &[(path, text)], &sources_of(dir), language_of(dir).as_deref(), signin_of(dir).as_ref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
@@ -1016,8 +1095,14 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
         let found = target_problems(settings, project, &file.display().to_string());
         project.diagnostics.extend(found);
     }
+    // A problem with no file of its own is one of the project file (the signin block's).
+    let shown = file.display().to_string();
+    for diagnostic in project.diagnostics.iter_mut().filter(|d| d.path.is_empty()) {
+        diagnostic.path = shown.clone();
+    }
     if let Some(settings) = settings {
         project.keys_editable = settings.keys_editable;
+        project.signin = settings.signin.clone();
         project.icon = settings.icon.clone();
         project.version = settings.version.clone();
         project.row_height = row_height(&settings);

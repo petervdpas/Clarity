@@ -50,6 +50,7 @@ export function appAsPage(app: App): Page {
     frame: app.frame,
     span: app.span,
     handlers: app.handlers,
+    allow: null,
   };
 }
 
@@ -322,7 +323,7 @@ export type PageData = Record<string, { entity: Entity; list: boolean; rows: Row
 export function valueEntry(decl: DataDecl, row: Row): PageData[string] | null {
   const field = valueField(decl);
   if (!field) return null;
-  const entity: Entity = { name: decl.name, fields: [field], table: null, key: null, settings: false, record: false, span: decl.span };
+  const entity: Entity = { name: decl.name, fields: [field], table: null, key: null, settings: false, record: false, people: false, readable: null, writable: null, version: null, versionNone: false, savedSince: null, keptVersion: null, span: decl.span };
   return { entity, list: false, rows: [row], value: true };
 }
 

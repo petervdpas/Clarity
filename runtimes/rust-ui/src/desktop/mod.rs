@@ -177,9 +177,14 @@ pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
     prepare();
     let running = WindowStack::prepare(program, files);
     let started = running.program.started();
-    // The splash screen the app names shows first, unless the databases did not open.
+    // The splash screen the app names shows first, unless the databases did
+    // not open or people sign in first on another window (it comes before
+    // `on start`). A splash that is the sign-in window shows, and stays.
     if let (Some(splash), None) = (files.splash(), &started.unconnected) {
-        return show_splash(running, splash, files);
+        let doubles = started.signin.as_deref() == Some(splash.page.as_str());
+        if started.signin.is_none() || doubles {
+            return show_splash(running, splash, files, doubles);
+        }
     }
     let stack = WindowStack::begin(running, started);
     // Dialogs, the keys window and new windows get desktop windows of their own.
@@ -192,13 +197,13 @@ pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
 }
 
 /// Shows the app's splash screen while its `on start` runs, then its main window (see `splash`).
-fn show_splash(running: Rc<Running>, splash: crate::app_files::Splash, files: AppFiles) -> ExitCode {
+fn show_splash(running: Rc<Running>, splash: crate::app_files::Splash, files: AppFiles, signs_in: bool) -> ExitCode {
     running.set_apart(true);
-    let stack = WindowStack::splash(running.clone(), &splash.page);
+    let stack = if signs_in { WindowStack::splash_signing_in(running.clone(), &splash.page) } else { WindowStack::splash(running.clone(), &splash.page) };
     let (width, height) = grow::open_size(&stack);
     let screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
     let options = ShowOptions::new(files.title).size(width, height).following(move |dark| crate::choices::look(&files, dark)).icon(files.icon());
-    let starting = Starting { running, at_least: splash.at_least, opened: None, asked: false, reply: None, next_status: Instant::now() };
+    let starting = Starting { running, at_least: splash.at_least, opened: None, asked: false, reply: None, next_status: Instant::now(), signs_in };
     show_starting(screen, options, Some(starting))
 }
 
@@ -537,6 +542,8 @@ struct Starting {
     asked: bool,
     reply: Option<clarity_runtime::program::Answer<clarity_runtime::ui::Reply>>,
     next_status: Instant,
+    /// The splash is the sign-in window too: it gets what `on start` answered and stays.
+    signs_in: bool,
 }
 
 /// Every desktop window, and what they share.
@@ -806,6 +813,17 @@ impl Host {
         if crate::splash::closes(answered, now - opened, starting.at_least) {
             let key = self.wins[at].key;
             let Some(starting) = self.starting.take() else { return None };
+            if starting.signs_in {
+                // It keeps the answer until someone signs in on it, then asks for the main window (`Apart::Main`).
+                if let Some(reply) = starting.reply {
+                    let win = &mut self.wins[at];
+                    win.screen.act_root::<WindowStack, _>(move |stack, cx| stack.splash_started(reply, cx));
+                    if let Some(shown) = &win.shown {
+                        shown.window.request_redraw();
+                    }
+                }
+                return None;
+            }
             if let Some(reply) = starting.reply {
                 // The main window is added before the splash goes, so the program never has no window of its own.
                 self.open_main(starting.running, reply);
@@ -1003,6 +1021,12 @@ impl Host {
             if let Some(closed) = closed {
                 self.tell_opener(closed);
             }
+            // The main window a signed-in splash asked for, or the splash a signout shows again, opens
+            // before the window that asked goes, so the program always has a window.
+            let (mains, aparts): (Vec<Apart>, Vec<Apart>) = aparts.into_iter().partition(|a| matches!(a, Apart::Main(_) | Apart::Signin(_)));
+            for main in mains {
+                self.open_apart(main, &running, key);
+            }
             if ended {
                 self.close(key);
                 continue;
@@ -1049,6 +1073,14 @@ impl Host {
                     screen.focus(first);
                 }
                 self.add(screen, title, size, Some(owner), modal);
+            }
+            Apart::Main(reply) => self.open_main(running.clone(), reply),
+            // Borderless at its size, as its markup says, and owned by no window: it stays when the one that asked closes.
+            Apart::Signin(page) => {
+                let stack = WindowStack::splash_again(running.clone(), &page);
+                let title = stack.title();
+                let size = grow::open_size(&stack);
+                self.add(Screen::new(Box::new(stack), look), title, size, None, false);
             }
             Apart::Keys => {
                 if self.wins.iter().any(|w| w.screen.root().as_any().is::<KeysWindow>()) {

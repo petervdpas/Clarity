@@ -34,6 +34,28 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
         .filter(|b| file.entities.iter().any(|e| e.name.name == b.name.name))
         .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
         .collect();
+    // An entity's `readable when` and `writable when` (docs/APP-CAPABILITIES-PLAN.md
+    // step 4): a function each, which a find and a save call.
+    for entity in file.entities.iter().filter(|e| !e.record && !e.settings) {
+        for (word, condition) in [("readable", &entity.readable), ("writable", &entity.writable)] {
+            let Some(condition) = condition else { continue };
+            let mut emitter = Emitter::new(project, types, None, None);
+            let mut body = String::new();
+            let holds = bare(emitter.value(condition, &mut body));
+            body.push_str(&format!("return clarity.Yours({holds})\n"));
+            let name = &entity.name.name;
+            if emitter.errors.is_empty() {
+                out.push_str(&format!(
+                    "// {function} is `{word} when` of {name}: refused with notYours when it does not hold.\nfunc {function}(db *clarity.Db, {record} *{name}) error {{\n{}}}\n\n",
+                    indent(&body, 1),
+                    function = access_function(word, name),
+                    record = local(&clarity_spec::code::record_name(name)),
+                ));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("{word} when of {name}: {e}")));
+            }
+        }
+    }
     for decl in file.functions.iter().chain(&events) {
         let mut emitter = Emitter::new(project, types, Some(decl), None);
         let code = emitter.function();
@@ -59,8 +81,9 @@ pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> R
         let mut params = vec!["db *clarity.Db".to_string(), "cli *clarity.CliSession".to_string(), "w *CommandData".to_string()];
         for (name, ty) in command.params.iter().map(|p| (&p.name, &p.ty)).chain(command.options.iter().map(|o| (&o.name, &o.ty))) {
             params.push(format!("{} {}", local(&name.name), value_type(&type_ref_info(project, ty))));
+            emitter.note_params(std::iter::once((&name.name, ty)));
         }
-        let mut body = String::new();
+        let mut body = command.allow.as_ref().map(|allow| allow_check(&mut emitter, allow)).unwrap_or_default();
         emitter.block(&command.body, &mut body);
         // Go refuses code after a return, so the command's own last return stays the last.
         if !body.trim_end().lines().last().is_some_and(|l| l.starts_with("return ")) {
@@ -82,6 +105,38 @@ pub fn command_function(command: &clarity_spec::code::CommandDecl) -> String {
 }
 
 pub(crate) use crate::type_ref_info;
+
+/// The Go function of an entity's `readable when` or `writable when`: `readableMember`.
+pub(crate) fn access_function(word: &str, entity: &str) -> String {
+    format!("{word}{}", pascal(entity))
+}
+
+/// The lines that refuse a record code is given, `record` (a pointer), when
+/// its entity's `readable when` does not hold; none without one.
+pub(crate) fn readable_check(project: &Project, entity: &str, record: &str, fail: &str) -> String {
+    if project.entity(entity).is_none_or(|e| e.readable.is_none()) {
+        return String::new();
+    }
+    format!("if err := {}(db, {record}); err != nil {{\n\t{fail}\n}}\n", access_function("readable", entity))
+}
+
+/// As `readable_check`, for every record of the list `list`.
+pub(crate) fn readable_list_check(project: &Project, entity: &str, list: &str, fail: &str) -> String {
+    let check = readable_check(project, entity, &format!("&{list}[i]"), fail);
+    if check.is_empty() {
+        return check;
+    }
+    format!("for i := range {list} {{\n{}}}\n", indent(&check, 1))
+}
+
+/// `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): the lines that refuse
+/// with notAllowed when `condition` does not hold.
+fn allow_check(emitter: &mut Emitter, condition: &clarity_spec::code::Expr) -> String {
+    let mut pre = String::new();
+    let holds = bare(emitter.value(condition, &mut pre));
+    pre.push_str(&format!("if err := clarity.Allow({holds}); err != nil {{\n\t{}\n}}\n", emitter.fail("err")));
+    pre
+}
 
 fn is_decimal(ty: &TypeInfo) -> bool {
     matches!(ty, TypeInfo::Decimal | TypeInfo::Money)
@@ -325,6 +380,12 @@ pub struct Owner {
     /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
     /// method, and each value's Go type, a record's by its struct.
     pub answers: Vec<(String, String, Vec<AnswerValue>)>,
+    /// The function of the window's `allow when`, checked before it opens.
+    pub allow: Option<String>,
+    /// The function of the `allow when` of its frame's commands that run each handler.
+    pub handler_allows: Vec<(String, String)>,
+    /// The function of the `allow when` of its frame's commands that open each window.
+    pub open_allows: Vec<(String, String)>,
 }
 
 /// A value an answering handler takes: a record (by its struct) or another value (by its Go type).
@@ -391,7 +452,10 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 }
                 DataKind::List { entity } => {
                     let entity = &entity.name;
-                    let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tw.{field_name} = {local_name}\n");
+                    let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n");
+                    // Every record the window is given is checked against `readable when`.
+                    load.push_str(&indent(&readable_list_check(project, entity, &local_name, "return nil, err"), 1));
+                    let _ = writeln!(load, "\tw.{field_name} = {local_name}");
                 }
                 DataKind::Record { entity } => {
                     let _ = write!(load, "\t{local_name} := New{}()\n\tw.{field_name} = &{local_name}\n", entity.name);
@@ -425,6 +489,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 .map(|p| format!(", {} {}", local(&p.name.name), super::names::value_type(&type_ref_info(project, &p.ty))))
                 .collect();
             let mut emitter = Emitter::new(project, types, None, Some(&ctx));
+            emitter.note_params(handler.params.iter().map(|p| (&p.name.name, &p.ty)));
             let mut code = String::new();
             emitter.block(&handler.body, &mut code);
             if !code.trim_end().ends_with("return nil") {
@@ -456,8 +521,54 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 (h.name.name.clone(), local(&h.name.name), values)
             })
             .collect();
+        // `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): a window's, decided before it opens,
+        // and its frame's commands', checked when the handler runs or the window opens.
+        let mut allows: Vec<(String, Vec<&clarity_spec::code::Expr>)> = Vec::new();
+        let allow = page.and_then(|p| p.allow_condition.as_ref()).map(|condition| {
+            let function = format!("allow{}", pascal(name));
+            allows.push((function.clone(), vec![condition]));
+            function
+        });
+        let (frame, widgets) = match (page, app) {
+            (Some(p), _) => (&p.frame, p.widgets.as_slice()),
+            (None, Some(a)) => (&a.frame, &[][..]),
+            (None, None) => unreachable!("a window or the app"),
+        };
+        let mut handler_allows: Vec<(String, String)> = Vec::new();
+        let mut open_allows: Vec<(String, String)> = Vec::new();
+        for command in clarity_spec::code::check::all_commands(frame, widgets) {
+            let Some(condition) = &command.props.allow_condition else { continue };
+            let (function, kept) = if let Some(handler) = &command.props.handler {
+                (format!("allow{}{}", pascal(name), pascal(handler)), (&mut handler_allows, handler.clone()))
+            } else if let Some(window) = command.props.on_click.as_ref().filter(|w| project.pages().any(|p| p.name.name == **w)) {
+                (format!("allow{}Opens{}", pascal(name), pascal(window)), (&mut open_allows, window.clone()))
+            } else {
+                continue;
+            };
+            let (list, key) = kept;
+            if !list.iter().any(|(k, _)| *k == key) {
+                list.push((key, function.clone()));
+            }
+            match allows.iter_mut().find(|(f, _)| *f == function) {
+                Some((_, conditions)) => conditions.push(condition),
+                None => allows.push((function, vec![condition])),
+            }
+        }
+        for (function, conditions) in &allows {
+            let mut emitter = Emitter::new(project, types, None, None);
+            let mut body = String::new();
+            for condition in conditions {
+                body.push_str(&allow_check(&mut emitter, condition));
+            }
+            body.push_str("return nil\n");
+            if emitter.errors.is_empty() {
+                let _ = write!(out, "// {function} is who may: refused with notAllowed when `allow when` does not hold.\nfunc {function}(db *clarity.Db) error {{\n{}}}\n\n", indent(&body, 1));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("allow when of {name}: {e}")));
+            }
+        }
         owners.push(Owner {
-            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events, draws, answers });
+            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events, draws, answers, allow, handler_allows, open_allows });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
 }
@@ -479,11 +590,32 @@ struct Emitter<'a> {
     /// Whether this is a command of the command-line program (DESIGN 5.20):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
+    /// The entity of each record local and parameter by its name, for
+    /// `reload` of a record, which names it bare.
+    records: HashMap<String, String>,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, command: false }
+        let mut emitter = Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, command: false, records: HashMap::new() };
+        if let Some(decl) = decl {
+            emitter.note_params(decl.params.iter().map(|p| (&p.name.name, &p.ty)));
+        }
+        emitter
+    }
+
+    /// Notes the record parameters among `params`.
+    fn note_params<'p>(&mut self, params: impl Iterator<Item = (&'p String, &'p TypeRef)>) {
+        for (name, ty) in params {
+            self.note_record(name, &type_ref_info(self.project, ty));
+        }
+    }
+
+    /// Notes local `name` when it holds a record.
+    fn note_record(&mut self, name: &str, ty: &TypeInfo) {
+        if let TypeInfo::Record(entity) = ty {
+            self.records.insert(name.to_string(), entity.clone());
+        }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -509,7 +641,7 @@ impl<'a> Emitter<'a> {
         }
         let name = if decl.kind == FunctionKind::Event { local(&decl.name.name) } else { function_name(self.project, &decl.name.name) };
         let ret = self.returns().map(|r| format!("({}, error)", value_type(&r))).unwrap_or_else(|| "error".into());
-        let mut body = String::new();
+        let mut body = decl.allow.as_ref().map(|allow| allow_check(self, allow)).unwrap_or_default();
         for condition in &decl.requires {
             let mut pre = String::new();
             let holds = bare(self.value(condition, &mut pre));
@@ -661,6 +793,8 @@ impl<'a> Emitter<'a> {
         match &stmt.kind {
             StmtKind::Let { name, ty, value } => {
                 let declared = ty.as_ref().map(|t| type_ref_info(self.project, t));
+                let held = declared.clone().unwrap_or_else(|| self.types.type_of(value));
+                self.note_record(&name.name, &held);
                 let target = local(&name.name);
                 let code = match &declared {
                     Some(t) if is_decimal(t) => self.decimal(value, &mut pre),
@@ -812,6 +946,21 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{place} = {copied}\n"));
                     return;
                 }
+                // Text assigned to a hashed field keeps its hash (docs/APP-CAPABILITIES-PLAN.md
+                // step 4), by the field's method, refused when shorter than its minimum.
+                if let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                    && self.project.entity(&owner).and_then(|e| e.field(&member.name)).is_some_and(|f| f.modifiers.hashed)
+                {
+                    let hashing = crate::signin::hashing(self.project, &member.name);
+                    let text = call_arg(self.value(value, &mut pre));
+                    let minimum = hashing.minimum.map(|m| format!(", {m}")).unwrap_or_default();
+                    let kept = self.lift(format!("clarity.Hashed(authCall, {}, {text}{minimum})", string(hashing.method)), &mut pre);
+                    let place = self.place(target, &mut pre);
+                    out.push_str(&pre);
+                    out.push_str(&format!("{place} = {kept}\n"));
+                    return;
+                }
                 let to = self.types.type_of(target);
                 // A list position, counted from 1.
                 if let ExprKind::Index { list, index } = &target.kind {
@@ -860,6 +1009,9 @@ impl<'a> Emitter<'a> {
                 ));
             }
             StmtKind::For { var, list, body } => {
+                if let TypeInfo::List(entity) = self.types.type_of(list) {
+                    self.note_record(&var.name, &TypeInfo::Record(entity));
+                }
                 // Files are worked on as values, records through pointers.
                 let values = matches!(self.types.type_of(list), TypeInfo::Values(_));
                 let by_value = self.types.type_of(list) == TypeInfo::Files;
@@ -917,8 +1069,13 @@ impl<'a> Emitter<'a> {
                 let take = if returns.is_some() { "_, err" } else { "err" };
                 out.push_str(&format!("if {take} := {call_code}; err != nil {{\n\t{}\n}}\n", self.fail("err")));
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } => {
-                let verb = if matches!(stmt.kind, StmtKind::Save { .. }) { "Save" } else { "Delete" };
+            StmtKind::Save { value, .. } | StmtKind::Delete { value } => {
+                // `save ... anyway` writes regardless of the version (docs/APP-CAPABILITIES-PLAN.md step 5).
+                let verb = match stmt.kind {
+                    StmtKind::Save { anyway: true, .. } => "SaveAnyway",
+                    StmtKind::Save { .. } => "Save",
+                    _ => "Delete",
+                };
                 // An item of a list is saved in place: the record in the list, by its position from 1.
                 let record = if let ExprKind::Index { list, index } = &value.kind {
                     let list = self.list_ref(list, &mut pre);
@@ -942,6 +1099,14 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text, &mut pre);
                 out.push_str(&pre);
                 out.push_str(&format!("cli.Message({text})\n"));
+            }
+            // A record local or parameter is read again as it is stored now, in place.
+            StmtKind::Reload { data } if self.records.contains_key(&data.name) => {
+                let entity = self.records[&data.name].clone();
+                let record = local(&data.name);
+                let fail = self.fail("err");
+                out.push_str(&format!("if err := clarity.Reload(db, {record}); err != nil {{\n\t{fail}\n}}\n"));
+                out.push_str(&readable_check(self.project, &entity, &record, &fail));
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
@@ -1053,6 +1218,8 @@ impl<'a> Emitter<'a> {
                 match found {
                     Some((name, entity, true)) => {
                         let all = self.lift(format!("clarity.All[{entity}](db)"), &mut pre);
+                        let fail = self.fail("err");
+                        pre.push_str(&readable_list_check(self.project, &entity, &all, &fail));
                         out.push_str(&pre);
                         out.push_str(&format!("w.{} = {all}\n", pascal(&name)));
                         out.push_str(&self.deselect(&name));
@@ -1061,6 +1228,8 @@ impl<'a> Emitter<'a> {
                         let field_name = format!("w.{}", pascal(&name));
                         let mut inner = String::new();
                         let fresh = self.lift(format!("clarity.Get[{entity}](db, {field_name}.ID)"), &mut inner);
+                        let fail = self.fail("err");
+                        inner.push_str(&readable_check(self.project, &entity, &format!("&{fresh}"), &fail));
                         inner.push_str(&format!("{field_name} = &{fresh}\n"));
                         out.push_str(&format!("if {field_name}.ID != 0 {{\n{}}}\n", indent(&inner, 1)));
                     }
@@ -1313,6 +1482,15 @@ impl<'a> Emitter<'a> {
                 // A command has the settings as data of its own, as a window does.
                 Some(NameKind::Data) if self.window.is_some() || self.command => format!("w.{}", pascal(name)),
                 Some(NameKind::EnumValue(e)) => constant(e, name),
+                // `me`: the record signed in for this call, refused with notAllowed for nobody.
+                Some(NameKind::Me) => {
+                    let TypeInfo::Record(people) = self.types.type_of(expr) else {
+                        self.errors.push("'me' names no entity of people".into());
+                        return String::new();
+                    };
+                    let me = self.lift(format!("clarity.Me[{people}](db)"), pre);
+                    format!("(&{me})")
+                }
                 _ => {
                     self.errors.push(format!("'{name}' is not generated yet for Go"));
                     String::new()
@@ -1347,11 +1525,19 @@ impl<'a> Emitter<'a> {
                     return String::new();
                 };
                 let object = self.place(object, pre);
+                // A field of `me` is read from the record itself.
+                let object = match object.strip_prefix("(&").and_then(|o| o.strip_suffix(')')) {
+                    Some(record) if is_ident(record) => record.to_string(),
+                    _ => object,
+                };
                 match self.field_type(&entity, &member.name) {
                     // Every record has an id.
                     None if member.name == clarity_spec::code::check::RECORD_ID => format!("{object}.ID"),
                     Some(FieldType::Ref { entity: target }) => {
-                        self.lift(format!("clarity.Ref[{}](db, {object}.{})", target.name, field(&member.name)), pre)
+                        let record = self.lift(format!("clarity.Ref[{}](db, {object}.{})", target.name, field(&member.name)), pre);
+                        let fail = self.fail("err");
+                        pre.push_str(&readable_check(self.project, &target.name, &record, &fail));
+                        record
                     }
                     Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
@@ -1555,7 +1741,11 @@ impl<'a> Emitter<'a> {
             ExprKind::Call { function, args, .. } => self.call(&function.name, args, pre),
             ExprKind::Find { entity, filter, order, var } => {
                 let query = self.find(&var.name, &entity.name, filter.as_deref(), order, pre);
-                self.lift(query, pre)
+                let found = self.lift(query, pre);
+                // Each record found is checked against its entity's `readable when`.
+                let fail = self.fail("err");
+                pre.push_str(&readable_list_check(self.project, &entity.name, &found, &fail));
+                found
             }
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order, pre),
             ExprKind::ReadText { file } => {
@@ -1808,6 +1998,16 @@ impl<'a> Emitter<'a> {
             };
             let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };
             return format!("clarity.{function}({value})");
+        }
+        // newToken() and newRecoveryCodes(count) (docs/APP-CAPABILITIES-PLAN.md step 4), through Clarity.Auth.
+        let project = self.project;
+        let own = |n: &str| project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == n);
+        if name == clarity_spec::code::check::NEW_TOKEN && !own(name) {
+            return self.lift("clarity.NewToken(authCall)".to_string(), pre);
+        }
+        if name == clarity_spec::code::check::NEW_RECOVERY_CODES && !own(name) {
+            let count = args.first().map(|a| call_arg(self.value(a, pre))).unwrap_or_default();
+            return self.lift(format!("clarity.NewRecoveryCodes(authCall, {count})"), pre);
         }
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();

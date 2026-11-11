@@ -54,4 +54,8 @@ gives: TypeRef | null,
  * DESIGN 5.33): its code says `tell saved(name)`, and the window hears
  * it on the slide-out or section that shows it (`on saved: handler`).
  */
-tells: Array<PartMessage>, span: Span, };
+tells: Array<PartMessage>, 
+/**
+ * `allow="me.role == Admin"`: who may open it, as written; none for everyone.
+ */
+allow: string | null, span: Span, };

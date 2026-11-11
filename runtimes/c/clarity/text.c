@@ -101,8 +101,10 @@ ClarityText* clarity_text_with(ClarityText* text, const char* path, ClaritySlot 
 const char* clarity_text_show(const ClarityText* text) {
     if (!text) return "";
     ClarityBuffer out = {0};
-    // A key takes its value in the language the screen picked.
-    const char* t = text->key ? clarity_text_of(text->key) : text->text;
+    // A key takes its value in the language the screen picked; without a
+    // translation, the English it came with (Clarity's own words), else the key.
+    const char* translated = text->key ? clarity_key_value(text->key) : NULL;
+    const char* t = !text->key ? (text->text ? text->text : "") : translated ? translated : (text->text && *text->text ? text->text : text->key);
     size_t length = strlen(t);
     size_t i = 0;
     while (i < length) {
@@ -157,6 +159,8 @@ cJSON* clarity_text_json(const ClarityText* text) {
     if (text->key) {
         cJSON* keyed = cJSON_CreateObject();
         cJSON_AddStringToObject(keyed, "key", text->key);
+        // Clarity's own words carry their English, for a project without the key.
+        if (text->text && *text->text) cJSON_AddStringToObject(keyed, "text", text->text);
         if (text->count > 0) {
             cJSON* values = cJSON_AddObjectToObject(keyed, "values");
             for (size_t i = 0; i < text->count; ++i) cJSON_AddItemToObject(values, text->paths[i], clarity_slot_json(&text->slots[i]));
@@ -180,6 +184,7 @@ bool clarity_text_from_json(const cJSON* in, ClarityText** out) {
     const cJSON* key = cJSON_GetObjectItemCaseSensitive(in, "key");
     if (!cJSON_IsString(text) && !cJSON_IsString(key)) return clarity_fail(CLARITY_INVALID, "text to show has no text");
     ClarityText* t = cJSON_IsString(key) ? clarity_key_text(key->valuestring) : clarity_text(text->valuestring);
+    if (cJSON_IsString(key) && cJSON_IsString(text)) t->text = clarity_copy(text->valuestring);
     const cJSON* value;
     cJSON_ArrayForEach(value, cJSON_GetObjectItemCaseSensitive(in, "values")) {
         ClaritySlot s;

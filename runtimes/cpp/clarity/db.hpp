@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "clarity/errors.hpp"
+#include "clarity/people.hpp"
 #include "clarity/record_file.hpp"
 #include "clarity/picture.hpp"
 #include "clarity/query.hpp"
@@ -103,12 +104,48 @@ std::vector<PictureColumn> pictures_of() {
     else return {};
 }
 
+/// The column of a record's version (conformance/versions.json): the
+/// entity's `version_column` (`row_version` for an owned one), or empty for
+/// an entity whose saves are not checked. Its member `version` holds the
+/// version the record was read or last saved with; 0 for a new one.
+template <typename R>
+std::string version_of() {
+    if constexpr (requires { R::version_column; }) return R::version_column;
+    else return "";
+}
+
+template <typename R>
+int64_t* held_version(R& record) {
+    if constexpr (requires { R::version_column; }) return &record.version;
+    else return nullptr;
+}
+
 template <typename R>
 constexpr bool has_events = requires(R r, Db& db) { r.before_save(db); } || requires(R r, Db& db) { r.after_save(db); } ||
                             requires(R r, Db& db) { r.before_delete(db); } || requires(R r, Db& db) { r.after_delete(db); } ||
                             requires(R r, Db& db) { r.cascade(db); };
 
 }  // namespace detail
+
+/// How many undo steps are kept: the oldest goes when a newer one comes, so a
+/// long session does not keep every row it ever changed.
+inline constexpr size_t undo_steps = 100;
+
+/// Why a save or a delete is refused: someone saved the record since it was
+/// read (conformance/versions.json), in Clarity's own words with their English.
+Text saved_since();
+/// Why an undo is refused: what it would take back was changed since.
+Text undo_changed_since();
+/// Why an undo is refused when its step is older than the ones kept.
+Text undo_too_old();
+
+/// A save or delete refused because someone saved the record since; an
+/// entity with its own `saved_since(db, current)` words it about the record
+/// as stored now.
+class SavedSinceError : public RefusedError {
+public:
+    SavedSinceError() : RefusedError(saved_since()) {}
+};
 
 class Db {
 public:
@@ -132,51 +169,51 @@ public:
     int migrate_source(const std::string& source, const std::vector<Step>& steps);
 
     /// Inserts a new record (and gives it its id) or updates a stored one,
-    /// with the entity's data events around it.
+    /// with the entity's data events around it. A record someone saved
+    /// since it was read is refused (saved_since), changing nothing.
     template <Record R>
     void save(R& record) {
-        if constexpr (!detail::has_events<R>) {
-            detail::check_required_of(record);
-            write(record);
-        } else {
-            int64_t id = record.id;
-            try {
-                atomic(detail::source_of<R>(), [&] {
-                    if constexpr (requires { record.before_save(*this); }) record.before_save(*this);
-                    // A required field is checked after before save, which may fill it.
-                    detail::check_required_of(record);
-                    write(record);
-                    if constexpr (requires { record.after_save(*this); }) record.after_save(*this);
-                });
-            } catch (...) {
-                // Nothing was kept, so a new record is still new.
-                record.id = id;
-                throw;
-            }
-        }
+        save_with(record, false);
     }
 
-    /// Removes a stored record, with the entity's data events around it.
+    /// Saves a record regardless of its version (`save ... anyway`): what
+    /// someone saved since is written over, on purpose.
+    template <Record R>
+    void save_anyway(R& record) {
+        save_with(record, true);
+    }
+
+    /// Reads a record again as it is stored now, with its version.
+    template <Record R>
+    void reload(R& record) {
+        record = get<R>(record.id);
+    }
+
+    /// Removes a stored record, with the entity's data events around it; one
+    /// someone saved since it was read is refused.
     template <Record R>
     void remove(const R& record) {
+        R copy = record;
+        int64_t* held = detail::held_version(copy);
+        int64_t version = held ? *held : 0;
         if constexpr (!detail::has_events<R>) {
-            remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), record.id);
+            worded<R>(copy.id, [&] { remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), detail::version_of<R>(), version, copy.id); });
         } else {
-            R copy = record;
             atomic(detail::source_of<R>(), [&] {
                 if constexpr (requires { copy.before_delete(*this); }) copy.before_delete(*this);
                 // What cascades from it goes first, so no reference is left behind.
                 if constexpr (requires { copy.cascade(*this); }) copy.cascade(*this);
-                remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), copy.id);
+                worded<R>(copy.id, [&] { remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), detail::version_of<R>(), version, copy.id); });
                 if constexpr (requires { copy.after_delete(*this); }) copy.after_delete(*this);
             });
         }
     }
 
     /// Runs a handler as one step, which undo takes back whole (DESIGN 5.29):
-    /// its id, when it changed anything, is last_step. When it fails, what
-    /// it changed is put back at once, so it leaves nothing behind. A step
-    /// inside a step is part of it.
+    /// its id, when it changed anything, is last_step. Everything it changes
+    /// is one transaction in each source it changes: kept when it ends, left
+    /// whole when it fails, so it leaves nothing behind. A step inside a step
+    /// is part of it. The last `undo_steps` are kept.
     template <typename F>
     void step(F run) {
         if (recording_) {
@@ -189,27 +226,38 @@ public:
             run();
         } catch (...) {
             recording_ = nullptr;
-            put_back(changes);
+            release(false);
             throw;
         }
         recording_ = nullptr;
-        if (!changes.empty()) steps_[++last_step_] = {std::move(changes), false};
+        release(true);
+        if (changes.empty()) return;
+        steps_[++last_step_] = {std::move(changes), false};
+        while (steps_.size() > undo_steps) steps_.erase(steps_.begin());
     }
     /// The id of the last step a handler made, to undo it later by; 0 before any.
     int64_t last_step() const { return last_step_; }
     /// Takes back step `id`: every row it changed as it was, with its own
     /// id. Refused, changing nothing, when one of its rows changed since;
-    /// false when there is no such step, or it is undone already.
-    bool undo(int64_t id) { return replay_step(id, true); }
+    /// false when it is undone already.
+    bool undo(int64_t id) { return replay_steps({id}, true); }
     /// Does step `id` again after an undo; false when it is not undone.
-    bool redo(int64_t id) { return replay_step(id, false); }
+    bool redo(int64_t id) { return replay_steps({id}, false); }
+    /// Takes back (`back`) or does again the steps of one edit, in the order
+    /// given, as one: all of them or, refused, none. A step older than the
+    /// ones kept is refused (undo_too_old); false when none of them is in
+    /// the state to be replayed.
+    bool replay_steps(const std::vector<int64_t>& ids, bool back);
+
+    /// The rows SQL reads in the database of `source`, for tools and tests.
+    std::vector<Row> rows(const std::string& source, const std::string& sql, const std::vector<SqlValue>& params) { return select(source, sql, params); }
 
     /// The records a query finds, in its order.
     template <Record R>
     std::vector<R> find(const Query& query) {
         std::string source = detail::source_of<R>();
         Dialect d = dialect(source);
-        std::string columns = select_columns(d, detail::key_of<R>(), R::columns(), detail::pictures_of<R>());
+        std::string columns = select_columns(d, detail::key_of<R>(), R::columns(), detail::pictures_of<R>(), detail::version_of<R>());
         auto [sql, params] = query.sql(d, R::table, detail::key_of<R>(), columns);
         return records<R>(source, sql, params);
     }
@@ -225,7 +273,8 @@ public:
         std::string source = detail::source_of<R>();
         Dialect d = dialect(source);
         std::string key = detail::key_of<R>();
-        std::string sql = "SELECT " + select_columns(d, key, R::columns(), detail::pictures_of<R>()) + " FROM " + quote(d, R::table) + " WHERE " + quote(d, key) + " = " + mark(d, 1);
+        std::string sql = "SELECT " + select_columns(d, key, R::columns(), detail::pictures_of<R>(), detail::version_of<R>()) + " FROM " + quote(d, R::table) + " WHERE " +
+                          quote(d, key) + " = " + mark(d, 1);
         auto found = records<R>(source, sql, {id});
         if (found.empty()) throw NotFoundError(R::table, id);
         return found.back();
@@ -244,6 +293,39 @@ public:
     /// be read or does not fit. Carried with the formats part
     /// (formats/file_source.cpp), as only a program that uses formats calls it.
     void add_file(const FileSource& source);
+
+    /// Names the people of the program and how they sign in (step 4), after
+    /// the databases opened. Carried with the auth part (auth/auth.cpp,
+    /// clarity_use_auth), as only a program that signs people in calls it.
+    void add_signin(const SigninSource& source);
+    /// The record signed in for this call: served, the one of the call's
+    /// session; else the one of the program. None for nobody.
+    std::optional<int64_t> me_id() const;
+    /// `me` in code: the record signed in now; refused with notAllowed when nobody is.
+    template <Record R>
+    R me() {
+        auto id = me_id();
+        if (!id) refuse(not_allowed());
+        return get<R>(*id);
+    }
+    /// The sign-in window the program starts with (`Started.signin`): none
+    /// when it names no people, when its people do not sign in where it runs
+    /// (`web` served, else `desktop`), or when someone is signed in. On the
+    /// desktop the `account` strategy signs the computer's user in by itself
+    /// when they have a record (no try counted).
+    std::optional<std::string> signin_first();
+    /// Signs a person in with `strategy` and its `inputs` (an object: `name`,
+    /// `password`, `token`, as the catalog names them), served on `web`, else
+    /// on the desktop: the record signed in, or a RefusedError with
+    /// signinRefused or signinTooManyTries.
+    int64_t signin(const std::string& strategy, const nlohmann::json& inputs);
+    /// The same on the target named (`cli` for a command line).
+    int64_t signin_on(const std::string& target, const std::string& strategy, const nlohmann::json& inputs);
+    /// Signs the person out: served, the call's session is closed and its
+    /// cookie cleared; else nobody is signed in any more.
+    void signout();
+    /// The people the program names; none without add_signin.
+    const People* people() const { return people_.get(); }
 
     /// Adds the file store `name` at a folder (made when it is not there
     /// yet); `env:NAME` takes it from that environment variable.
@@ -319,6 +401,17 @@ public:
     Bytes store_file(const std::string& store, const std::string& path);
 
 private:
+    /// The sign-in of auth/auth.cpp reads and adds people in their table.
+    friend class AuthPeople;
+    friend std::optional<int64_t> cli_signin(Db& db, const CliSignin& flags, cli::Terminal& terminal, const std::string& prompt);
+    std::shared_ptr<People> people_;
+    /// The person signed in for the program (desktop, command line).
+    std::optional<int64_t> me_;
+    /// Whether the start asked who signs in already: `account` signs in by itself only once.
+    bool signin_started_ = false;
+    /// Whether a command line signed in: later sign-ins are on `cli` too.
+    bool signin_cli_ = false;
+
     struct SourceDb {
         std::string name;
         std::unique_ptr<Driver> driver;
@@ -335,12 +428,15 @@ private:
     std::map<std::string, StoreSetting> store_settings_;
 
     /// A row of a table as it was before a change and as the change left
-    /// it; none where it was not there.
+    /// it; none where it was not there. A versioned row (`version`) carries
+    /// its version in each state, which undo compares instead of the whole row.
     struct Change {
         std::string source, table, key;
         std::vector<std::string> columns;
+        std::string version;
         int64_t id = 0;
         std::optional<Row> before, after;
+        std::optional<int64_t> before_version, after_version;
     };
     /// A step's changes, and whether it is undone.
     struct Done {
@@ -349,16 +445,28 @@ private:
     };
     /// The changes of the step that runs; none outside a step.
     std::vector<Change>* recording_ = nullptr;
-    /// Each step by its id, kept until the application closes.
+    /// Each step by its id, the last `undo_steps` kept.
     std::map<int64_t, Done> steps_;
     int64_t last_step_ = 0;
+    /// The sources the running step holds a transaction in, by name: what
+    /// one handler changes is kept or left whole.
+    std::vector<std::string> held_;
 
-    void put_back(const std::vector<Change>& changes);
-    bool replay_step(int64_t id, bool back);
+    /// Makes the running step hold a transaction in `source`, from its first change there.
+    void enlist(const std::string& source);
+    /// Ends the transactions a step held: kept or rolled back.
+    void release(bool keep);
+    void replay(std::vector<Change*>& order, bool back);
+    /// A row's raw values (its columns) and its version (by `version`), or none when it is not there.
+    std::pair<std::optional<Row>, std::optional<int64_t>> state(const std::string& source, const std::string& table, const std::string& key,
+                                                                 const std::vector<std::string>& columns, const std::string& version, int64_t id);
     /// A row's raw values (its columns), or none when it is not there.
-    std::optional<Row> row(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns, int64_t id);
-    /// Makes a row so: gone, or with these values and its own id.
-    void put(const Change& change, const std::optional<Row>& values);
+    std::optional<Row> row(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns, int64_t id) {
+        return state(source, table, key, columns, "", id).first;
+    }
+    /// Makes a row so: gone, or with these values and its own id; a
+    /// versioned one with a version past its current one and `version`.
+    void put(const Change& change, const std::optional<Row>& values, std::optional<int64_t> version);
     /// Runs `run` in a transaction of each of `sources`.
     void within(const std::vector<std::string>& sources, size_t from, const std::function<void()>& run);
 
@@ -381,7 +489,7 @@ private:
         } catch (...) {
             --s.depth;
             // The error that made it roll back is the one to report.
-            if (outer) {
+            if (s.depth == 0) {
                 try {
                     s.driver->batch(rollback(d));
                 } catch (...) {
@@ -390,12 +498,65 @@ private:
             throw;
         }
         --s.depth;
-        if (outer) s.driver->batch(commit(d));
+        // A step that holds the transaction ends it itself; a commit that fails leaves nothing half kept.
+        if (s.depth == 0) {
+            try {
+                s.driver->batch(commit(d));
+            } catch (...) {
+                try {
+                    s.driver->batch(rollback(d));
+                } catch (...) {
+                }
+                throw;
+            }
+        }
     }
 
     template <Record R>
-    void write(R& record) {
-        record.id = store_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), detail::pictures_of<R>(), record.values(), record.id);
+    void save_with(R& record, bool anyway) {
+        int64_t* held = detail::held_version(record);
+        int64_t id = record.id, version = held ? *held : 0;
+        try {
+            if constexpr (!detail::has_events<R>) {
+                detail::check_required_of(record);
+                write(record, anyway);
+            } else {
+                atomic(detail::source_of<R>(), [&] {
+                    if constexpr (requires { record.before_save(*this); }) record.before_save(*this);
+                    // A required field is checked after before save, which may fill it.
+                    detail::check_required_of(record);
+                    write(record, anyway);
+                    if constexpr (requires { record.after_save(*this); }) record.after_save(*this);
+                });
+            }
+        } catch (...) {
+            // Nothing was kept, so a new record is still new, at the version it was read with.
+            record.id = id;
+            if (held) *held = version;
+            throw;
+        }
+    }
+
+    /// Runs `run`, a save or delete of record `id`; a refusal because
+    /// someone saved it since is worded by the entity when it has its own
+    /// words (`saved_since(db, current)`, current as stored now, db to load
+    /// what its fields refer to).
+    template <Record R, typename F>
+    void worded(int64_t id, F run) {
+        try {
+            run();
+        } catch (const SavedSinceError&) {
+            if constexpr (requires(Db& db, const R& r) { R::saved_since(db, r); }) refuse(R::saved_since(*this, get<R>(id)));
+            throw;
+        }
+    }
+
+    template <Record R>
+    void write(R& record, bool anyway) {
+        worded<R>(record.id, [&] {
+            record.id = store_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), detail::pictures_of<R>(), record.values(), record.id,
+                                     detail::version_of<R>(), detail::held_version(record), anyway);
+        });
     }
 
     template <Record R>
@@ -404,21 +565,38 @@ private:
         for (auto& row : select(source, sql, params)) {
             int64_t id = std::get<int64_t>(row.at(0));
             row.erase(row.begin());
+            // The version, read last.
+            std::optional<int64_t> version;
+            if constexpr (requires { R::version_column; }) {
+                version = std::get<int64_t>(row.back());
+                row.pop_back();
+            }
             out.push_back(R::from_values(id, row));
+            if constexpr (requires { R::version_column; }) out.back().version = *version;
         }
         return out;
     }
 
-    /// Saves a row, keeping it as it was and as it is now while a step records.
+    /// Saves a row, keeping it as it was and as it is now while a step
+    /// records; a versioned one (`version`, its version in `held`) checked
+    /// unless `anyway`.
     int64_t store_record(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
-                         const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id);
+                         const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id, const std::string& version, int64_t* held,
+                         bool anyway);
+    /// Saves a row as store_record does, without looking at the secrets of people.
+    int64_t recorded(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
+                     const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id, const std::string& version, int64_t* held,
+                     bool anyway);
     int64_t store_row(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
-                      const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id);
-    /// Deletes a row, keeping it as it was while a step records.
-    void remove_record(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns, int64_t id);
-    void remove_row(const std::string& source, const std::string& table, const std::string& key, int64_t id);
+                      const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id, const std::string& version, int64_t* held,
+                      bool anyway);
+    /// Deletes a row (of a versioned entity only at `held`, the version read), keeping it as it was while a step records.
+    void remove_record(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
+                       const std::string& version, int64_t held, int64_t id);
+    void remove_row(const std::string& source, const std::string& table, const std::string& key, const std::string& version, int64_t held, int64_t id);
     std::vector<Row> select(const std::string& source, const std::string& sql, const std::vector<SqlValue>& params);
-    static std::string select_columns(Dialect d, const std::string& key, const std::vector<std::string>& columns, const std::vector<PictureColumn>& pictures);
+    static std::string select_columns(Dialect d, const std::string& key, const std::vector<std::string>& columns, const std::vector<PictureColumn>& pictures,
+                                      const std::string& version = "");
     std::optional<Bytes> picture_bytes(const std::string& source, const std::string& table, const std::string& key, const PictureColumn& picture, int64_t id);
 };
 

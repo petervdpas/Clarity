@@ -112,7 +112,7 @@ pub fn is_design_edit(edit: &Edit) -> bool {
     match edit {
         Batch { edits } => edits.iter().all(is_design_edit),
         Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageColor { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
-        | AddData { .. } | SetGrid { .. } | SetSize { .. } | SetPageStyle { .. } | PlaceField { .. } | NameParts | SetMain { .. } | SetSplash { .. } | SetOwnerEvent { .. } | AddRegion { .. }
+        | AddData { .. } | SetGrid { .. } | SetSize { .. } | SetPageStyle { .. } | SetPageAllow { .. } | PlaceField { .. } | NameParts | SetMain { .. } | SetSplash { .. } | SetOwnerEvent { .. } | AddRegion { .. }
         | UpdateSidebar { .. } | UpdateSidebars | UpdateRibbon { .. } | SetName { .. } | AddFrameItem { .. } | UpdateCommand { .. } | MoveSibling { .. } => true,
         _ => false,
     }
@@ -550,6 +550,16 @@ impl Editor<'_> {
                     return fail(format!("'{style}' is not a style name"));
                 }
                 page.style = (!style.is_empty()).then(|| style.to_string());
+                Ok(Some(*at))
+            }
+            Edit::SetPageAllow { page: at, allow } => {
+                let page = designed.page("allow")?;
+                if page.span.start != *at {
+                    return fail("only a window or view says who may open it");
+                }
+                let allow = allow.trim();
+                page.allow = (!allow.is_empty()).then(|| allow.to_string());
+                page.allow_condition = None;
                 Ok(Some(*at))
             }
             Edit::PlaceField { container, col, row, room, bind } => self.place_field(designed, *container, *col, *row, *room, bind),

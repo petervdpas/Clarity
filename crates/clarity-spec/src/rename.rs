@@ -261,7 +261,7 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                     expr(&arg.value, name, found);
                 }
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => {
+            StmtKind::Save { value, .. } | StmtKind::Delete { value } | StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => {
                 expr(value, name, found)
             }
             StmtKind::Write { text, path, .. } => {

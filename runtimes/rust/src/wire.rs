@@ -37,6 +37,9 @@ fn started(started: program::Started) -> Value {
     if let Some(unconnected) = started.unconnected {
         out["unconnected"] = json!({ "handler": unconnected.handler, "window": unconnected.window, "problem": unconnected.problem });
     }
+    if let Some(signin) = started.signin {
+        out["signin"] = json!(signin);
+    }
     out
 }
 
@@ -93,6 +96,11 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
         "started" => json!({ "value": started(app.started()) }),
         "start_app" => given(app.start_app()),
         "connect" => given(app.connect()),
+        "signin" => given((|| {
+            let (strategy, inputs): (String, Option<Map<String, Value>>) = (arg(&args, "strategy")?, arg(&args, "inputs")?);
+            app.signin(&strategy, inputs.unwrap_or_default())
+        })()),
+        "signout" => given(app.signout()),
         "open_window" => given((|| {
             let (window, with): (String, Option<Map<String, Value>>) = (arg(&args, "window")?, arg(&args, "with")?);
             app.open_window(&window, with.unwrap_or_default())

@@ -57,6 +57,11 @@ void clarity_server_quiet(ClarityServer* server, uint64_t milliseconds);
 /// The reply to one HTTP request, `length` bytes of it, in this thread's
 /// scratch arena: a file the browser takes, or a command's answer. From any thread.
 const char* clarity_serve_answer(ClarityServer* server, const char* request, size_t request_length, size_t* length);
+/// clarity_serve_answer for a request from `address` (the client's, as
+/// digits; "" when unknown), which failed sign-in tries count by. A request
+/// carries the person's session in its `clarity_session` cookie, and a
+/// reply that signs in or out sets it (clarity/people.h).
+const char* clarity_serve_answer_from(ClarityServer* server, const char* request, size_t request_length, const char* address, size_t* length);
 
 /// Where the server listens: `--address host:port`, else the environment's
 /// CLARITY_ADDRESS, else `project`, where the project file says (its port).

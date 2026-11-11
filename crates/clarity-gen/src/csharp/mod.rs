@@ -108,6 +108,8 @@ const VIDEO_PACKAGE: &str = "Clarity.Video";
 pub(crate) const IMAGE_PACKAGE: &str = "Clarity.Image";
 /// Clarity.Formats' native library (docs/FORMATS-PLAN.md), carried only when code reads or writes a format.
 pub(crate) const FORMATS_PACKAGE: &str = "Clarity.Formats";
+/// Clarity.Auth's native library (docs/APP-CAPABILITIES-PLAN.md step 4), carried only when the project signs people in.
+pub(crate) const AUTH_PACKAGE: &str = "Clarity.Auth";
 
 /// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
@@ -182,7 +184,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let songs = ui == DESKTOP_PACKAGE && clarity_spec::resources::carries_audio(project);
     let videos = ui == DESKTOP_PACKAGE && clarity_spec::resources::plays_videos(project);
     let pictures = crate::uses_picture_functions(project);
-    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
+    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE), (crate::carries_auth(project), AUTH_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
     let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &media, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
@@ -487,6 +489,7 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
         .iter()
         .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
         .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        Clarity.Formats.FileSources.AddFile(db, new Clarity.Formats.FileSource({}, {}, {}, {}, {}, {}, {}, {}));\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
+        .chain(add_signin(project, settings))
         .collect();
     let databases = databases
         .iter()
@@ -512,6 +515,41 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
     }}
 "
     )
+}
+
+/// `read`, which hands records of `entity` out (a list or one record), checked by
+/// the entity's `readable when` (step 4) on `db`: refused with notYours. As it is
+/// for an entity without the line.
+pub(super) fn readable(project: &Project, entity: &str, db: &str, read: String) -> String {
+    if project.entity(entity).is_some_and(|e| e.readable.is_some()) { format!("{entity}.Readable_({db}, {read})") } else { read }
+}
+
+/// The people of the program and how they sign in, named to the database
+/// handle once its databases are open (docs/APP-CAPABILITIES-PLAN.md step 4);
+/// none without a `signin` block.
+pub(super) fn add_signin(project: &Project, settings: &Settings) -> Option<String> {
+    let plan = crate::signin::signin_plan(project)?;
+    let list = |items: &[String]| items.iter().map(|i| string(i)).collect::<Vec<_>>().join(", ");
+    // How long the desktop remembers a sign-in, only with `remember N days`.
+    let mut remember = plan.remember_seconds.map(|s| format!(", RememberSeconds = {s}")).unwrap_or_default();
+    // `when asked`: remembered only when the sign-in part's box is ticked; left out otherwise.
+    if plan.remember_asks {
+        remember.push_str(", RememberAsks = true");
+    }
+    let strategies = plan.strategies.iter().map(|(name, columns)| format!("new Clarity.Auth.SigninStrategy({}, [{}])", string(name), list(columns))).collect::<Vec<_>>().join(", ");
+    Some(format!(
+        "        Clarity.Auth.Signins.AddSignin(db, new Clarity.Auth.SigninSource({}, {}) {{ Source = {}, Key = {}, Targets = [{}], Strategies = [{strategies}], SessionSeconds = {}, Tries = {}, TriesSeconds = {}, Program = {}{remember} }});\n",
+        string(&plan.table),
+        string(&plan.page),
+        string(&plan.source),
+        string(&plan.key),
+        list(&plan.targets),
+        plan.session_seconds,
+        plan.tries,
+        plan.tries_seconds,
+        // The program's name, which the protected store keeps a remembered sign-in under, as its secret settings.
+        string(&crate::settings_program(settings)),
+    ))
 }
 
 fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
@@ -619,6 +657,8 @@ fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
         handlers: Vec::new(),
         gives: None,
         tells: Vec::new(),
+        allow: None,
+        allow_condition: None,
         span: Default::default(),
     }
 }

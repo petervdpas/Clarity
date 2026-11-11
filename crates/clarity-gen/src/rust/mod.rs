@@ -130,6 +130,14 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !project.secret_settings().is_empty() {
         features.push("secrets");
     }
+    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth.
+    if crate::signin::carries_auth(project) {
+        features.push("auth");
+    }
+    // A sign-in remembered between runs (`remember N days`) is kept in the system's protected store.
+    if crate::signin::signin_plan(project).is_some_and(|plan| plan.remember_seconds.is_some()) {
+        features.push("secrets");
+    }
     // Until the databases open, the windows work on an empty SQLite one in memory.
     if crate::unconnected(project).is_some() {
         features.push("sqlite");
@@ -870,16 +878,26 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             )
         })
         .collect();
+    // A window with `allow when` is refused before its data is read.
     let opens: String = owners
         .iter()
         .filter(|o| !o.is_app)
         .map(|o| {
-            format!(
-                "        {:?} => to_data(&{}::{}::load(db)?)?,\n",
-                o.name, o.module, o.struct_name
-            )
+            // Its own `allow`, and that of every frame command that opens it: stricter, never looser.
+            let mut checks: Vec<String> = Vec::new();
+            if o.allowed {
+                checks.push(format!("{}::{}::allowed(db)?;", o.module, o.struct_name));
+            }
+            for opener in owners {
+                checks.extend(opener.opens_guarded.iter().filter(|(w, _)| *w == o.name).map(|(_, f)| format!("{}::{f}(db)?;", opener.module)));
+            }
+            let load = format!("to_data(&{}::{}::load(db)?)?", o.module, o.struct_name);
+            let allowed = if checks.is_empty() { load } else { format!("{{\n{}            {load}\n        }}", checks.iter().map(|c| format!("            {c}\n")).collect::<String>()) };
+            format!("        {:?} => {allowed},\n", o.name)
         })
         .collect();
+    // A handler a frame command with `allow when` runs checks it first.
+    let guard = |o: &Owner, handler: &str| o.guarded.iter().find(|(h, _)| h == handler).map(|(_, f)| format!("            {}::{f}(db)?;\n", o.module)).unwrap_or_default();
     let checks: String = owners
         .iter()
         .filter(|o| !o.is_app)
@@ -895,13 +913,14 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         for (handler, function) in &o.handlers {
             dispatch.push_str(&format!(
                 "        ({:?}, {:?}) => {{
-            let mut w: {m}::{s} = from_data(state.data.clone())?;
+{guard}            let mut w: {m}::{s} = from_data(state.data.clone())?;
             {m}::{function}(db, &mut w, &mut ui)?;
             Ok(ui.reply(&state.window, to_data(&w)?))
         }}
 ",
                 o.name,
                 handler,
+                guard = guard(o, handler),
                 m = o.module,
                 s = o.struct_name
             ));
@@ -982,12 +1001,13 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         for (handler, function) in &o.handlers {
             dispatch.push_str(&format!(
                 "        (_, {:?}) => {{
-            let mut app = {m}::{s}::load(db)?;
+{guard}            let mut app = {m}::{s}::load(db)?;
 {read}            {m}::{function}(db, &mut app, &mut ui)?;
 {give}            Ok(ui.reply(&state.window, {data}))
         }}
 ",
                 handler,
+                guard = guard(o, handler),
                 m = o.module,
                 s = o.struct_name
             ));
@@ -1022,13 +1042,17 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             } else {
                 format!(".map(|r| Ok(RefOption {{ id: r.id, text: {text}{fields} }}))\n            .collect::<Result<_>>()?,\n")
             };
-            format!("        {name:?} => db\n            .all::<{}::{name}>()?\n            .into_iter()\n            {map}", module_of(name))
+            format!("        {name:?} => {}\n            .into_iter()\n            {map}", readable_all(e, &module_of(name), &format!("db\n            .all::<{}::{name}>()?", module_of(name))))
         })
         .collect();
     let values: String = needs
         .typed
         .iter()
-        .map(|(entity, field)| format!("        ({entity:?}, {field:?}) => db.all::<{}::{entity}>()?.into_iter().map(|r| r.{}).collect(),\n", module_of(entity), names::ident(field)))
+        .map(|(entity, field)| {
+            let all = format!("db.all::<{}::{entity}>()?", module_of(entity));
+            let all = project.entity(entity).map_or(all.clone(), |e| readable_all(e, &module_of(entity), &all));
+            format!("        ({entity:?}, {field:?}) => {all}.into_iter().map(|r| r.{}).collect(),\n", names::ident(field))
+        })
         .collect();
     let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
     // A store whose folder is a folder setting follows the person's settings.
@@ -1037,12 +1061,25 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         .iter()
         .map(|(name, setting, default)| format!("    db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?})?;\n"))
         .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    db.add_file({})?;\n", file_source(f))))
+        .chain(crate::signin::signin_plan(project).map(|plan| format!("    db.add_signin({});\n", signin_source(&plan))))
         .collect();
+    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): the start
+    // says the sign-in window, and the program signs people in and out.
+    let (started_signin, signin_fns) = if crate::signin::carries_auth(project) {
+        (
+            "self.0.lock().ok().and_then(|db| db.signin_first())",
+            "\n    fn signin(&self, strategy: &str, inputs: Map<String, Value>) -> Answer<()> {\n        locked(self, |db| db.signin(strategy, &inputs).map(|_| ()))\n    }\n\n    fn signout(&self) -> Answer<()> {\n        locked(self, |db| {\n            db.signout();\n            Ok(())\n        })\n    }\n",
+        )
+    } else {
+        ("None", "")
+    };
     let pictures: String = crate::picture_fields(project)
         .iter()
         .map(|(e, f)| {
             let name = &e.name.name;
-            format!("        ({name:?}, {:?}) => db.picture::<{}::{name}>(id, {:?}),\n", f.name.name, module_of(name), e.column_of(&f.name.name))
+            // A picture of a record that is not the person's is refused, as the record is.
+            let check = if e.readable.is_some() { format!("{{\n            {m}::{name}::readable(db, db.get::<{m}::{name}>(id)?)?;\n            db.picture::<{m}::{name}>(id, {:?})\n        }}", e.column_of(&f.name.name), m = module_of(name)) } else { format!("db.picture::<{}::{name}>(id, {:?})", module_of(name), e.column_of(&f.name.name)) };
+            format!("        ({name:?}, {:?}) => {check},\n", f.name.name)
         })
         .collect();
 
@@ -1235,7 +1272,7 @@ fn open_databases() -> Result<Db> {{
 /// commands and Clarity.UI (DESIGN 7.9).
 impl Program for App {{
     fn started(&self) -> program::Started {{
-        program::Started {{ main: MAIN_WINDOW.to_string(), unconnected: {started_unconnected} }}
+        program::Started {{ main: MAIN_WINDOW.to_string(), unconnected: {started_unconnected}, signin: {started_signin} }}
     }}
 
     fn start_app(&self) -> Answer<Reply> {{
@@ -1343,7 +1380,7 @@ impl Program for App {{
     fn keep_settings(&self, settings: Map<String, Value>) -> Answer<()> {{
         {keep}.map_err(|err| Text::plain(err.to_string()))
     }}
-{connect_fn}{watched_impl}}}
+{connect_fn}{signin_fns}{watched_impl}}}
 
 
 fn main(){main_returns} {{
@@ -1375,6 +1412,33 @@ pub(crate) fn file_source(f: &crate::FileSource) -> String {
     format!(
         "clarity_runtime::FileSource {{ name: {:?}, format: {:?}, path: {:?}, options: {}, table: {:?}, key: {:?}, fields: {}, readonly: {} }}",
         f.name, f.format, f.path, raw(&f.options), f.table, f.key, raw(&f.fields), f.readonly
+    )
+}
+
+/// Records of `entity` that main reads (`found`, of type Vec), each checked
+/// against its `readable when` (refused with notYours); as they are without one.
+fn readable_all(entity: &clarity_spec::model::Entity, module: &str, found: &str) -> String {
+    if entity.readable.is_none() { found.to_string() } else { format!("{module}::{}::readable_all(db, {found})?", entity.name.name) }
+}
+
+/// The project's people as the runtime's signin source takes them (docs/APP-CAPABILITIES-PLAN.md
+/// step 4), its remembered sign-in kept under the program's name (main's `PROGRAM`).
+pub(crate) fn signin_source(plan: &crate::signin::SigninPlan) -> String {
+    let texts = |items: &[String]| items.iter().map(|t| format!("{t:?}.into()")).collect::<Vec<_>>().join(", ");
+    let strategies: Vec<String> = plan.strategies.iter().map(|(name, columns)| format!("clarity_runtime::signin::SigninStrategy {{ name: {name:?}.into(), columns: vec![{}] }}", texts(columns))).collect();
+    format!(
+        "clarity_runtime::signin::SigninSource {{ source: {:?}.into(), table: {:?}.into(), key: {:?}.into(), page: {:?}.into(), targets: vec![{}], strategies: vec![{}], session_seconds: {}, tries: {}, tries_seconds: {}, program: PROGRAM.into(), remember_seconds: {:?}, remember_asks: {} }}",
+        plan.source,
+        plan.table,
+        plan.key,
+        plan.page,
+        texts(&plan.targets),
+        strategies.join(", "),
+        plan.session_seconds,
+        plan.tries,
+        plan.tries_seconds,
+        plan.remember_seconds,
+        plan.remember_asks
     )
 }
 

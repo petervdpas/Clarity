@@ -105,8 +105,8 @@ TEST(the_desktop_answers_the_librarys_commands) {
     Shop shop;
     shell::Options options = options_of(db, shop);
     shell::DesktopProgram program(options);
-    // How it starts: the main window, nothing unconnected; the model stays with the files.
-    CHECK_EQ(called(program, "started"), json::parse(R"({"value":{"main":"Main","unconnected":null}})"));
+    // How it starts: the main window, nothing unconnected, nobody to sign in; the model stays with the files.
+    CHECK_EQ(called(program, "started"), json::parse(R"({"value":{"main":"Main","unconnected":null,"signin":null}})"));
     // Without facts, engines beside the screen or a command it knows: the library's default.
     CHECK_EQ(called(program, "facts"), json("none"));
     CHECK_EQ(called(program, "engine_open", {{"name", "Board"}}), json("none"));

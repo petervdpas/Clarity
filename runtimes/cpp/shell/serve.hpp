@@ -61,8 +61,12 @@ private:
 
 /// The reply to one HTTP request: a browser file by its path (the page at
 /// `/`), a command's answer at invoke_path. From any thread: commands take
-/// turns on the service, except how far a long call is and its Stop.
-std::string serve_answer(Server& server, const std::string& request);
+/// turns on the service, except how far a long call is and its Stop. A
+/// command runs as the person of the request's session cookie, `address`
+/// the peer's (failed tries count per address); while people sign in on the
+/// web, a request without a session reaches only the sign-in window, and a
+/// sign-in or sign-out sets the cookie (clarity/people.hpp, served).
+std::string serve_answer(Server& server, const std::string& request, const std::string& address = "");
 
 /// Where the server listens: `--address host:port`, else the environment's
 /// CLARITY_ADDRESS, else `project`, where the project file says (its port).

@@ -110,6 +110,8 @@ fn rewrites_a_command() {
         new_window: false,
         open_with: Vec::new(),
         handler: None,
+        allow: None,
+        allow_condition: None,
     };
     let text = edit(&app, Edit::UpdateCommand { item: at(&app, "<Item caption=\"Open\""), props });
     // An item written without a name gets one, after its caption.

@@ -120,6 +120,9 @@ pub struct Fake {
     pub found: Value,
     /// A stored field's bytes, and a file store's file.
     pub bytes: Option<Vec<u8>>,
+    /// The sign-in window it starts with while nobody signed in; signing in takes the password `right`.
+    pub signin: Option<String>,
+    pub signed_in: AtomicBool,
     /// What the next handler's reply asks besides, as code asks it (quit, the keys window, a window of its own).
     pub then: Mutex<Option<fn(&mut Reply)>>,
 }
@@ -229,7 +232,7 @@ impl Program for Fake {
         self.engines.close(id)
     }
     fn started(&self) -> Started {
-        Started { main: "Main".into(), unconnected: self.unconnected.clone() }
+        Started { main: "Main".into(), unconnected: self.unconnected.clone(), signin: self.signin.clone().filter(|_| !self.signed_in.load(Ordering::SeqCst)) }
     }
     fn start_app(&self) -> Answer<Reply> {
         self.said("start".into());
@@ -321,6 +324,20 @@ impl Program for Fake {
     fn keep_settings(&self, settings: Map<String, Value>) -> Answer<()> {
         self.said(format!("keep {}", Value::Object(settings.clone())));
         *self.settings.lock().unwrap() = settings;
+        Ok(())
+    }
+    fn signin(&self, strategy: &str, inputs: Map<String, Value>) -> Answer<()> {
+        self.said(format!("signin {strategy} {}", Value::Object(inputs.clone())));
+        if inputs.get("password") == Some(&json!("right")) {
+            self.signed_in.store(true, Ordering::SeqCst);
+            Ok(())
+        } else {
+            Err(Text::keyed("signinRefused", "Signing in did not work. Check what you typed and try again."))
+        }
+    }
+    fn signout(&self) -> Answer<()> {
+        self.said("signout".into());
+        self.signed_in.store(false, Ordering::SeqCst);
         Ok(())
     }
     fn connect(&self) -> Answer<()> {

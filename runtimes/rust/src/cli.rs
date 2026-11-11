@@ -489,6 +489,77 @@ impl Terminal for Console {
     }
 }
 
+/// Asks for a password on the terminal (standard error) and reads it from
+/// standard input without showing what is typed; none at the end of input
+/// or without a terminal. The echo comes back however the reading ends.
+#[cfg(feature = "auth")]
+pub fn read_password(prompt: &str) -> Option<String> {
+    let mut console = Console;
+    if !console.is_terminal() {
+        return None;
+    }
+    console.write(prompt);
+    let echo = Echo::off();
+    let line = console.read_line();
+    drop(echo);
+    console.write("\n");
+    line
+}
+
+/// The terminal's echo while it is off; on again when dropped.
+#[cfg(feature = "auth")]
+struct Echo {
+    #[cfg(windows)]
+    mode: Option<u32>,
+}
+
+#[cfg(all(feature = "auth", unix))]
+impl Echo {
+    fn off() -> Echo {
+        let _ = std::process::Command::new("stty").arg("-echo").stdin(std::process::Stdio::inherit()).status();
+        Echo {}
+    }
+}
+
+#[cfg(all(feature = "auth", unix))]
+impl Drop for Echo {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("stty").arg("echo").stdin(std::process::Stdio::inherit()).status();
+    }
+}
+
+#[cfg(all(feature = "auth", windows))]
+impl Echo {
+    fn off() -> Echo {
+        use windows_sys::Win32::System::Console::{ENABLE_ECHO_INPUT, GetConsoleMode, GetStdHandle, STD_INPUT_HANDLE, SetConsoleMode};
+        let mut mode = 0u32;
+        // SAFETY: the standard input's handle, asked and set with a mode read from it.
+        let kept = unsafe {
+            let input = GetStdHandle(STD_INPUT_HANDLE);
+            (GetConsoleMode(input, &mut mode) != 0 && SetConsoleMode(input, mode & !ENABLE_ECHO_INPUT) != 0).then_some(mode)
+        };
+        Echo { mode: kept }
+    }
+}
+
+#[cfg(all(feature = "auth", windows))]
+impl Drop for Echo {
+    fn drop(&mut self) {
+        use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE, SetConsoleMode};
+        if let Some(mode) = self.mode {
+            // SAFETY: the mode the standard input had, set back.
+            unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), mode) };
+        }
+    }
+}
+
+#[cfg(all(feature = "auth", not(any(unix, windows))))]
+impl Echo {
+    fn off() -> Echo {
+        Echo {}
+    }
+}
+
 /// Asks `question` and gives the answer as text (`true` or `false` for yes
 /// or no, the number of a choice), or the exit code the program ends with.
 pub fn ask(question: &str, asked: &Asked, terminal: &mut dyn Terminal, words: &Words) -> Result<String, i32> {

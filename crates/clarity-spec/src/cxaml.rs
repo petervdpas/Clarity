@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 use crate::code::{TypeRef, TypeRefKind};
 use crate::diagnostic::Diagnostic;
 use crate::model::{
-    App, Command, CommandKind, DataDecl, DataKind, Footer, Frame, Ident, Menu, Page, PageKind, Ribbon, RibbonGroup, RibbonTab, Sidebar, Toolbar, TreeLevel, TreeSelect, Widget, WidgetPage, WindowSize,
+    App, Command, CommandKind, CommandProps, DataDecl, DataKind, Footer, Frame, Ident, Menu, Page, PageKind, Ribbon, RibbonGroup, RibbonTab, Sidebar, Toolbar, TreeLevel, TreeSelect, Widget, WidgetPage, WindowSize,
 };
 use crate::span::Span;
 use crate::widgets::{self, WidgetKind};
@@ -65,7 +65,7 @@ impl Marks<'_> {
     pub const SOURCE: Marks<'static> = Marks { item: &|_| String::new(), shown: &|_| String::new(), source: true };
 }
 
-/// The root element's name for a page kind: `Window`, `Dialog`, `View`, `Splash`, `Toolbox`.
+/// The root element's name for a page kind: `Window`, `Dialog`, `View`, `Splash`, `Toolbox`, `SignIn`.
 pub fn root_name(kind: PageKind) -> &'static str {
     match kind {
         PageKind::Window => "Window",
@@ -73,11 +73,12 @@ pub fn root_name(kind: PageKind) -> &'static str {
         PageKind::View => "View",
         PageKind::Splash => "Splash",
         PageKind::Toolbox => "Toolbox",
+        PageKind::Signin => "SignIn",
     }
 }
 
 fn kind_of_root(name: &str) -> Option<PageKind> {
-    [PageKind::Window, PageKind::Dialog, PageKind::View, PageKind::Splash, PageKind::Toolbox].into_iter().find(|k| root_name(*k) == name)
+    [PageKind::Window, PageKind::Dialog, PageKind::View, PageKind::Splash, PageKind::Toolbox, PageKind::Signin].into_iter().find(|k| root_name(*k) == name)
 }
 
 /// A page as its own `.cxaml` file: the root names its kind and, as
@@ -95,6 +96,9 @@ pub fn page_source(page: &Page, module: &str) -> String {
 pub fn page_root(page: &Page, module: &str) -> String {
     let class = if module.is_empty() { page.name.name.clone() } else { format!("{module}.{}", page.name.name) };
     let mut root = attribute("class", &Value::String(class));
+    if let Some(allow) = &page.allow {
+        root.push_str(&attribute("allow", &Value::String(allow.clone())));
+    }
     if let Some(title) = &page.title {
         root.push_str(&attribute("title", &Value::String(title.clone())));
     }
@@ -600,7 +604,7 @@ impl Reading {
 
     fn page(&mut self, root: &Element) -> Option<Page> {
         let Some(kind) = kind_of_root(&root.name) else {
-            self.error(format!("a page's file starts with <Window>, <Dialog>, <View>, <Splash> or <Toolbox>, not <{}>", root.name), root.span);
+            self.error(format!("a page's file starts with <Window>, <Dialog>, <View>, <Splash>, <Toolbox> or <SignIn>, not <{}>", root.name), root.span);
             return None;
         };
         let Some(class) = root.attribute("class") else {
@@ -632,9 +636,16 @@ impl Reading {
             handlers,
             gives,
             tells,
+            allow: None,
+            allow_condition: None,
             span: root.span,
         };
         page.title = root.get("title").map(str::to_string);
+        // Who may open it: a condition, read where it is written.
+        if let Some(allow) = root.attribute("allow") {
+            page.allow = Some(allow.value.clone());
+            page.allow_condition = self.read(crate::parser::condition_value(&allow.value, allow.span));
+        }
         page.size = match (root.get("width"), root.get("height")) {
             (Some(w), Some(h)) => match (w.parse(), h.parse()) {
                 (Ok(width), Ok(height)) => Some(WindowSize { width, height }),
@@ -813,7 +824,11 @@ impl Reading {
             return None;
         }
         let defaults = crate::frame::new_command(CommandKind::Item, None);
-        let props = self.props(element, &defaults, &COMMAND_WORDS, &[])?;
+        let mut props: CommandProps = self.props(element, &defaults, &COMMAND_WORDS, &[])?;
+        // Who may pick it: a condition, read where it is written.
+        if let Some(allow) = element.attribute("allow") {
+            props.allow_condition = self.read(crate::parser::condition_value(&allow.value, allow.span));
+        }
         Some(Command { props, items: self.commands(&element.children), span: element.span })
     }
 

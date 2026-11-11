@@ -1,0 +1,961 @@
+{
+  "about": "Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4), as every runtime signs people in. Each case starts from an empty table of people with the rows given (a value {hash, text} is stored as that hash of the text, as clarity-auth's hash makes it), and the sign-in block given. Its steps run in order: signin with a strategy and inputs, which either signs the record of that id in (me) or is refused with a key of Clarity's own words; signout; me, the record signed in now (null for nobody); count, the rows of the table; hashed, text assigned to a hashed field with its minimum (refused, or kept as a hash); save, a person's record saved with new values (a secret changed this way closes the person's other sessions when they changed their own, every session of theirs when someone else did). A served case runs each step as one call of a browser (the step's browser, \"a\" without one) that carries the session cookie the program set it last, from the address given. The tries and sessions of clarity-auth are kept for the whole program, so each case uses names of its own. A case with rememberDays signs in on the desktop as `remember N days` does: a successful sign-in with a strategy that keeps a secret keeps an entry in the program's secret store (the signin block's program, the name clarityRemembered; each runner keeps that store in memory, empty at the case's start); remembered, whether the store holds one; restart, the program starts anew on the same database and secret store (its people named again, nobody signed in) and its start gives the sign-in window, or none (page null) when the remembered sign-in still held and signed its person in. A case with rememberAsks as well signs in as `remember N days when asked` does: the sign-in part asks, and its answer comes as the input remember, \"true\" or \"false\"; only \"true\" keeps the entry. Without rememberAsks the input remember changes nothing.",
+  "refusals": {
+    "signinRefused": "Signing in did not work. Check what you typed and try again.",
+    "signinTooManyTries": "Too many tries. Wait a few minutes and try again.",
+    "notAllowed": "You are not allowed to do this.",
+    "notYours": "This record is not yours.",
+    "secretTooShort": "This needs at least {minimum} characters."
+  },
+  "people": {
+    "table": "members",
+    "key": "id",
+    "create": "CREATE TABLE members (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL DEFAULT '', email TEXT, login TEXT, password_hash TEXT, api_token TEXT, recovery_codes TEXT)"
+  },
+  "signin": {
+    "page": "SignIn",
+    "targets": [
+      "desktop",
+      "web"
+    ],
+    "strategies": [
+      {
+        "name": "password",
+        "columns": [
+          "email",
+          "password_hash"
+        ]
+      },
+      {
+        "name": "account",
+        "columns": [
+          "login"
+        ]
+      },
+      {
+        "name": "token",
+        "columns": [
+          "api_token"
+        ]
+      },
+      {
+        "name": "recovery",
+        "columns": [
+          "email",
+          "recovery_codes"
+        ]
+      }
+    ],
+    "sessionMinutes": 480,
+    "tries": 3,
+    "triesMinutes": 15,
+    "program": "clarity-signin-conformance"
+  },
+  "cases": [
+    {
+      "name": "a password signs its person in and a wrong one is refused",
+      "rows": [
+        {
+          "name": "Ann",
+          "email": "ann@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "correct horse"
+          }
+        },
+        {
+          "name": "Ben",
+          "email": "ben@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "battery staple"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "me": null
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "ben@signin.test",
+            "password": "correct horse"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "nobody@signin.test",
+            "password": "correct horse"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "ben@signin.test"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "ben@signin.test",
+            "password": "battery staple"
+          },
+          "me": 2
+        },
+        {
+          "me": 2
+        },
+        {
+          "signout": true
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "a token is found by its hash",
+      "rows": [
+        {
+          "name": "Robot",
+          "api_token": {
+            "hash": "sha256",
+            "text": "secret-token-of-the-robot"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "token",
+          "inputs": {
+            "token": "another-token"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "token",
+          "inputs": {
+            "token": "secret-token-of-the-robot"
+          },
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "the first account is made by a strategy that can, when there are no people yet",
+      "rows": [],
+      "steps": [
+        {
+          "count": 0
+        },
+        {
+          "signin": "token",
+          "inputs": {
+            "token": "anything"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "count": 0
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "first@signin.test",
+            "password": "first one"
+          },
+          "me": 1
+        },
+        {
+          "count": 1
+        },
+        {
+          "signout": true
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "second@signin.test",
+            "password": "second one"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "count": 1
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "first@signin.test",
+            "password": "first one"
+          },
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "the account strategy makes the first account of the computer's user",
+      "rows": [],
+      "steps": [
+        {
+          "signin": "account",
+          "inputs": {},
+          "me": 1
+        },
+        {
+          "count": 1
+        },
+        {
+          "signout": true
+        },
+        {
+          "signin": "account",
+          "inputs": {},
+          "me": 1
+        },
+        {
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "too many failed tries refuse even the right password until the window passed",
+      "rows": [
+        {
+          "name": "Cat",
+          "email": "cat@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "meow"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "cat@signin.test",
+            "password": "woof"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "cat@signin.test",
+            "password": "woof"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "cat@signin.test",
+            "password": "woof"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "cat@signin.test",
+            "password": "meow"
+          },
+          "refused": "signinTooManyTries"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "a success forgets the failed tries",
+      "rows": [
+        {
+          "name": "Dan",
+          "email": "dan@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "right"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "wrong"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "wrong"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "right"
+          },
+          "me": 1
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "wrong"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "wrong"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dan@signin.test",
+            "password": "right"
+          },
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "served, the session cookie names the person on every call until signing out closes it",
+      "served": true,
+      "address": "192.0.2.10",
+      "rows": [
+        {
+          "name": "Eve",
+          "email": "eve@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "apple"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "me": null
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "eve@signin.test",
+            "password": "apple"
+          },
+          "me": 1
+        },
+        {
+          "me": 1
+        },
+        {
+          "signout": true
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "served, the computer's account is no strategy of a browser",
+      "served": true,
+      "address": "192.0.2.11",
+      "rows": [],
+      "steps": [
+        {
+          "signin": "account",
+          "inputs": {},
+          "refused": "signinRefused"
+        },
+        {
+          "count": 0
+        }
+      ]
+    },
+    {
+      "name": "served, failed tries from one address slow down every name it tries",
+      "served": true,
+      "address": "192.0.2.12",
+      "rows": [
+        {
+          "name": "Fay",
+          "email": "fay@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "pear"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "one@signin.test",
+            "password": "x"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "two@signin.test",
+            "password": "x"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "three@signin.test",
+            "password": "x"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "fay@signin.test",
+            "password": "pear"
+          },
+          "refused": "signinTooManyTries"
+        }
+      ]
+    },
+    {
+      "name": "a recovery code signs in once",
+      "rows": [
+        {
+          "name": "Kim",
+          "email": "kim@signin.test",
+          "recovery_codes": {
+            "hash": "sha256-lines",
+            "text": "aaaaa-bbbbb\nccccc-ddddd"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "recovery",
+          "inputs": {
+            "name": "kim@signin.test",
+            "code": "zzzzz-zzzzz"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "recovery",
+          "inputs": {
+            "name": "kim@signin.test",
+            "code": "aaaaa-bbbbb"
+          },
+          "me": 1
+        },
+        {
+          "signout": true
+        },
+        {
+          "signin": "recovery",
+          "inputs": {
+            "name": "kim@signin.test",
+            "code": "aaaaa-bbbbb"
+          },
+          "refused": "signinRefused"
+        },
+        {
+          "signin": "recovery",
+          "inputs": {
+            "name": "kim@signin.test",
+            "code": "ccccc-ddddd"
+          },
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "a secret shorter than its field's minimum is refused before it is hashed",
+      "rows": [],
+      "steps": [
+        {
+          "hashed": {
+            "method": "argon2id",
+            "text": "short",
+            "minimum": 8
+          },
+          "refused": "secretTooShort",
+          "minimum": 8
+        },
+        {
+          "hashed": {
+            "method": "argon2id",
+            "text": "long enough",
+            "minimum": 8
+          }
+        },
+        {
+          "hashed": {
+            "method": "argon2id",
+            "text": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "served, a person who changes their password closes their other sessions; someone else changing it closes all of them",
+      "served": true,
+      "address": "192.0.2.13",
+      "rows": [
+        {
+          "name": "Lea",
+          "email": "lea@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "plum"
+          }
+        },
+        {
+          "name": "Max",
+          "email": "max@signin.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "fig"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "browser": "a",
+          "signin": "password",
+          "inputs": {
+            "name": "lea@signin.test",
+            "password": "plum"
+          },
+          "me": 1
+        },
+        {
+          "browser": "b",
+          "signin": "password",
+          "inputs": {
+            "name": "lea@signin.test",
+            "password": "plum"
+          },
+          "me": 1
+        },
+        {
+          "browser": "a",
+          "save": {
+            "id": 1,
+            "password_hash": {
+              "hash": "argon2id",
+              "text": "new plum"
+            }
+          }
+        },
+        {
+          "browser": "a",
+          "me": 1
+        },
+        {
+          "browser": "b",
+          "me": null
+        },
+        {
+          "browser": "c",
+          "signin": "password",
+          "inputs": {
+            "name": "max@signin.test",
+            "password": "fig"
+          },
+          "me": 2
+        },
+        {
+          "browser": "c",
+          "save": {
+            "id": 1,
+            "name": "Lea"
+          }
+        },
+        {
+          "browser": "a",
+          "me": 1
+        },
+        {
+          "browser": "c",
+          "save": {
+            "id": 1,
+            "password_hash": {
+              "hash": "argon2id",
+              "text": "plum again"
+            }
+          }
+        },
+        {
+          "browser": "a",
+          "me": null
+        },
+        {
+          "browser": "c",
+          "me": 2
+        }
+      ]
+    },
+    {
+      "name": "remember N days keeps a desktop sign-in for the next start until signing out",
+      "rememberDays": 30,
+      "rows": [
+        {
+          "name": "Zed",
+          "email": "zed@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "other one"
+          }
+        },
+        {
+          "name": "Ann",
+          "email": "ann@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "correct horse"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "remembered": false
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        },
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "ann@remember.test",
+            "password": "correct horse"
+          },
+          "me": 2
+        },
+        {
+          "remembered": true
+        },
+        {
+          "restart": true,
+          "page": null
+        },
+        {
+          "me": 2
+        },
+        {
+          "restart": true,
+          "page": null
+        },
+        {
+          "me": 2
+        },
+        {
+          "signout": true
+        },
+        {
+          "remembered": false
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "a remembered sign-in no longer holds after the person's password changed",
+      "rememberDays": 30,
+      "rows": [
+        {
+          "name": "Bea",
+          "email": "bea@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "first secret"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "bea@remember.test",
+            "password": "first secret"
+          },
+          "me": 1
+        },
+        {
+          "remembered": true
+        },
+        {
+          "save": {
+            "id": 1,
+            "password_hash": {
+              "hash": "argon2id",
+              "text": "second secret"
+            }
+          }
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "a remembered sign-in holds by the secret of the strategy it was made with",
+      "rememberDays": 30,
+      "rows": [
+        {
+          "name": "Cy",
+          "email": "cy@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "cy password"
+          },
+          "api_token": {
+            "hash": "sha256",
+            "text": "token-of-cy"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "token",
+          "inputs": {
+            "token": "token-of-cy"
+          },
+          "me": 1
+        },
+        {
+          "remembered": true
+        },
+        {
+          "restart": true,
+          "page": null
+        },
+        {
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "the account strategy remembers nothing: it signs in by itself",
+      "rememberDays": 30,
+      "rows": [],
+      "steps": [
+        {
+          "signin": "account",
+          "inputs": {},
+          "me": 1
+        },
+        {
+          "remembered": false
+        }
+      ]
+    },
+    {
+      "name": "without rememberDays a sign-in is not kept for the next start",
+      "rows": [
+        {
+          "name": "Dot",
+          "email": "dot@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "dot password"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "dot@remember.test",
+            "password": "dot password"
+          },
+          "me": 1
+        },
+        {
+          "remembered": false
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "remember when asked keeps a desktop sign-in when the box is ticked",
+      "rememberDays": 30,
+      "rememberAsks": true,
+      "rows": [
+        {
+          "name": "Eve",
+          "email": "eve@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "eve password"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "eve@remember.test",
+            "password": "eve password",
+            "remember": "true"
+          },
+          "me": 1
+        },
+        {
+          "remembered": true
+        },
+        {
+          "restart": true,
+          "page": null
+        },
+        {
+          "me": 1
+        }
+      ]
+    },
+    {
+      "name": "remember when asked keeps nothing when the box is not ticked",
+      "rememberDays": 30,
+      "rememberAsks": true,
+      "rows": [
+        {
+          "name": "Fay",
+          "email": "fay@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "fay password"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "fay@remember.test",
+            "password": "fay password",
+            "remember": "false"
+          },
+          "me": 1
+        },
+        {
+          "remembered": false
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "remember when asked keeps nothing without the box's answer",
+      "rememberDays": 30,
+      "rememberAsks": true,
+      "rows": [
+        {
+          "name": "Gus",
+          "email": "gus@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "gus password"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "gus@remember.test",
+            "password": "gus password"
+          },
+          "me": 1
+        },
+        {
+          "remembered": false
+        },
+        {
+          "restart": true,
+          "page": "SignIn"
+        },
+        {
+          "me": null
+        }
+      ]
+    },
+    {
+      "name": "remember without when asked keeps a sign-in whatever the input remember says",
+      "rememberDays": 30,
+      "rows": [
+        {
+          "name": "Hal",
+          "email": "hal@remember.test",
+          "password_hash": {
+            "hash": "argon2id",
+            "text": "hal password"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "signin": "password",
+          "inputs": {
+            "name": "hal@remember.test",
+            "password": "hal password",
+            "remember": "false"
+          },
+          "me": 1
+        },
+        {
+          "remembered": true
+        },
+        {
+          "restart": true,
+          "page": null
+        },
+        {
+          "me": 1
+        }
+      ]
+    }
+  ]
+}

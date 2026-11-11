@@ -1,0 +1,22 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Record versions"
+    add version Book
+    add version Layer
+    add version Chapter
+    add version Manuscript
+    add version Version
+    add version Cutting
+    add version Session
+    add version Fragment
+    add version FragmentPlace
+    add version TrialBalloon
+    add version BalloonPlace
+    add version Participation
+    add version Line
+    add version Character
+    add version Appearance
+    add version Research
+    add version ResearchPlace
+    add version Document
+    add version Event

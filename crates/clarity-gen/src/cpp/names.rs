@@ -18,9 +18,10 @@ const RESERVED: [&str; 97] = [
     "table", "key", "source", "db", "ui",
 ];
 
-/// A Clarity name as a C++ name.
+/// A Clarity name as a C++ name; also clear of the members the runtime
+/// asks of a record (`version`, `version_column`, `saved_since`).
 pub fn ident(name: &str) -> String {
-    if RESERVED.contains(&name) || ["columns", "values", "pictures", "from_values", "load", "cascade"].contains(&name) { format!("{name}_") } else { name.to_string() }
+    if RESERVED.contains(&name) || ["columns", "values", "pictures", "from_values", "load", "cascade", "version", "version_column", "saved_since"].contains(&name) { format!("{name}_") } else { name.to_string() }
 }
 
 /// `order_status` and `My shop` as `OrderStatus` and `MyShop`.

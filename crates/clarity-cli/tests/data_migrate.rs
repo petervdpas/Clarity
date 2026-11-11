@@ -21,6 +21,10 @@ fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
         std::fs::copy(&entry, to).unwrap();
     }
     let clarity = env!("CARGO_BIN_EXE_clarity");
+    // The YAML file source `ideas` is external: it never gets steps.
+    let pending = Command::new(clarity).args(["migrate", "--check"]).arg(root.join("todo.clarity")).output().unwrap();
+    let listed = String::from_utf8_lossy(&pending.stderr);
+    assert!(!listed.contains("data source ideas"), "{listed}");
     let first = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
     let said = String::from_utf8_lossy(&first.stderr);
     assert!(first.status.success() && said.contains("Migrated main by"), "{said}");

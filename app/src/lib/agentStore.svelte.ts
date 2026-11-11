@@ -5,7 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { addUsage, agentConnections, outsideAgents, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
+import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
 import { isRuns } from "./agent";
 import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
 import type { Runs } from "@clarity/ui/generated/Runs.ts";
@@ -42,11 +42,9 @@ class AgentStore {
   items = $state<Item[]>([]);
   running = $state(false);
   connections = $state<string[]>([]);
-  /** The connections that are the person's own agent program, which signs in its own way. */
-  outside = $state<string[]>([]);
   /** Whether Sign in runs. */
   signingIn = $state(false);
-  /** Whether the agent program said it is not signed in, so the panel offers Sign in. */
+  /** Whether the connection is not signed in (its agent program, or its Microsoft sign-in), so the panel offers Sign in. */
   needsSignIn = $state(false);
   connection = $state(remembered(CONNECTION_KEY) ?? "anthropic");
   /** Whether the agent asks before it runs, may run without asking, or never runs (Clarity's settings). */
@@ -88,10 +86,8 @@ class AgentStore {
     try {
       const rows = await invoke<ConnectionRow[]>("connections_list");
       this.connections = agentConnections(rows);
-      this.outside = outsideAgents(rows);
     } catch {
       this.connections = [];
-      this.outside = [];
     }
     if (this.connections.length > 0 && !this.connections.includes(this.connection)) this.pick(this.connections[0]);
   }
@@ -134,12 +130,13 @@ class AgentStore {
     }
   }
 
-  /** Signs in to the outside agent the vendor's own way; a browser opens. */
+  /** Signs in the way the connection does (the agent program's vendor, or Microsoft); a browser opens. */
   async signIn() {
     if (this.signingIn) return;
     this.signingIn = true;
     try {
-      const said = await invoke<string>("agent_sign_in", { connection: this.connection });
+      // A Microsoft sign-in keeps its token in the vault: a locked vault asks for its password first.
+      const said = await unlock.invoke<string>("agent_sign_in", { connection: this.connection });
       this.items = [...this.items, { kind: "note", text: said }];
       this.needsSignIn = false;
     } catch (err) {

@@ -22,6 +22,9 @@ const BASELINE: &str = "migration \"Taken over\" baseline
         amount: money
 ";
 
+/// The step after taking ownership: the tables get the version a save checks.
+const VERSIONS: &str = "migration \"Versions\"\n    add version Invoice\n";
+
 fn load(erp: &str, steps: &[(&str, &str)]) -> Project {
     load_in([("erp.clarity", erp)], steps.iter().copied(), &[SourceRef::sql("main"), SourceRef::sql("erp")])
 }
@@ -33,6 +36,9 @@ fn pending(project: &Project) -> Vec<String> {
 #[test]
 fn a_baseline_step_describes_the_mapped_tables() {
     let project = load(ERP, &[("migrations/erp/0001.clarity", BASELINE)]);
+    // The tables as they were have no version yet: the next step adds it.
+    assert_eq!(pending(&project), ["add version Invoice"]);
+    let project = load(ERP, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let steps = &project.migrations.as_ref().unwrap()["erp"];
     assert!(steps[0].baseline);
@@ -43,8 +49,9 @@ fn a_baseline_step_describes_the_mapped_tables() {
     assert_eq!(invoice.column_name("number"), "InvNo");
     assert_eq!(invoice.column_name("amount"), "amount");
 
-    // The step text is what Take ownership writes.
-    let written = migrate::step_text_baseline("Taken over", &migrate::pending(&load(ERP, &[]), "erp", &[]));
+    // The step text is what Take ownership writes, while the source is still external.
+    let external = load_in([("erp.clarity", ERP)], [], &[SourceRef::sql("main"), SourceRef::sql("erp").external()]);
+    let written = migrate::step_text_baseline("Taken over", &migrate::pending(&external, "erp", &[]));
     assert!(written.ends_with(BASELINE), "{written}");
 }
 
@@ -66,7 +73,7 @@ fn changing_a_mapping_is_a_step() {
         .replace("column \"InvNo\"", "column \"InvoiceNumber\"")
         .replace("key \"InvoiceID\"", "key \"id\"")
         .replace("    amount: money\n", "    amount: money, column \"Total\"\n");
-    let project = load(&remapped, &[("migrations/erp/0001.clarity", BASELINE)]);
+    let project = load(&remapped, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS)]);
     assert_eq!(
         pending(&project),
         [
@@ -77,22 +84,22 @@ fn changing_a_mapping_is_a_step() {
         ]
     );
     let steps = format!("migration \"Remap\"\n{}", pending(&project).iter().map(|l| format!("    {l}\n")).collect::<String>());
-    let project = load(&remapped, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", &steps)]);
+    let project = load(&remapped, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS), ("migrations/erp/0003.clarity", &steps)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 
     // Back to the default name.
     let plain = remapped.replace("    amount: money, column \"Total\"\n", "    amount: money\n");
-    let project = load(&plain, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", &steps)]);
+    let project = load(&plain, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS), ("migrations/erp/0003.clarity", &steps)]);
     assert_eq!(pending(&project), ["map column Invoice.amount to default"]);
 }
 
 #[test]
 fn owned_entities_can_keep_mapped_names() {
-    let project = load(ERP, &[("migrations/erp/0001.clarity", BASELINE)]);
+    let project = load(ERP, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     // A renamed field keeps its column.
     let renamed = ERP.replace("    number: text(20)", "    invoice_number: text(20)");
-    let project = load(&renamed, &[("migrations/erp/0001.clarity", BASELINE)]);
+    let project = load(&renamed, &[("migrations/erp/0001.clarity", BASELINE), ("migrations/erp/0002.clarity", VERSIONS)]);
     let ops = migrate::pending(&project, "erp", &migrate::proposed_renames(&project, "erp"));
     assert!(matches!(ops.as_slice(), [Op::RenameField { .. }]), "{ops:#?}");
 }

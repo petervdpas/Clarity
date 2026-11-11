@@ -18,6 +18,7 @@ entity Recording
 
 const FIRST: &str = "migration \"Albums\"
     add entity Album
+        version
         title: text(80), search
         notes: text
         tags: list<text>

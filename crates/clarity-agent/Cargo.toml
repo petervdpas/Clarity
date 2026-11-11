@@ -6,6 +6,7 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+clarity-auth = { path = "../../runtimes/rust-auth", features = ["openid"] }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

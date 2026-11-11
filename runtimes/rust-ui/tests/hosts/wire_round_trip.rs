@@ -33,7 +33,7 @@ impl Noted {
 
 impl Program for Noted {
     fn started(&self) -> Started {
-        Started { main: "Shop".into(), unconnected: Some(Unconnected { handler: Some("offline".into()), window: None, problem: Text::plain("no database") }) }
+        Started { main: "Shop".into(), unconnected: Some(Unconnected { handler: Some("offline".into()), window: None, problem: Text::plain("no database") }), signin: Some("SignIn".into()) }
     }
     fn start_app(&self) -> Answer<Reply> {
         self.note("start_app".into())
@@ -102,6 +102,14 @@ impl Program for Noted {
     fn facts_json(&self) -> Value {
         json!({ "fields": { "price": { "label": "Price" } } })
     }
+    fn signin(&self, strategy: &str, inputs: Map<String, Value>) -> Answer<()> {
+        self.0.lock().unwrap().push(format!("signin {strategy} {inputs:?}"));
+        if inputs.get("password") == Some(&json!("right")) { Ok(()) } else { Err(Text::keyed("signinRefused", "Signing in did not work.")) }
+    }
+    fn signout(&self) -> Answer<()> {
+        self.0.lock().unwrap().push("signout".into());
+        Ok(())
+    }
     fn watches(&self) -> bool {
         true
     }
@@ -157,6 +165,18 @@ fn every_call_crosses_the_wire_and_arrives_as_it_was_made() {
     assert_eq!(started.main, "Shop");
     assert_eq!(started.unconnected.as_ref().and_then(|u| u.handler.clone()).as_deref(), Some("offline"));
     assert_eq!(started.unconnected.unwrap().problem, Text::plain("no database"));
+    assert_eq!(started.signin.as_deref(), Some("SignIn"));
+
+    // Signing in and out, the inputs as the sign-in window's parts had them.
+    let mut inputs = Map::new();
+    inputs.insert("name".into(), json!("ann"));
+    inputs.insert("password".into(), json!("wrong"));
+    assert_eq!(wire.signin("password", inputs.clone()).unwrap_err().key.as_deref(), Some("signinRefused"));
+    assert_eq!(noted.last(), format!("signin password {inputs:?}"));
+    inputs.insert("password".into(), json!("right"));
+    wire.signin("password", inputs).unwrap();
+    wire.signout().unwrap();
+    assert_eq!(noted.last(), "signout");
 
     let mut with = Map::new();
     with.insert("id".into(), json!(4));

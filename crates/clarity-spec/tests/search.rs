@@ -91,8 +91,10 @@ fn the_rules_of_matches() {
 
 const FIRST: &str = "migration \"Music\"
     add entity Artist
+        version
         name: text(80), search
     add entity Album
+        version
         title: text(80), search
         notes: text
         tags: list<text>

@@ -13,6 +13,7 @@
 #include "clarity/dropdown_options.h"
 #include "clarity/edits.h"
 #include "clarity/list_fields.h"
+#include "clarity/people.h"
 #include "clarity/ranges.h"
 #include "clarity/record_file.h"
 #include "clarity/reorder.h"
@@ -191,14 +192,10 @@ static bool stepped(ClarityService* s, const ClarityWindowState* state, const ch
     return true;
 }
 
-/// Takes an edit's database steps back or does them again, in order; the
-/// first the database refuses stops it.
+/// Takes an edit's database steps back or does them again, in order: all
+/// of them, or none when the database refuses one.
 static bool take_steps(const int64_t* steps, size_t count, bool back, void* context) {
-    ClarityDb* db = context;
-    for (size_t i = 0; i < count; ++i) {
-        if (!(back ? clarity_undo(db, steps[i], NULL) : clarity_redo(db, steps[i], NULL))) return false;
-    }
-    return true;
+    return clarity_replay_steps(context, steps, count, back, NULL);
 }
 
 /// Puts `value` as the field `name` of `object`.
@@ -492,6 +489,10 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
             cJSON_AddItemToObject(why, "window", s->options.unconnected_window ? cJSON_CreateString(s->options.unconnected_window) : cJSON_CreateNull());
             cJSON_AddItemToObject(why, "problem", clarity_text_json(clarity_unconnected_reason(s->options.unconnected)));
         }
+        // The sign-in window, when people sign in before the main window opens.
+        const ClarityPeopleHooks* people = clarity_people();
+        const char* signin = people && !s->options.unconnected ? people->first(db) : NULL;
+        if (signin) cJSON_AddStringToObject(started, "signin", signin);
         return value(started);
     }
     if (strcmp(command, "connect") == 0) {
@@ -508,6 +509,20 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         s->connected = opened;
         s->options.db = opened;
         s->options.unconnected = NULL;
+        return value(cJSON_CreateNull());
+    }
+    if (strcmp(command, "signin") == 0) {
+        // A person signs in with a strategy and its inputs, or is refused in
+        // Clarity's own words; a program whose people do not sign in refuses.
+        const ClarityPeopleHooks* people = clarity_people();
+        int64_t id = 0;
+        if (!people) clarity_refuse(clarity_signin_refused());
+        if (!people || !people->signin(db, text_of(args, "strategy"), cJSON_GetObjectItemCaseSensitive(args, "inputs"), &id)) return failed();
+        return value(cJSON_CreateNull());
+    }
+    if (strcmp(command, "signout") == 0) {
+        const ClarityPeopleHooks* people = clarity_people();
+        if (people) people->signout(db);
         return value(cJSON_CreateNull());
     }
     if (strcmp(command, "read_settings") == 0) {

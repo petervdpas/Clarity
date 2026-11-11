@@ -2,6 +2,7 @@
 import type { CodecLibrary } from "./CodecLibrary";
 import type { DataSource } from "./DataSource";
 import type { FileStore } from "./FileStore";
+import type { Signin } from "./Signin";
 import type { Stack } from "./Stack";
 
 /**
@@ -69,6 +70,11 @@ keeps: Array<string>,
  * themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
  */
 keys_editable: boolean, 
+/**
+ * Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4):
+ * `signin Member on desktop web` with its strategies; none without it.
+ */
+signin: Signin | null, 
 /**
  * Whether the engines written in Clarity are run by the interpreter
  * rather than compiled (DESIGN 5.12): `engines interpreted`.

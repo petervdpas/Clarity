@@ -13,6 +13,11 @@ pub(crate) enum Failure {
     /// A reference between records would no longer fit: a record that is
     /// referred to, or a reference to a record that does not exist.
     Reference(String),
+    /// A file source's file changed on disk since it was read or last
+    /// written: the save is refused as one someone else saved since. Only
+    /// a file source makes it, so a runtime without them never does.
+    #[cfg_attr(not(all(feature = "formats", feature = "sqlite")), allow(dead_code))]
+    Changed,
     Other(String),
 }
 
@@ -20,6 +25,7 @@ impl From<Failure> for Error {
     fn from(failure: Failure) -> Self {
         match failure {
             Failure::Reference(what) | Failure::Other(what) => Error::Storage(what),
+            Failure::Changed => Error::Refused(crate::saved_since()),
         }
     }
 }

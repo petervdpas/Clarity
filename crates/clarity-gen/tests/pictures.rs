@@ -104,7 +104,8 @@ fn csharp_records_hold_their_pictures() {
 fn go_records_hold_their_pictures() {
     let files = files(Backend::Go, Ui::Clarity, SourceKind::Sqlite);
     let music = text(&files, "music_module.go");
-    has(music, "\tCover *clarity.Picture `json:\"cover\"`\n");
+    // Aligned with the record's version field, which its migration steps give it.
+    has(music, "\tCover      *clarity.Picture `json:\"cover\"`\n");
     has(music, "clarity.PictureValue(r.Cover), clarity.PictureValue(r.Photo)}");
     has(music, "\tr.Cover = read.Picture(1, \"cover\")\n");
     has(music, "func (*Album) Pictures() []clarity.PictureColumn {\n\treturn []clarity.PictureColumn{{Column: \"cover\"}, {Column: \"photo\", Store: \"photos\"}}\n}\n");

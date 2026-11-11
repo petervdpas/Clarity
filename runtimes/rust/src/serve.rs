@@ -34,9 +34,24 @@ pub fn address(args: &[String], project: &str) -> String {
 }
 
 fn reply(status: &str, kind: &str, body: &[u8]) -> Vec<u8> {
-    let mut out = format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).into_bytes();
+    reply_with(status, kind, None, body)
+}
+
+/// A reply with a `Set-Cookie` header when one is given (the sign-in session).
+fn reply_with(status: &str, kind: &str, cookie: Option<&str>, body: &[u8]) -> Vec<u8> {
+    let cookie = cookie.map(|c| format!("Set-Cookie: {c}\r\nCache-Control: no-store\r\n")).unwrap_or_default();
+    let mut out = format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n{cookie}Connection: close\r\n\r\n", body.len()).into_bytes();
     out.extend_from_slice(body);
     out
+}
+
+/// The value of header `name` in a request's head; none without it.
+#[cfg_attr(not(feature = "auth"), allow(dead_code))]
+fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
+    head.lines().skip(1).find_map(|line| {
+        let (at, value) = line.split_once(':')?;
+        at.trim().eq_ignore_ascii_case(name).then_some(value.trim())
+    })
 }
 
 /// The kind of a file the renderer is made of, by its extension.
@@ -168,6 +183,13 @@ pub fn answer(request: &[u8], files: &dyn Fn(&str) -> Option<Vec<u8>>, invoke: &
 
 /// [`answer`] with the pages `pages`.
 pub fn answer_in(pages: &Pages, request: &[u8], files: &dyn Fn(&str) -> Option<Vec<u8>>, invoke: &mut dyn FnMut(&str, Value) -> Value) -> Vec<u8> {
+    answer_from(pages, request, "", files, invoke)
+}
+
+/// [`answer_in`] for a request that came from `address` (the peer's IP,
+/// empty when unknown): with sign-in, each command runs as the person of the
+/// request's session cookie, and failed tries count per address too.
+pub fn answer_from(pages: &Pages, request: &[u8], address: &str, files: &dyn Fn(&str) -> Option<Vec<u8>>, invoke: &mut dyn FnMut(&str, Value) -> Value) -> Vec<u8> {
     let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") else {
         return reply("400 Bad Request", "text/plain", b"");
     };
@@ -179,6 +201,7 @@ pub fn answer_in(pages: &Pages, request: &[u8], files: &dyn Fn(&str) -> Option<V
         if method != "POST" {
             return reply("405 Method Not Allowed", "text/plain", b"send a command with POST");
         }
+        let mut cookie: Option<String> = None;
         let answer = match serde_json::from_slice::<Value>(&request[end + 4..]) {
             Ok(sent) => match sent.get("command").and_then(Value::as_str) {
                 Some(command) => {
@@ -186,13 +209,23 @@ pub fn answer_in(pages: &Pages, request: &[u8], files: &dyn Fn(&str) -> Option<V
                     // The page that asks (one id per tab) and its person's settings.
                     let browser = sent.get("browser").and_then(Value::as_str).unwrap_or("");
                     let settings = sent.get("settings").and_then(Value::as_object).cloned();
-                    pages.answer(browser, settings, command, args, invoke)
+                    #[cfg(feature = "auth")]
+                    {
+                        let (answer, set) = crate::signin::served(header(&head, "cookie"), address, command, &args.clone(), || pages.answer(browser, settings, command, args, invoke));
+                        cookie = set;
+                        answer
+                    }
+                    #[cfg(not(feature = "auth"))]
+                    {
+                        let _ = (address, &mut cookie);
+                        pages.answer(browser, settings, command, args, invoke)
+                    }
                 }
                 None => json!({ "error": "a command is JSON with its command and its args" }),
             },
             Err(err) => json!({ "error": format!("a command is JSON with its command and its args: {err}") }),
         };
-        return reply("200 OK", "application/json", answer.to_string().as_bytes());
+        return reply_with("200 OK", "application/json", cookie.as_deref(), answer.to_string().as_bytes());
     }
     let file = match path.trim_start_matches('/') {
         "" => "index.html",
@@ -247,8 +280,9 @@ pub fn serve(name: &str, address: &str, files: &(dyn Fn(&str) -> Option<Vec<u8>>
             let Ok(mut stream) = stream else { continue };
             scope.spawn(move || {
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(60)));
+                let address = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
                 if let Ok(request) = read_request(&mut stream) {
-                    let _ = stream.write_all(&answer(&request, files, &mut |command, args| invoke(command, args)));
+                    let _ = stream.write_all(&answer_from(&PAGES, &request, &address, files, &mut |command, args| invoke(command, args)));
                 }
             });
         }

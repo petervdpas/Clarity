@@ -81,6 +81,10 @@ const KEYWORDS: &[&str] = &[
     "level", "under",
     // Mappings (docs/FORMATS-PLAN.md, step 4): `mapping OrderFeed of Order from xml`, `order is ".."`, `check "orders.xsd"`, `using OrderFeed`.
     "mapping", "is", "check", "using",
+    // Sign-in (docs/APP-CAPABILITIES-PLAN.md step 4): `hashed`, `me`, `allow when`, `readable when`, `writable when`, the kind and the targets `signin` and `signout`.
+    "hashed", "me", "allow", "readable", "writable", "signin", "signout",
+    // Versions (docs/APP-CAPABILITIES-PLAN.md step 5): `save customer anyway`, `savedSince @key` on an entity; `version` is above.
+    "anyway", "savedSince",
 ];
 
 /// Clarity's own types.
@@ -93,6 +97,14 @@ const LITERALS: &[&str] = &["true", "false", "none"];
 /// or a part. A name the project gives should not be one.
 pub fn is_word_of_the_language(word: &str) -> bool {
     KEYWORDS.contains(&word) || TYPES.contains(&word) || LITERALS.contains(&word) || crate::widgets::catalog().iter().any(|w| w.keyword == word) || is_format(word)
+}
+
+/// The options of the project file's signin block, each at the start of its line.
+const SIGNIN_LINE_WORDS: &[&str] = &["minimum", "session", "tries", "remember"];
+
+/// Whether `word` starts a line of the signin block: an option, or a strategy of Clarity.Auth's catalog.
+fn is_signin_line_word(word: &str) -> bool {
+    SIGNIN_LINE_WORDS.contains(&word) || crate::signin::strategy_info(word).is_some()
 }
 
 /// Whether `word` names a format of Clarity.Formats' catalog (`json`, `csv`, `xml`).
@@ -170,6 +182,12 @@ fn word_kind(tokens: &[Token], i: usize) -> PieceKind {
     {
         return PieceKind::Keyword;
     }
+    // A line of the project file's signin block: a strategy of Clarity.Auth's catalog and the
+    // fields it names (`account name`), or one of its options (`tries 5 per 15 minutes`). Only
+    // there: a project may name a field `account` or `session`.
+    if i == 0 && tokens.len() > 1 && tokens[1].kind != TokenKind::Assign && tokens[1].kind != TokenKind::Dot && tokens[1].kind != TokenKind::LParen && is_signin_line_word(word) {
+        return PieceKind::Keyword;
+    }
     // A member, or a word set, called, indexed or reached into.
     if before.is_some_and(|t| t.kind == TokenKind::Dot)
         || matches!(after, Some(TokenKind::Assign | TokenKind::LParen | TokenKind::LBracket | TokenKind::Dot))
@@ -240,6 +258,8 @@ pub fn keywords() -> Vec<String> {
     words.extend(crate::widgets::catalog().into_iter().filter(|w| w.kind != crate::widgets::WidgetKind::Custom).map(|w| w.keyword));
     words.extend(crate::widgets::ALL_EVENTS.iter().map(|e| e.keyword().to_string()));
     words.extend(clarity_formats::catalog().into_iter().map(|f| f.name.to_string()));
+    words.extend(SIGNIN_LINE_WORDS.iter().map(|w| w.to_string()));
+    words.extend(crate::signin::strategy_names().into_iter().map(str::to_string));
     words.sort();
     words.dedup();
     words

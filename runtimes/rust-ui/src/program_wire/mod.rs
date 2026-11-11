@@ -193,6 +193,18 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
         }
     }
 
+    fn signin(&self, strategy: &str, inputs: Map<String, Value>) -> Answer<()> {
+        read::<Value>("signin", self.ask("signin", args(json!({ "strategy": strategy, "inputs": inputs })))).map(|_| ())
+    }
+
+    fn signout(&self) -> Answer<()> {
+        // A program whose people do not sign in answers nothing: nobody was signed in.
+        match self.ask("signout", Map::new()) {
+            None => Ok(()),
+            answered => read::<Value>("signout", answered).map(|_| ()),
+        }
+    }
+
     fn set_language(&self, language: Option<&str>) {
         // The library's own texts follow the language as well as the program's.
         clarity_runtime::i18n::set_language(language);

@@ -79,11 +79,12 @@ fn typed(p: &ParamSpec, at: usize) -> String {
     }
 }
 
-fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool, formats: bool) -> String {
+fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool, formats: bool, auth: bool) -> String {
     let version = runtime_version();
     let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE)
         .chain(pictures.then_some(super::IMAGE_PACKAGE))
         .chain(formats.then_some(super::FORMATS_PACKAGE))
+        .chain(auth.then_some(super::AUTH_PACKAGE))
         .chain(drivers.iter().map(|s| s.package))
         .chain(engines.then_some(ENGINES_PACKAGE))
         .collect();
@@ -134,7 +135,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         .filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql) || (s.sql == crate::ddl::Sql::Sqlite && !crate::file_sources(project, settings).unwrap_or_default().is_empty()))
         .collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), crate::carries_formats(project, settings)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), crate::carries_formats(project, settings), crate::carries_auth(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -222,6 +223,7 @@ fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(
         .iter()
         .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
         .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        Clarity.Formats.FileSources.AddFile(db, new Clarity.Formats.FileSource({}, {}, {}, {}, {}, {}, {}, {}));\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
+        .chain(super::add_signin(project, settings))
         .collect();
 
     let databases = databases.iter().map(|(source, sql, at)| format!("({}, {}, {})", string(source), dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
@@ -236,11 +238,27 @@ fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(
         ),
         None => ("", "null".to_string(), ""),
     };
+    // The command line signs in before a command runs when people sign in on it (step 4):
+    // `--user` and `--token` are the sign-in's, not the command's.
+    let cli_signin = crate::signin::signin_plan(project).is_some_and(|p| p.targets.iter().any(|t| t == "cli"));
+    let (read_signin, signs_in) = if cli_signin {
+        (
+            "        var signin = CliSignin.FromArgs(args);\n        args = WithoutSignin(args);\n",
+            "            db.SigninCli(signin, () => Clarity.Runtime.Signin.ReadPassword(CliLanguage.Translate(\"cliPassword\", \"Password\") + \": \"));\n",
+        )
+    } else {
+        ("", "")
+    };
+    let without_signin = if cli_signin {
+        "\n    /// <summary>The command line without the sign-in's <c>--user</c> and <c>--token</c> and their values.</summary>\n    static string[] WithoutSignin(string[] args)\n    {\n        var end = Array.IndexOf(args, \"--\");\n        var kept = new List<string>();\n        for (var i = 0; i < args.Length; i++)\n        {\n            if ((end < 0 || i < end) && args[i] is \"--user\" or \"--token\")\n            {\n                i++;\n                continue;\n            }\n            kept.Add(args[i]);\n        }\n        return [.. kept];\n    }\n"
+    } else {
+        ""
+    };
     let mut dispatch = String::new();
     for (i, c) in commands.iter().enumerate() {
         let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
         let args: String = values.iter().map(|v| format!(", {v}")).collect();
-        dispatch.push_str(&format!("            {i} => Logic.{}(db, cli{args}),\n", logic::command_method(c.decl)));
+        dispatch.push_str(&format!("                {i} => Logic.{}(db, cli{args}),\n", logic::command_method(c.decl)));
     }
     format!(
         "{HEADER}
@@ -266,7 +284,7 @@ public static class Program
             db.AddStore(store, at);
 {folder_stores}        return db;
     }}
-
+{without_signin}
     /// <summary>The program and its commands, as the command line reads them.</summary>
     static CliProgram Described() => new(
         {program},
@@ -276,7 +294,7 @@ public static class Program
 
     public static int Main(string[] args)
     {{
-{check_engines}{start}        CliLanguage.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named, {language});
+{check_engines}{start}{read_signin}        CliLanguage.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named, {language});
         Db db;
         try
         {{
@@ -288,9 +306,12 @@ public static class Program
             return 1;
         }}
         using var opened = db;
-        var code = Cli.RunProgram(Described(), args, (cli, command, values) => command switch
+        var code = Cli.RunProgram(Described(), args, (cli, command, values) =>
         {{
-{dispatch}            _ => 2,
+{signs_in}            return command switch
+            {{
+{dispatch}                _ => 2,
+            }};
         }});
 {keep}        return code;
     }}

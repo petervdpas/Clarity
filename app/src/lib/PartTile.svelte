@@ -46,6 +46,10 @@
     {:else if kind === "password"}
       <rect x="4" y="7" width="40" height="14" rx="2" />
       <text x="8" y="18.5" class="ink small">&#8226;&#8226;&#8226;&#8226;&#8226;</text>
+    {:else if kind === "signin"}
+      <rect x="10" y="3" width="28" height="6" rx="1.5" />
+      <rect x="10" y="11" width="28" height="6" rx="1.5" />
+      <rect x="22" y="19" width="16" height="6" rx="1.5" class="fill" />
     {:else if kind === "switch"}
       <rect x="14" y="8" width="20" height="12" rx="6" class="fill" />
       <circle cx="28" cy="14" r="4" />

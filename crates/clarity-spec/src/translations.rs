@@ -209,9 +209,15 @@ pub const UNCONNECTED_KEYS: [(&str, &str); 2] = [("unconnectedNotKept", "The dat
 /// of its drawing (DESIGN 5.12): the host's own message in `{problem}`.
 pub const SCREEN_ENGINE_KEYS: [(&str, &str); 1] = [("screenEngineFailed", "The engine stopped: {problem}")];
 
-/// Why an undo was refused (DESIGN 5.29): what it would take back was
-/// changed since. Every application with windows has undo.
-pub const UNDO_KEYS: [(&str, &str); 1] = [("undoChangedSince", "This was changed since, so it cannot be taken back")];
+/// Why an undo or a save was refused (DESIGN 5.29, docs/APP-CAPABILITIES-PLAN.md
+/// step 5): what it would take back was changed since, or was done longer ago
+/// than the steps undo keeps; and a record someone else saved since it was
+/// read. Every application with windows has undo and saves records.
+pub const UNDO_KEYS: [(&str, &str); 3] = [
+    ("undoChangedSince", "This was changed since, so it cannot be taken back"),
+    ("undoTooOld", "This was done too long ago to take back"),
+    ("savedSince", "Someone else changed this record since you opened it. Reload it to see their change."),
+];
 
 /// Why a save was refused: a `required` field of the record is empty
 /// (conformance/required.json). The runtimes fill the slot with its label.
@@ -272,6 +278,44 @@ pub const ENGINE_ERROR_KEYS: [(&str, &str); 3] = [
     ("engineBroke", "{engine} stopped working in {function}"),
 ];
 
+/// Clarity's words of signing in (docs/APP-CAPABILITIES-PLAN.md step 4):
+/// a refused sign-in, too many failed tries, a call `allow` refuses, and a
+/// record `readable` or `writable` refuses. A project whose file has
+/// `signin` has them. The English is the runtimes' own too
+/// (conformance/signin.json, `refusals`), word for word.
+pub const SIGNIN_KEYS: [(&str, &str); 4] = [
+    ("signinRefused", "Signing in did not work. Check what you typed and try again."),
+    ("signinTooManyTries", "Too many tries. Wait a few minutes and try again."),
+    ("notAllowed", "You are not allowed to do this."),
+    ("notYours", "This record is not yours."),
+];
+
+/// What the sign-in part shows for the strategies it offers: the labels of
+/// their inputs and their buttons. A project with a sign-in part has them.
+pub const SIGNIN_PART_KEYS: [(&str, &str); 9] = [
+    ("signinName", "Name"),
+    ("signinPassword", "Password"),
+    ("signinButton", "Sign in"),
+    ("signinCode", "Recovery code"),
+    ("signinUseCode", "Use a recovery code"),
+    ("signinToken", "Token"),
+    ("signinAccountButton", "Use this computer's account"),
+    ("signinBack", "Back"),
+    ("signinNothing", "No way to sign in here"),
+];
+
+/// The sign-in part's box that keeps a person signed in, for a block with
+/// `remember 30 days when asked`.
+pub const SIGNIN_REMEMBER_KEYS: [(&str, &str); 1] = [("signinRemember", "Keep me signed in")];
+
+/// What a secret people choose is refused for: shorter than the `minimum`
+/// of its strategy. A project whose file writes a `minimum` has it.
+pub const SECRET_RULE_KEYS: [(&str, &str); 1] = [("secretTooShort", "This needs at least {minimum} characters.")];
+
+/// What the command line asks when a person signs in there with `--user`.
+/// A project whose people sign in on the command line has it.
+pub const SIGNIN_CLI_KEYS: [(&str, &str); 1] = [("cliPassword", "Password")];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -311,6 +355,11 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
         .chain(&PREVIEW_KEYS)
+        .chain(&SIGNIN_KEYS)
+        .chain(&SIGNIN_PART_KEYS)
+        .chain(&SIGNIN_REMEMBER_KEYS)
+        .chain(&SECRET_RULE_KEYS)
+        .chain(&SIGNIN_CLI_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -605,6 +654,11 @@ fn shown(project: &Project) -> Shown {
                 }
                 shown.some(&field.modifiers.help, field.span);
             }
+            // A refused save's text fills its slots from the record as stored now.
+            if let Some(key) = &entity.saved_since {
+                let slots = crate::versions::saved_since_slots(project, entity);
+                shown.uses.push(Use { key: key.clone(), place: shown.place.clone(), path: shown.path.clone(), span: entity.name.span, args: Some(slots), from_fields: true });
+            }
         }
         for decl in &file.enums {
             shown.place = format!("enum {}", decl.name.name);
@@ -703,6 +757,7 @@ fn shown(project: &Project) -> Shown {
     let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
     let graphs = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Graph));
+    let signin_part = project.signin.is_some() && project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Signin));
     // A graph has the zoom bar a zooming canvas has.
     let zooms = graphs || project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
     let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
@@ -796,7 +851,12 @@ fn shown(project: &Project) -> Shown {
         .chain(if graphs { GRAPH_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
-        .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] });
+        .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] })
+        .chain(if project.signin.is_some() { SIGNIN_KEYS.as_slice() } else { &[] })
+        .chain(if signin_part { SIGNIN_PART_KEYS.as_slice() } else { &[] })
+        .chain(if signin_part && project.signin.as_ref().is_some_and(|s| s.remember_asks) { SIGNIN_REMEMBER_KEYS.as_slice() } else { &[] })
+        .chain(if project.signin.as_ref().is_some_and(|s| s.strategies.iter().any(|line| line.minimum.is_some())) { SECRET_RULE_KEYS.as_slice() } else { &[] })
+        .chain(if project.signin.as_ref().is_some_and(|s| s.targets.iter().any(|t| t == "cli")) { SIGNIN_CLI_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false });

@@ -234,6 +234,14 @@ fn adds_tabs_data_grid_size_and_style() {
     let (text, _) = edit(&text, Edit::SetPageStyle { page: root(&text), style: String::new() });
     assert!(!text.contains("style="), "{text}");
     assert!(error(&markup, Edit::SetPageStyle { page, style: "not a name".into() }).contains("not a style name"));
+
+    // Who may open it: set, changed, and removed (docs/APP-CAPABILITIES-PLAN.md step 4).
+    let (text, _) = edit(&markup, Edit::SetPageAllow { page, allow: "me.role == Admin".into() });
+    assert!(text.contains("<Window class=\"p.Card\" allow=\"me.role == Admin\" title=\"Card\">"), "{text}");
+    let (text, _) = edit(&text, Edit::SetPageAllow { page: root(&text), allow: "me.id > 0".into() });
+    assert!(text.contains(" allow=\"me.id &gt; 0\" ") && !text.contains("Admin"), "{text}");
+    let (text, _) = edit(&text, Edit::SetPageAllow { page: root(&text), allow: "  ".into() });
+    assert!(!text.contains("allow="), "{text}");
 }
 
 /// A new page is a file of its own in design/, titled after its name.

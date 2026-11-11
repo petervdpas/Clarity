@@ -93,9 +93,20 @@ entity Invoice
 
 Without `table`, the table is the entity's name in snake case; without `key`, the key column is `id`, an integer; without `column`, a field's column has its name. Clarity reads and writes the records but never changes the tables, writes no steps for them and never migrates them. Each time the project loads, Clarity compares the entities with the tables: a missing table or column is an error, and a column whose type does not fit is a warning.
 
+A save never overwrites someone else's change when the table has a version column, a whole number the database keeps as Clarity keeps its own `row_version`. Name it on the entity, as you name the key:
+
+```clarity
+entity Invoice
+    table "tblInvoice"
+    key "InvoiceID"
+    version "RowVersion"
+```
+
+Without it the saves of the entity are not checked, and the checker says so with a warning: "Invoice has no version column, so saves of it are not checked: name its column with version \"Column\", or write version none". `version none` says it is on purpose. A `readonly` source needs neither. `version` is for external databases only: a database Clarity owns keeps `row_version` itself, and a file source's file is its own version.
+
 ## Import
 
-**Import...** next to an external SQLite source, or a file source, opens the Import panel. It lists the tables; tick the ones you want, name the module and click the **Import** button below them. The tables become entities mapped onto them, in a new module. Foreign keys between imported tables become `ref` fields, `NOT NULL` becomes `required`, and binary columns are left out. From the command line:
+**Import...** next to an external SQLite source, or a file source, opens the Import panel. It lists the tables; tick the ones you want, name the module and click the **Import** button below them. The tables become entities mapped onto them, in a new module. Foreign keys between imported tables become `ref` fields, `NOT NULL` becomes `required`, and binary columns are left out. An integer column named `row_version`, as in a table Clarity made, becomes the entity's `version "row_version"`; any other version column you name yourself. From the command line:
 
 ```shell
 clarity import shop.clarity erp --tables tblInvoice,tblCustomers

@@ -54,6 +54,56 @@ pub struct ModelFacts {
     keys_editable: bool,
     /// The icons the program carries: an SVG path in a 24 by 24 box, by the icon's name.
     icons: BTreeMap<String, String>,
+    /// Who is using the program: the project's `signin` block; none without one.
+    signin: Option<SigninFacts>,
+}
+
+/// The project's `signin` block as a sign-in part offers it
+/// (docs/APP-CAPABILITIES-PLAN.md step 4): its strategies in the order
+/// written, each with what a person gives it and where it works.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SigninFacts {
+    /// The targets people sign in on (`desktop`, `web`, `cli`).
+    pub targets: Vec<String>,
+    pub strategies: Vec<SigninStrategyFacts>,
+    /// The strategies a sign-in part shows, in order, the first the default
+    /// (`shows password, recovery`); empty for every one that works where it runs.
+    pub shows: Vec<String>,
+    /// Whether a sign-in part asks to keep the person signed in (`remember ... asks`).
+    pub remember_asks: bool,
+}
+
+/// One strategy of the block: its name, its inputs (`name`, `password`,
+/// `token`, `code`; none for `account`) and the targets it works on, as the
+/// model carries them from Clarity.Auth's catalog, else as the catalog says.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SigninStrategyFacts {
+    pub name: String,
+    pub inputs: Vec<String>,
+    pub works_on: Vec<String>,
+}
+
+impl SigninFacts {
+    /// The block in the model's `project.signin`; none without one. A
+    /// strategy neither the model nor the catalog knows is left out.
+    pub fn read(block: &Value) -> Option<SigninFacts> {
+        let block = block.as_object()?;
+        let texts = |v: Option<&Value>| -> Option<Vec<String>> { v?.as_array().map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect()) };
+        let targets = texts(block.get("targets")).unwrap_or_default();
+        let mut strategies = Vec::new();
+        for line in block.get("strategies").and_then(Value::as_array).into_iter().flatten() {
+            let Some(name) = line["name"].as_str() else { continue };
+            let known = clarity_auth::catalog().iter().find(|s| s.name == name);
+            let from_catalog = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let inputs = texts(line.get("inputs")).or_else(|| known.map(|k| from_catalog(k.inputs)));
+            let works_on = texts(line.get("targets")).or_else(|| known.map(|k| from_catalog(k.targets)));
+            let (Some(inputs), Some(works_on)) = (inputs, works_on) else { continue };
+            strategies.push(SigninStrategyFacts { name: name.to_string(), inputs, works_on });
+        }
+        let shows = texts(block.get("shows")).unwrap_or_default();
+        let remember_asks = block.get("rememberAsks").and_then(Value::as_bool).unwrap_or(false);
+        Some(SigninFacts { targets, strategies, shows, remember_asks })
+    }
 }
 
 /// A literal of the model as Clarity writes it: `{ "kind": "int", "value": 3 }` is 3.
@@ -89,6 +139,7 @@ impl ModelFacts {
             formats: Formats { language: project["locale"]["language"].as_str().map(str::to_string), currency: project["locale"]["currency"].as_str().map(str::to_string) },
             keys_editable: project["keysEditable"].as_bool().unwrap_or(false),
             icons: model["icons"].as_object().into_iter().flatten().filter_map(|(name, path)| Some((name.clone(), path.as_str()?.to_string()))).collect(),
+            signin: SigninFacts::read(&project["signin"]),
             ..ModelFacts::default()
         };
         for file in project["files"].as_array().into_iter().flatten() {
@@ -187,6 +238,11 @@ impl ModelFacts {
     /// The SVG path of icon `name` the program carries; none when it carries none of that name.
     pub fn icon(&self, name: &str) -> Option<&str> {
         self.icons.get(name).map(String::as_str)
+    }
+
+    /// The project's `signin` block; none without one.
+    pub fn signin(&self) -> Option<&SigninFacts> {
+        self.signin.as_ref()
     }
 
     /// Whether the person may set their own keys for the program's commands.

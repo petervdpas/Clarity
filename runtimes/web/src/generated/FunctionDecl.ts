@@ -22,4 +22,8 @@ ensures: Array<Expr>,
 /**
  * Effects an action may have, such as `db.write`.
  */
-effects: Array<Ident>, body: Array<Stmt>, span: Span, };
+effects: Array<Ident>, 
+/**
+ * `allow when <condition>`: who may run an action (docs/APP-CAPABILITIES-PLAN.md step 4).
+ */
+allow: Expr | null, body: Array<Stmt>, span: Span, };

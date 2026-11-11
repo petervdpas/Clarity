@@ -31,6 +31,9 @@ cJSON* clarity_wire_answer(ClarityService* service, const ClarityWire* wire, con
         cJSON_AddItemToObject(started, "main", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(value, "main"), true));
         const cJSON* unconnected = cJSON_GetObjectItemCaseSensitive(value, "unconnected");
         cJSON_AddItemToObject(started, "unconnected", unconnected ? cJSON_Duplicate(unconnected, true) : cJSON_CreateNull());
+        // The sign-in window shown before the main window, when people sign in first.
+        const cJSON* signin = cJSON_GetObjectItemCaseSensitive(value, "signin");
+        if (cJSON_IsString(signin)) cJSON_AddStringToObject(started, "signin", signin->valuestring);
         return out;
     }
     if (strcmp(command, "facts") == 0) {

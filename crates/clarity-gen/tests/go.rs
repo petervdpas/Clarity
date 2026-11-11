@@ -191,7 +191,7 @@ fn enums_and_entities_become_go_types() {
     has(sales, "\tOrderStatusApproved OrderStatus = \"Approved\"\n");
     has(sales, "func (v OrderStatus) Label() string {");
     has(sales, "\tcase OrderStatusApproved:\n\t\treturn \"Approved by sales\"\n");
-    has(sales, "type Customer struct {\n\tID          int64           `json:\"id\"`\n\tName        string          `json:\"name\"`\n\tCreditLimit decimal.Decimal `json:\"creditLimit\"`\n\tActive      bool            `json:\"active\"`\n\tSince       *clarity.Date   `json:\"since\"`\n}");
+    has(sales, "type Customer struct {\n\tID          int64           `json:\"id\"`\n\tName        string          `json:\"name\"`\n\tCreditLimit decimal.Decimal `json:\"creditLimit\"`\n\tActive      bool            `json:\"active\"`\n\tSince       *clarity.Date   `json:\"since\"`\n\tRowVersion  int64           `json:\"rowVersion\"`\n}");
     // A new record has its defaults.
     has(sales, "func NewCustomer() Customer {\n\treturn Customer{CreditLimit: decimal.NewFromInt(100), Active: true}\n}");
     has(sales, "func (*Customer) Table() string {\n\treturn \"customer\"\n}");
@@ -706,7 +706,7 @@ fn a_local_from_a_number_is_an_int64() {
 #[test]
 fn a_step_without_statements_is_written_as_gofmt_writes_it() {
     let module = "module music\n\nentity Album\n    title: text(80), search\n\napp Music\n    main Albums\n\npage Albums: window\n    size 400 x 300\n";
-    let first = "migration \"Albums\"\n    add entity Album\n        title: text(80)\n";
+    let first = "migration \"Albums\"\n    add entity Album\n        version\n        title: text(80)\n";
     let second = "migration \"Search albums\"\n    add search Album.title\n";
     let project = clarity_spec::load_with_migrations(clarity_spec::converted([("music.clarity", module)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", first), ("0002.clarity", second)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

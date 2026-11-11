@@ -13,12 +13,15 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
 
 // InvokePath is where a page the server serves sends its commands.
@@ -54,7 +57,20 @@ func (p *Program) Handler() http.Handler {
 		} else {
 			var settings map[string]any
 			_ = json.Unmarshal(sent.Settings, &settings)
-			answer = p.AnswerPage(sent.Browser, settings, sent.Command, sent.Args)
+			// Signing in (step 4): the session the cookie carries, the address it came from.
+			session := ""
+			if cookie, err := r.Cookie(clarity.SessionCookie); err == nil {
+				session = cookie.Value
+			}
+			address := r.RemoteAddr
+			if host, _, err := net.SplitHostPort(address); err == nil {
+				address = host
+			}
+			var setCookie string
+			answer, setCookie = p.AnswerVisit(sent.Browser, settings, session, address, sent.Command, sent.Args)
+			if setCookie != "" {
+				w.Header().Add("Set-Cookie", setCookie)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(answer)
@@ -101,6 +117,16 @@ type servedPage struct {
 // alone to keep. What the program does not answer is an error, which the
 // library takes as its default.
 func (p *Program) AnswerPage(browser string, settings map[string]any, command string, args json.RawMessage) []byte {
+	answer, _ := p.AnswerVisit(browser, settings, "", "", command, args)
+	return answer
+}
+
+// AnswerVisit is AnswerPage for a request that carries the session of its
+// clarity_session cookie (session, "" for none) from address: the command
+// runs as that session's person, and the answer comes with the value of
+// the Set-Cookie header the command made ("" for none) when it signed in
+// or out.
+func (p *Program) AnswerVisit(browser string, settings map[string]any, session, address, command string, args json.RawMessage) ([]byte, string) {
 	now := time.Now()
 	p.pagesMu.Lock()
 	for id, page := range p.pages {
@@ -127,18 +153,18 @@ func (p *Program) AnswerPage(browser string, settings map[string]any, command st
 		}
 		page.Language = given.Language
 		p.pagesMu.Unlock()
-		return value(nil)
+		return value(nil), ""
 	}
-	asking := &Page{Settings: maps.Clone(page.Settings), Language: page.Language}
+	asking := &Page{Settings: maps.Clone(page.Settings), Language: page.Language, Session: session, Address: address}
 	p.pagesMu.Unlock()
 	answer := p.answerRequest(WithPage(context.Background(), asking), command, args)
 	if answer == nil {
-		return refused("there is no command " + command)
+		return refused("there is no command " + command), ""
 	}
 	var out map[string]json.RawMessage
 	changedTo, changed := settingsChanged(args, answer, asking.Settings)
 	if !changed || json.Unmarshal(answer, &out) != nil {
-		return answer
+		return answer, asking.SetCookie
 	}
 	p.pagesMu.Lock()
 	if page.Settings == nil {
@@ -149,9 +175,9 @@ func (p *Program) AnswerPage(browser string, settings map[string]any, command st
 	p.pagesMu.Unlock()
 	out["settings"] = kept
 	if both, err := json.Marshal(out); err == nil {
-		return both
+		return both, asking.SetCookie
 	}
-	return answer
+	return answer, asking.SetCookie
 }
 
 // settingsChanged is the settings record of the window answer gives (its

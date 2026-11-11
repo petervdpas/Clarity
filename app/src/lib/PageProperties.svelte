@@ -1443,6 +1443,20 @@
       {/if}
     </label>
     {/if}
+    <!-- Who may open it (docs/APP-CAPABILITIES-PLAN.md step 4): a condition on `me`, checked before it opens. -->
+    {#if preview.project.signin && page.kind !== "signin" && page.kind !== "splash"}
+      <label class="prop">
+        <span>Allow</span>
+        <input
+          class="mono"
+          value={page.allow ?? ""}
+          placeholder="everyone signed in"
+          spellcheck="false"
+          title="A condition on who signed in, like me.role == Admin; empty lets everyone who signed in open it"
+          onchange={(e) => onedit({ op: "setPageAllow", page: page.span.start, allow: e.currentTarget.value })}
+        />
+      </label>
+    {/if}
 
     <fieldset class="checks">
       <legend>Data</legend>

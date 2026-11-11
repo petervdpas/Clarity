@@ -116,6 +116,7 @@ impl EventDecl {
             requires: Vec::new(),
             ensures: Vec::new(),
             effects: EFFECTS.iter().map(|e| ident(e.to_string())).collect(),
+            allow: None,
             body: self.body.clone(),
             span: self.span,
         }
@@ -199,10 +200,17 @@ pub enum StmtKind {
     CloseWith {
         value: Expr,
     },
+    /// `save customer`: stores a record, refused when someone saved it since
+    /// it was read; `save customer anyway` writes regardless of the version
+    /// (docs/APP-CAPABILITIES-PLAN.md step 5).
     Save {
         value: Expr,
+        anyway: bool,
     },
     /// `reload customers`: loads a window's data again, as when it opened.
+    /// `reload customer` of a record variable (a local or a parameter) reads
+    /// that record again as it is stored now. Locals never share a name with
+    /// the window's data, so the name says which.
     Reload {
         data: Ident,
     },
@@ -883,6 +891,8 @@ pub struct CommandDecl {
     pub params: Vec<Param>,
     pub help: Option<Expr>,
     pub options: Vec<CommandOption>,
+    /// `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
+    pub allow: Option<Expr>,
     pub body: Vec<Stmt>,
     pub span: Span,
 }
@@ -951,6 +961,8 @@ pub struct FunctionDecl {
     pub ensures: Vec<Expr>,
     /// Effects an action may have, such as `db.write`.
     pub effects: Vec<Ident>,
+    /// `allow when <condition>`: who may run an action (docs/APP-CAPABILITIES-PLAN.md step 4).
+    pub allow: Option<Expr>,
     pub body: Vec<Stmt>,
     pub span: Span,
 }
@@ -1111,7 +1123,7 @@ pub fn path_text(expr: &Expr) -> String {
 pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
     for stmt in body {
         match &stmt.kind {
-            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } => each_expr(value, found),
+            StmtKind::Let { value, .. } | StmtKind::Save { value, .. } | StmtKind::Delete { value } | StmtKind::CloseWith { value } => each_expr(value, found),
             StmtKind::Assign { target, value } => {
                 each_expr(target, found);
                 each_expr(value, found);
@@ -1237,7 +1249,7 @@ pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
     for stmt in body {
         match &mut stmt.kind {
             StmtKind::Let { value, .. }
-            | StmtKind::Save { value }
+            | StmtKind::Save { value, .. }
             | StmtKind::Delete { value }
             | StmtKind::CloseWith { value }
             | StmtKind::Message { text: value, .. }

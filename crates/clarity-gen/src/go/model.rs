@@ -168,6 +168,12 @@ fn record(project: &Project, entity: &Entity) -> String {
     for f in &fields {
         rows.push(vec![field(&f.name.name), field_type(&f.ty), format!("`json:\"{}\"`", f.name.name)]);
     }
+    // A versioned entity (docs/APP-CAPABILITIES-PLAN.md step 5) carries the
+    // version it was read with, which travels with the record to the screen and back.
+    let version = project.version_column(name);
+    if version.is_some() {
+        rows.push(vec!["RowVersion".into(), "int64".into(), "`json:\"rowVersion\"`".into()]);
+    }
     let defaults: Vec<String> = fields.iter().filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
     // A file has the column of its name beside its own.
     let columns = stored(entity)
@@ -222,6 +228,14 @@ fn record(project: &Project, entity: &Entity) -> String {
     if !required.is_empty() {
         let _ = write!(out, "func (*{name}) Required() []clarity.RequiredField {{\n\treturn []clarity.RequiredField{{{}}}\n}}\n\n", required.join(", "));
     }
+    if let Some(column) = &version {
+        let _ = write!(out, "func (*{name}) VersionColumn() string {{\n\treturn {}\n}}\n\n", string(column));
+        let _ = write!(out, "func (r *{name}) GetVersion() int64 {{\n\treturn r.RowVersion\n}}\n\n");
+        let _ = write!(out, "func (r *{name}) SetVersion(version int64) {{\n\tr.RowVersion = version\n}}\n\n");
+        if let Some(key) = &entity.saved_since {
+            out.push_str(&saved_since(project, entity, key));
+        }
+    }
     let _ = write!(out, "func (r *{name}) GetID() int64 {{\n\treturn r.ID\n}}\n\n");
     let _ = write!(out, "func (r *{name}) SetID(id int64) {{\n\tr.ID = id\n}}\n\n");
     let _ = write!(out, "func (r *{name}) Values() []any {{\n\treturn []any{{{values}}}\n}}\n\n");
@@ -233,9 +247,21 @@ fn record(project: &Project, entity: &Entity) -> String {
     // function generated from it.
     let events: Vec<DataEvent> =
         project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
-    for event in &events {
+    // `writable when` (docs/APP-CAPABILITIES-PLAN.md step 4) is checked before a
+    // save and a delete, by code or by a window, then the event written for it runs.
+    let writable = entity.writable.is_some() && !entity.record && !entity.settings;
+    let unwritten = [DataEvent::BeforeSave, DataEvent::BeforeDelete].into_iter().filter(|e| writable && !events.contains(e));
+    for event in events.iter().copied().chain(unwritten) {
+        let written = events.contains(&event);
+        let checked = writable && matches!(event, DataEvent::BeforeSave | DataEvent::BeforeDelete);
         let function = local(&format!("{}_{}", event.word(), record_name(name)));
-        let _ = write!(out, "func (r *{name}) {}(db *clarity.Db) error {{\n\treturn {function}(db, r)\n}}\n\n", pascal(event.word()));
+        let check = super::logic::access_function("writable", name);
+        let body = match (checked, written) {
+            (true, true) => format!("\tif err := {check}(db, r); err != nil {{\n\t\treturn err\n\t}}\n\treturn {function}(db, r)\n"),
+            (true, false) => format!("\treturn {check}(db, r)\n"),
+            _ => format!("\treturn {function}(db, r)\n"),
+        };
+        let _ = write!(out, "func (r *{name}) {}(db *clarity.Db) error {{\n{body}}}\n\n", pascal(event.word()));
     }
     // What cascades from it is deleted first, each child as any record is.
     let cascades = crate::cascades(project, name);
@@ -251,4 +277,86 @@ fn record(project: &Project, entity: &Entity) -> String {
         let _ = write!(out, "\treturn nil\n}}\n\n");
     }
     out
+}
+
+/// `savedSince @key` of a versioned entity: the refusal of a save someone
+/// saved since, in the entity's words, its slots filled from the record as it
+/// is stored now (`clarity_spec::versions::saved_since_slots`): its id, its
+/// fields, and for each reference the id and the fields of the record it
+/// refers to, read through db. A reference to none, or to a record that is
+/// gone or not readable, leaves those slots empty; it never fails the refusal.
+/// A field whose value no slot shows (a picture, a file, a list) fills none.
+fn saved_since(project: &Project, entity: &Entity, key: &str) -> String {
+    let mut slots = vec![("current.id".to_string(), "clarity.SlotInteger(r.ID, \"\")".to_string())];
+    let mut refs = String::new();
+    for f in &entity.fields {
+        let path = format!("current.{}", f.name.name);
+        let value = format!("r.{}", field(&f.name.name));
+        if let FieldType::Ref { entity: target } = &f.ty {
+            let mut inner = format!("text = text.\n\tWith({}, clarity.SlotInteger(*{value}, \"\")).\n\tWith({}, clarity.SlotInteger(*{value}, \"\"))\n", string(&path), string(&format!("{path}.id")));
+            if let Some(target) = project.entity(&target.name) {
+                // Named apart from the receiver r, db, text and the package clarity.
+                let found = format!("{}Record", local(&f.name.name));
+                let readable = if target.readable.is_some() {
+                    format!(" && {}(db, &{found}) == nil", super::logic::access_function("readable", &target.name.name))
+                } else {
+                    String::new()
+                };
+                let mut fields = String::new();
+                for t in &target.fields {
+                    let _ = write!(fields, "{}", field_slot(t, &format!("{found}.{}", field(&t.name.name)), &format!("{path}.{}", t.name.name)));
+                }
+                if !fields.is_empty() {
+                    let _ = write!(inner, "if {found}, err := clarity.Get[{}](db, *{value}); err == nil{readable} {{\n{}}}\n", target.name.name, indent(&fields));
+                }
+            }
+            let _ = write!(refs, "\tif {value} != nil {{\n{}\t}}\n", indent(&indent(&inner)));
+            continue;
+        }
+        if let Some(slot) = slot_of(f, &value) {
+            slots.push((path, slot));
+        }
+    }
+    let with: String = slots.iter().map(|(path, slot)| format!(".\n\t\tWith({}, {slot})", string(path))).collect();
+    let body = if refs.is_empty() {
+        format!("\treturn clarity.KeyText({}){with}\n", string(key))
+    } else {
+        format!("\ttext := clarity.KeyText({}){with}\n{refs}\treturn text\n", string(key))
+    };
+    format!(
+        "// SavedSince is why a save of a {} someone saved since is refused, in its entity's words about it as stored now.\nfunc (r *{}) SavedSince(db *clarity.Db) clarity.Text {{\n{body}}}\n\n",
+        record_name(&entity.name.name).replace('_', " "),
+        entity.name.name,
+    )
+}
+
+/// One tab more on every line of `code`.
+fn indent(code: &str) -> String {
+    code.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("\t{l}\n") }).collect()
+}
+
+/// The slot of field `f`, whose value is `value`; none for a field no slot shows.
+fn slot_of(f: &Field, value: &str) -> Option<String> {
+    let format = string(f.modifiers.format.as_deref().unwrap_or_default());
+    Some(match &f.ty {
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity.SlotText({value})"),
+        FieldType::Integer | FieldType::Id => format!("clarity.SlotInteger({value}, {format})"),
+        FieldType::Duration => format!("clarity.SlotDuration({value})"),
+        FieldType::Decimal { scale, .. } => format!("clarity.SlotDecimal({value}, {scale}, {format})"),
+        FieldType::Money => format!("clarity.SlotMoney({value}, {format})"),
+        FieldType::Date => format!("clarity.SlotDate({value}, {format})"),
+        FieldType::DateTime => format!("clarity.SlotDateTime({value}, {format})"),
+        FieldType::Bool => format!("clarity.SlotBool({value})"),
+        FieldType::Enum { name } => format!("clarity.SlotEnum(string({value}), {})", string(&name.name)),
+        FieldType::Ref { .. } | FieldType::Image | FieldType::File | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => return None,
+    })
+}
+
+/// The line that gives slot `path` the value of field `f` of a referred
+/// record: a reference of it shows its id, and none when it refers to none.
+fn field_slot(f: &Field, value: &str, path: &str) -> String {
+    match &f.ty {
+        FieldType::Ref { .. } => format!("if {value} != nil {{\n\ttext = text.With({}, clarity.SlotInteger(*{value}, \"\"))\n}}\n", string(path)),
+        _ => slot_of(f, value).map(|slot| format!("text = text.With({}, {slot})\n", string(path))).unwrap_or_default(),
+    }
 }

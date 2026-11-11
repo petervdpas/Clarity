@@ -15,7 +15,8 @@
 //! messages belong to the stack, so one said just before a window closes
 //! shows in the window below. When the language changes every window is
 //! made again, so its texts show in it. When the databases did not open,
-//! what keeps the connection shows first (DESIGN 5.27).
+//! what keeps the connection shows first (DESIGN 5.27); when people sign
+//! in first, the sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4).
 
 pub mod address;
 pub mod history;
@@ -155,6 +156,12 @@ pub struct ApartWindow {
 pub enum Apart {
     Window(ApartWindow),
     Keys,
+    /// The main window, in a desktop window of its own, with what `on start`
+    /// answered: a splash that doubles as the sign-in window was signed in on.
+    Main(Answer<Reply>),
+    /// The sign-in window that is the app's splash, after a signout on the
+    /// desktop: in a desktop window of its own as at the start (`splash_again`).
+    Signin(String),
 }
 
 /// A desktop window of its own closed: what the window that opened it is told.
@@ -231,6 +238,13 @@ pub struct WindowStack {
     /// This desktop window of its own shows a dialog: it is sized to it.
     dialog: bool,
     unconnected: Option<Unconnecting>,
+    /// The sign-in window, once the program said people sign in first; shown again after `signout`.
+    signin: Option<String>,
+    /// The splash is the sign-in window too: it stays once `on start` answered, until someone signed in (`signed`).
+    splash_signs_in: bool,
+    signed: bool,
+    /// This desktop window of its own shows the splash as the sign-in window after a signout.
+    splash_window: bool,
     language: String,
     /// The app starting behind its splash page in this same screen (the browser's whole page).
     starting: Option<InPlace>,
@@ -287,6 +301,10 @@ impl WindowStack {
             closed: None,
             dialog: false,
             unconnected: None,
+            signin: None,
+            splash_signs_in: false,
+            signed: false,
+            splash_window: false,
             language: crate::choices::language(),
             starting: None,
         }
@@ -304,11 +322,81 @@ impl WindowStack {
     /// Starts a prepared program as `start` does, from how it `started`.
     pub fn begin(running: Rc<Running>, started: clarity_runtime::program::Started) -> WindowStack {
         let mut stack = WindowStack::empty(running);
-        match started.unconnected {
-            Some(unconnected) => stack.start_unconnected(unconnected, None),
-            None => stack.start_main(None),
+        match (started.unconnected, started.signin) {
+            (Some(unconnected), _) => stack.start_unconnected(unconnected, None),
+            (None, Some(page)) => stack.show_signin(page, None),
+            (None, None) => stack.start_main(None),
         }
         stack
+    }
+
+    /// People sign in first: the sign-in window shows, before the app's
+    /// `on start` and its main window. Fail safe: a sign-in window that does
+    /// not open ends the program, saying why, rather than showing the rest.
+    fn show_signin(&mut self, page: String, cx: Option<&mut Cx>) {
+        self.open_window(&page, Map::new(), cx);
+        self.signin = Some(page);
+        if self.stack.is_empty() {
+            self.ended = true;
+        }
+    }
+
+    /// Closes every window and dialog of this stack, each hearing its `on
+    /// close`, without ending it: for signing in and out.
+    fn close_all(&mut self, cx: &mut Cx) {
+        while !self.dialogs.is_empty() {
+            let dialog = self.dialogs.pop().expect("a dialog");
+            let _ = dialog.host.closing();
+            cx.close(dialog.overlay);
+        }
+        while let Some(top) = self.stack.pop() {
+            let _ = top.host.closing();
+        }
+        if let Some(index) = self.view_index() {
+            self.node.remove(index, cx);
+        }
+        cx.focus(None);
+    }
+
+    /// Someone signed in: the sign-in window closes, the app's `on start` runs and its main window opens.
+    fn signed_in(&mut self, cx: &mut Cx) {
+        self.close_all(cx);
+        // The splash in a desktop window of its own: the main window gets one of its own, and the splash ends.
+        if self.splash_window && self.running.apart.get() {
+            let reply = self.running.program.start_app();
+            self.aparts.push(Apart::Main(reply));
+            self.ended = true;
+            cx.invalidate();
+            return;
+        }
+        self.start_main(Some(cx));
+        if self.stack.is_empty() {
+            self.ended = true;
+        }
+        cx.invalidate();
+    }
+
+    /// The person signed out: every window closes and the sign-in window
+    /// shows again; a program that names none starts over as it began.
+    fn signed_out(&mut self, cx: &mut Cx) {
+        self.close_all(cx);
+        let page = self.signin.clone().or_else(|| self.running.program.started().signin);
+        // On the desktop the splash that signs in shows as at the start, in a borderless desktop window of its own.
+        let splash = self.running.files.splash().map(|s| s.page);
+        if let Some(page) = page.as_ref().filter(|p| self.running.apart.get() && Some(*p) == splash.as_ref()) {
+            self.aparts.push(Apart::Signin(page.clone()));
+            self.ended = true;
+            cx.invalidate();
+            return;
+        }
+        match page {
+            Some(page) => self.show_signin(page, Some(cx)),
+            None => self.start_main(Some(cx)),
+        }
+        if self.stack.is_empty() {
+            self.ended = true;
+        }
+        cx.invalidate();
     }
 
     /// What the program's windows share, its texts loaded and its language
@@ -336,12 +424,44 @@ impl WindowStack {
     /// and the splash showed its time. Where the databases did not open, it starts as `begin` does.
     pub fn start_in_place(running: Rc<Running>, splash: &crate::app_files::Splash) -> WindowStack {
         let started = running.program.started();
-        if started.unconnected.is_some() {
+        // A sign-in page other than the splash comes first, before `on start`.
+        let doubles = started.signin.as_deref() == Some(splash.page.as_str());
+        if started.unconnected.is_some() || (started.signin.is_some() && !doubles) {
             return WindowStack::begin(running, started);
         }
-        let mut stack = WindowStack::splash(running, &splash.page);
+        let mut stack = if doubles { WindowStack::splash_signing_in(running, &splash.page) } else { WindowStack::splash(running, &splash.page) };
         stack.starting = Some(InPlace { at_least: splash.at_least, opened: std::time::Instant::now(), asked: false, reply: None });
         stack
+    }
+
+    /// The splash `name` that is the sign-in window too: it shows while `on
+    /// start` runs, then stays, its parts working, until someone signed in.
+    pub fn splash_signing_in(running: Rc<Running>, name: &str) -> WindowStack {
+        let mut stack = WindowStack::splash(running, name);
+        stack.splash_signs_in = true;
+        stack.signin = Some(name.to_string());
+        stack
+    }
+
+    /// The splash that is the sign-in window, shown again after a signout in
+    /// a desktop window of its own: no start runs and it stays; a sign-in on
+    /// it runs `on start` and asks for the main window (`Apart::Main`).
+    pub fn splash_again(running: Rc<Running>, name: &str) -> WindowStack {
+        let mut stack = WindowStack::splash(running, name);
+        stack.signin = Some(name.to_string());
+        stack.splash_window = true;
+        if stack.stack.is_empty() {
+            stack.ended = true;
+        }
+        stack
+    }
+
+    /// `on start` answered `reply` while this splash shows (the desktop host
+    /// runs it): a splash that is the sign-in window keeps it until someone
+    /// signed in; else the main window follows.
+    pub fn splash_started(&mut self, reply: Answer<Reply>, cx: &mut Cx) {
+        self.starting = Some(InPlace { at_least: std::time::Duration::ZERO, opened: std::time::Instant::now(), asked: true, reply: Some(reply) });
+        self.follow_start(cx);
     }
 
     /// Whether the splash page still shows while the app starts.
@@ -379,7 +499,13 @@ impl WindowStack {
             cx.wake(self.node.id(), std::time::Instant::now() + next);
             return;
         }
+        // The splash that is the sign-in window stays, keeping what `on start` answered, until someone signed in.
+        if self.splash_signs_in && !self.signed {
+            return;
+        }
         let Some(reply) = self.starting.take().and_then(|s| s.reply) else { return };
+        self.splash_signs_in = false;
+        self.signed = false;
         if let Some(top) = self.stack.pop() {
             let _ = top.host.closing();
         }
@@ -387,7 +513,13 @@ impl WindowStack {
             self.node.remove(index, cx);
         }
         cx.focus(None);
-        self.open_main(reply, Some(cx));
+        // On the desktop the splash is a desktop window of its own: the main window gets one too, and the splash ends.
+        if self.running.apart.get() {
+            self.aparts.push(Apart::Main(reply));
+            self.ended = true;
+        } else {
+            self.open_main(reply, Some(cx));
+        }
         cx.invalidate();
     }
 
@@ -832,6 +964,13 @@ impl WindowStack {
                         self.start_call(host, call, cx);
                     }
                 }
+                // On a splash that is the sign-in window, the main window follows once `on start` answered and the splash showed its time.
+                Effect::SignedIn if self.splash_signs_in => {
+                    self.signed = true;
+                    self.follow_start(cx);
+                }
+                Effect::SignedIn => self.signed_in(cx),
+                Effect::SignedOut => self.signed_out(cx),
             }
         }
         self.say_next(cx);

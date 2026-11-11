@@ -5,6 +5,7 @@ import type { Choice } from "./Choice";
 import type { FormatChoice } from "./FormatChoice";
 import type { SourceInfo } from "./SourceInfo";
 import type { Stack } from "./Stack";
+import type { StrategyChoice } from "./StrategyChoice";
 import type { Target } from "./Target";
 import type { Ui } from "./Ui";
 
@@ -16,4 +17,8 @@ starter: Stack, backends: Array<BackendInfo>, uis: Array<Choice<Ui>>, targets: A
 /**
  * The formats a data source can be a file in, with their options.
  */
-formats: Array<FormatChoice>, };
+formats: Array<FormatChoice>, 
+/**
+ * The sign-in strategies of Clarity.Auth's catalog, for the signin block.
+ */
+strategies: Array<StrategyChoice>, };

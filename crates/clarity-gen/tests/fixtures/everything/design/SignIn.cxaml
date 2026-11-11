@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Where people sign in: the sign-in part, drawn from the project's signin block. -->
+<SignIn class="everything.SignIn" title="@signInTitle">
+  <Signin name="signIn" at="1,1" span="12" rows="6" />
+</SignIn>

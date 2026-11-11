@@ -94,7 +94,7 @@ TEST(the_server_serves_the_page_and_answers_its_commands) {
     // Clarity.UI's commands, answered as the desktop answers them.
     got = shell::serve_answer(service, post(R"({"command": "started", "args": {}})"));
     CHECK(got.rfind("HTTP/1.1 200 OK\r\n", 0) == 0);
-    CHECK(nlohmann::json::parse(body_of(got)) == nlohmann::json::parse(R"({"value":{"main":"Card","unconnected":null}})"));
+    CHECK(nlohmann::json::parse(body_of(got)) == nlohmann::json::parse(R"({"value":{"main":"Card","unconnected":null,"signin":null}})"));
     got = shell::serve_answer(service, post(R"({"command": "open_window", "args": {"window": "Card"}})"));
     CHECK(has(body_of(got), "\"name\":\"Ada\""));
     got = shell::serve_answer(service, post(R"({"command": "facts", "args": {}})"));

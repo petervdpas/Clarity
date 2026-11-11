@@ -33,6 +33,9 @@ pub struct Started {
     pub main: String,
     /// Set while the databases are not open (DESIGN 5.27).
     pub unconnected: Option<Unconnected>,
+    /// The sign-in window, when people sign in before the main window
+    /// opens (docs/APP-CAPABILITIES-PLAN.md step 4; `Db::signin_first`).
+    pub signin: Option<String>,
 }
 
 /// What the screen shows when the databases did not open (DESIGN 5.27).
@@ -212,6 +215,21 @@ pub trait Program: Send + Sync + 'static {
     /// connection (DESIGN 5.27). A program whose databases always open has
     /// nothing to do.
     fn connect(&self) -> Answer<()> {
+        Ok(())
+    }
+
+    /// Signs a person in with `strategy` (`signin password` on a button) and
+    /// the values of the sign-in window's parts named as its inputs (`name`,
+    /// `password`, `token`): refused in Clarity's own words when it did not
+    /// work. A program whose people do not sign in refuses.
+    fn signin(&self, strategy: &str, inputs: Map<String, Value>) -> Answer<()> {
+        let _ = (strategy, inputs);
+        Err(Text::keyed("signinRefused", "Signing in did not work. Check what you typed and try again."))
+    }
+
+    /// Signs the person out (`signout` on a button). A program whose people
+    /// do not sign in has nothing to do.
+    fn signout(&self) -> Answer<()> {
         Ok(())
     }
 

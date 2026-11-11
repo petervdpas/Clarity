@@ -318,11 +318,13 @@ fn a_cargo_patch_survives_writing_the_project_again() {
 /// SALES as it was: a `limit`, an integer total, a note, no unique number.
 const FIRST_STEP: &str = "migration \"First\"
     add entity Customer
+        version
         name: text(80)
         limit: money, default 100
         active: bool, default true
         since: date
     add entity Order
+        version
         number: text(12)
         status: OrderStatus
         customer: ref Customer
@@ -395,7 +397,7 @@ fn each_data_source_gets_its_own_database() {
     let schema = file(&files, "src/schema.rs");
     assert!(schema.contains("    (\"erp\", &[\n"), "{schema}");
     // The customer is in the other database, so no foreign key.
-    assert!(schema.contains("\"customer\" INTEGER\n"), "{schema}");
+    assert!(schema.contains("\"customer\" INTEGER,\n    \"row_version\" INTEGER NOT NULL DEFAULT 1\n"), "{schema}");
 }
 
 #[test]
@@ -441,7 +443,7 @@ fn a_taken_over_database_keeps_its_names() {
     let start = "module start\npage Start: window\n    title \"Start\"\n";
     let erp = "module erp\nsource erp\n\nentity Invoice\n    table \"invoices\"\n    key \"InvoiceID\"\n    number: text(20), unique, column \"InvoiceNumber\"\n    total: money\n";
     let baseline = "migration \"Taken over\" baseline\n    add entity Invoice\n        table \"tblInvoice\"\n        key \"InvoiceID\"\n        number: text(20), unique, column \"InvNo\"\n        total: money\n";
-    let remap = "migration \"Tidy names\"\n    map table Invoice to \"invoices\"\n    map column Invoice.number to \"InvoiceNumber\"\n";
+    let remap = "migration \"Tidy names\"\n    map table Invoice to \"invoices\"\n    map column Invoice.number to \"InvoiceNumber\"\n    add version Invoice\n";
     let project = clarity_spec::load_in(
         clarity_spec::converted([("start.clarity", start), ("erp.clarity", erp)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
         [("migrations/erp/0001.clarity", baseline), ("migrations/erp/0002.clarity", remap)],

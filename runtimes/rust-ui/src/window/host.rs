@@ -44,6 +44,12 @@ pub enum Effect {
     Quit,
     /// A handler to run off the screen's thread, its program's long calls watched.
     Call(Call),
+    /// Someone signed in on the sign-in window (`signin <strategy>`): it
+    /// closes and the main window opens.
+    SignedIn,
+    /// The person signed out (`signout`): every window closes and the
+    /// sign-in window shows again.
+    SignedOut,
 }
 
 /// A handler that runs off the screen's thread, with the window's state as it was when it started.
@@ -109,6 +115,15 @@ pub struct ProgramHost {
     engines: crate::engines::Engines,
     /// What the program knows of its fields and types, read from its JSON once.
     program_facts: std::cell::OnceCell<crate::program_facts::ProgramFacts>,
+}
+
+/// The strategy a click target signs in with: `signin password`, or `signin(password)`.
+fn signin_strategy(call: &HandlerCall) -> Option<String> {
+    match (call.handler.as_str(), call.args.as_slice()) {
+        ("signin", [strategy]) => Some(strategy.trim().to_string()),
+        (handler, []) => handler.strip_prefix("signin ").map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && !s.contains(' ')),
+        _ => None,
+    }
 }
 
 /// A translation's text with its braces written double shown single (`{{name}}` is `{name}`).
@@ -439,6 +454,51 @@ impl ProgramHost {
         self.answered(self.program.return_to(state));
     }
 
+    /// Signs in with `strategy`, its inputs (as Clarity.Auth's catalog names
+    /// them) the values of this window's parts of those names: a part bound
+    /// to a field gives the field's value, an unbound one what was typed. A
+    /// missing part gives no input, which the program refuses. A refusal
+    /// shows as any refusal does.
+    fn sign_in_by_names(&self, strategy: &str) -> bool {
+        let names = clarity_auth::catalog().iter().find(|s| s.name == strategy).map(|s| s.inputs).unwrap_or_default();
+        let mut inputs = Map::new();
+        for name in names {
+            if let Some(value) = self.input_value(name) {
+                inputs.insert(name.to_string(), Value::String(value));
+            }
+        }
+        match self.signed_in_with(strategy, inputs) {
+            Ok(()) => true,
+            Err(text) => self.answered(Err(text)),
+        }
+    }
+
+    /// The one way a sign-in goes, by a `signin <strategy>` button or a
+    /// sign-in part: the program checks `inputs`; on success the window
+    /// closes and the main window opens (or the splash's rules hold), and a
+    /// refusal is given back.
+    fn signed_in_with(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
+        self.flush();
+        self.program.signin(strategy, inputs)?;
+        self.effects.borrow_mut().push(Effect::SignedIn);
+        self.changed();
+        Ok(())
+    }
+
+    /// The text of the part named `name`: its field's value when it is bound, else what was typed in it.
+    fn input_value(&self, name: &str) -> Option<String> {
+        let spec = self.specs.get(name)?;
+        let state = self.state.borrow();
+        match spec.text("bind").filter(|b| !b.is_empty()) {
+            Some(path) => match paths::read(&state.data, path)? {
+                Value::String(text) => Some(text),
+                Value::Null => Some(String::new()),
+                other => Some(other.to_string()),
+            },
+            None => Some(state.parts.get(name).and_then(|p| p.text.clone()).unwrap_or_default()),
+        }
+    }
+
     /// The window closes: its `on close` runs, and what its reply says shows in the window below.
     pub fn closing(&self) -> Vec<Effect> {
         self.flush();
@@ -482,6 +542,14 @@ impl PartHost for ProgramHost {
 
     fn window_name(&self) -> Option<String> {
         Some(self.window())
+    }
+
+    fn signin(&self) -> Option<crate::facts::SigninFacts> {
+        self.facts.signin().cloned()
+    }
+
+    fn sign_in(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
+        self.signed_in_with(strategy, inputs)
     }
 
     /// While a long call runs, no other handler can.
@@ -531,6 +599,23 @@ impl PartHost for ProgramHost {
                 self.effects.borrow_mut().push(own);
                 self.changed();
                 return true;
+            }
+        }
+        // Signing in and out (docs/APP-CAPABILITIES-PLAN.md step 4), unless a window has that name.
+        if matches!(call.event.as_str(), "click" | crate::parts::NEW_WINDOW_CLICK) && self.files.window(&call.handler).is_none() {
+            if let Some(strategy) = signin_strategy(call) {
+                return self.sign_in_by_names(&strategy);
+            }
+            if call.handler == "signout" && call.args.is_empty() {
+                self.flush();
+                return match self.program.signout() {
+                    Ok(()) => {
+                        self.effects.borrow_mut().push(Effect::SignedOut);
+                        self.changed();
+                        true
+                    }
+                    Err(text) => self.answered(Err(text)),
+                };
             }
         }
         // A click that names a popover or slide-out of this window opens it (C#'s `Show_<popover>`).

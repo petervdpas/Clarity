@@ -43,6 +43,11 @@ entity Friend
     city: text(60), label @friendCity
     position: integer, label @friendPosition
 
+// Who signs in: the signin block of the project file names it.
+entity Member
+    email: email, unique, required, label @memberEmail
+    passwordHash: text, hashed, label @memberPasswordHash
+
 entity Folder
     name: text(80), required, label @folderName
     size: integer, label @folderSize

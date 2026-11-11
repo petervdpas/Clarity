@@ -18,4 +18,8 @@ group: Ident | null, name: Ident,
 /**
  * The arguments, given in this order, all required.
  */
-params: Array<Param>, help: Expr | null, options: Array<CommandOption>, body: Array<Stmt>, span: Span, };
+params: Array<Param>, help: Expr | null, options: Array<CommandOption>, 
+/**
+ * `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
+ */
+allow: Expr | null, body: Array<Stmt>, span: Span, };

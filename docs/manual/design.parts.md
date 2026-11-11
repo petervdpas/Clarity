@@ -21,6 +21,7 @@ For every part, its own properties, events and binding rules are in [the languag
 ## Basic input
 
 - `textbox` binds to text, email or url; `memo` to text, over several lines; `password` to text, hidden while typed; the eye beside it shows what is typed or hides it again, and the button next to it copies it. Events: `change`, `enter`, `leave`.
+- `signin`: signs in with the project's strategies (see [Signing in](project.signin.md)): per strategy its inputs and button, in Clarity's own words, and a refused try inside itself. It keeps only its place and look: what it offers is set under **Who is using it** in Project settings. It goes on the sign-in window or the app's splash, one in a project.
 - `number` binds to integer, decimal, money, id or duration. Events: `change`, `enter`, `leave`.
 - `folder` binds to a folder setting (`bind settings.photosFolder`): the folder a file store keeps its files in, typed, or chosen with the system's folder picker through its button. In a browser the path is typed. Events: `change`, `enter`, `leave`.
 - `checkbox` and `switch` bind to bool; `dropdown` to an enum or a `ref`; `radio` to an enum, one button per value; `date` to date or datetime. Event: `change`.

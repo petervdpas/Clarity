@@ -1,6 +1,6 @@
 # Connections for the agent
 
-How the agent reaches its model through a connection in Clarity's vault: the fields of an Anthropic connection, keeping the key in the vault, and choosing a connection in the panel.
+How the agent reaches its model through a connection in Clarity's vault: the fields of an Anthropic connection, your company's models on Microsoft Foundry, keeping the key in the vault, and choosing a connection in the panel.
 
 ## What a connection is
 
@@ -31,6 +31,38 @@ apikey      Vault        Anthropic / apikey
 
 Store the key itself as a secret first: on the Vault tab, under **Secrets**, add a category such as `Anthropic` with **Categories**, then **Add** a secret with that category, the key `apikey` and your API key as its value.
 
+## Your company's models on Microsoft Foundry
+
+When your company runs Claude in Microsoft Foundry (its own Azure), the agent can use that deployment, billed to the company, and you can sign in with your Microsoft work account instead of a key. A connection of kind `foundry` has these fields:
+
+- `kind`: `foundry`.
+- `resource`: the name of the company's Foundry resource, the first part of `https://<resource>.services.ai.azure.com`. Or give the whole address as `baseUrl` (ending in `/anthropic`).
+- `deployment`: the name the model was deployed under in Foundry. It can differ from the model's own name.
+- `apikey`: the deployment's key, from the vault. Leave it out to sign in with your Microsoft work account.
+- `clientId`: for the Microsoft sign-in, the application (client) id of the app registration in Microsoft Entra ID that you sign in through. See below.
+- `tenant`: your company's tenant id or domain (like `contoso.com`). Leave it out to accept any work or school account.
+- `maxTokens`, `cacheTtl` and `turnBudget` as for an Anthropic connection.
+
+A typical connection signed in with Microsoft:
+
+```text
+Field       From         Value
+kind        Plain text   foundry
+resource    Plain text   contoso-ai
+deployment  Plain text   claude-team
+clientId    Plain text   (the app registration's client id)
+tenant      Plain text   contoso.com
+```
+
+### Signing in with Microsoft
+
+The first time you ask the agent on such a connection, the panel says it is not signed in and shows **Sign in**. Click it: your browser opens Microsoft's own sign-in page, where you choose your work account. When Microsoft sends the browser back, the page says you are signed in, and you can ask again. Clarity never sees your password. It keeps what lets it stay signed in in the vault, under the category `Microsoft` with the connection's name as the key, so the vault must be unlocked (Clarity asks for its password). Each sign-in lasts until Microsoft ends it; when it does, the panel says so and **Sign in** signs you in again.
+
+The sign-in needs two things set up in your company's Azure, usually by an administrator:
+
+- **An app registration** in Microsoft Entra ID for Clarity, of the kind for apps on your computer (a public client), with the redirect address `http://localhost`. Its application (client) id goes in `clientId`.
+- **Access to the Foundry resource**: your account needs the role Cognitive Services User on it.
+
 ## Values from the vault
 
 When a turn starts, Clarity reads the connection's fields. A plain field is used as written. A vault field needs the vault to be unlocked; when it is locked, Clarity asks for the master password and then starts the turn. Plain fields are stored readable in `connections.json`, so keep the key in the vault.
@@ -43,4 +75,4 @@ The box at the top of the Agent panel lists the connection named `anthropic` and
 
 ## Other kinds
 
-The `kind` field says which kind of model a connection reaches, so other providers can be added later without changing how connections work. Today only Anthropic works: a connection of any other kind is refused with a message that says so.
+The `kind` field says which kind of model a connection reaches, so other providers can be added later without changing how connections work. Today Clarity's agent works with `anthropic` and `foundry`; `codex` and `copilot` are your own agent program (see [Your own agent in Clarity](ai.your-agent.md)). A connection of any other kind is refused with a message that says so.

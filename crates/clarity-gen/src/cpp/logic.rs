@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{HttpMethod, 
+use clarity_spec::code::{HttpMethod, DataEvent,
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -96,6 +96,10 @@ pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> R
         let mut emitter = Emitter::new(project, types, None, None);
         emitter.command = true;
         let mut body = String::new();
+        // `allow when`: refused with notAllowed before anything else runs.
+        if let Some(condition) = &command.allow {
+            emitter.allow(condition, &mut body);
+        }
         emitter.block(&command.body, &mut body);
         if !body.trim_end().lines().last().is_some_and(|l| l.starts_with("return ")) {
             body.push_str("return 0;\n");
@@ -132,17 +136,44 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
         }
     }
-    // Each data event runs from its record's method.
+    // `readable when` and `writable when` of the module's entities (step 4).
+    for entity in file.entities.iter().filter(|e| !e.record && !e.settings) {
+        for (word, condition) in [("readable", &entity.readable), ("writable", &entity.writable)] {
+            let Some(condition) = condition else { continue };
+            let mut emitter = Emitter::new(project, types, None, None);
+            let holds = emitter.value(condition);
+            if emitter.errors.is_empty() {
+                let _ = write!(out, "{} {{\n    clarity::yours({holds});\n}}\n\n", super::model::access_signature(entity, word, true));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("{word} when of {}: {e}", entity.name.name)));
+            }
+        }
+    }
+    // Each data event runs from its record's method, after `writable when`
+    // where the entity has one; a method with only that check is written
+    // with the entity, where no data event of its kind is written.
+    let writable = |name: &str| project.entity(name).is_some_and(|e| e.writable.is_some() && !e.record && !e.settings);
+    let checks = |name: &str, event: DataEvent| {
+        if writable(name) && matches!(event, DataEvent::BeforeSave | DataEvent::BeforeDelete) { format!("    {}_writable(db, *this);\n", snake(name)) } else { String::new() }
+    };
     for block in &file.code {
         for event in &block.events {
             let record = clarity_spec::code::record_name(&block.name.name);
             let _ = write!(
                 out,
-                "void {}::{}(clarity::Db& db) {{\n    {}(db, *this);\n}}\n\n",
+                "void {}::{}(clarity::Db& db) {{\n{}    {}(db, *this);\n}}\n\n",
                 block.name.name,
                 event.event.word(),
+                checks(&block.name.name, event.event),
                 ident(&format!("{}_{record}", event.event.word()))
             );
+        }
+    }
+    for entity in file.entities.iter().filter(|e| writable(&e.name.name)) {
+        let name = &entity.name.name;
+        let written: Vec<DataEvent> = project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
+        for event in [DataEvent::BeforeSave, DataEvent::BeforeDelete].into_iter().filter(|e| !written.contains(e)) {
+            let _ = write!(out, "void {name}::{}(clarity::Db& db) {{\n{}}}\n\n", event.word(), checks(name, event));
         }
     }
     if errors.is_empty() { Ok(out) } else { Err(errors) }
@@ -279,7 +310,9 @@ pub struct Owner {
 
 /// The struct of every window and the app in `file`, for the header, and
 /// their loading, JSON and handlers, for the source.
-pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<(String, String, Vec<Owner>), Vec<String>> {
+/// `all_types` are the checker's types of every file, for the `allow` of
+/// commands in other files that open a window of this one.
+pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes, all_types: &HashMap<String, FileTypes>) -> Result<(String, String, Vec<Owner>), Vec<String>> {
     let (mut header, mut source) = (String::new(), String::new());
     let mut owners = Vec::new();
     let mut errors = Vec::new();
@@ -341,10 +374,30 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             if let DataKind::List { entity } = &d.of
                 && !project.entity(&entity.name).is_some_and(|e| e.record)
             {
-                let _ = writeln!(load, "    w.{member} = db.all<{}>();", entity.name);
+                let _ = writeln!(load, "    w.{member} = {};", readable_all(project, &entity.name, &format!("db.all<{}>()", entity.name)));
             }
             let _ = writeln!(to, "    out[{key}] = w.{member};");
             let _ = writeln!(from, "    if (in.contains({key}) && !in[{key}].is_null()) w.{member} = in[{key}].get<{ty}>();");
+        }
+
+        // The `allow` of the frame's commands, by the handler each runs (step 4).
+        let commands = match (page, app) {
+            (Some(page), _) => clarity_spec::code::check::all_commands(&page.frame, &page.widgets),
+            (None, Some(app)) => clarity_spec::code::check::all_commands(&app.frame, &[]),
+            (None, None) => Vec::new(),
+        };
+        let allowed: Vec<(&str, &Expr)> = commands.iter().filter_map(|c| Some((c.props.handler.as_deref()?, c.props.allow_condition.as_ref()?))).collect();
+        // A window's `allow` is decided when it opens, before its data loads,
+        // with the `allow` of every frame command that opens it: they hold together.
+        if let Some(page) = page {
+            let mut allow = String::new();
+            let own = page.allow_condition.as_ref().map(|c| (c, types));
+            for (condition, types) in own.into_iter().chain(openers(project, &page.name.name, all_types)) {
+                let mut emitter = Emitter::new(project, types, None, None);
+                emitter.allow(condition, &mut allow);
+                errors.extend(emitter.errors.into_iter().map(|e| format!("allow of {name}: {e}")));
+            }
+            load.insert_str(0, &indent(&allow, 1));
         }
 
         let mut methods = String::new();
@@ -353,6 +406,10 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             let method = method(&handler.name.name);
             let mut emitter = Emitter::new(project, types, None, Some(&ctx));
             let mut code = String::new();
+            // A command with `allow` is checked when it runs: its handler refuses first.
+            for (_, condition) in allowed.iter().filter(|(h, _)| *h == handler.name.name) {
+                emitter.allow(condition, &mut code);
+            }
             emitter.block(&handler.body, &mut code);
             // The values a click gives it, typed.
             let values: String = handler
@@ -431,6 +488,10 @@ impl<'a> Emitter<'a> {
     fn function(&mut self) -> String {
         let decl = self.decl.expect("a function, action or data event");
         let mut body = String::new();
+        // `allow when`: refused with notAllowed before anything else runs.
+        if let Some(condition) = &decl.allow {
+            self.allow(condition, &mut body);
+        }
         for condition in &decl.requires {
             let holds = self.value(condition);
             let _ = writeln!(body, "clarity::require({holds}, {});", string(&print::expr(condition)));
@@ -460,6 +521,12 @@ impl<'a> Emitter<'a> {
         }
         let signature = signature(self.project, decl);
         format!("{signature} {{\n{}}}\n\n", indent(&body, 1))
+    }
+
+    /// `allow when <condition>`: the call is refused with notAllowed when it does not hold.
+    fn allow(&mut self, condition: &Expr, out: &mut String) {
+        let holds = self.value(condition);
+        let _ = writeln!(out, "clarity::allow({holds});");
     }
 
     fn block(&mut self, body: &[Stmt], out: &mut String) {
@@ -565,6 +632,19 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "{place} = db.{made}({file}, {store});");
                     return;
                 }
+                // Text given to a hashed field is kept as its hash, by the
+                // field's method, checked against its minimum first (step 4).
+                if let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                    && self.project.entity(&owner).and_then(|e| e.field(&member.name)).is_some_and(|f| f.modifiers.hashed)
+                    && !matches!(value.kind, ExprKind::Empty)
+                {
+                    let hashing = crate::signin::hashing(self.project, &member.name);
+                    let minimum = hashing.minimum.map_or("std::nullopt".to_string(), |m| format!("int64_t{{{m}}}"));
+                    let (place, text) = (self.place(target), self.value(value));
+                    let _ = writeln!(out, "{place} = clarity::hashed({}, {text}, {minimum});", string(hashing.method));
+                    return;
+                }
                 // Another record's picture or file: copied, its bytes read when it is only stored.
                 if let Some(copy) = crate::copied(self.project, |e| self.types.type_of(e), target, value) {
                     let made = if copy.file { "copied_file" } else { "copied_picture" };
@@ -650,8 +730,13 @@ impl<'a> Emitter<'a> {
                 let code = self.value(call);
                 let _ = writeln!(out, "{code};");
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } => {
-                let verb = if matches!(stmt.kind, StmtKind::Save { .. }) { "save" } else { "remove" };
+            StmtKind::Save { value, .. } | StmtKind::Delete { value } => {
+                // `save ... anyway` writes regardless of the version (step 5).
+                let verb = match stmt.kind {
+                    StmtKind::Save { anyway: true, .. } => "save_anyway",
+                    StmtKind::Save { .. } => "save",
+                    _ => "remove",
+                };
                 let record = self.record_arg(value);
                 let _ = writeln!(out, "db.{verb}({record});");
             }
@@ -670,7 +755,12 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 let _ = writeln!(out, "cli.message({text});");
             }
-            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } | StmtKind::Reload { .. } if self.window.is_none() => {
+            // `reload` of a record variable (a local or a parameter; never
+            // named as the window's data) reads it again as it is stored now.
+            StmtKind::Reload { data } if !self.window.is_some_and(|w| w.data.iter().any(|(n, _, _)| *n == data.name)) => {
+                let _ = writeln!(out, "db.reload({});", ident(&data.name));
+            }
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
@@ -771,12 +861,12 @@ impl<'a> Emitter<'a> {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {
                     Some((name, entity, true)) => {
-                        let _ = writeln!(out, "{} = db.all<{entity}>();", ident(&name));
+                        let _ = writeln!(out, "{} = {};", ident(&name), readable_all(self.project, &entity, &format!("db.all<{entity}>()")));
                         out.push_str(&self.deselect(&name));
                     }
                     Some((name, entity, false)) => {
                         let member = ident(&name);
-                        let _ = writeln!(out, "if ({member}.id != 0) {member} = db.get<{entity}>({member}.id);");
+                        let _ = writeln!(out, "if ({member}.id != 0) {member} = {};", readable_one(self.project, &entity, &format!("db.get<{entity}>({member}.id)")));
                     }
                     None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
                 }
@@ -965,6 +1055,14 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) | Some(NameKind::Data) => ident(name),
                 Some(NameKind::EnumValue(e)) => constant(e, name),
+                // The person signed in, read for this call; refused with notAllowed when nobody is.
+                Some(NameKind::Me) => match self.types.type_of(expr) {
+                    TypeInfo::Record(people) => format!("db.me<{people}>()"),
+                    other => {
+                        self.errors.push(format!("'me' is a record of the people who sign in, not {other:?}"));
+                        String::new()
+                    }
+                },
                 _ => {
                     self.errors.push(format!("'{name}' is not generated yet for C++"));
                     String::new()
@@ -998,7 +1096,7 @@ impl<'a> Emitter<'a> {
                 match self.field_type(&entity, &member.name) {
                     // Every record has an id.
                     None if member.name == clarity_spec::code::check::RECORD_ID => format!("{object}.id"),
-                    Some(FieldType::Ref { entity: target }) => format!("db.load<{}>({object}.{})", target.name, ident(&member.name)),
+                    Some(FieldType::Ref { entity: target }) => readable_one(self.project, &target.name, &format!("db.load<{}>({object}.{})", target.name, ident(&member.name))),
                     Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
@@ -1412,6 +1510,14 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| self.picture_in_hand(a)).collect();
             return format!("{}({})", built.cpp, values.join(", "));
         }
+        // A new token and new recovery codes, made by Clarity.Auth (step 4).
+        if name == clarity_spec::code::check::NEW_TOKEN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            return "clarity::new_token()".to_string();
+        }
+        if name == clarity_spec::code::check::NEW_RECOVERY_CODES && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let count = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity::new_recovery_codes({count})");
+        }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("clarity::length({text})");
@@ -1452,7 +1558,7 @@ impl<'a> Emitter<'a> {
                 let _ = write!(query, ".order_through({{{}}}, {column}, {}, {numeric})", hops.join(", "), key.descending);
             }
         }
-        format!("db.find<{entity}>({query})")
+        readable_all(self.project, entity, &format!("db.find<{entity}>({query})"))
     }
 
     /// `files f in store where ... order by ...`: the files of a store,
@@ -1590,6 +1696,44 @@ impl<'a> Emitter<'a> {
 }
 
 /// A value as text, the way `"text" + value` shows it.
+/// The `allow` of every frame command in the project that opens `window`,
+/// with the checker's types of the file it is written in.
+fn openers<'a>(project: &'a Project, window: &str, all_types: &'a HashMap<String, FileTypes>) -> Vec<(&'a Expr, &'a FileTypes)> {
+    let mut out = Vec::new();
+    for file in &project.files {
+        let Some(types) = all_types.get(&file.path) else { continue };
+        let frames = file.pages.iter().map(|p| (&p.frame, p.widgets.as_slice())).chain(file.apps.iter().map(|a| (&a.frame, &[][..])));
+        for (frame, widgets) in frames {
+            for command in clarity_spec::code::check::all_commands(frame, widgets) {
+                if let (Some(opens), Some(condition)) = (&command.props.on_click, &command.props.allow_condition)
+                    && opens == window
+                {
+                    out.push((condition, types));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Records `code` gives back, each checked by `readable when` of `entity`
+/// (step 4): refused with notYours, as a check rather than a hidden filter.
+pub(crate) fn readable_all(project: &Project, entity: &str, code: &str) -> String {
+    match project.entity(entity).filter(|e| e.readable.is_some()) {
+        Some(_) => format!("[&] {{ auto found = {code}; for (const auto& r : found) {}_readable(db, r); return found; }}()", snake(entity)),
+        None => code.to_string(),
+    }
+}
+
+/// The record `code` gives back, checked by `readable when` of `entity`
+/// when it is one (an empty reference gives none to check).
+fn readable_one(project: &Project, entity: &str, code: &str) -> String {
+    match project.entity(entity).filter(|e| e.readable.is_some()) {
+        Some(_) => format!("[&] {{ auto found = {code}; if (found.id != 0) {}_readable(db, found); return found; }}()", snake(entity)),
+        None => code.to_string(),
+    }
+}
+
 fn show(code: String, ty: &TypeInfo) -> String {
     match ty {
         TypeInfo::Text => code,

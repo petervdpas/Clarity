@@ -134,6 +134,8 @@ translation de
     cancel "Abbrechen"
     dismiss "Schließen"
     undoChangedSince "Dies wurde inzwischen geändert und kann daher nicht rückgängig gemacht werden"
+    undoTooOld "Das ist zu lange her, um es rückgängig zu machen"
+    savedSince "Jemand anderes hat diesen Datensatz geändert, seit du ihn geöffnet hast. Lade ihn neu, um die Änderung zu sehen."
     fieldRequired "{field} ist erforderlich"
     languagePicker "Sprache"
     themePicker "Design"

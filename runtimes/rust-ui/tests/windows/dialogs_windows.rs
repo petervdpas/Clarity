@@ -82,6 +82,7 @@ fn a_host_with_windows_of_its_own_opens_dialogs_and_new_windows_there() {
         .map(|a| match a {
             Apart::Window(w) => (w.window, w.dialog, w.opener),
             Apart::Keys => panic!("no keys window was asked for"),
+            Apart::Main(_) | Apart::Signin(_) => panic!("no main or sign-in window was asked for"),
         })
         .collect();
     assert_eq!(vec![("Pick".to_string(), true, main), ("Connection".to_string(), false, main)], asked);

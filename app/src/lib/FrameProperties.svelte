@@ -115,6 +115,20 @@
         <input value={p.shortcut ?? ""} placeholder="Ctrl+N" onchange={(e) => update(p, { shortcut: textOf(e) })} />
       </label>
     {/if}
+    {#if preview.project.signin && (p.kind === "item" || p.kind === "button")}
+      <!-- Who may run it (docs/APP-CAPABILITIES-PLAN.md step 4): a condition on `me`. -->
+      <label class="prop">
+        <span>Allow</span>
+        <input
+          class="mono"
+          value={p.allow ?? ""}
+          placeholder="everyone signed in"
+          spellcheck="false"
+          title="A condition on who signed in, like me.role == Admin; empty lets everyone who signed in run it"
+          onchange={(e) => update(p, { allow: textOf(e) })}
+        />
+      </label>
+    {/if}
     {#if p.kind === "button" && element.parent === "group"}
       <label class="inline">
         <input type="checkbox" checked={p.large} onchange={(e) => update(p, { large: e.currentTarget.checked })} />

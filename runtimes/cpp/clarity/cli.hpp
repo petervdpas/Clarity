@@ -111,6 +111,8 @@ public:
     virtual bool is_terminal() = 0;
     /// The next line typed, without its end; nothing at the end of input.
     virtual std::optional<std::string> read_line() = 0;
+    /// The next line typed without showing it, as a password is; nothing at the end of input.
+    virtual std::optional<std::string> read_secret() { return read_line(); }
     /// Writes to standard error, where questions go.
     virtual void write(const std::string& text) = 0;
 };
@@ -120,6 +122,7 @@ class Console : public Terminal {
 public:
     bool is_terminal() override;
     std::optional<std::string> read_line() override;
+    std::optional<std::string> read_secret() override;
     void write(const std::string& text) override;
 };
 

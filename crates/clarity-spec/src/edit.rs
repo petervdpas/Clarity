@@ -103,6 +103,8 @@ pub enum Edit {
     SetSize { page: u32, width: Option<u32>, height: Option<u32> },
     /// The window's own style of the theme (`style splashBack`); empty for none.
     SetPageStyle { page: u32, style: String },
+    /// Who may open a window or view (`allow="me.role == Admin"`); empty for everyone.
+    SetPageAllow { page: u32, allow: String },
     /// Add an empty page at the end of the file.
     AddPage { name: String, kind: PageKind },
     /// Add a window at the end of the file, blank or from a template.

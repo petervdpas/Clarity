@@ -13,3 +13,8 @@ serde_json.workspace = true
 ts-rs.workspace = true
 # The files of the engines beside the screen, carried in the model for the renderer.
 base64 = "0.22"
+
+[dev-dependencies]
+# Tests load an example as the IDE does: its modules with the data sources
+# its project file names.
+clarity-project.workspace = true

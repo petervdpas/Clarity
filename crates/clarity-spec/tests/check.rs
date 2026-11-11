@@ -1,4 +1,4 @@
-use clarity_spec::{Severity, load_dir, load_sources};
+use clarity_spec::{Severity, load_sources};
 
 fn diagnostics(sources: &[(&str, &str)]) -> Vec<(Severity, String)> {
     load_sources(sources.iter().copied())
@@ -31,9 +31,9 @@ entity Note
 #[test]
 fn example_project_is_clean() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop");
-    let project = load_dir(std::path::Path::new(dir)).unwrap();
-    // Its five modules, and its windows and views in design/.
-    assert_eq!(project.files.iter().filter(|f| !clarity_spec::cxaml::is_page_file(&f.path)).count(), 5);
+    let project = clarity_project::load_modules(std::path::Path::new(dir)).unwrap();
+    // Its six modules, and its windows and views in design/.
+    assert_eq!(project.files.iter().filter(|f| !clarity_spec::cxaml::is_page_file(&f.path)).count(), 6);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 

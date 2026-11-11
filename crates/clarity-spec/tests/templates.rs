@@ -1,6 +1,6 @@
 use clarity_spec::edit::Edit;
 use clarity_spec::templates::PageTemplate;
-use clarity_spec::{Project, load_dir, load_dir_with};
+use clarity_spec::Project;
 use std::path::PathBuf;
 
 fn example_dir() -> PathBuf {
@@ -20,7 +20,7 @@ struct Added {
 fn add_window(template: PageTemplate) -> Added {
     let dir = example_dir();
     let path = dir.join("counter.clarity");
-    let project = load_dir(&dir).unwrap();
+    let project = clarity_project::load_modules(&dir).unwrap();
     let source = std::fs::read_to_string(&path).unwrap();
     let edit = Edit::AddWindow { name: "FreshWindow".into(), template };
     let added = clarity_spec::cxaml::added(&project, &path, &source, &edit).unwrap().unwrap_or_else(|e| panic!("{e}"));
@@ -29,7 +29,7 @@ fn add_window(template: PageTemplate) -> Added {
     let mut replaced: Vec<(&std::path::Path, &str)> = vec![(path.as_path(), added.module.as_str())];
     replaced.extend(added.files.iter().map(|(p, t)| (p.as_path(), t.as_str())));
     replaced.extend(languages.iter().map(|(p, _, t)| (p.as_path(), t.as_str())));
-    let after = clarity_spec::load_dir_with_files_in(&dir, &replaced, &[]).unwrap();
+    let after = clarity_project::load_modules_with_files(&dir, &replaced).unwrap();
     let file = |name: &str| added.files.iter().find(|(p, _)| p.ends_with(format!("design/{name}.cxaml"))).map(|(_, t)| t.clone()).unwrap_or_default();
     Added { window: file("FreshWindow"), view: file("FreshWindowView"), module: added.module.clone(), after }
 }
@@ -83,7 +83,7 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
 #[test]
 fn templates_need_a_known_entity_and_a_free_name() {
     let dir = example_dir();
-    let project = load_dir(&dir).unwrap();
+    let project = clarity_project::load_modules(&dir).unwrap();
     let path = dir.join("counter.clarity");
     let add = |name: &str, entity: &str| clarity_spec::cxaml::added(&project, &path, "module counter\n", &Edit::AddWindow { name: name.into(), template: PageTemplate::Form { entity: entity.into() } }).unwrap();
     assert!(add("X", "Nope").unwrap_err().contains("'Nope' is not an entity"));
@@ -115,7 +115,7 @@ fn a_dropped_field_brings_its_label_and_help() {
     // The customer card's view is a window's view in its own file, as the designer edits it.
     let dir = example_dir();
     let path = dir.join("design/CustomerCardView.cxaml");
-    let project = load_dir(&dir).unwrap();
+    let project = clarity_project::load_modules(&dir).unwrap();
     let source = std::fs::read_to_string(&path).unwrap();
     let page = project
         .pages()
@@ -136,7 +136,7 @@ fn a_dropped_field_brings_its_label_and_help() {
     let outcome = clarity_spec::cxaml::apply(Some(&project), &source, &edit).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(placed(&outcome.text), [("vatNumberLabel".to_string(), 1, 20, 3), ("vatNumber".to_string(), 4, 20, 4), ("vatNumberHelp".to_string(), 8, 20, 5)], "{}", outcome.text);
     assert!(outcome.text.contains("caption=\"@customerVatNumberLabel\""), "{}", outcome.text);
-    let after = load_dir_with(&dir, &path, &outcome.text).unwrap();
+    let after = clarity_project::load_modules_with(&dir, &path, &outcome.text).unwrap();
     assert!(after.diagnostics.is_empty(), "{:#?}", after.diagnostics);
 
     // Dropped again, the input gets a free name and the label follows it.

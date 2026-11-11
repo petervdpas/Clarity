@@ -1372,6 +1372,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-formats",
+ "clarity-project",
  "serde",
  "serde_json",
  "ts-rs",

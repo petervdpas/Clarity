@@ -11,18 +11,10 @@ fn shop() -> clarity_spec::Project {
     example("shop")
 }
 
+/// An example as the IDE loads it: its modules with the data sources its project file names.
 fn example(name: &str) -> clarity_spec::Project {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(name);
-    let mut sources = Vec::new();
-    for folder in [dir.clone(), dir.join("design")] {
-        for entry in std::fs::read_dir(folder).unwrap().flatten() {
-            let p = entry.path();
-            if p.extension().is_some_and(|e| e == "clarity" || e == "cxaml") {
-                sources.push((p.display().to_string(), std::fs::read_to_string(&p).unwrap()));
-            }
-        }
-    }
-    clarity_spec::load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())))
+    clarity_project::load_modules(&dir).unwrap()
 }
 
 /// The example's files: its modules and its design files, by path.

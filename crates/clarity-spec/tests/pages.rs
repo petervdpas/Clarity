@@ -66,7 +66,7 @@ fn all_widgets(widgets: &[Widget]) -> Vec<&Widget> {
 #[test]
 fn example_page_is_clean() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop");
-    let project = clarity_spec::load_dir(std::path::Path::new(dir)).unwrap();
+    let project = clarity_project::load_modules(std::path::Path::new(dir)).unwrap();
     let page = project
         .pages()
         .find(|p| p.name.name == "CustomerCardView")

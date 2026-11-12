@@ -12,7 +12,8 @@
 //! so writers take turns through the system's lock on `activity.jsonl.lock`
 //! (on Linux, Windows and macOS alike). The system lets go of it when the
 //! process ends, so a program that stopped leaves no lock behind; one that
-//! hangs holding it is waited on for `LOCK_WAIT`, then the call is left out.
+//! hangs holding it is waited on until nothing was written to the log for
+//! `LOCK_WAIT`, then the call is left out; a busy log keeps it waiting.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -83,13 +84,23 @@ fn turn(file: &Path) -> Result<std::fs::File, String> {
         std::fs::create_dir_all(folder).map_err(failed)?;
     }
     let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(lock_file(file)).map_err(failed)?;
-    let started = Instant::now();
+    // A busy log is no hung one: the wait starts again whenever the log
+    // changed, so a writer gives up only when nothing was written for LOCK_WAIT.
+    let written = || std::fs::metadata(file).ok().map(|m| (m.len(), m.modified().ok()));
+    let mut last = written();
+    let mut started = Instant::now();
     loop {
         match lock.try_lock() {
             Ok(()) => return Ok(lock),
-            Err(std::fs::TryLockError::WouldBlock) if started.elapsed() < LOCK_WAIT => std::thread::sleep(Duration::from_millis(5)),
             Err(std::fs::TryLockError::WouldBlock) => {
-                return Err(format!("{} stayed in use for {} seconds; this call is left out of it", file.display(), LOCK_WAIT.as_secs()));
+                let now = written();
+                if now != last {
+                    last = now;
+                    started = Instant::now();
+                } else if started.elapsed() >= LOCK_WAIT {
+                    return Err(format!("{} stayed in use for {} seconds without a line written; this call is left out of it", file.display(), LOCK_WAIT.as_secs()));
+                }
+                std::thread::sleep(Duration::from_millis(5));
             }
             Err(std::fs::TryLockError::Error(err)) => return Err(failed(err)),
         }

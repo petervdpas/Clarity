@@ -114,3 +114,29 @@ fn a_log_held_too_long_is_given_up_on() {
     lock.unlock().unwrap();
     activity::record_in(&file, &call("check", None, true)).unwrap();
 }
+
+/// A busy log is no hung one: a writer waits its turn as long as the one
+/// holding the log keeps writing to it, past `LOCK_WAIT`, and gives up only
+/// when nothing is written for that long.
+#[test]
+fn a_writer_waits_while_the_log_keeps_being_written() {
+    let file = log("busy");
+    activity::record_in(&file, &call("check", None, true)).unwrap();
+    let lock = std::fs::File::create(activity::lock_file(&file)).unwrap();
+    lock.lock().unwrap();
+    let writing = file.clone();
+    let holder = std::thread::spawn(move || {
+        // Holds the log for longer than LOCK_WAIT, writing to it all the while.
+        let until = std::time::Instant::now() + activity::LOCK_WAIT + std::time::Duration::from_secs(1);
+        while std::time::Instant::now() < until {
+            let mut text = std::fs::read_to_string(&writing).unwrap();
+            text.push_str("\n");
+            std::fs::write(&writing, text).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        lock.unlock().unwrap();
+    });
+    let written = activity::record_in(&file, &call("check", None, true));
+    holder.join().unwrap();
+    assert!(written.is_ok(), "{written:?}");
+}

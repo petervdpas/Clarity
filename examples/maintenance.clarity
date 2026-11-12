@@ -1,0 +1,5 @@
+project Maintenance
+    stack rust desktop
+    output "out"
+    datasource main sqlite "data/maintenance.db"
+    filestore ledger "setting:ledgerFolder"

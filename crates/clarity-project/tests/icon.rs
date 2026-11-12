@@ -1,4 +1,4 @@
-//! The application's icon (docs/APP-ICON-SPLASH-PLAN.md): the project file
+//! The application's icon: the project file
 //! names a picture among the resources, the checker says when it is not
 //! there or no picture, and the model carries it to every stack.
 

@@ -1,8 +1,8 @@
-//! Clarity's manual: Markdown topics in docs/manual, one file per topic,
+//! Clarity's manual: Markdown topics in manual, one file per topic,
 //! named by its id (`code.queries.md`). A topic's first line is its title
 //! (`# Queries`), the sentence under it its summary, and the rest the page.
 //! People read the files as they are; the agent gets the list of titles and
-//! summaries, and reads a page when it needs one. docs/manual/README.md lists
+//! summaries, and reads a page when it needs one. manual/README.md lists
 //! the topics in the same order for people.
 
 pub use clarity_tools::manual::{page, topics};

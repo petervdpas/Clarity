@@ -16,4 +16,9 @@ targets: Array<string>,
 /**
  * Whether people choose its secret, so it can have a `minimum`.
  */
-minimum: boolean, };
+minimum: boolean, 
+/**
+ * A provider's settings it takes, in the order written under its line
+ * (`client`, `secret`, `tenant`, `issuer`, `register`); none for the others.
+ */
+settings: Array<string>, };

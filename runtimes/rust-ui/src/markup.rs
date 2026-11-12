@@ -125,6 +125,8 @@ pub struct PageSpec {
     pub children: Vec<PartSpec>,
     /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
     pub item: Option<String>,
+    /// The view a content's page shows (`<View name="CodeView">`), by which an "other way" shows it.
+    pub view: Option<String>,
 }
 
 /// An item of a menu: its fields (caption, name, key, handler or window it opens) and its items.
@@ -415,6 +417,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
                 color: child.attribute("color").map(str::to_string).filter(|c| !c.is_empty()),
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,
                 item: child.attribute(DESIGN_ITEM).map(str::to_string),
+                view: (child.name == "View").then(|| child.attribute("name").map(str::to_string)).flatten(),
             });
         } else {
             children.push(part_of(child)?);

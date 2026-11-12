@@ -78,9 +78,13 @@ page Main: window
     button \"Greet\" name greet at 1,2 span 2 on click: greetClicked
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Main
     handler greetClicked
@@ -166,6 +170,26 @@ fn the_databases_name_their_people_after_they_open() {
     has(file(&files(&asking, CLUB, false), "Program.cs"), "TriesSeconds = 600, Program = \"club\", RememberSeconds = 2592000, RememberAsks = true });");
 }
 
+/// The desktop program, its people signing in with GitHub too.
+fn with_provider() -> Vec<clarity_gen::OutFile> {
+    let mut settings = clarity_project::parse(PROJECT).unwrap();
+    settings.stack.backend = Backend::Csharp;
+    let converted = clarity_spec::converted([("club/club.clarity", CLUB)]);
+    let mut project = clarity_spec::load_in_signed(converted.iter().map(|(p, t)| (p.as_str(), t.as_str())), [("migrations/main/0001.clarity", STEP)], &[clarity_spec::SourceRef::sql("main")], settings.signin.as_ref());
+    let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+    project.signin.as_mut().unwrap().strategies.push(clarity_spec::signin::SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
+    clarity_gen::generate(&project, &settings).unwrap()
+}
+
+#[test]
+fn a_provider_strategy_carries_its_settings() {
+    let out = with_provider();
+    let program = file(&out, "Program.cs");
+    has(program, "new Clarity.Auth.SigninStrategy(\"github\", [\"email\"]) { Options = [(\"client\", \"app\"), (\"secret\", \"setting:githubSecret\"), (\"claim\", \"email\")] }");
+    // A strategy without settings has no options.
+    has(program, "new Clarity.Auth.SigninStrategy(\"password\", [\"email\", \"password_hash\"]), ");
+}
+
 #[test]
 fn me_is_the_handle_s_person_in_handlers_actions_events_and_commands() {
     let out = desktop();
@@ -247,9 +271,13 @@ page Main: window
     button \"Again\" name again at 1,12 span 2 on click: againClicked
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Main
     handler againClicked
@@ -327,7 +355,7 @@ fn the_command_line_signs_in_before_a_command_runs() {
 fn builds_on_the_runtime() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated/signin-csharp");
     let remembering = PROJECT.replace("        session 2 hours\n", "        session 2 hours\n        remember 30 days\n");
-    for (name, generated) in [("desktop", files(&remembering, CLUB, false)), ("cli", files(&remembering, CLUB, true)), ("roster", roster())] {
+    for (name, generated) in [("desktop", files(&remembering, CLUB, false)), ("cli", files(&remembering, CLUB, true)), ("roster", roster()), ("provider", with_provider())] {
         let out = root.join(name);
         let _ = std::fs::remove_dir_all(&out);
         for f in generated {

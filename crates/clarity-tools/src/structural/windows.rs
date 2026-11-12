@@ -163,13 +163,13 @@ pub fn definitions() -> Vec<ToolDef> {
         tool("remove_tab", "Removes a tab, step, section or content line of a part, with what it holds.", schema(json!({ "page": page_prop(), "part": part_prop("The part, by its name"), "tab": { "type": "integer", "minimum": 1 } }), &["page", "part", "tab"])),
         tool(
             "add_data",
-            "Declares data on a window or view: a record or a list of an entity, which its parts bind to.",
+            "Declares data on a window or view, which its parts bind to: a record of an entity or a record type, a list of them, or a value (text, integer, decimal, money, bool, date, datetime, duration, or an enum).",
             schema(
                 json!({
                     "page": page_prop(),
                     "name": { "type": "string", "description": "The data's name, camelCase (customer)" },
-                    "entity": { "type": "string", "description": "The entity it holds" },
-                    "list": { "type": "boolean", "description": "true for a list of them" }
+                    "entity": { "type": "string", "description": "What it holds: an entity, a record type, an enum or a plain type (text, bool, ...)" },
+                    "list": { "type": "boolean", "description": "true for a list of them; only records come as a list" }
                 }),
                 &["page", "name", "entity"],
             ),
@@ -545,13 +545,26 @@ fn remove_tab(tools: &mut ProjectTools, input: &Value) -> Result<String, String>
 // ---------------------------------------------------------------------------
 // Data and custom parts
 
+/// The plain types window data can hold, as the designer offers them (`PLAIN_TYPES` in runtimes/web/src/screen/windowData.ts).
+const PLAIN_DATA_TYPES: [&str; 8] = ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration"];
+
 fn add_data(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
     let (dir, at) = page_of(tools, input)?;
     let name = required(input, "name")?;
     let entity = required(input, "entity")?;
     let project = places::model_project(&dir)?;
-    places::entity(&project, &entity)?;
     let list = flag(input, "list")?.unwrap_or(false);
+    // What the designer's Data panel offers: a record of an entity or a record type, a list of them, or a value (a plain type or an enum).
+    let records: Vec<&str> = places::entity_names(&project).into_iter().chain(places::record_names(&project)).collect();
+    let values: Vec<&str> = PLAIN_DATA_TYPES.iter().copied().chain(places::enum_names(&project)).collect();
+    if values.contains(&entity.as_str()) {
+        if list {
+            return Err(format!("{entity} is a value; only records come as a list: {}", crate::listed(&records)));
+        }
+    } else if !records.contains(&entity.as_str()) {
+        let all: Vec<&str> = records.iter().chain(values.iter()).copied().collect();
+        return Err(format!("there is no entity, record, enum or plain type {entity}; data can hold {}", crate::listed(&all)));
+    }
     let of = if list { format!("list<{entity}>") } else { entity.clone() };
     let edit = Edit::AddData { page: at.page.span.start, name: name.clone(), entity, list };
     make(tools, &dir, &at.file, &edit, &format!("Declared data {name}: {of} on {}", at.page.name.name))
@@ -688,6 +701,22 @@ mod tests {
         let data = tools.call("add_data", &json!({"page": "MainView", "name": "task", "entity": "Task"}));
         assert!(!data.is_error, "{}", data.text);
         assert!(view(&dir, "MainView").contains("<Data name=\"task\" type=\"Task\""), "{}", view(&dir, "MainView"));
+
+        // What the designer's Data panel declares, the tool declares too: a list of records, plain values, an enum.
+        let wrote = tools.call("write_file", &json!({"path": "todo.clarity", "text": "module todo\n\nentity Task\n    title: text(80)\n    done: bool\n\nenum Level\n    Low\n    High\n\nrecord Row\n    key: text\n    label: text\n"}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+        let rows = tools.call("add_data", &json!({"page": "MainView", "name": "rows", "entity": "Row", "list": true}));
+        assert!(!rows.is_error, "{}", rows.text);
+        let note = tools.call("add_data", &json!({"page": "MainView", "name": "note", "entity": "text"}));
+        assert!(!note.is_error, "{}", note.text);
+        let level = tools.call("add_data", &json!({"page": "MainView", "name": "level", "entity": "Level"}));
+        assert!(!level.is_error, "{}", level.text);
+        let text = view(&dir, "MainView");
+        assert!(text.contains("<Data name=\"rows\" type=\"list&lt;Row&gt;\"") && text.contains("<Data name=\"note\" type=\"text\"") && text.contains("<Data name=\"level\" type=\"Level\""), "{text}");
+        let plain_list = tools.call("add_data", &json!({"page": "MainView", "name": "notes", "entity": "text", "list": true}));
+        assert!(plain_list.is_error && plain_list.text.contains("list"), "{}", plain_list.text);
+        let unknown = tools.call("add_data", &json!({"page": "MainView", "name": "thing", "entity": "Thing"}));
+        assert!(unknown.is_error && unknown.text.contains("Row") && unknown.text.contains("text"), "{}", unknown.text);
 
         let placed = tools.call("place_field", &json!({"page": "MainView", "field": "task.title", "col": 1, "row": 1}));
         assert!(!placed.is_error, "{}", placed.text);

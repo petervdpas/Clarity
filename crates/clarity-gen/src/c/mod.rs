@@ -524,7 +524,7 @@ struct Links {
     web: bool,
 }
 
-/// The program file's icon and version on Windows: a resource object per processor, and the lines that link it (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md).
+/// The program file's icon and version on Windows: a resource object per processor, and the lines that link it.
 pub(crate) fn with_windows_resources(project: &Project, title: &str, program: &str, files: &mut Vec<OutFile>) {
     let icons = crate::windows_resources::object_files(project, title, program, crate::windows_resources::object_path);
     if icons.is_empty() {
@@ -665,7 +665,16 @@ pub(crate) fn signin_source(project: &Project, program: &str, fail: &str) -> (St
     for (name, columns) in &plan.strategies {
         let var = format!("signin_{}", snake(name));
         let _ = writeln!(data, "static const char* const {var}[] = {{{}}};", list(columns));
-        strategies.push(format!("{{{}, {var}, {}}}", string(name), columns.len()));
+        // A provider's settings for Clarity.Auth, key and value in turn; left out for a strategy without them.
+        let options = match plan.options.get(name) {
+            Some(options) => {
+                let pairs = options.iter().map(|(k, v)| format!("{}, {}", string(k), string(v))).collect::<Vec<_>>().join(", ");
+                let _ = writeln!(data, "static const char* const {var}_options[] = {{{pairs}}};");
+                format!(", {var}_options, {}", options.len())
+            }
+            None => String::new(),
+        };
+        strategies.push(format!("{{{}, {var}, {}{options}}}", string(name), columns.len()));
     }
     let _ = writeln!(data, "static const ClaritySigninStrategy signin_strategies[] = {{{}}};", strategies.join(", "));
     let _ = write!(

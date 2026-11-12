@@ -100,7 +100,7 @@ pub fn is_word_of_the_language(word: &str) -> bool {
 }
 
 /// The options of the project file's signin block, each at the start of its line.
-const SIGNIN_LINE_WORDS: &[&str] = &["minimum", "session", "tries", "remember"];
+const SIGNIN_LINE_WORDS: &[&str] = &["minimum", "session", "tries", "remember", "client", "secret", "tenant", "issuer", "register"];
 
 /// Whether `word` starts a line of the signin block: an option, or a strategy of Clarity.Auth's catalog.
 fn is_signin_line_word(word: &str) -> bool {

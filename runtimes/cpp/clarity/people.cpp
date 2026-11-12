@@ -6,6 +6,7 @@
 
 #include "clarity/cli.hpp"
 #include "clarity/db.hpp"
+#include "clarity/settings.hpp"
 
 namespace clarity {
 
@@ -15,6 +16,18 @@ bool SigninSource::on(const std::string& target) const { return std::find(target
 
 bool SigninSource::uses(const std::string& name) const {
     return std::any_of(strategies.begin(), strategies.end(), [&](const SigninStrategy& s) { return s.name == name; });
+}
+
+json SigninSource::options_of(const SigninStrategy& strategy) const {
+    json options = json::object();
+    for (const auto& [key, value] : strategy.options) {
+        const std::string prefix = "setting:";
+        if (key == "secret" && value.rfind(prefix, 0) == 0)
+            options[key] = secret_store.get ? secret_store.get(program, value.substr(prefix.size())).value_or("") : "";
+        else
+            options[key] = value;
+    }
+    return options;
 }
 
 // Clarity's own words with their English (conformance/signin.json, "refusals").

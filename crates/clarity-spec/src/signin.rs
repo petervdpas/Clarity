@@ -36,6 +36,10 @@ pub struct Signin {
     /// every strategy of the block that works on the target, in block order.
     #[serde(default)]
     pub shows: Vec<String>,
+    /// Whether the sign-in part lets people pick their language (`language
+    /// picker`); off without the line.
+    #[serde(default)]
+    pub language_picker: bool,
     /// The line of the project file it is written on, for messages about it.
     #[serde(skip)]
     #[ts(skip)]
@@ -45,8 +49,8 @@ pub struct Signin {
 /// Two blocks are the same when they say the same, wherever they are written.
 impl PartialEq for Signin {
     fn eq(&self, other: &Self) -> bool {
-        (&self.entity, &self.targets, &self.strategies, self.session_minutes, self.tries, self.tries_minutes, self.remember_days, self.remember_asks, &self.shows)
-            == (&other.entity, &other.targets, &other.strategies, other.session_minutes, other.tries, other.tries_minutes, other.remember_days, other.remember_asks, &other.shows)
+        (&self.entity, &self.targets, &self.strategies, self.session_minutes, self.tries, self.tries_minutes, self.remember_days, self.remember_asks, &self.shows, self.language_picker)
+            == (&other.entity, &other.targets, &other.strategies, other.session_minutes, other.tries, other.tries_minutes, other.remember_days, other.remember_asks, &other.shows, other.language_picker)
     }
 }
 
@@ -65,6 +69,36 @@ pub struct SigninStrategy {
     #[serde(default)]
     #[ts(optional)]
     pub minimum: Option<u32>,
+    /// A provider's settings, indented under its line; none for a strategy that is no provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub provider: Option<ProviderSettings>,
+}
+
+/// A provider strategy's settings (GitHub, Microsoft, an OpenID provider):
+/// `client "..."`, `secret "setting:..."`, `tenant "..."`, `issuer "..."`
+/// and `register`, indented under its line in the project file.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProviderSettings {
+    /// The app's id at the provider.
+    #[serde(default)]
+    pub client: String,
+    /// The secret setting that holds the app's secret at the provider (`setting:githubSecret`); never the secret itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub secret: Option<String>,
+    /// Microsoft's tenant: the company's id or domain, `organizations` or `consumers`; `common` without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tenant: Option<String>,
+    /// An OpenID provider's address, by which its endpoints are found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub issuer: Option<String>,
+    /// Whether a first sign-in makes the person's record.
+    #[serde(default)]
+    pub register: bool,
 }
 
 /// A strategy line as the model hands it to Clarity.UI and the runtimes: the
@@ -88,6 +122,10 @@ pub struct SigninStrategyModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub targets: Option<Vec<String>>,
+    /// A provider's settings, as written under its line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub provider: Option<ProviderSettings>,
 }
 
 impl Serialize for SigninStrategy {
@@ -100,7 +138,7 @@ impl From<SigninStrategy> for SigninStrategyModel {
     fn from(line: SigninStrategy) -> Self {
         let info = strategy_info(&line.name);
         let texts = |list: &[&str]| list.iter().map(|s| s.to_string()).collect();
-        SigninStrategyModel { inputs: info.map(|i| texts(i.inputs)), targets: info.map(|i| texts(i.targets)), name: line.name, fields: line.fields, minimum: line.minimum }
+        SigninStrategyModel { inputs: info.map(|i| texts(i.inputs)), targets: info.map(|i| texts(i.targets)), name: line.name, fields: line.fields, minimum: line.minimum, provider: line.provider }
     }
 }
 
@@ -110,7 +148,7 @@ pub const DEFAULT_TRIES_MINUTES: u32 = 15;
 
 impl Signin {
     pub fn new(entity: impl Into<String>, targets: Vec<String>) -> Self {
-        Signin { entity: entity.into(), targets, strategies: Vec::new(), session_minutes: DEFAULT_SESSION_MINUTES, tries: DEFAULT_TRIES, tries_minutes: DEFAULT_TRIES_MINUTES, remember_days: None, remember_asks: false, shows: Vec::new(), line: 0 }
+        Signin { entity: entity.into(), targets, strategies: Vec::new(), session_minutes: DEFAULT_SESSION_MINUTES, tries: DEFAULT_TRIES, tries_minutes: DEFAULT_TRIES_MINUTES, remember_days: None, remember_asks: false, shows: Vec::new(), language_picker: false, line: 0 }
     }
 
     /// The strategy of that name, when the project uses it.
@@ -218,6 +256,31 @@ pub fn check(files: &[crate::model::SpecFile], signin: &Signin) -> Vec<crate::di
                 _ => {}
             }
         }
+        // A provider: what it signs in with.
+        if info.provider {
+            let settings = line.provider.clone().unwrap_or_default();
+            let at_provider = match line.name.as_str() {
+                "github" => "GitHub",
+                "microsoft" => "Microsoft",
+                _ => "the provider",
+            };
+            if settings.client.is_empty() {
+                found.push(Diagnostic::error(format!("the {} strategy needs its client, the app's id at {at_provider}: write client \"...\" indented under its line", line.name), at));
+            }
+            if line.name == "openid" && settings.issuer.is_none() {
+                found.push(Diagnostic::error("the openid strategy needs its issuer, the provider's address: write issuer \"https://...\" indented under its line", at));
+            }
+            // The secret is kept in the program's protected store, under a secret setting the project declares.
+            if let Some(name) = settings.secret.as_deref().and_then(|s| s.strip_prefix("setting:")) {
+                let declared = files.iter().flat_map(|f| &f.entities).filter(|e| e.settings).flat_map(|e| &e.fields).any(|f| f.name.name == name && f.ty == crate::model::FieldType::Secret);
+                if !declared {
+                    found.push(Diagnostic::error(format!("the {} strategy's secret setting:{name} is no secret setting of the project: add {name}: secret to the settings, where the app's secret is kept", line.name), at));
+                }
+            }
+            if line.name == "github" && settings.secret.is_none() {
+                found.push(Diagnostic::error("GitHub trades the code for a token only with the app's secret: write secret \"setting:githubSecret\" indented under its line", at));
+            }
+        }
         // The first account has the strategy's fields and the others at their defaults.
         if info.first_account {
             for field in entity.fields.iter().filter(|f| f.modifiers.required && f.modifiers.default.is_none() && !line.fields.contains(&f.name.name)) {
@@ -240,6 +303,23 @@ pub fn check(files: &[crate::model::SpecFile], signin: &Signin) -> Vec<crate::di
 
 /// The app's splash page, which may hold sign-in parts and so double as the
 /// sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4).
+/// The sign-in views of the sign-in window `window`: the views its content
+/// shows, in order (docs/APP-CAPABILITIES-PLAN.md, "The sign-in window is designed, and guided").
+pub fn views_of(window: &crate::model::Page) -> Vec<String> {
+    let mut views = Vec::new();
+    crate::resources::each_widget(&window.widgets, &mut |w| {
+        if w.props.kind == crate::widgets::WidgetKind::Content {
+            views.extend(w.pages.iter().filter_map(|p| p.view.clone()));
+        }
+    });
+    views
+}
+
+/// The sign-in window of the project: the page of the kind `signin`.
+pub fn window(files: &[crate::model::SpecFile]) -> Option<&crate::model::Page> {
+    files.iter().flat_map(|f| &f.pages).find(|p| p.kind == crate::model::PageKind::Signin)
+}
+
 pub fn app_splash(files: &[crate::model::SpecFile]) -> Option<&crate::model::Page> {
     let name = files.iter().flat_map(|f| &f.apps).find_map(|a| a.splash.as_ref())?;
     files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name.name && p.kind == crate::model::PageKind::Splash)

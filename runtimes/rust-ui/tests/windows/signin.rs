@@ -14,7 +14,7 @@ use clarity_ui::window::WindowStack;
 use clarity_ui::{AppFiles, Screen};
 use core_windows_fake::*;
 
-const SIGN_IN: &str = r#"<Window name="SignIn">
+const SIGN_IN: &str = r#"<Window name="SignIn" width="420" height="380" startup="centerScreen" resizable="false" frame="none">
   <Textbox name="name" at="1,1" span="12" />
   <Textbox name="password" at="1,2" span="12" />
   <Button name="go" at="1,3" span="6" caption="Sign in" onclick="signin password" />
@@ -254,7 +254,7 @@ fn on_the_desktop_signing_out_shows_the_splash_in_its_own_window_again() {
     assert_eq!(asked, (vec![clarity_ui::window::Apart::Signin("Welcome".into())], true));
     assert_eq!(fake.calls(), vec!["signout", "close Main"]);
     // What the host opens for it: the splash, borderless at its size, nothing started.
-    let again = WindowStack::splash_again(running, "Welcome");
+    let again = WindowStack::signin_window(running, "Welcome");
     assert_eq!(again.windows(), vec!["Welcome"]);
     assert_eq!(again.wanted_size(), Some((480.0, 280.0)));
     assert!(!again.window_look().decorations);
@@ -272,4 +272,45 @@ fn on_the_desktop_signing_out_shows_the_splash_in_its_own_window_again() {
     assert!(matches!(asked.0.as_slice(), [clarity_ui::window::Apart::Main(Ok(_))]), "{:?}", asked.0);
     assert!(asked.1);
     assert_eq!(starts(&fake.calls()), 1, "the new sign-in starts the app again");
+}
+
+/// On the desktop a sign-in window other than the splash is a desktop window
+/// of its own at its size, without the app's frame: no start runs while it
+/// shows; a sign-in on it runs `on start`, asks for the main window in a
+/// desktop window of its own and ends; signing out asks for it again.
+#[test]
+fn on_the_desktop_the_sign_in_window_is_a_window_of_its_own() {
+    let fake = Arc::new(Fake { signin: Some("SignIn".into()), ..Fake::default() });
+    let program: Arc<dyn Program> = fake.clone();
+    let running = WindowStack::prepare(program.clone(), SIGNIN_FILES);
+    running.set_apart(true);
+    let own = WindowStack::signin_window(running.clone(), "SignIn");
+    assert_eq!(own.windows(), vec!["SignIn"]);
+    assert_eq!(own.wanted_size(), Some((420.0, 380.0)));
+    let look = own.window_look();
+    assert!(look.decorations && look.centre && !look.resizable && !look.app_frame, "{look:?}");
+    let mut screen = Screen::new(Box::new(own), SIGNIN_FILES.look(false));
+    screen.resize(420.0, 380.0, 1.0);
+    for _ in 0..3 {
+        screen.act_root::<WindowStack, _>(|_, _| ());
+    }
+    assert_eq!(starts(&fake.calls()), 0, "on start runs after the sign-in");
+    type_in(&mut screen, "name", "ann");
+    type_in(&mut screen, "password", "right");
+    click(&mut screen, "go");
+    let asked = screen.act_root::<WindowStack, _>(|stack, _| (stack.take_aparts(), stack.ended())).unwrap();
+    assert!(matches!(asked.0.as_slice(), [clarity_ui::window::Apart::Main(Ok(_))]), "{:?}", asked.0);
+    assert!(asked.1, "the sign-in window ends once the main window is asked for");
+    assert_eq!(starts(&fake.calls()), 1);
+    // The main window, signed out: the sign-in window is asked for in a desktop window of its own.
+    let mut screen = Screen::new(Box::new(WindowStack::started(running, program.start_app())), SIGNIN_FILES.look(false));
+    screen.resize(800.0, 500.0, 1.0);
+    fake.calls();
+    screen.act_root::<WindowStack, _>(|stack, _| {
+        use clarity_ui::PartHost;
+        stack.current().unwrap().clone().run(None, &clarity_ui::markup::HandlerCall::new("click", "signout", Vec::new()));
+    });
+    let asked = screen.act_root::<WindowStack, _>(|stack, _| (stack.take_aparts(), stack.ended())).unwrap();
+    assert_eq!(asked, (vec![clarity_ui::window::Apart::Signin("SignIn".into())], true));
+    assert_eq!(fake.calls(), vec!["signout", "close Main"]);
 }

@@ -12,7 +12,7 @@ export type Values = Record<string, Record<string, string>>;
 
 /** The values to look keys up in: the language picked (null for the
  *  default) and the default language; and the app's version, which fills
- *  `{app.version}` (docs/VERSION-PLAN.md). */
+ *  `{app.version}`. */
 export type Texts = { values: Values; picked: string | null; fallback: string; version?: string | null };
 
 const primary = (tag: string) => tag.split("-")[0].toLowerCase();

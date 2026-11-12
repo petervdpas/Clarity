@@ -151,19 +151,23 @@ pub fn row_height_attribute(row_height: u32) -> String {
 /// What a window says of its desktop window, as an Avalonia `Window` says it
 /// in its XAML. A splash page: its size (when the page names none), no
 /// system decorations, centred on the screen, fixed, above the others and not
-/// in the taskbar, and none of the app's frame. Other windows declare nothing
+/// in the taskbar, and none of the app's frame. A sign-in window: a window of
+/// its own too, sized, centred and fixed without the app's frame, but with
+/// the system's title bar and in the taskbar. Other windows declare nothing
 /// and keep the system's window.
 fn window_look(page: &Page) -> String {
-    if page.kind != PageKind::Splash {
-        return String::new();
-    }
+    let (standard, rest) = match page.kind {
+        PageKind::Splash => (clarity_spec::layout::SPLASH_SIZE, " decorations=\"none\" startup=\"centerScreen\" resizable=\"false\" topmost=\"true\" taskbar=\"false\" frame=\"none\""),
+        PageKind::Signin => (clarity_spec::layout::SIGNIN_SIZE, " startup=\"centerScreen\" resizable=\"false\" frame=\"none\""),
+        _ => return String::new(),
+    };
     let size = if page.size.is_some() {
         String::new()
     } else {
-        let (width, height) = clarity_spec::layout::SPLASH_SIZE;
+        let (width, height) = standard;
         format!(" width=\"{width}\" height=\"{height}\"")
     };
-    format!("{size} decorations=\"none\" startup=\"centerScreen\" resizable=\"false\" topmost=\"true\" taskbar=\"false\" frame=\"none\"")
+    format!("{size}{rest}")
 }
 
 /// `window_markup` of a project whose rows are `row_height` high, which the

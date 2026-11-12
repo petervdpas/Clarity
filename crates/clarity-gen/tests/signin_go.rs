@@ -76,9 +76,13 @@ page Members: window
     label \"Members\" name title at 1,1 span 4
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Main
     handler greetClicked
@@ -171,6 +175,17 @@ fn the_people_are_named_after_the_databases_open() {
     // Without `remember`, no secret store.
     let files = desktop(CLUB, true);
     assert!(!file(&files, "main.go").contains("clarity.Secrets"), "secrets without remember");
+}
+
+#[test]
+fn a_provider_strategy_carries_its_settings() {
+    let (mut signed, settings) = project(CLUB, true);
+    let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+    signed.signin.as_mut().unwrap().strategies.push(clarity_spec::signin::SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
+    let main = file(&clarity_gen::generate(&signed, &settings).unwrap(), "main.go").to_string();
+    has(&main, "{Name: \"github\", Columns: []string{\"email\"}, Options: [][2]string{{\"client\", \"app\"}, {\"secret\", \"setting:githubSecret\"}, {\"claim\", \"email\"}}}");
+    // A strategy without settings has no options.
+    has(&main, "{Name: \"password\", Columns: []string{\"email\", \"password_hash\"}}");
 }
 
 #[test]

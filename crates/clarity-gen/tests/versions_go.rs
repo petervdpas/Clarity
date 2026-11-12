@@ -175,7 +175,7 @@ fn a_reloaded_record_is_checked_against_readable_when() {
     let readable = SHOP
         .replace("entity Person\n    name: text(80), label @personName\n", "entity Person\n    name: text(80), label @personName\n    passwordHash: text, hashed, label @personPassword\n")
         .replace("    savedSince @customerChangedSince\n", "    savedSince @customerChangedSince\n    readable when customer.visits >= 0\n")
-        + "\npage SignIn: signin\n    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button @signInButton name signIn at 1,3 span 2 on click -> signin password\n";
+        + "\npage SignIn: signin\n    content name ways at 1,1 span 12 rows 6\n        view PasswordView\n\npage PasswordView: view\n    signinField name nameField at 1,1 span 12 rows 2 input name\n    signinField name passwordField at 1,3 span 12 rows 2 input password\n    signinButton name signInButton at 1,5 span 12 strategy password\n";
     let first = FIRST.replace("    add entity Person\n        name: text(80)\n", "    add entity Person\n        name: text(80)\n        passwordHash: text, hashed\n");
     let mut signed = settings();
     signed.signin = clarity_project::parse("project Shop\n    stack go desktop\n    signin Person on desktop\n        password name passwordHash\n").unwrap().signin;

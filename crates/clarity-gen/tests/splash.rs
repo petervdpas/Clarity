@@ -1,5 +1,4 @@
-//! An application's splash screen in every stack (docs/APP-ICON-SPLASH-PLAN.md,
-//! step 3), as the todo example has one: the splash page is a window the program carries, its name and
+//! An application's splash screen in every stack, as the todo example has one: the splash page is a window the program carries, its name and
 //! time are in the model Clarity.UI reads, and `splash.status = ...` in code
 //! becomes the stack's own call into its runtime.
 
@@ -61,7 +60,7 @@ fn every_stack_carries_the_splash_and_its_status() {
     }
 }
 
-/// The app's version (docs/VERSION-PLAN.md): `app.version` in code is the
+/// The app's version: `app.version` in code is the
 /// project's version in every stack, and a text that shows `{app.version}`
 /// carries it in what the program reads its texts from.
 #[test]

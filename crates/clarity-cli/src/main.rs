@@ -43,7 +43,7 @@ enum Command {
     },
     /// Move each window and view out of the project's .clarity files into a
     /// .cxaml file of its own, in a folder named after its module
-    /// (docs/CXAML-SOURCE-PLAN.md).
+    ///.
     ConvertPages {
         /// The project file, like shop.clarity.
         project: PathBuf,

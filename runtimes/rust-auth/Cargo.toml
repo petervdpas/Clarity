@@ -2,7 +2,7 @@
 name = "clarity-auth"
 description = "Clarity.Auth: the sign-in strategies of the programs Clarity generates (password, the computer's account, tokens), sessions and failed tries, alike on every stack"
 # Released on its own (tag runtimes/rust-auth/vX.Y.Z).
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -32,4 +32,8 @@ openid = ["dep:ureq"]
 
 [[test]]
 name = "openid"
+required-features = ["openid"]
+
+[[test]]
+name = "providers"
 required-features = ["openid"]

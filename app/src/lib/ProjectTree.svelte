@@ -149,6 +149,15 @@
   {:else if full}
     <button class="row add" class:current={selected?.kind === "readme"} onclick={() => onselect({ kind: "readme", name: "" })} title="Write the project's design goal and guide in README.md">+ Write README</button>
   {/if}
+  <!-- Who uses the program and how they sign in: the project file's signin block. -->
+  {#if preview.project.signin}
+    <button class="row top" class:current={selected?.kind === "signin"} onclick={() => onselect({ kind: "signin", name: "" })} title="Sign-in: who uses the program and how they sign in">
+      <span class="badge">key</span>
+      Sign-in
+    </button>
+  {:else if full}
+    <button class="row add" class:current={selected?.kind === "signin"} onclick={() => onselect({ kind: "signin", name: "" })} title="Let people sign in to the program">+ Sign-in</button>
+  {/if}
 
   <details open>
     <summary>Windows <span class="count">{windows.length}</span></summary>

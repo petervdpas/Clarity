@@ -52,7 +52,7 @@ fn picked(l: &Languages) -> Option<String> {
 pub fn load(model: &str) {
     let model: serde_json::Value = serde_json::from_str(model).unwrap_or_default();
     let mut values: Values = serde_json::from_value(model["project"]["translations"].clone()).unwrap_or_default();
-    // `{app.version}` is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+    // `{app.version}` is the project's version, which Clarity fills itself.
     if let Some(version) = model["project"]["version"].as_str() {
         for text in values.values_mut().flat_map(|v| v.values_mut()) {
             *text = with_version(text, version);

@@ -158,7 +158,8 @@
     X(a_command_line_signs_in_before_its_command) \
     X(a_served_program_signs_in_with_a_session_cookie) \
     X(a_chosen_secret_has_its_minimum_and_a_recovery_code_is_used_once) \
-    X(a_changed_secret_signs_the_person_out_elsewhere)
+    X(a_changed_secret_signs_the_person_out_elsewhere) \
+    X(a_provider_s_settings_go_to_clarity_auth)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

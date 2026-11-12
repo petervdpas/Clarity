@@ -1,4 +1,4 @@
-//! Clarity's own file browser over the backend's listing (docs/PROJECT-BROWSER-PLAN.md):
+//! Clarity's own file browser over the backend's listing:
 //! the window asks what a folder holds, where a use starts, and the projects
 //! opened last; the backend lists and tells Clarity's projects apart.
 

@@ -190,7 +190,7 @@ void load_translations(const std::string& model) {
     std::string fallback = "en";
     if (parsed.is_object() && parsed.contains("project")) {
         const auto& project = parsed["project"];
-        // {app.version} is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+        // {app.version} is the project's version, which Clarity fills itself.
         const std::string slot = "{app.version}";
         const bool versioned = project.contains("version") && project["version"].is_string();
         const std::string version = versioned ? project["version"].get<std::string>() : std::string();

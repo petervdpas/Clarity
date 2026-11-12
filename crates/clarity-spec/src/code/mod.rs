@@ -427,7 +427,7 @@ pub struct Expr {
 }
 
 /// Whether an expression reads the application's version: `app.version`
-/// (docs/VERSION-PLAN.md), which every stack writes as the project's version.
+///, which every stack writes as the project's version.
 pub fn reads_app_version(expr: &Expr) -> bool {
     matches!(&expr.kind, ExprKind::Member { object, member } if member.name == "version" && matches!(&object.kind, ExprKind::Name { name } if name == "app"))
 }

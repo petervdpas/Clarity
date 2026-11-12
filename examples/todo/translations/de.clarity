@@ -87,6 +87,8 @@ translation de
     signinButton "Anmelden"
     signinCode "Wiederherstellungscode"
     signinUseCode "Einen Wiederherstellungscode verwenden"
+    signinUsePassword "Mit einem Passwort anmelden"
+    signinUseToken "Ein Token verwenden"
     signinToken "Token"
     signinAccountButton "Konto dieses Computers verwenden"
     signinBack "Zurück"

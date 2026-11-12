@@ -1,4 +1,4 @@
-//! An application's version (docs/VERSION-PLAN.md): the project file says
+//! An application's version: the project file says
 //! it (`version "1.2.0"`), the checker says when it is not a version, and
 //! the model carries it to every stack.
 

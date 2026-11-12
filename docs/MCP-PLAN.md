@@ -71,11 +71,11 @@ Open questions, for the user:
 
 ## Order of work
 
-Agreed 2026-11-09 (user: "agree"), interleaved with the `.cxaml` refactor ("Next: no translator between design and code" in CXAML-SOURCE-PLAN.md) because two steps touch pages:
+Agreed 2026-11-09 (user: "agree"), interleaved with the `.cxaml` refactor ("Next: no translator between design and code"; what is left of it is in UNIMPLEMENTED.md section 9) because two steps touch pages:
 
 1. Move `ProjectTools` and its tests into a shared crate; the IDE uses it from there (TDD, IDE agent tests stay green). Its instructions teach `.cxaml`, which they do not yet.
 2. Add the `generate` tool.
-3. The `.cxaml` refactor (CXAML-SOURCE-PLAN.md), so renames and pages work on the model.
+3. The `.cxaml` refactor (built), so renames and pages work on the model.
 4. The `rename` tool (fields added to `rename.rs`, on model renames), automatic folded steps without guessed renames.
 5. `crates/clarity-mcp`: stdio server, tool list from the shared tools minus the left-out ones, a test that lists every offered tool (like `no_tool_executes_anything`).
 6. `clarity mcp` in the CLI; the IDE records its open project (one key, read-modify-write); manual page `ai.mcp.md` with setup for Claude Code, Codex and Copilot (in English, as the whole manual is).

@@ -39,4 +39,12 @@ events: Array<Event>, properties: Array<WidgetProperty>,
 /**
  * The languages it colors as code (`code csharp`): a memo's; none for other parts.
  */
-codeLanguages: Array<string>, };
+codeLanguages: Array<string>, 
+/**
+ * Whether it may stand on a sign-in view (`on_signin_view`).
+ */
+signinView: boolean, 
+/**
+ * Whether it may stand on the sign-in window itself (`on_signin_window`).
+ */
+signinWindow: boolean, };

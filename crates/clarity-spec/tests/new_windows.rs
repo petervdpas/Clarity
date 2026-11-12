@@ -34,8 +34,8 @@ fn files_of(name: &str) -> Vec<(String, String)> {
 }
 
 /// Every template, added beside a module of an example, writes files that
-/// read back clean and give the project no new problem. (Until the cleanup
-/// after step 5 of docs/CXAML-SOURCE-PLAN.md each gave what its page block
+/// read back clean and give the project no new problem. (Until windows
+/// moved into `.cxaml` files each gave what its page block
 /// of Clarity, moved into design/, gave.)
 #[test]
 fn every_template_writes_files_that_load_clean() {

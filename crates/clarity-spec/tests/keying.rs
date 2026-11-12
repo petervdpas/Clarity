@@ -1,5 +1,5 @@
-//! Make texts keys on the model of a `.cxaml` page or app (step 5 of
-//! docs/CXAML-SOURCE-PLAN.md): every example's pages and app, with their
+//! Make texts keys on the model of a `.cxaml` page or app:
+//! every example's pages and app, with their
 //! keys put back as the texts they say, and a few pages written by hand,
 //! are made keys alike on the model and through the page's block of
 //! Clarity: the same markup and the same keys. The comparison stays until
@@ -62,8 +62,8 @@ fn unkeyed(markup: &str, texts: &BTreeMap<String, String>) -> String {
 }
 
 /// Making `pages` keys beside `modules`: each file written reads back
-/// clean, and the keys made each have a value. (Until step 5 of
-/// docs/CXAML-SOURCE-PLAN.md this was compared with keys made through each
+/// clean, and the keys made each have a value. (Until windows moved
+/// into `.cxaml` files this was compared with keys made through each
 /// page's block of Clarity, on every example and these pages, and agreed.)
 fn keyed_clean(what: &str, modules: &[(&str, &str)], pages: &[(&str, &str)]) -> clarity_spec::keyed::Keyed {
     let keyed = make_keys_with_pages(modules, pages, &[], "en");

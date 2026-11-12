@@ -50,6 +50,19 @@ pub enum Effect {
     /// The person signed out (`signout`): every window closes and the
     /// sign-in window shows again.
     SignedOut,
+    /// A sign-in button of a provider strategy was pressed: the browser goes
+    /// to the provider off the screen's thread (`window/signin.rs`), then
+    /// the button's view signs in with what it brought back.
+    Provider(ProviderSignin),
+}
+
+/// A sign-in with a provider on its way: the button, its strategy and the
+/// settings the browser part needs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProviderSignin {
+    pub button: String,
+    pub strategy: String,
+    pub options: serde_json::Map<String, Value>,
 }
 
 /// A handler that runs off the screen's thread, with the window's state as it was when it started.
@@ -90,6 +103,8 @@ struct Pending {
     scope: String,
 }
 
+mod signin;
+
 pub struct ProgramHost {
     program: Arc<dyn Program>,
     files: AppFiles,
@@ -97,6 +112,10 @@ pub struct ProgramHost {
     history: RefCell<super::history::History>,
     state: RefCell<WindowState>,
     specs: BTreeMap<String, PartSpec>,
+    /// The sign-in view each part of a view stands on, by the part's name (a content's `<View name>`).
+    views: BTreeMap<String, String>,
+    /// The last refused sign-in of a sign-in view, which its refusal shows.
+    refusal: RefCell<Option<Text>>,
     changes: Cell<u64>,
     effects: RefCell<Vec<Effect>>,
     pending: RefCell<Option<Pending>>,
@@ -115,15 +134,6 @@ pub struct ProgramHost {
     engines: crate::engines::Engines,
     /// What the program knows of its fields and types, read from its JSON once.
     program_facts: std::cell::OnceCell<crate::program_facts::ProgramFacts>,
-}
-
-/// The strategy a click target signs in with: `signin password`, or `signin(password)`.
-fn signin_strategy(call: &HandlerCall) -> Option<String> {
-    match (call.handler.as_str(), call.args.as_slice()) {
-        ("signin", [strategy]) => Some(strategy.trim().to_string()),
-        (handler, []) => handler.strip_prefix("signin ").map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && !s.contains(' ')),
-        _ => None,
-    }
 }
 
 /// A translation's text with its braces written double shown single (`{{name}}` is `{name}`).
@@ -149,8 +159,10 @@ impl ProgramHost {
     pub fn new(program: Arc<dyn Program>, files: AppFiles, state: WindowState, parts: &[PartSpec]) -> ProgramHost {
         let mut specs = BTreeMap::new();
         named(parts, &mut specs);
+        let mut views = BTreeMap::new();
+        signin::in_views(parts, &mut views);
         let facts = ModelFacts::of(files.model);
-        ProgramHost { program, files, history: RefCell::new(super::history::History::default()), state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()), engines: crate::engines::Engines::new(), program_facts: std::cell::OnceCell::new() }
+        ProgramHost { program, files, history: RefCell::new(super::history::History::default()), state: RefCell::new(state), specs, views, refusal: RefCell::new(None), changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()), engines: crate::engines::Engines::new(), program_facts: std::cell::OnceCell::new() }
     }
 
     /// The host shares what the program's windows share: the person's keys, and whether a long call runs.
@@ -454,51 +466,6 @@ impl ProgramHost {
         self.answered(self.program.return_to(state));
     }
 
-    /// Signs in with `strategy`, its inputs (as Clarity.Auth's catalog names
-    /// them) the values of this window's parts of those names: a part bound
-    /// to a field gives the field's value, an unbound one what was typed. A
-    /// missing part gives no input, which the program refuses. A refusal
-    /// shows as any refusal does.
-    fn sign_in_by_names(&self, strategy: &str) -> bool {
-        let names = clarity_auth::catalog().iter().find(|s| s.name == strategy).map(|s| s.inputs).unwrap_or_default();
-        let mut inputs = Map::new();
-        for name in names {
-            if let Some(value) = self.input_value(name) {
-                inputs.insert(name.to_string(), Value::String(value));
-            }
-        }
-        match self.signed_in_with(strategy, inputs) {
-            Ok(()) => true,
-            Err(text) => self.answered(Err(text)),
-        }
-    }
-
-    /// The one way a sign-in goes, by a `signin <strategy>` button or a
-    /// sign-in part: the program checks `inputs`; on success the window
-    /// closes and the main window opens (or the splash's rules hold), and a
-    /// refusal is given back.
-    fn signed_in_with(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
-        self.flush();
-        self.program.signin(strategy, inputs)?;
-        self.effects.borrow_mut().push(Effect::SignedIn);
-        self.changed();
-        Ok(())
-    }
-
-    /// The text of the part named `name`: its field's value when it is bound, else what was typed in it.
-    fn input_value(&self, name: &str) -> Option<String> {
-        let spec = self.specs.get(name)?;
-        let state = self.state.borrow();
-        match spec.text("bind").filter(|b| !b.is_empty()) {
-            Some(path) => match paths::read(&state.data, path)? {
-                Value::String(text) => Some(text),
-                Value::Null => Some(String::new()),
-                other => Some(other.to_string()),
-            },
-            None => Some(state.parts.get(name).and_then(|p| p.text.clone()).unwrap_or_default()),
-        }
-    }
-
     /// The window closes: its `on close` runs, and what its reply says shows in the window below.
     pub fn closing(&self) -> Vec<Effect> {
         self.flush();
@@ -546,6 +513,14 @@ impl PartHost for ProgramHost {
 
     fn signin(&self) -> Option<crate::facts::SigninFacts> {
         self.facts.signin().cloned()
+    }
+
+    fn signin_refusal(&self) -> Option<Text> {
+        self.refusal.borrow().clone()
+    }
+
+    fn signin_way(&self, view: &str) -> Option<String> {
+        self.way_of(view)
     }
 
     fn sign_in(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
@@ -602,21 +577,8 @@ impl PartHost for ProgramHost {
             }
         }
         // Signing in and out (docs/APP-CAPABILITIES-PLAN.md step 4), unless a window has that name.
-        if matches!(call.event.as_str(), "click" | crate::parts::NEW_WINDOW_CLICK) && self.files.window(&call.handler).is_none() {
-            if let Some(strategy) = signin_strategy(call) {
-                return self.sign_in_by_names(&strategy);
-            }
-            if call.handler == "signout" && call.args.is_empty() {
-                self.flush();
-                return match self.program.signout() {
-                    Ok(()) => {
-                        self.effects.borrow_mut().push(Effect::SignedOut);
-                        self.changed();
-                        true
-                    }
-                    Err(text) => self.answered(Err(text)),
-                };
-            }
+        if let Some(ran) = self.run_signin(part, call) {
+            return ran;
         }
         // A click that names a popover or slide-out of this window opens it (C#'s `Show_<popover>`).
         if call.args.is_empty() && self.specs.get(&call.handler).is_some_and(|spec| spec.kind == "popover" || spec.kind == "slideout") {

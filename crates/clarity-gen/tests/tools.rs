@@ -237,7 +237,7 @@ fn every_stack_of_the_catalog_is_checked_and_reported() {
     assert!(report.contains("Rust with Clarity.UI: missing Rust with cargo, from https://rustup.rs"), "{report}");
     assert!(report.contains("Go with Clarity.UI: missing Go, from https://go.dev/dl"), "{report}");
     // Where to read how, once something is missing.
-    assert!(report.ends_with("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n"), "{report}");
+    assert!(report.ends_with("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or manual/setup.tools.md).\n"), "{report}");
     let ready = clarity_gen::tools::report(&all.into_iter().filter(|s| s.missing.is_empty()).collect::<Vec<_>>());
     assert!(!ready.contains("How to install"), "{ready}");
 }
@@ -366,7 +366,7 @@ fn anchor(heading: &str) -> String {
 fn every_missing_tool_points_at_the_manual() {
     use clarity_gen::tools::{SETUP_TOPIC, guide_headings};
     assert_eq!(SETUP_TOPIC, "setup.tools");
-    let page = include_str!("../../../docs/manual/setup.tools.md");
+    let page = include_str!("../../../manual/setup.tools.md");
     let anchors: Vec<String> = page.lines().filter_map(|l| l.strip_prefix("### ").or_else(|| l.strip_prefix("## "))).map(anchor).collect();
     for heading in guide_headings() {
         assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");

@@ -186,7 +186,15 @@ pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
             return show_splash(running, splash, files, doubles);
         }
     }
-    let stack = WindowStack::begin(running, started);
+    // People sign in first on a sign-in window of its own: a desktop window at
+    // its size; the main window gets one of its own once someone signed in.
+    let stack = match (&started.unconnected, &started.signin) {
+        (None, Some(page)) => {
+            running.set_apart(true);
+            WindowStack::signin_window(running, page)
+        }
+        _ => WindowStack::begin(running, started),
+    };
     // Dialogs, the keys window and new windows get desktop windows of their own.
     stack.running().set_apart(true);
     let title = stack.title();
@@ -1075,9 +1083,9 @@ impl Host {
                 self.add(screen, title, size, Some(owner), modal);
             }
             Apart::Main(reply) => self.open_main(running.clone(), reply),
-            // Borderless at its size, as its markup says, and owned by no window: it stays when the one that asked closes.
+            // At its size, as its markup says, and owned by no window: it stays when the one that asked closes.
             Apart::Signin(page) => {
-                let stack = WindowStack::splash_again(running.clone(), &page);
+                let stack = WindowStack::signin_window(running.clone(), &page);
                 let title = stack.title();
                 let size = grow::open_size(&stack);
                 self.add(Screen::new(Box::new(stack), look), title, size, None, false);

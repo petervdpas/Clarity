@@ -33,7 +33,7 @@ func LoadTranslations(model []byte) {
 		} `json:"project"`
 	}
 	_ = json.Unmarshal(model, &m)
-	// {app.version} is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+	// {app.version} is the project's version, which Clarity fills itself.
 	if m.Project.Version != nil {
 		for _, values := range m.Project.Translations {
 			for key, text := range values {

@@ -78,9 +78,13 @@ page Tasks: window
     table name list at 1,1 span 4 bind tasks
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Main
     handler greetClicked
@@ -161,7 +165,7 @@ fn the_people_are_named_after_the_databases_open() {
         let files = files(cli, CLUB);
         let main = file(&files, "src/main.rs");
         has(main, "db.add_signin(clarity_runtime::signin::SigninSource { source: \"main\".into(), table: \"member\".into(), key: \"id\".into(), page: \"SignIn\".into(), targets: vec![\"desktop\".into(), \"cli\".into()], strategies: vec![");
-        has(main, "clarity_runtime::signin::SigninStrategy { name: \"password\".into(), columns: vec![\"email\".into(), \"password_hash\".into()] }");
+        has(main, "clarity_runtime::signin::SigninStrategy { name: \"password\".into(), columns: vec![\"email\".into(), \"password_hash\".into()], options: vec![] }");
         has(main, "session_seconds: 28800, tries: 5, tries_seconds: 900, program: PROGRAM.into(), remember_seconds: Some(2592000), remember_asks: false });");
     }
 }

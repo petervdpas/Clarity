@@ -618,3 +618,26 @@ fn the_preview_shows_the_window_picked_not_the_splash() {
         assert!(welcome["windows"]["Welcome"].as_str().unwrap().contains("frame=\"none\""));
     }
 }
+
+/// The sign-in window is a desktop window of its own, as the splash is: at
+/// its size, centred, fixed and with none of the app's frame (no menu, no
+/// toolbar), but with the system's title bar and in the taskbar. The
+/// designer draws it so too; a window that names no size takes the sign-in size.
+#[test]
+fn the_sign_in_window_is_a_window_of_its_own_without_the_app_s_frame() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/shop");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let page = project.pages().find(|p| p.name.name == "SignIn").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    let root = markup.lines().find(|l| l.starts_with("<SignIn")).unwrap_or_else(|| panic!("{markup}"));
+    let size = page.size.expect("the sign-in window names its size");
+    assert!(root.contains(&format!(r#"width="{}" height="{}" startup="centerScreen" resizable="false" frame="none""#, size.width, size.height)), "{root}");
+    assert!(!root.contains("decorations=") && !root.contains("taskbar=") && !root.contains("topmost="), "{root}");
+    let designed = files(&preview::files_json(&project, "Shop", &Shown::Window("SignIn".into()), true, &Default::default()));
+    assert!(designed["windows"]["SignIn"].as_str().unwrap().contains(r#"frame="none""#));
+    let source = "module m\n\npage Enter: signin\n    signin name signIn at 1,1 span 12\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let (width, height) = clarity_spec::layout::SIGNIN_SIZE;
+    assert!(clarity_gen::web_windows::window_markup(&file.pages[0]).contains(&format!(r#"width="{width}" height="{height}" startup="centerScreen""#)));
+}

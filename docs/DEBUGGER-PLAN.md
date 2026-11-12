@@ -34,7 +34,7 @@ Inside the IDE a developer stops their running app at a line of Clarity, sees wh
 
 The user: "you mean remove the translator between them... that might enable debugging design too?" and "yes, add those to the debugger plan... but that are consequences of the change".
 
-These follow from the change in CXAML-SOURCE-PLAN.md ("Next: no translator between design and code"): once the designer, the code and the running app know a part by the same file and name, and Clarity.UI already reads the `.cxaml` on every stack, the running app maps back to the design without translating. They come after that change, not before it.
+These follow from the change "no translator between design and code" (what is left of it: UNIMPLEMENTED.md section 9, designer edits by key): once the designer, the code and the running app know a part by the same file and name, and Clarity.UI already reads the `.cxaml` on every stack, the running app maps back to the design without translating. They come after that change, not before it.
 
 | Feature | What it does |
 |---|---|
@@ -71,7 +71,7 @@ These follow from the change in CXAML-SOURCE-PLAN.md ("Next: no translator betwe
 4. **The event log and the data view.**
 5. **Watches as expressions**, and stepping through interpreted engines.
 6. **The browser target**, and debugging from VS Code through its Clarity extension.
-7. **Debugging the design**, once the change it depends on is built (CXAML-SOURCE-PLAN.md).
+7. **Debugging the design**, once the change it depends on is built (UNIMPLEMENTED.md section 9).
 
 ## To settle when building
 

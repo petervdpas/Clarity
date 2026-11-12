@@ -85,7 +85,7 @@ fn frame_edits(frame: &Frame, owner: u32, out: &mut Vec<Edit>) {
         let mut props = sidebar.props.clone();
         props.name = None;
         out.push(Edit::UpdateSidebar { item: sidebar.span.start, props });
-        out.push(Edit::CreateWidget { container: sidebar.span.start, kind: WidgetKind::Button, col: 1, row: 20, width: None, caption: None, bind: None, part: None, height: None });
+        out.push(Edit::CreateWidget { container: sidebar.span.start, kind: WidgetKind::Button, col: 1, row: 20, width: None, caption: None, bind: None, part: None, height: None, input: None, strategy: None, shows: None });
         widget_edits(&sidebar.widgets, out);
     }
     if let Some(footer) = &frame.footer {
@@ -107,7 +107,7 @@ fn widget_edits(widgets: &[Widget], out: &mut Vec<Edit>) {
         out.push(Edit::UpdateWidget { item: w.span.start, container: None, props: nameless });
         out.push(Edit::AddMenu { item: w.span.start });
         out.push(Edit::AddTab { item: w.span.start, title: "ExtraView".into() });
-        out.push(Edit::CreateWidget { container: w.span.start, kind: WidgetKind::Label, col: 1, row: 20, width: Some(2), caption: Some("@extraCaption".into()), bind: None, part: None, height: None });
+        out.push(Edit::CreateWidget { container: w.span.start, kind: WidgetKind::Label, col: 1, row: 20, width: Some(2), caption: Some("@extraCaption".into()), bind: None, part: None, height: None, input: None, strategy: None, shows: None });
         if let Some(menu) = &w.menu {
             out.push(Edit::Remove { item: menu.span.start });
             out.push(Edit::AddFrameItem { parent: menu.span.start, item: FrameItem::Item, caption: None });
@@ -118,7 +118,7 @@ fn widget_edits(widgets: &[Widget], out: &mut Vec<Edit>) {
             out.push(Edit::SetPaneSpan { target: inner.span.start, columns: Some(3) });
             out.push(Edit::SetPageView { target: inner.span.start, view: Some("OtherView".into()) });
             out.push(Edit::SetPageColor { target: inner.span.start, color: Some("#ff0000".into()) });
-            out.push(Edit::CreateWidget { container: inner.span.start, kind: WidgetKind::Button, col: 1, row: 20, width: None, caption: None, bind: None, part: None, height: None });
+            out.push(Edit::CreateWidget { container: inner.span.start, kind: WidgetKind::Button, col: 1, row: 20, width: None, caption: None, bind: None, part: None, height: None, input: None, strategy: None, shows: None });
             // A part moved into the page of another.
             if let Some(first) = widgets.iter().find(|o| o.span.start != w.span.start) {
                 out.push(Edit::UpdateWidget { item: first.span.start, container: Some(inner.span.start), props: first.props.clone() });
@@ -159,8 +159,8 @@ fn edits_of(markup: &str) -> Vec<Edit> {
     out.push(Edit::AddData { page: at, name: "extra".into(), entity: "Thing".into(), list: true });
     out.push(Edit::SetOwnerEvent { owner: at, event: Event::Open, handler: Some("opened".into()) });
     out.push(Edit::SetOwnerEvent { owner: at, event: Event::Open, handler: None });
-    out.push(Edit::CreateWidget { container: at, kind: WidgetKind::Tabs, col: 1, row: 30, width: Some(4), caption: None, bind: None, part: None, height: None });
-    out.push(Edit::CreateWidget { container: at, kind: WidgetKind::Button, col: 3, row: 1, width: None, caption: Some("Go".into()), bind: None, part: None, height: None });
+    out.push(Edit::CreateWidget { container: at, kind: WidgetKind::Tabs, col: 1, row: 30, width: Some(4), caption: None, bind: None, part: None, height: None, input: None, strategy: None, shows: None });
+    out.push(Edit::CreateWidget { container: at, kind: WidgetKind::Button, col: 3, row: 1, width: None, caption: Some("Go".into()), bind: None, part: None, height: None, input: None, strategy: None, shows: None });
     for data in page.data.iter().filter(|d| !d.made) {
         out.push(Edit::Remove { item: data.span.start });
     }
@@ -171,8 +171,8 @@ fn edits_of(markup: &str) -> Vec<Edit> {
 
 /// Every edit the designer makes, on every thing of every example's windows,
 /// views and apps, is refused with a reason or writes a file that reads back
-/// clean, the same each time, its focus on a thing of the file. (Until step 5
-/// of docs/CXAML-SOURCE-PLAN.md each gave what the edit through the page's
+/// clean, the same each time, its focus on a thing of the file. (Until windows
+/// moved into `.cxaml` files each gave what the edit through the page's
 /// text gave, 7764 of them.)
 #[test]
 fn every_edit_writes_a_file_that_reads_back_clean() {
@@ -236,7 +236,7 @@ fn with_the_project_texts_become_keys_and_fields_are_placed() {
             }
             let page = read_page(&markup, "").0.unwrap();
             let at = page.span.start;
-            let done = apply(Some(&project), &markup, &Edit::CreateWidget { container: at, kind: WidgetKind::Button, col: 1, row: 30, width: None, caption: Some("Go there".into()), bind: None, part: None, height: None }).unwrap();
+            let done = apply(Some(&project), &markup, &Edit::CreateWidget { container: at, kind: WidgetKind::Button, col: 1, row: 30, width: None, caption: Some("Go there".into()), bind: None, part: None, height: None, input: None, strategy: None, shows: None }).unwrap();
             let (key, text) = done.keys.first().unwrap_or_else(|| panic!("{}: the caption is a key\n{}", path.display(), done.text));
             assert!(text == "Go there" && done.text.contains(&format!("caption=\"@{key}\"")), "{}: {key} {text}\n{}", path.display(), done.text);
             keyed += 1;

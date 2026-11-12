@@ -2,7 +2,7 @@
 
 # Clarity
 
-A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](docs/manual/README.md), one topic per page. The language is described in full in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
+A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](manual/README.md), one topic per page. The language is described in full in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
 
 Five stacks are generated: Rust, C#, Go, C and C++. Every desktop program draws its windows with Clarity.UI, Clarity's own UI framework, and each stack can also serve the same windows to a browser, where Clarity.UI draws them as WebAssembly. Each window, view and the app is a `.cxaml` file in the project's `design` folder; entities, themes, code, functions and actions are Clarity text in the project's modules. What is built and what is planned is in the roadmap in docs/DESIGN.md and in the plans next to it in `docs/`.
 
@@ -37,11 +37,12 @@ conformance/             cases every runtime and renderer must pass alike
 editors/vscode/          colors for .clarity files in VS Code (and JetBrains, through TextMate bundles)
 app/                     Clarity IDE: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build; the Agent panel
-docs/manual/             the manual, one topic per page; the IDE opens it with F1
+manual/                  the manual, one topic per page; the IDE opens it with F1
 examples/                example projects, each a project file with a folder of its modules and a README, on the stack it names:
   shop                   Rust    customers and orders, priced by an engine
   dashboard              Rust    sales and stock at a glance: charts, totals and the products running low
   modelling              Rust    a data model kept in one place, from which the app writes what developers would write by hand
+  maintenance            Rust    reviews a project's development ledger: entries in a tree, each shown as Markdown, with a review beside it
   network                Rust    graphs of records: people, organisations and projects from the data model, and free ideas with their links
   records                Go      a record collection, with albums, tracks and loans; an engine reads photo sizes
   calculator             Go      a calculator: values in clicks, plain window data, a seven-segment display
@@ -62,7 +63,7 @@ examples/                example projects, each a project file with a folder of 
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
-Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). A custom part is a library of the project in its own language (a Rust crate, a Go package, C or C++ with CMake, C# with NuGet): the program builds it in and Clarity.UI draws it; see [Custom parts](docs/manual/design.custom-parts.md).
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). A custom part is a library of the project in its own language (a Rust crate, a Go package, C or C++ with CMake, C# with NuGet): the program builds it in and Clarity.UI draws it; see [Custom parts](manual/design.custom-parts.md).
 
 ## Requirements
 
@@ -76,7 +77,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 
 ### Setting up the tools
 
-What to install on Windows, Linux and macOS, step by step with the commands, is in the manual: [Setting up the build tools](docs/manual/setup.tools.md). Clarity opens that page itself, at the right part, from **How to install** beside a missing tool (Clarity settings, Environment, and Build tools in the project settings). On Windows, C and C++ come from MSYS2's UCRT64 shell, every tool from that one prefix.
+What to install on Windows, Linux and macOS, step by step with the commands, is in the manual: [Setting up the build tools](manual/setup.tools.md). Clarity opens that page itself, at the right part, from **How to install** beside a missing tool (Clarity settings, Environment, and Build tools in the project settings). On Windows, C and C++ come from MSYS2's UCRT64 shell, every tool from that one prefix.
 
 ## Commands
 
@@ -121,9 +122,9 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
-A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](docs/manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 
-How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](docs/manual/start.overview.md).
+How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](manual/start.overview.md).
 
 Type-check the frontend:
 
@@ -134,10 +135,10 @@ npm run check
 
 ## AI agents
 
-Clarity's own agent works in the Agent panel through a connection in the vault, such as an Anthropic API key; see [The agent](docs/manual/ai.agent.md). Two more ways use an agent you already pay for, with no API key in Clarity:
+Clarity's own agent works in the Agent panel through a connection in the vault, such as an Anthropic API key; see [The agent](manual/ai.agent.md). Two more ways use an agent you already pay for, with no API key in Clarity:
 
-- **Your agent in Clarity:** Codex (with `codex-acp`) or the GitHub Copilot CLI in the Agent panel, started by Clarity and signed in with the vendor's own login. See [Your own agent in Clarity](docs/manual/ai.your-agent.md).
-- **Clarity in your agent:** Claude Code, Codex or Copilot starts `clarity mcp` and designs and generates the project open in the IDE with Clarity's tools: `claude mcp add --scope user clarity -- clarity mcp`. See [Clarity in your own agent](docs/manual/ai.mcp.md).
+- **Your agent in Clarity:** Codex (with `codex-acp`) or the GitHub Copilot CLI in the Agent panel, started by Clarity and signed in with the vendor's own login. See [Your own agent in Clarity](manual/ai.your-agent.md).
+- **Clarity in your agent:** Claude Code, Codex or Copilot starts `clarity mcp` and designs and generates the project open in the IDE with Clarity's tools: `claude mcp add --scope user clarity -- clarity mcp`. See [Clarity in your own agent](manual/ai.mcp.md).
 
 `clarity mcp` never builds or runs. In the panel, Clarity's own agent runs or builds only as **Clarity settings** allow (it asks each time by default), and Codex or Copilot asks before every command it runs, apart from commands that only read, which Codex runs in its read-only sandbox. The same settings section turns outside agents off and shows each tool call they make.
 

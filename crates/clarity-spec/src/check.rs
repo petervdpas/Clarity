@@ -15,6 +15,8 @@ use crate::model::{
 use crate::span::Span;
 use crate::widgets::{self, BindTarget, ContainerKind, WidgetKind};
 
+mod signin;
+
 /// Data declarations of the page being checked: name -> (entity, is list).
 /// The entity is `None` when it did not resolve; that error is reported once.
 struct PageContext<'a> {
@@ -488,99 +490,7 @@ impl<'a> Checker<'a> {
         for sidebar in &page.frame.sidebars {
             self.check_forms(file, &sidebar.widgets, None);
         }
-    }
-
-    /// A sign-in window: one at most, in a project whose file has `signin`,
-    /// shown by the program before anyone signs in.
-    fn check_signin_page(&mut self, file: usize, page: &'a Page) {
-        let first = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin);
-        if let Some(first) = first.filter(|f| !std::ptr::eq(*f, page)) {
-            self.error(file, format!("there is already a sign-in window, {}; a project has one", first.name.name), page.name.span);
-        }
-        if self.signin.is_none() {
-            self.error(file, format!("{} is a sign-in window, which needs signin in the project file, like: signin Member", page.name.name), page.name.span);
-        }
-        if page.allow.is_some() {
-            self.error(file, format!("{} shows before anyone signs in, so it has no 'allow'", page.name.name), page.name.span);
-        }
-        if let Some(splash) = crate::signin::app_splash(self.files).filter(|s| crate::frame::page_signs_in(s)) {
-            self.error(file, format!("both {} and the splash {} sign in; keep one: the window of the kind signin, or the sign-in parts on the splash", page.name.name, splash.name.name), page.name.span);
-        }
-    }
-
-    /// A click that signs in (`signin password`) or out (`signout`): the
-    /// project file has `signin`; signing in is a button of the sign-in
-    /// window, with a strategy the project names and a part per input.
-    fn check_signin_target(&mut self, file: usize, target: &str, button: bool, new_window: bool, span: Span) {
-        if new_window {
-            self.error(file, "only a window opens in a new window", span);
-        }
-        let Some(strategy) = crate::frame::signin_strategy(target) else {
-            if self.signin.is_none() {
-                self.error(file, "signout signs out who signed in, which needs signin in the project file, like: signin Member", span);
-            }
-            return;
-        };
-        let Some(signin) = self.signin else {
-            self.error(file, format!("{target} signs in, which needs signin in the project file, like: signin Member"), span);
-            return;
-        };
-        let signs_in = |p: &&Page| p.kind == PageKind::Signin || crate::signin::app_splash(self.files).is_some_and(|s| std::ptr::eq(s, *p));
-        let page = self.page.filter(signs_in);
-        let Some(page) = page.filter(|_| button) else {
-            let window = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin).or_else(|| crate::signin::app_splash(self.files));
-            let message = match window {
-                Some(window) => format!("a button signs in on the sign-in window, {}", window.name.name),
-                None => "a button signs in on the sign-in window: add a window of the kind signin".to_string(),
-            };
-            self.error(file, message, span);
-            return;
-        };
-        if signin.strategy(strategy).is_none() {
-            let names: Vec<&str> = signin.strategies.iter().map(|s| s.name.as_str()).collect();
-            self.error(file, format!("the project signs in with {}, not {strategy}", names.join(", ")), span);
-            return;
-        }
-        let Some(info) = crate::signin::strategy_info(strategy) else { return };
-        let mut names = Vec::new();
-        crate::resources::each_widget(&page.widgets, &mut |w| names.extend(w.props.name.clone()));
-        for input in info.inputs {
-            if !names.iter().any(|n| n == input) {
-                self.error(file, format!("signin {strategy} takes the {input} from a part named {input}; {} has none", page.name.name), span);
-            }
-        }
-    }
-
-    /// A sign-in part: the project file has `signin`; the part is on the
-    /// sign-in window or the app's splash, as a sign-in button is; one in the
-    /// project. What it offers is the block's (`shows`), checked with it.
-    fn check_signin_part(&mut self, file: usize, widget: &Widget) {
-        if self.signin.is_none() {
-            self.error(file, "a signin part signs in, which needs signin in the project file, like: signin Member", widget.span);
-            return;
-        }
-        let splash = crate::signin::app_splash(self.files);
-        let signs_in = |page: &&Page| page.kind == PageKind::Signin || splash.is_some_and(|s| std::ptr::eq(s, *page));
-        if self.page.filter(signs_in).is_none() {
-            let window = self.files.iter().flat_map(|f| &f.pages).find(|p| p.kind == PageKind::Signin).or(splash);
-            let message = match window {
-                Some(window) => format!("a signin part signs in on the sign-in window, {}", window.name.name),
-                None => "a signin part signs in on the sign-in window: add a window of the kind signin, or put it on the app's splash".to_string(),
-            };
-            self.error(file, message, widget.span);
-        }
-        // The first in the project, in the order of the files and their pages.
-        let mut first: Option<(&Page, *const Widget)> = None;
-        for page in self.files.iter().flat_map(|f| &f.pages) {
-            crate::resources::each_widget(&page.widgets, &mut |w| {
-                if first.is_none() && w.props.kind == WidgetKind::Signin {
-                    first = Some((page, std::ptr::from_ref(w)));
-                }
-            });
-        }
-        if let Some((page, _)) = first.filter(|(_, w)| !std::ptr::eq(*w, widget)) {
-            self.error(file, format!("there is already a signin part, on {}; a project has one", page.name.name), widget.span);
-        }
+        self.check_signin_guided(file, page);
     }
 
     fn data_context(&mut self, file: usize, decls: &'a [DataDecl]) -> PageContext<'a> {

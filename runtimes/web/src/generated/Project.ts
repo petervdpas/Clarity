@@ -19,13 +19,13 @@ locale: Locale,
 /**
  * The application's icon, a picture among its resources, as the project
  * file names it (`icon "app.png"`); none for Clarity's own
- * (docs/APP-ICON-SPLASH-PLAN.md).
+ *.
  */
 icon: string | null, 
 /**
  * The application's version as the project file says it (`version
  * "1.2.0"`): `app.version` in code, `{app.version}` in texts; none
- * without one (docs/VERSION-PLAN.md).
+ * without one.
  */
 version: string | null, 
 /**

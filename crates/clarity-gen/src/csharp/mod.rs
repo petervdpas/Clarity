@@ -271,7 +271,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     // The themes offered, as Clarity resolves them for light and dark mode (DESIGN 7.9).
     files.extend(themes::theme_files(project, &name));
     files.extend(crate::web::resource_files(project, "resources"));
-    // The program file's icon on Windows, as C# takes it (docs/APP-ICON-SPLASH-PLAN.md).
+    // The program file's icon on Windows, as C# takes it.
     if let Some(ico) = crate::windows_resources::ico_file(project) {
         files.push(ico);
         if let Some(csproj) = files.first_mut() {
@@ -536,7 +536,9 @@ pub(super) fn add_signin(project: &Project, settings: &Settings) -> Option<Strin
     if plan.remember_asks {
         remember.push_str(", RememberAsks = true");
     }
-    let strategies = plan.strategies.iter().map(|(name, columns)| format!("new Clarity.Auth.SigninStrategy({}, [{}])", string(name), list(columns))).collect::<Vec<_>>().join(", ");
+    // A provider's settings for Clarity.Auth; left out for a strategy without them.
+    let options = |name: &str| plan.options.get(name).map(|o| format!(" {{ Options = [{}] }}", o.iter().map(|(k, v)| format!("({}, {})", string(k), string(v))).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+    let strategies = plan.strategies.iter().map(|(name, columns)| format!("new Clarity.Auth.SigninStrategy({}, [{}]){}", string(name), list(columns), options(name))).collect::<Vec<_>>().join(", ");
     Some(format!(
         "        Clarity.Auth.Signins.AddSignin(db, new Clarity.Auth.SigninSource({}, {}) {{ Source = {}, Key = {}, Targets = [{}], Strategies = [{strategies}], SessionSeconds = {}, Tries = {}, TriesSeconds = {}, Program = {}{remember} }});\n",
         string(&plan.table),

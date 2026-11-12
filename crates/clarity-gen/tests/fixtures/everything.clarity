@@ -7,7 +7,10 @@ project Everything
     stack csharp desktop cli
     output "out"
     language "en"
-    signin Member on cli
+    signin Member on desktop cli
         password email passwordHash
+        recovery email codes
+        language picker
+        remember 30 days when asked
     datasource main sqlite "data/everything.db"
     filestore scans "setting:scansFolder"

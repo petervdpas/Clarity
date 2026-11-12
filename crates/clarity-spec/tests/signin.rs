@@ -59,19 +59,51 @@ page Main: window
     button \"Greet\" name greet at 1,2 span 2 on click: greetClicked
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 10
+        view PasswordView
+        view TokenView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
+    signinOther name useToken at 1,6 span 12 shows TokenView
+
+page TokenView: view
+    signinField name tokenField at 1,1 span 12 rows 2 input token
+    signinButton name tokenButton at 1,3 span 12 strategy token
+    signinOther name back at 1,4 span 12 shows PasswordView
 
 code Main
     handler greetClicked
         hello.caption = \"Hello \" + me.name
 ";
 
+/// The club's sign-in window and its two sign-in views, as written in CLUB.
+const GUIDED: &str = "page SignIn: signin
+    content name ways at 1,1 span 12 rows 10
+        view PasswordView
+        view TokenView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
+    signinOther name useToken at 1,6 span 12 shows TokenView
+
+page TokenView: view
+    signinField name tokenField at 1,1 span 12 rows 2 input token
+    signinButton name tokenButton at 1,3 span 12 strategy token
+    signinOther name back at 1,4 span 12 shows PasswordView
+";
+
+/// The hand-built sign-in: parts named after the inputs and a `signin password` button, which the splash may hold.
+const HAND_BUILT: &str = "    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n";
+
 fn signin() -> Signin {
     let mut signin = Signin::new("Member", vec!["desktop".into()]);
-    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: None });
-    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None });
+    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: None, provider: None });
+    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None, provider: None });
     signin.line = 3;
     signin
 }
@@ -130,8 +162,12 @@ fn the_model_carries_what_the_generators_need() {
     let page = project.pages().find(|p| p.name.name == "SignIn").unwrap();
     assert_eq!(page.kind, PageKind::Signin);
     assert_eq!(page.kind.word(), "signin");
-    let button = page.widgets.iter().find(|w| w.props.name.as_deref() == Some("signIn")).unwrap();
-    assert_eq!(button.props.on_click.as_deref(), Some("signin password"));
+    assert_eq!(clarity_spec::signin::views_of(page), vec!["PasswordView", "TokenView"]);
+    let view = project.pages().find(|p| p.name.name == "PasswordView").unwrap();
+    let button = view.widgets.iter().find(|w| w.props.name.as_deref() == Some("signInButton")).unwrap();
+    assert_eq!(button.props.strategy.as_deref(), Some("password"));
+    let field = view.widgets.iter().find(|w| w.props.name.as_deref() == Some("passwordField")).unwrap();
+    assert_eq!(field.props.input.as_deref(), Some("password"));
     assert_eq!(project.signin, Some(signin()));
 }
 
@@ -143,7 +179,13 @@ fn the_page_file_writes_and_reads_allow_and_the_signin_kind() {
     assert!(main.contains("opens=\"Main\" allow=\"me.role == Admin\""), "{main}");
     let page = &sources.iter().find(|(p, _)| p.ends_with("SignIn.cxaml")).unwrap().1;
     assert!(page.contains("<SignIn class=\"club.SignIn\""), "{page}");
-    assert!(page.contains("opens=\"signin password\""), "{page}");
+    assert!(page.contains("<View name=\"PasswordView\" />"), "{page}");
+    let view = &sources.iter().find(|(p, _)| p.ends_with("PasswordView.cxaml")).unwrap().1;
+    assert!(view.contains("<SigninButton name=\"signInButton\" at=\"1,5\" span=\"12\" strategy=\"password\" />"), "{view}");
+    assert!(view.contains("<SigninField name=\"passwordField\" at=\"1,3\" span=\"12\" rows=\"2\" input=\"password\" />"), "{view}");
+    // Read back, the parts are the same.
+    let project = clarity_spec::load_sources_signed(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())), Some(&signin()));
+    assert_eq!(errors_of(&project), Vec::<String>::new());
 }
 
 #[test]
@@ -231,7 +273,7 @@ fn the_signin_window() {
     let two = format!("{CLUB}\npage Other: signin\n    label \"x\" name x at 1,1 span 2\n");
     has(&errors(&two), "there is already a sign-in window, SignIn");
     // Needed where people sign in on the desktop or the web.
-    let none = CLUB.replace("page SignIn: signin\n    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n", "");
+    let none = CLUB.replace(GUIDED, "");
     has(&errors(&none), "people sign in on desktop, so the project needs a sign-in window: add a window of the kind signin");
     let mut cli = signin();
     cli.targets = vec!["cli".into()];
@@ -248,12 +290,12 @@ fn the_signin_window() {
 
 #[test]
 fn the_click_targets_signin_and_signout() {
-    has(&errors(&with("on click -> signin password", "on click -> signin pigeon")), "the project signs in with password, token, not pigeon");
-    let missing = with("    password name password at 1,2 span 4\n", "    password name secret at 1,2 span 4\n");
-    has(&errors(&missing), "signin password takes the password from a part named password; SignIn has none");
+    has(&errors(&on_splash().replace("on click -> signin password", "on click -> signin pigeon")), "the project signs in with password, token, not pigeon");
+    let missing = on_splash().replace("    password name password at 1,2 span 4\n", "    password name secret at 1,2 span 4\n");
+    has(&errors(&missing), "signin password takes the password from a part named password; Welcome has none");
     let elsewhere = with("button \"Greet\" name greet at 1,2 span 2 on click: greetClicked", "button \"Greet\" name greet at 1,2 span 2 on click -> signin password");
-    has(&errors(&elsewhere), "a button signs in on the sign-in window, SignIn");
-    let plain = errors_of(&load_with(&CLUB.replace("me.", "member.").replace("allow when", "// allow when"), None));
+    has(&errors(&elsewhere), "signin password signs in from a button on the app's splash; the sign-in window signs in with its sign-in buttons");
+    let plain = errors_of(&load_with(&on_splash().replace("me.", "member.").replace("allow when", "// allow when"), None));
     has(&plain, "signout signs out who signed in, which needs signin in the project file");
     has(&plain, "signin password signs in, which needs signin in the project file");
     has(&errors(&with("item \"Sign out\" name signOutItem on click -> signout", "item \"Sign out\" name signOutItem on click -> signout in new window")), "only a window opens in a new window");
@@ -271,23 +313,43 @@ fn signin_words_are_used_only_with_signin() {
 }
 
 #[test]
-fn the_signin_template_holds_the_signin_part() {
+fn the_signin_template_makes_a_window_of_sign_in_views() {
     use clarity_spec::design_edit::Designed;
     use clarity_spec::templates::{PageTemplate, new_window};
-    let none = CLUB.replace("page SignIn: signin\n    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n", "");
-    let project = load(&none);
+    use clarity_spec::widgets::WidgetKind;
+    // The computer's account makes the first member from the name alone: the e-mail is not required.
+    let none = CLUB.replace(GUIDED, "").replace("email: email, unique, required", "email: email, unique");
+    let mut block = signin();
+    block.strategies.push(SigninStrategy { name: "account".into(), fields: vec!["name".into()], minimum: None, provider: None });
+    block.remember_days = Some(30);
+    block.remember_asks = true;
+    block.language_picker = true;
+    let project = load_with(&none, Some(&block));
     let made = new_window(&project, "SignIn", &PageTemplate::SignIn).unwrap();
-    let [Designed::Page(page)] = made.designed.as_slice() else { panic!("one page") };
-    assert_eq!(page.kind, PageKind::Signin);
-    let [part] = page.widgets.as_slice() else { panic!("one part: {:?}", page.widgets) };
-    assert_eq!(part.props.kind, clarity_spec::widgets::WidgetKind::Signin);
-    assert_eq!(part.props.name.as_deref(), Some("signIn"));
-    assert_eq!((part.props.col, part.props.row, part.props.width), (1, 1, clarity_spec::model::DEFAULT_PAGE_COLUMNS));
-    // Written into the project, it is the sign-in window the project needed.
-    let source = clarity_spec::cxaml::page_source(page, "club");
+    let pages: Vec<_> = made.designed.iter().map(|d| match d { Designed::Page(p) => p, Designed::App(_) => panic!("pages only") }).collect();
+    let names: Vec<&str> = pages.iter().map(|p| p.name.name.as_str()).collect();
+    assert_eq!(names, vec!["SignIn", "PasswordView", "TokenView"]);
+    assert_eq!(pages[0].kind, PageKind::Signin);
+    assert_eq!(clarity_spec::signin::views_of(pages[0]), vec!["PasswordView", "TokenView"]);
+    // The password view: language, name, password, keep me signed in, its button, the account's, the other way, the refusal.
+    let kinds = |page: &clarity_spec::model::Page| page.widgets.iter().map(|w| (w.props.kind, w.props.name.clone().unwrap())).collect::<Vec<_>>();
+    assert_eq!(kinds(pages[1]), vec![
+        (WidgetKind::SigninLanguage, "passwordLanguage".to_string()),
+        (WidgetKind::SigninField, "passwordNameField".to_string()),
+        (WidgetKind::SigninField, "passwordPasswordField".to_string()),
+        (WidgetKind::SigninRemember, "passwordRemember".to_string()),
+        (WidgetKind::SigninButton, "passwordButton".to_string()),
+        (WidgetKind::SigninButton, "accountButton".to_string()),
+        (WidgetKind::SigninOther, "passwordToToken".to_string()),
+        (WidgetKind::SigninRefusal, "passwordRefusal".to_string()),
+    ]);
+    assert_eq!(pages[1].widgets[6].props.shows.as_deref(), Some("TokenView"));
+    // Written into the project, it is the sign-in window the project needed, and clean.
     let mut sources = clarity_spec::converted([("club.clarity", none.as_str())]);
-    sources.push(("design/SignIn.cxaml".into(), source));
-    let project = clarity_spec::load_sources_signed(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())), Some(&signin()));
+    for page in &pages {
+        sources.push((format!("design/{}.cxaml", page.name.name), clarity_spec::cxaml::page_source(page, "club")));
+    }
+    let project = clarity_spec::load_sources_signed(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())), Some(&block));
     assert_eq!(errors_of(&project), Vec::<String>::new());
 }
 
@@ -301,13 +363,13 @@ fn new_recovery_codes_gives_text_lines() {
 
 #[test]
 fn a_recovery_button_takes_a_name_and_a_code() {
-    let source = CLUB.replace("    apiToken: text, hashed\n", "    apiToken: text, hashed\n    codes: text, hashed\n").replace(
+    let source = on_splash().replace("    apiToken: text, hashed\n", "    apiToken: text, hashed\n    codes: text, hashed\n").replace(
         "on click -> signin password\n",
         "on click -> signin password\n    button \"Use a code\" name useCode at 3,3 span 2 on click -> signin recovery\n",
     );
     let mut with_recovery = signin();
-    with_recovery.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "codes".into()], minimum: None });
-    has(&errors_of(&load_with(&source, Some(&with_recovery))), "signin recovery takes the code from a part named code; SignIn has none");
+    with_recovery.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "codes".into()], minimum: None, provider: None });
+    has(&errors_of(&load_with(&source, Some(&with_recovery))), "signin recovery takes the code from a part named code; Welcome has none");
     let fixed = source.replace("    password name password at 1,2 span 4\n", "    password name password at 1,2 span 4\n    textbox name code at 5,2 span 4\n");
     assert_eq!(errors_of(&load_with(&fixed, Some(&with_recovery))), Vec::<String>::new());
 }
@@ -339,10 +401,7 @@ fn the_runtimes_refuse_in_clarity_s_own_words() {
 
 /// The club with its sign-in parts on the app's splash, not on a window of their own.
 fn on_splash() -> String {
-    CLUB.replace("    main Main\n", "    main Main\n    splash Welcome\n").replace(
-        "page SignIn: signin\n",
-        "page Welcome: splash\n",
-    )
+    CLUB.replace("    main Main\n", "    main Main\n    splash Welcome\n").replace(GUIDED, &format!("page Welcome: splash\n{HAND_BUILT}"))
 }
 
 #[test]
@@ -351,20 +410,18 @@ fn the_app_s_splash_doubles_as_the_signin_window() {
     let missing = on_splash().replace("    password name password at 1,2 span 4\n", "");
     has(&errors(&missing), "signin password takes the password from a part named password; Welcome has none");
     // Both is one too many.
-    let both = format!("{}\npage SignIn: signin\n    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n", on_splash());
+    let both = format!("{}\n{GUIDED}", on_splash());
     has(&errors(&both), "both SignIn and the splash Welcome sign in; keep one");
     // A splash the app does not show signs no one in.
     let other = on_splash().replace("    splash Welcome\n", "");
-    has(&errors(&other), "a button signs in on the sign-in window");
+    has(&errors(&other), "signin password signs in from a button on the app's splash");
     // It is still a splash: nothing opens it.
     has(&errors(&on_splash().replace("on click -> Main allow", "on click -> Welcome allow")), "Welcome is the splash screen");
 }
 
-/// The club's sign-in window holding the sign-in part instead of the hand-built parts.
-const HAND_BUILT: &str = "page SignIn: signin\n    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n";
-
+/// The club's splash holding the sign-in part instead of the sign-in window.
 fn with_part(part: &str) -> String {
-    CLUB.replace(HAND_BUILT, &format!("page SignIn: signin\n    {part}\n"))
+    CLUB.replace("    main Main\n", "    main Main\n    splash Welcome\n").replace(GUIDED, &format!("page Welcome: splash\n    {part}\n"))
 }
 
 #[test]
@@ -372,22 +429,22 @@ fn the_signin_part_signs_in_on_its_own() {
     let source = with_part("signin name signIn at 1,1 span 12 rows 6");
     let project = load(&source);
     assert_eq!(errors_of(&project), Vec::<String>::new());
-    let page = project.pages().find(|p| p.name.name == "SignIn").unwrap();
+    let page = project.pages().find(|p| p.name.name == "Welcome").unwrap();
     let part = &page.widgets[0];
     assert_eq!(part.props.kind, clarity_spec::widgets::WidgetKind::Signin);
     assert!(clarity_spec::frame::page_signs_in(page));
     // The part keeps only its place and look; the project's block says what it offers.
     has(&errors(&with_part("signin name signIn at 1,1 span 12 rows 6 strategies password")), "strategies");
     let sources = clarity_spec::converted([("club.clarity", source.as_str())]);
-    let markup = &sources.iter().find(|(p, _)| p.ends_with("SignIn.cxaml")).unwrap().1;
+    let markup = &sources.iter().find(|(p, _)| p.ends_with("Welcome.cxaml")).unwrap().1;
     assert!(markup.contains("<Signin name=\"signIn\" at=\"1,1\" span=\"12\" rows=\"6\" />"), "{markup}");
 }
 
 #[test]
 fn the_signin_part_follows_the_rules_of_signing_in() {
-    // Only on the sign-in window or the app's splash.
+    // Only on the app's splash.
     let elsewhere = with_part("signin name signIn at 1,1 span 12 rows 6").replace("    label \"Hello\" name hello at 1,1 span 4\n", "    label \"Hello\" name hello at 1,1 span 4\n    signin name other at 1,4 span 12 rows 6\n");
-    has(&errors(&elsewhere), "a signin part signs in on the sign-in window, SignIn");
+    has(&errors(&elsewhere), "a signin part stands on the app's splash; the sign-in window is designed from its views");
     // One in a project.
     has(&errors(&elsewhere), "there is already a signin part, on Main; a project has one");
     // Not without sign-in.
@@ -397,10 +454,7 @@ fn the_signin_part_follows_the_rules_of_signing_in() {
 
 #[test]
 fn the_signin_part_on_the_splash_makes_it_the_signin_window() {
-    let splash = on_splash().replace(
-        "    textbox name name at 1,1 span 4\n    password name password at 1,2 span 4\n    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password\n",
-        "    signin name signIn at 1,1 span 12 rows 6\n",
-    );
+    let splash = on_splash().replace(HAND_BUILT, "    signin name signIn at 1,1 span 12 rows 6\n");
     assert_eq!(errors(&splash), Vec::<String>::new());
     let both = format!("{splash}\npage SignIn: signin\n    label \"x\" name x at 1,1 span 2\n");
     has(&errors(&both), "both SignIn and the splash Welcome sign in; keep one");
@@ -424,7 +478,7 @@ fn the_model_gives_each_strategy_its_inputs_and_targets() {
     // Read back, the block is the same.
     let back: Signin = serde_json::from_value(json["signin"].clone()).unwrap();
     assert_eq!(back, block);
-    let page = json["files"].as_array().unwrap().iter().flat_map(|f| f["pages"].as_array().unwrap()).find(|p| p["name"]["name"] == "SignIn").unwrap();
+    let page = json["files"].as_array().unwrap().iter().flat_map(|f| f["pages"].as_array().unwrap()).find(|p| p["name"]["name"] == "Welcome").unwrap();
     assert_eq!(page["widgets"][0]["props"]["kind"], "signin");
     assert!(page["widgets"][0]["props"].get("strategies").is_none());
 }
@@ -437,7 +491,7 @@ fn the_signin_part_brings_its_words() {
         assert!(part.iter().any(|k| k == key), "{key}: {part:?}");
     }
     assert!(!part.iter().any(|k| k == "signinRemember"), "{part:?}");
-    let hand = keys(CLUB);
+    let hand = keys(&on_splash());
     assert!(!hand.iter().any(|k| k == "signinButton"), "{hand:?}");
     // The keep-me-signed-in box comes with `remember 30 days when asked`.
     let mut asks = signin();
@@ -445,4 +499,32 @@ fn the_signin_part_brings_its_words() {
     asks.remember_asks = true;
     let found = clarity_spec::translations::keys(&load_with(&with_part("signin name signIn at 1,1 span 12 rows 6"), Some(&asks))).into_iter().map(|k| k.key).collect::<Vec<_>>();
     assert!(found.iter().any(|k| k == "signinRemember"), "{found:?}");
+    // Its language picker, when the block turns it on, brings the picker's word.
+    assert!(!part.iter().any(|k| k == "languagePicker"), "{part:?}");
+    let mut picks = signin();
+    picks.language_picker = true;
+    let found = clarity_spec::translations::keys(&load_with(&with_part("signin name signIn at 1,1 span 12 rows 6"), Some(&picks))).into_iter().map(|k| k.key).collect::<Vec<_>>();
+    assert!(found.iter().any(|k| k == "languagePicker"), "{found:?}");
+}
+
+/// A provider needs what it signs in with: its client, an OpenID
+/// provider its issuer, and GitHub the app's secret to trade the code.
+#[test]
+fn a_provider_says_what_it_needs() {
+    use clarity_spec::signin::ProviderSettings;
+    let with = |name: &str, settings: Option<ProviderSettings>| {
+        let mut block = signin();
+        block.strategies.push(SigninStrategy { name: name.into(), fields: vec!["email".into()], minimum: None, provider: settings });
+        errors_of(&load_with(CLUB, Some(&block)))
+    };
+    has(&with("microsoft", None), "the microsoft strategy needs its client, the app's id at Microsoft: write client \"...\" indented under its line");
+    has(&with("openid", Some(ProviderSettings { client: "app".into(), ..Default::default() })), "the openid strategy needs its issuer, the provider's address: write issuer \"https://...\" indented under its line");
+    has(&with("github", Some(ProviderSettings { client: "app".into(), ..Default::default() })), "GitHub trades the code for a token only with the app's secret: write secret \"setting:githubSecret\" indented under its line");
+    assert_eq!(with("microsoft", Some(ProviderSettings { client: "app".into(), ..Default::default() })), Vec::<String>::new());
+    has(&with("github", Some(ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() })), "the github strategy's secret setting:githubSecret is no secret setting of the project: add githubSecret: secret to the settings");
+    // Declared as a secret setting, it is kept in the program's protected store.
+    let mut block = signin();
+    block.strategies.push(SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() }) });
+    let kept = CLUB.replace("cli Club\n", "settings\n    githubSecret: secret\n\ncli Club\n");
+    assert_eq!(errors_of(&load_with(&kept, Some(&block))), Vec::<String>::new());
 }

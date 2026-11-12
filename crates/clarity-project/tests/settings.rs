@@ -864,7 +864,7 @@ fn a_web_api_says_how_it_pages() {
     }
 }
 
-/// The application's icon (docs/APP-ICON-SPLASH-PLAN.md): `icon "app.png"`,
+/// The application's icon: `icon "app.png"`,
 /// a picture among the project's resources; without the line, Clarity's.
 #[test]
 fn the_project_names_its_icon() {

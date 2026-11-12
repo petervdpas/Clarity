@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.21.0"
+version = "0.22.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -26,8 +26,8 @@ audio = ["desktop", "dep:clarity-audio"]
 video = ["audio", "dep:clarity-video"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.56.0", default-features = false }
-clarity-auth = { path = "../rust-auth", version = "0.1.0" }
+clarity-runtime = { path = "../rust", version = "0.57.0", default-features = false }
+clarity-auth = { path = "../rust-auth", version = "0.2.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/IMAGE-PLAN.md).
 clarity-image = { path = "../rust-image", version = "0.1.0" }
 clarity-graph = { path = "../rust-graph", version = "0.1.0" }
@@ -50,6 +50,8 @@ accesskit = "0.25"
 # The desktop host's crates; a browser build (wasm32-unknown-emscripten) has
 # none of them: the page does the window, clipboard, sound and files there.
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
+# Signing in with a provider through the system's browser (GitHub, Microsoft, OpenID): the desktop only.
+clarity-auth = { path = "../rust-auth", version = "0.2.0", features = ["openid"] }
 winit = { version = "0.30", optional = true }
 glutin = { version = "0.32", optional = true }
 glutin-winit = { version = "0.5", optional = true }

@@ -69,6 +69,15 @@ pub enum Edit {
         /// Overrides the catalog height, as a custom part's declared size does.
         #[serde(default)]
         height: Option<u32>,
+        /// A sign-in field's input (`input password`), as the palette of a sign-in view offers it.
+        #[serde(default)]
+        input: Option<String>,
+        /// A sign-in button's strategy (`strategy password`).
+        #[serde(default)]
+        strategy: Option<String>,
+        /// The sign-in view an "other way" shows (`shows CodeView`).
+        #[serde(default)]
+        shows: Option<String>,
     },
     /// Several edits applied together: one write, one check, all or nothing.
     /// Offsets in later edits refer to the original text.

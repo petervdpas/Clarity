@@ -87,6 +87,8 @@ translation nl
     signinButton "Aanmelden"
     signinCode "Herstelcode"
     signinUseCode "Een herstelcode gebruiken"
+    signinUsePassword "Aanmelden met een wachtwoord"
+    signinUseToken "Een token gebruiken"
     signinToken "Token"
     signinAccountButton "Account van deze computer gebruiken"
     signinBack "Terug"

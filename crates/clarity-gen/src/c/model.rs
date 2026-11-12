@@ -428,8 +428,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     }
     // The version read travels with the record, so a window's copy saves over that one.
     if version.is_some() {
-        to.push_str("    cJSON_AddItemToObject(out, \"rowVersion\", clarity_json_integer(r->row_version));\n");
-        from.push_str("    if (!clarity_json_get_integer(in, \"rowVersion\", &r->row_version)) return false;\n");
+        let wire = Project::VERSION_WIRE;
+        to.push_str(&format!("    cJSON_AddItemToObject(out, \"{wire}\", clarity_json_integer(r->row_version));\n"));
+        from.push_str(&format!("    if (!clarity_json_get_integer(in, \"{wire}\", &r->row_version)) return false;\n"));
     }
     let _ = write!(
         source,

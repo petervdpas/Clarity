@@ -25,6 +25,9 @@ typedef struct {
     char* name;
     char** columns;
     size_t column_count;
+    /// Key and value in turn, option_count pairs.
+    char** options;
+    size_t option_count;
 } Strategy;
 
 /// The project's people as the database handle keeps them, outside the scratch arena.
@@ -88,10 +91,10 @@ static const char* auth_text(const char* op, const cJSON* args) {
     return NULL;
 }
 
-static cJSON* key_args(const char* key) {
-    cJSON* args = cJSON_CreateObject();
-    cJSON_AddStringToObject(args, "key", key);
-    return args;
+/* The text `name` of an object, NULL when it has none (or null). */
+static const char* text_of(const cJSON* object, const char* name) {
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(object, name);
+    return cJSON_IsString(item) ? item->valuestring : NULL;
 }
 
 static cJSON* token_args(const char* token) {
@@ -121,12 +124,6 @@ static const cJSON* catalog_entry(const char* name) {
         if (cJSON_IsString(named) && strcmp(named->valuestring, name) == 0) return entry;
     }
     return NULL;
-}
-
-static bool holds_text(const cJSON* list, const char* text) {
-    const cJSON* item;
-    cJSON_ArrayForEach(item, list) if (cJSON_IsString(item) && strcmp(item->valuestring, text) == 0) return true;
-    return false;
 }
 
 // -- Helpers code calls ------------------------------------------------------
@@ -187,6 +184,7 @@ static void forget(struct ClarityPeople* people) {
     for (size_t i = 0; people->strategies && i < people->strategy_count; i++) {
         free(people->strategies[i].name);
         free_list(people->strategies[i].columns, people->strategies[i].column_count);
+        free_list(people->strategies[i].options, people->strategies[i].option_count * 2);
     }
     free(people->strategies);
     free(people);
@@ -250,6 +248,8 @@ bool clarity_db_add_signin(ClarityDb* db, const ClaritySigninSource* source) {
                 people->strategies[i].name = clarity_lasting(given->name ? given->name : "");
                 people->strategies[i].columns = copied_list(given->columns, given->column_count, &ok);
                 people->strategies[i].column_count = people->strategies[i].columns ? given->column_count : 0;
+                people->strategies[i].options = copied_list(given->options, given->option_count * 2, &ok);
+                people->strategies[i].option_count = people->strategies[i].options ? given->option_count : 0;
                 ok = ok && people->strategies[i].name;
             }
         } else {
@@ -326,56 +326,6 @@ static bool no_people(ClarityDb* db, const struct ClarityPeople* people, bool* n
     int64_t count = 0;
     if (rows.count > 0 && rows.items[0].count > 0 && !clarity_get_integer("count", rows.items[0].values[0], &count)) return false;
     *none = count == 0;
-    return true;
-}
-
-/* Inserts the first person, with only the fields the strategy names. */
-static bool first_account(ClarityDb* db, const struct ClarityPeople* people, const cJSON* info, const Strategy* strategy, const char* name, const cJSON* inputs, int64_t* id) {
-    cJSON* args = cJSON_CreateObject();
-    cJSON_AddStringToObject(args, "strategy", name);
-    cJSON_AddItemToObject(args, "inputs", cJSON_Duplicate(inputs, true));
-    cJSON* made = NULL;
-    if (!auth_call("firstAccount", args, &made)) return false;
-    const char** columns = CLARITY_NEW(const char*, strategy->column_count + 1);
-    ClarityValues values = {0};
-    size_t count = 0, at = 0;
-    const cJSON* field;
-    cJSON_ArrayForEach(field, cJSON_GetObjectItemCaseSensitive(info, "fields")) {
-        const cJSON* role = cJSON_GetObjectItemCaseSensitive(field, "role");
-        const cJSON* value = cJSON_IsString(role) ? cJSON_GetObjectItemCaseSensitive(made, role->valuestring) : NULL;
-        if (at < strategy->column_count && cJSON_IsString(value)) {
-            columns[count++] = strategy->columns[at];
-            clarity_values_add(&values, clarity_text_value(value->valuestring));
-        }
-        at++;
-    }
-    ClaritySourceDb* source = NULL;
-    if (!clarity_source(db, people->source, &source)) return false;
-    const char* sql = clarity_insert_sql(source->driver->dialect, people->table, people->key, columns, count);
-    return source->driver->insert(source->driver, sql, &values, id);
-}
-
-/* Writes back what Clarity.Auth says to store after a sign-in (a recovery code used up), by role. */
-static bool stored_after(ClarityDb* db, const struct ClarityPeople* people, const cJSON* info, const Strategy* strategy, const char* name, const cJSON* inputs, const char* stored, int64_t id) {
-    cJSON* args = cJSON_CreateObject();
-    cJSON_AddStringToObject(args, "strategy", name);
-    cJSON_AddItemToObject(args, "inputs", cJSON_Duplicate(inputs, true));
-    cJSON_AddItemToObject(cJSON_AddObjectToObject(args, "stored"), "secret", cJSON_CreateString(stored));
-    cJSON* after = NULL;
-    if (!auth_call("afterSignin", args, &after)) return false;
-    ClaritySourceDb* source = NULL;
-    if (!clarity_source(db, people->source, &source)) return false;
-    ClarityDialect d = source->driver->dialect;
-    const cJSON* value;
-    cJSON_ArrayForEach(value, after) {
-        const char* column = column_of(info, strategy, value->string);
-        if (!column || !cJSON_IsString(value)) continue;
-        ClarityValues params = {0};
-        clarity_values_add(&params, clarity_text_value(value->valuestring));
-        clarity_values_add(&params, clarity_integer_value(id));
-        const char* sql = clarity_format("UPDATE %s SET %s = %s WHERE %s = %s", clarity_quote(d, people->table), clarity_quote(d, column), clarity_mark(d, 1), clarity_quote(d, people->key), clarity_mark(d, 2));
-        if (!source->driver->execute(source->driver, sql, &params, NULL)) return false;
-    }
     return true;
 }
 
@@ -468,78 +418,132 @@ static int64_t remembered(ClarityDb* db, const struct ClarityPeople* people) {
     return 0;
 }
 
-static void count_failed(const char* const* keys, size_t count) {
-    for (size_t i = 0; i < count; i++) {
-        cJSON* out = NULL;
-        auth_call("triesFailed", key_args(keys[i]), &out);
+/* The project's `signin` block as Clarity.Auth's sign-in calls take it. */
+cJSON* clarity_signin_options(const char* program, const ClaritySigninStrategy* strategy) {
+    cJSON* options = cJSON_CreateObject();
+    for (size_t i = 0; strategy && i < strategy->option_count; i++) {
+        const char* key = strategy->options[2 * i];
+        const char* value = strategy->options[2 * i + 1];
+        if (strcmp(key, "secret") == 0 && strncmp(value, "setting:", 8) == 0) {
+            const char* kept = clarity_secret_store.get ? clarity_secret_store.get(program ? program : "", value + 8) : NULL;
+            value = kept ? kept : "";
+        }
+        cJSON_AddStringToObject(options, key, value);
     }
+    return options;
 }
 
+static cJSON* block_of(const struct ClarityPeople* people) {
+    cJSON* block = cJSON_CreateObject();
+    cJSON* strategies = cJSON_AddArrayToObject(block, "strategies");
+    for (size_t i = 0; i < people->strategy_count; i++) {
+        cJSON* strategy = cJSON_CreateObject();
+        cJSON_AddStringToObject(strategy, "name", people->strategies[i].name);
+        cJSON* columns = cJSON_AddArrayToObject(strategy, "columns");
+        for (size_t c = 0; c < people->strategies[i].column_count; c++) cJSON_AddItemToArray(columns, cJSON_CreateString(people->strategies[i].columns[c]));
+        const Strategy* kept = &people->strategies[i];
+        ClaritySigninStrategy given = {kept->name, (const char* const*)kept->columns, kept->column_count, (const char* const*)kept->options, kept->option_count};
+        cJSON_AddItemToObject(strategy, "options", clarity_signin_options(people->program, &given));
+        cJSON_AddItemToArray(strategies, strategy);
+    }
+    cJSON_AddNumberToObject(block, "tries", people->tries);
+    cJSON_AddNumberToObject(block, "triesSeconds", (double)people->tries_seconds);
+    return block;
+}
+
+/* Clarity's refusal by the key Clarity.Auth gave. */
+static bool refused_by(const char* key) {
+    if (key && strcmp(key, "signinTooManyTries") == 0) return clarity_refuse(clarity_signin_too_many_tries());
+    return refused();
+}
+
+/* Writes `store`, values by column, to the person's record `id`, in one UPDATE. */
+static bool store_columns(ClarityDb* db, const struct ClarityPeople* people, const cJSON* store, int64_t id) {
+    ClaritySourceDb* source = NULL;
+    if (!clarity_source(db, people->source, &source)) return false;
+    ClarityDialect d = source->driver->dialect;
+    ClarityValues params = {0};
+    const char* sets = NULL;
+    const cJSON* value;
+    cJSON_ArrayForEach(value, store) {
+        if (!cJSON_IsString(value)) continue;
+        clarity_values_add(&params, clarity_text_value(value->valuestring));
+        const char* set = clarity_format("%s = %s", clarity_quote(d, value->string), clarity_mark(d, (int)params.count));
+        sets = sets ? clarity_format("%s, %s", sets, set) : set;
+    }
+    if (!sets) return true;
+    clarity_values_add(&params, clarity_integer_value(id));
+    const char* sql = clarity_format("UPDATE %s SET %s WHERE %s = %s", clarity_quote(d, people->table), sets, clarity_quote(d, people->key), clarity_mark(d, (int)params.count));
+    return source->driver->execute(source->driver, sql, &params, NULL);
+}
+
+/* Inserts a person with only `columns` (values by column); the other columns take their defaults. */
+static bool make_person(ClarityDb* db, const struct ClarityPeople* people, const cJSON* columns, int64_t* id) {
+    const char** names = CLARITY_NEW(const char*, (size_t)cJSON_GetArraySize(columns) + 1);
+    ClarityValues values = {0};
+    size_t count = 0;
+    const cJSON* value;
+    cJSON_ArrayForEach(value, columns) {
+        names[count++] = value->string;
+        clarity_values_add(&values, clarity_text_value(cJSON_IsString(value) ? value->valuestring : ""));
+    }
+    ClaritySourceDb* source = NULL;
+    if (!clarity_source(db, people->source, &source)) return false;
+    const char* sql = clarity_insert_sql(source->driver->dialect, people->table, people->key, names, count);
+    return source->driver->insert(source->driver, sql, &values, id);
+}
+
+/* One sign-in attempt: Clarity.Auth decides (signinBegin, signinDecide);
+ * this looks the person up and stores what it is told. An attempt not
+ * `counted` (the computer's user signed in at the start) counts no tries. */
 static bool attempt(ClarityDb* db, const char* name, const cJSON* given, bool counted, int64_t* id) {
     struct ClarityPeople* people = db ? db->people : NULL;
     if (!people) return clarity_fail(CLARITY_STORAGE, "the program names no people who sign in");
     if (!name) return refused();
     const cJSON* inputs = cJSON_IsObject(given) ? given : cJSON_CreateObject();
-    // Only a strategy the project names, on a target the catalog lets it work on.
-    const Strategy* strategy = used(people, name);
-    const cJSON* info = strategy ? catalog_entry(name) : NULL;
-    if (!info || !holds_text(cJSON_GetObjectItemCaseSensitive(info, "targets"), target(people))) return refused();
+    const char* where = target(people);
     cJSON* args = cJSON_CreateObject();
+    cJSON_AddItemToObject(args, "block", block_of(people));
     cJSON_AddStringToObject(args, "strategy", name);
     cJSON_AddItemToObject(args, "inputs", cJSON_Duplicate(inputs, true));
-    cJSON* found = NULL;
-    if (!auth_call("find", args, &found)) return refused();
-    const cJSON* role = cJSON_GetObjectItemCaseSensitive(found, "role");
-    const cJSON* equals = cJSON_GetObjectItemCaseSensitive(found, "equals");
-    if (!cJSON_IsString(role) || !cJSON_IsString(equals)) return refused();
-    const char* keys[2] = {clarity_format("account:%s", equals->valuestring), NULL};
-    size_t key_count = 1;
+    cJSON_AddStringToObject(args, "target", where);
     ClarityCall* call = clarity_call();
-    if (call && call->address[0]) keys[key_count++] = clarity_format("address:%s", call->address);
-    if (counted) {
-        for (size_t i = 0; i < key_count; i++) {
-            cJSON* allowed_args = key_args(keys[i]);
-            cJSON_AddNumberToObject(allowed_args, "tries", people->tries);
-            cJSON_AddNumberToObject(allowed_args, "window", (double)people->tries_seconds);
-            cJSON* allowed = NULL;
-            if (!auth_call("triesAllowed", allowed_args, &allowed) || !cJSON_IsTrue(allowed)) return clarity_refuse(clarity_signin_too_many_tries());
-        }
-    }
-    const char* by = column_of(info, strategy, role->valuestring);
-    const char* secret = column_of(info, strategy, "secret");
-    if (!by) {
-        if (counted) count_failed(keys, key_count);
-        return refused();
-    }
+    if (call && call->address[0]) cJSON_AddStringToObject(args, "address", call->address);
+    cJSON* begun = NULL;
+    if (!auth_call("signinBegin", args, &begun)) return false;
+    if (cJSON_GetObjectItemCaseSensitive(begun, "refused")) return refused_by(text_of(begun, "refused"));
+    const char* column = text_of(begun, "column");
+    const char* secret = text_of(begun, "secret");
+    const char* equals = text_of(begun, "equals");
+    if (!column || !equals) return refused();
     bool there = false;
     int64_t person = 0;
     const char* stored = "";
-    if (!person_by(db, people, by, secret, equals->valuestring, &there, &person, &stored)) return false;
-    bool ok = false;
-    if (there) {
-        cJSON* check = cJSON_CreateObject();
-        cJSON_AddStringToObject(check, "strategy", name);
-        cJSON_AddItemToObject(check, "inputs", cJSON_Duplicate(inputs, true));
-        cJSON_AddItemToObject(cJSON_AddObjectToObject(check, "stored"), "secret", cJSON_CreateString(stored));
-        cJSON* holds = NULL;
-        ok = auth_call("check", check, &holds) && cJSON_IsTrue(holds) && stored_after(db, people, info, strategy, name, inputs, stored, person);
+    if (!person_by(db, people, column, secret, equals, &there, &person, &stored)) return false;
+    bool none = false;
+    if (!there && !no_people(db, people, &none)) return false;
+    cJSON* decide = cJSON_CreateObject();
+    cJSON_AddItemToObject(decide, "block", block_of(people));
+    cJSON_AddStringToObject(decide, "strategy", name);
+    cJSON_AddItemToObject(decide, "inputs", cJSON_Duplicate(inputs, true));
+    const cJSON* keys = cJSON_GetObjectItemCaseSensitive(begun, "keys");
+    cJSON_AddItemToObject(decide, "keys", counted && cJSON_IsArray(keys) ? cJSON_Duplicate(keys, true) : cJSON_CreateArray());
+    if (there) cJSON_AddStringToObject(cJSON_AddObjectToObject(decide, "found"), "stored", stored);
+    else cJSON_AddNullToObject(decide, "found");
+    cJSON_AddBoolToObject(decide, "noPeople", none);
+    cJSON* decided = NULL;
+    if (!auth_call("signinDecide", decide, &decided)) return false;
+    const cJSON* make = cJSON_GetObjectItemCaseSensitive(decided, "make");
+    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decided, "signedIn"))) {
+        if (!store_columns(db, people, cJSON_GetObjectItemCaseSensitive(decided, "store"), person)) return false;
+    } else if (cJSON_IsObject(make)) {
+        // A first account the table cannot take (a required column without a default) is an ordinary refusal.
+        if (!make_person(db, people, make, &person)) return refused();
     } else {
-        bool none = false;
-        if (!no_people(db, people, &none)) return false;
-        ok = none && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(info, "firstAccount")) && first_account(db, people, info, strategy, name, inputs, &person);
-    }
-    if (!ok) {
-        if (counted) count_failed(keys, key_count);
-        return refused();
-    }
-    if (counted) {
-        for (size_t i = 0; i < key_count; i++) {
-            cJSON* out = NULL;
-            auth_call("triesCleared", key_args(keys[i]), &out);
-        }
+        return refused_by(text_of(decided, "refused"));
     }
     signed_in(db, person);
-    if (strcmp(target(people), "desktop") == 0 && remembers(people, inputs)) remember(db, people, secret, person);
+    if (strcmp(where, "desktop") == 0 && remembers(people, inputs)) remember(db, people, secret, person);
     *id = person;
     return true;
 }

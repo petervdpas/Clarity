@@ -243,7 +243,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
     files.extend(local_patch_file()?);
-    // The program file's icon and version on Windows, linked by build.rs (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md);
+    // The program file's icon and version on Windows, linked by build.rs;
     // on the desktop, build.rs links the ready-made library too.
     let icons = crate::windows_resources::object_files(project, &clarity_project::title(settings), &crate_name, crate::windows_resources::object_path);
     let has_icons = !icons.is_empty();
@@ -1425,7 +1425,8 @@ fn readable_all(entity: &clarity_spec::model::Entity, module: &str, found: &str)
 /// step 4), its remembered sign-in kept under the program's name (main's `PROGRAM`).
 pub(crate) fn signin_source(plan: &crate::signin::SigninPlan) -> String {
     let texts = |items: &[String]| items.iter().map(|t| format!("{t:?}.into()")).collect::<Vec<_>>().join(", ");
-    let strategies: Vec<String> = plan.strategies.iter().map(|(name, columns)| format!("clarity_runtime::signin::SigninStrategy {{ name: {name:?}.into(), columns: vec![{}] }}", texts(columns))).collect();
+    let options = |name: &str| plan.options.get(name).map(|o| o.iter().map(|(k, v)| format!("({k:?}.into(), {v:?}.into())")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+    let strategies: Vec<String> = plan.strategies.iter().map(|(name, columns)| format!("clarity_runtime::signin::SigninStrategy {{ name: {name:?}.into(), columns: vec![{}], options: vec![{}] }}", texts(columns), options(name))).collect();
     format!(
         "clarity_runtime::signin::SigninSource {{ source: {:?}.into(), table: {:?}.into(), key: {:?}.into(), page: {:?}.into(), targets: vec![{}], strategies: vec![{}], session_seconds: {}, tries: {}, tries_seconds: {}, program: PROGRAM.into(), remember_seconds: {:?}, remember_asks: {} }}",
         plan.source,

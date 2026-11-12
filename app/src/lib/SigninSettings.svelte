@@ -5,6 +5,7 @@
   // each with the fields it names; the backend checks what is saved.
 
   import type { Entity } from "@clarity/ui/generated/Entity.ts";
+  import type { ProviderSettings } from "@clarity/ui/generated/ProviderSettings.ts";
   import type { Signin } from "@clarity/ui/generated/Signin.ts";
   import type { StrategyChoice } from "@clarity/ui/generated/StrategyChoice.ts";
 
@@ -49,7 +50,7 @@
     if (!on) return onchange(null);
     const entity = entities[0]?.name.name ?? "Person";
     const where = targets.includes("web") ? ["web"] : targets.filter((t) => t !== "cli").slice(0, 1);
-    onchange({ entity, targets: where, strategies: [], sessionMinutes: DEFAULT_SESSION_MINUTES, tries: DEFAULT_TRIES, triesMinutes: DEFAULT_TRIES_MINUTES, rememberAsks: false, shows: [] });
+    onchange({ entity, targets: where, strategies: [], sessionMinutes: DEFAULT_SESSION_MINUTES, tries: DEFAULT_TRIES, triesMinutes: DEFAULT_TRIES_MINUTES, rememberAsks: false, shows: [], languagePicker: false });
   }
 
   function setTarget(target: string, on: boolean) {
@@ -80,6 +81,29 @@
     const minimum = text.trim() === "" ? undefined : wholeNumber(text, 12);
     change({ strategies: signin.strategies.map((s) => (s.name === name ? { ...s, minimum } : s)) });
   }
+
+  /** Sets one of a provider's settings (`client`, `secret`, `tenant`, `issuer`, `register`); empty text takes it away. */
+  function setProvider(name: string, setting: string, value: string | boolean) {
+    if (!signin) return;
+    change({
+      strategies: signin.strategies.map((s) => {
+        if (s.name !== name) return s;
+        const provider: ProviderSettings = { client: "", register: false, ...s.provider };
+        if (setting === "register") provider.register = value === true;
+        else if (setting === "client") provider.client = String(value).trim();
+        else if (setting === "secret" || setting === "tenant" || setting === "issuer") provider[setting] = String(value).trim() || undefined;
+        return { ...s, provider };
+      }),
+    });
+  }
+
+  /** What each provider setting is called, and what it holds. */
+  const PROVIDER_FIELDS: Record<string, { label: string; placeholder: string; help: string }> = {
+    client: { label: "Client id", placeholder: "the app's id at the provider", help: "The id of the app registered at the provider" },
+    secret: { label: "Secret setting", placeholder: "setting:githubSecret", help: "The secret setting that holds the app's secret, never the secret itself; give it its value in the program's settings" },
+    tenant: { label: "Tenant", placeholder: "common", help: "The company's id or domain, organizations or consumers; common for any Microsoft account" },
+    issuer: { label: "Issuer", placeholder: "https://accounts.google.com", help: "The provider's address, by which its sign-in pages are found" },
+  };
 
   /** The block's strategies in the order the sign-in part shows them: the shown ones first. */
   function shownOrder(): string[] {
@@ -154,6 +178,18 @@
                 </select>
               </label>
             {/each}
+            {#each choice.settings.filter((s) => s !== "register") as setting (setting)}
+              {@const field = PROVIDER_FIELDS[setting]}
+              <label class="field" title={field.help}>
+                {field.label}
+                <input class="mono" value={setting === "client" ? (line.provider?.client ?? "") : ((line.provider?.[setting as "secret" | "tenant" | "issuer"]) ?? "")} placeholder={field.placeholder} onchange={(e) => setProvider(choice.name, setting, e.currentTarget.value)} />
+              </label>
+            {/each}
+            {#if choice.settings.includes("register")}
+              <label class="field" title="A first sign-in of someone without a record makes their record; off, only people already known sign in">
+                <input type="checkbox" checked={line.provider?.register ?? false} onchange={(e) => setProvider(choice.name, "register", e.currentTarget.checked)} /> New people may register
+              </label>
+            {/if}
             {#if choice.minimum}
               <label class="field" title="The fewest characters a password may have; empty for no rule">
                 At least
@@ -215,6 +251,9 @@
         <p class="form-help">On, a person is remembered only when they tick the box; off, everyone who signs in is remembered.</p>
       {/if}
     {/if}
+    <span class="form-label">Language</span>
+    <label><input type="checkbox" checked={signin.languagePicker} onchange={(e) => change({ languagePicker: e.currentTarget.checked })} /> The sign-in part lets people pick their language</label>
+    <p class="form-help">A dropdown of the program's languages above the fields; off, the sign-in shows in the language the program starts in.</p>
   {/if}
 </div>
 

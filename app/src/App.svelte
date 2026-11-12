@@ -50,6 +50,7 @@
   import NewProjectDialog from "./lib/NewProjectDialog.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import ApiView from "./lib/ApiView.svelte";
+  import SigninView from "./lib/SigninView.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
   import MappingPage from "./lib/MappingPage.svelte";
@@ -469,8 +470,10 @@
         return all.some((f) => f.mappings.some((m) => m.name.name === o.name));
       case "settings":
       case "api":
-      // The README view stays open while it is written, also before the file exists.
+      // The README view stays open while it is written, also before the file exists;
+      // the sign-in setup too, before the project signs anyone in.
       case "readme":
+      case "signin":
         return true;
     }
   }
@@ -1638,6 +1641,8 @@
             <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} onopenmapping={(name) => select({ kind: "mapping", name })} />
           {:else if current?.kind === "mapping" && projectFile}
             <MappingPage {preview} name={current.name} formats={projectFile.catalog.formats} onapplied={applyPreview} ondelete={deleteMapping} />
+          {:else if current?.kind === "signin" && projectFile}
+            <SigninView project={projectFile} {preview} onsave={saveSettings} />
           {:else if current?.kind === "api" && projectFile}
             <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
           {:else if current?.kind === "diagram"}
@@ -1724,9 +1729,9 @@
               onopen={(kind, name) => select({ kind, name })}
             />
           {:else if tab === "design" && openApp && appPage && file}
-            <PageDesigner {preview} page={appPage} app={openApp} {file} settings={projectFile?.settings ?? null} onsavesettings={saveSettings} onapplied={applyPreview} />
+            <PageDesigner {preview} page={appPage} app={openApp} {file} settings={projectFile?.settings ?? null} onsavesettings={saveSettings} onapplied={applyPreview} onopen={select} />
           {:else if tab === "design" && page && file}
-            <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
+            <PageDesigner {preview} {page} {file} onapplied={applyPreview} onopen={select} />
           {:else if page}
             <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
               <div class="titlebar">

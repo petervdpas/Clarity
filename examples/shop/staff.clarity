@@ -1,0 +1,7 @@
+module staff
+
+// The shop's clerks: the people who sign in. The first one to sign in with a
+// password becomes the first clerk.
+entity Clerk
+    name: text(80), required, unique, label @clerkNameLabel
+    passwordHash: text, hashed, label @clerkPasswordHashLabel

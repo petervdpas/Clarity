@@ -244,7 +244,7 @@ fn the_designer_drops_a_declared_part_and_moves_it() {
     let dropped = apply(
         None,
         markup,
-        &Edit::CreateWidget { container: page_at, kind: WidgetKind::Custom, col: 1, row: 9, width: Some(8), caption: None, bind: None, part: Some("Arena".into()), height: Some(6) },
+        &Edit::CreateWidget { container: page_at, kind: WidgetKind::Custom, col: 1, row: 9, width: Some(8), caption: None, bind: None, part: Some("Arena".into()), height: Some(6), input: None, strategy: None, shows: None },
     )
     .unwrap_or_else(|e| panic!("{e}"));
     assert!(dropped.text.contains("  <Custom name=\"arena2\" at=\"1,9\" span=\"8\" rows=\"6\" part=\"Arena\" />\n"), "{}", dropped.text);

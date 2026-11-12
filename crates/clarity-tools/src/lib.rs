@@ -1449,7 +1449,7 @@ mod tests {
         assert_eq!(names, allowed);
     }
 
-    /// Windows and views are `.cxaml` files in the design folder (CXAML-SOURCE-PLAN.md):
+    /// Windows and views are `.cxaml` files in the design folder:
     /// the agent reads them by their paths and the overview lists them, but
     /// changes them only with the structural tools (docs/AGENT-TOOLS-PLAN.md,
     /// "add and change only through tools"): writing one is refused, naming the tools.

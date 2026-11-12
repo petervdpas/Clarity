@@ -54,13 +54,6 @@ json strategy_info(const std::string& name) {
     return nullptr;
 }
 
-bool listed(const json& list, const std::string& item) {
-    if (!list.is_array()) return false;
-    for (const auto& x : list)
-        if (x.is_string() && x.get<std::string>() == item) return true;
-    return false;
-}
-
 }  // namespace
 
 /// The sign-in of a database handle (Db::add_signin): it asks Clarity.Auth
@@ -71,68 +64,43 @@ public:
 
     const SigninSource& source() const override { return source_; }
 
+    /// One sign-in attempt: Clarity.Auth decides (signinBegin, signinDecide);
+    /// this looks the person up and stores what it is told. An attempt not
+    /// `counted` (the computer's user signed in at the start) counts no tries.
     int64_t attempt(Db& db, const std::string& target, const std::string& strategy, const json& inputs, bool counted) override {
-        auto refused = [] { return RefusedError(signin_refused()); };
-        // Only a strategy the project names, on a target the catalog lets it work on.
-        const SigninStrategy* used = nullptr;
-        for (const auto& s : source_.strategies)
-            if (s.name == strategy) used = &s;
-        json info = strategy_info(strategy);
-        if (!used || !info.is_object() || !listed(info.value("targets", json::array()), target)) throw refused();
-        json found;
-        try {
-            found = auth_call("find", {{"strategy", strategy}, {"inputs", inputs}});
-        } catch (const std::exception&) {
-            throw refused();
-        }
-        std::string role = found.value("role", ""), equals = found.value("equals", "");
-        std::vector<std::string> keys{"account:" + equals};
-        if (const ServedCall* call = served_call(); call && !call->address.empty()) keys.push_back("address:" + call->address);
-        if (counted) {
-            for (const auto& key : keys)
-                if (!auth_call("triesAllowed", {{"key", key}, {"tries", source_.tries}, {"window", source_.tries_seconds}}).get<bool>()) refuse(signin_too_many_tries());
-        }
-        auto failed = [&] {
-            if (counted)
-                for (const auto& key : keys) auth_call("triesFailed", {{"key", key}});
-            return refused();
+        auto refused = [](const json& answer) {
+            if (answer.value("refused", "") == "signinTooManyTries") return RefusedError(signin_too_many_tries());
+            return RefusedError(signin_refused());
         };
-        // The column of a role: the strategy's columns are in the catalog's order of its fields.
-        auto column = [&](const std::string& wanted) -> std::optional<std::string> {
-            const json& fields = info.value("fields", json::array());
-            for (size_t at = 0; at < fields.size(); ++at)
-                if (fields[at].value("role", "") == wanted) return at < used->columns.size() ? std::optional(used->columns[at]) : std::nullopt;
-            return std::nullopt;
-        };
-        auto by = column(role);
-        if (!by) throw failed();
+        json given = inputs.is_object() ? inputs : json::object();
+        json begin = {{"block", block()}, {"strategy", strategy}, {"inputs", given}, {"target", target}};
+        if (const ServedCall* call = served_call(); call && !call->address.empty()) begin["address"] = call->address;
+        json begun = auth_call("signinBegin", begin);
+        if (begun.contains("refused")) throw refused(begun);
+        std::string column = begun.value("column", ""), equals = begun.value("equals", "");
+        std::optional<std::string> secret;
+        if (begun.contains("secret") && begun["secret"].is_string()) secret = begun["secret"].get<std::string>();
+        auto person = person_by(db, column, secret, equals);
+        bool none = !person && no_people(db);
+        json decide = {{"block", block()}, {"strategy", strategy}, {"inputs", given}, {"keys", counted ? begun.value("keys", json::array()) : json::array()}, {"found", nullptr}, {"noPeople", none}};
+        if (person) decide["found"] = {{"stored", person->second}};
+        json decided = auth_call("signinDecide", decide);
         int64_t id = 0;
-        if (auto person = person_by(db, *by, column("secret"), equals)) {
-            bool checked = false;
+        if (decided.value("signedIn", false)) {
+            id = person ? person->first : 0;
+            store_columns(db, decided.value("store", json::object()), id);
+        } else if (decided.contains("make") && decided["make"].is_object()) {
+            // A first account the table cannot take (a required column without a default) is an ordinary refusal.
             try {
-                checked = auth_call("check", {{"strategy", strategy}, {"inputs", inputs}, {"stored", {{"secret", person->second}}}}).get<bool>();
+                id = make_person(db, decided["make"]);
             } catch (const std::exception&) {
-            }
-            if (!checked) throw failed();
-            id = person->first;
-            // What the strategy keeps after it (a recovery code used up), written back to the person's row.
-            json after = auth_call("afterSignin", {{"strategy", strategy}, {"inputs", inputs}, {"stored", {{"secret", person->second}}}});
-            if (after.is_object())
-                for (const auto& [kept_role, value] : after.items())
-                    if (auto kept = column(kept_role); kept && value.is_string()) keep(db, *kept, value.get<std::string>(), id);
-        } else if (info.value("firstAccount", false) && no_people(db)) {
-            try {
-                id = first_account(db, info, *used, strategy, inputs);
-            } catch (const std::exception&) {
-                throw failed();
+                throw RefusedError(signin_refused());
             }
         } else {
-            throw failed();
+            throw refused(decided);
         }
-        if (counted)
-            for (const auto& key : keys) auth_call("triesCleared", {{"key", key}});
         signed_in(db, id);
-        if (target == "desktop" && remembers(inputs)) remember(db, column("secret"), id);
+        if (target == "desktop" && remembers(given)) remember(db, secret, id);
         return id;
     }
 
@@ -240,10 +208,26 @@ private:
         return text && !text->empty() ? std::optional(*text) : std::nullopt;
     }
 
-    /// Writes `value` into `column` of person `id`.
-    void keep(Db& db, const std::string& column, const std::string& value, int64_t id) {
+    /// The project's `signin` block as Clarity.Auth's sign-in calls take it.
+    json block() const {
+        json strategies = json::array();
+        for (const auto& used : source_.strategies) strategies.push_back({{"name", used.name}, {"columns", used.columns}, {"options", source_.options_of(used)}});
+        return {{"strategies", strategies}, {"tries", source_.tries}, {"triesSeconds", source_.tries_seconds}};
+    }
+
+    /// Writes `store`, values by column, to the person's record `id`, in one UPDATE.
+    void store_columns(Db& db, const json& store, int64_t id) {
         Dialect d = db.dialect(source_.source);
-        db.at(source_.source).driver->execute("UPDATE " + quote(d, source_.table) + " SET " + quote(d, column) + " = " + mark(d, 1) + " WHERE " + quote(d, source_.key) + " = " + mark(d, 2), {sql::text(value), id});
+        std::string sets;
+        std::vector<SqlValue> values;
+        for (const auto& [column, value] : store.items()) {
+            if (!value.is_string()) continue;
+            values.push_back(sql::text(value.get<std::string>()));
+            sets += (sets.empty() ? "" : ", ") + quote(d, column) + " = " + mark(d, static_cast<int>(values.size()));
+        }
+        if (sets.empty()) return;
+        values.push_back(id);
+        db.at(source_.source).driver->execute("UPDATE " + quote(d, source_.table) + " SET " + sets + " WHERE " + quote(d, source_.key) + " = " + mark(d, static_cast<int>(values.size())), values);
     }
 
     static void close(const std::string& token) {
@@ -272,22 +256,17 @@ private:
         return !rows.empty() && !rows[0].empty() && sql::get_integer("count", rows[0][0]) == 0;
     }
 
-    /// Inserts the first person, with only the fields the strategy names;
-    /// every other column takes its default from the table.
-    int64_t first_account(Db& db, const json& info, const SigninStrategy& used, const std::string& strategy, const json& inputs) {
-        json made = auth_call("firstAccount", {{"strategy", strategy}, {"inputs", inputs}});
-        const json& fields = info.value("fields", json::array());
-        std::vector<std::string> columns;
+    /// Inserts a person with only `columns` (values by column); the other
+    /// columns take their defaults from the table.
+    int64_t make_person(Db& db, const json& columns) {
+        std::vector<std::string> names;
         std::vector<SqlValue> values;
-        for (size_t at = 0; at < fields.size() && at < used.columns.size(); ++at) {
-            std::string role = fields[at].value("role", "");
-            if (made.contains(role) && made[role].is_string()) {
-                columns.push_back(used.columns[at]);
-                values.push_back(sql::text(made[role].get<std::string>()));
-            }
+        for (const auto& [column, value] : columns.items()) {
+            names.push_back(column);
+            values.push_back(sql::text(value.is_string() ? value.get<std::string>() : std::string()));
         }
         Driver& driver = *db.at(source_.source).driver;
-        return driver.insert(insert(driver.dialect(), source_.table, source_.key, columns), values);
+        return driver.insert(insert(driver.dialect(), source_.table, source_.key, names), values);
     }
 
     void signed_in(Db& db, int64_t id) {

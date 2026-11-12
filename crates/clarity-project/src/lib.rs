@@ -217,10 +217,10 @@ pub struct Settings {
     pub title: Option<String>,
     /// The application's icon, a picture among its resources (`icon "app.png"`):
     /// its windows, its taskbar button, its program file and its web page show
-    /// it. Without one, Clarity's (docs/APP-ICON-SPLASH-PLAN.md).
+    /// it. Without one, Clarity's.
     #[serde(default)]
     pub icon: Option<String>,
-    /// The application's version (`version "1.2.0"`, docs/VERSION-PLAN.md):
+    /// The application's version (`version "1.2.0"`):
     /// `app.version` in code and `{app.version}` in texts; optional.
     #[serde(default)]
     pub version: Option<String>,
@@ -757,6 +757,9 @@ pub struct StrategyChoice {
     pub targets: Vec<&'static str>,
     /// Whether people choose its secret, so it can have a `minimum`.
     pub minimum: bool,
+    /// A provider's settings it takes, in the order written under its line
+    /// (`client`, `secret`, `tenant`, `issuer`, `register`); none for the others.
+    pub settings: Vec<&'static str>,
 }
 
 /// A field a strategy names, by its role.
@@ -773,12 +776,25 @@ pub struct RoleChoice {
 }
 
 /// The label and help of each strategy of Clarity.Auth's catalog, by name.
-const STRATEGY_TEXTS: [(&str, &str, &str); 4] = [
+const STRATEGY_TEXTS: [(&str, &str, &str); 7] = [
     ("password", "Password", "A name and a password; the password is kept as an Argon2id hash"),
     ("account", "Computer account", "The user signed in on the computer; on the desktop it signs in by itself when that user has a record"),
     ("token", "Token", "A long random token Clarity makes, typed or pasted in the sign-in window or given by a program that calls this one; kept as a hash"),
     ("recovery", "Recovery codes", "One-time codes shown once; each signs in once, for a person who lost their password or second factor"),
+    ("github", "GitHub", "Signs in at GitHub in the browser; found by the GitHub login or its verified e-mail address. Needs an OAuth app's client id and secret"),
+    ("microsoft", "Microsoft", "Signs in with a Microsoft account (work, school or personal) in the browser; found by its e-mail address. Needs an app registration's client id"),
+    ("openid", "OpenID provider", "Signs in at any OpenID provider (Google, GitLab, Okta, Keycloak) in the browser; found by the e-mail address or login it gives"),
 ];
+
+/// The settings each provider takes under its line.
+fn provider_settings(name: &str) -> Vec<&'static str> {
+    match name {
+        "github" => vec!["client", "secret", "register"],
+        "microsoft" => vec!["client", "secret", "tenant", "register"],
+        "openid" => vec!["client", "secret", "issuer", "register"],
+        _ => Vec::new(),
+    }
+}
 
 /// The label of each role a strategy's field has.
 const ROLE_TEXTS: [(&str, &str); 2] = [("match", "Found by"), ("secret", "Kept hashed in")];
@@ -800,6 +816,7 @@ pub fn strategy_choices() -> Vec<StrategyChoice> {
                     .collect(),
                 targets: s.targets.to_vec(),
                 minimum: s.fields.iter().any(|f| f.hash == Some("argon2id")),
+                settings: provider_settings(s.name),
             }
         })
         .collect()
@@ -1142,7 +1159,7 @@ pub(crate) fn stack_line(stack: &Stack) -> String {
 /// project file, where a missing block is reported.
 /// The icon the project file names is a picture among the resources; a
 /// resources folder that holds `icon.png` while the project names no icon
-/// is told to name it (docs/APP-ICON-SPLASH-PLAN.md).
+/// is told to name it.
 fn icon_problems(settings: &Settings, project: &clarity_spec::Project, file: &str) -> Vec<clarity_spec::Diagnostic> {
     use clarity_spec::Diagnostic;
     let Some(resources) = &project.resources else { return Vec::new() };

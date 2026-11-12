@@ -1,4 +1,4 @@
-// An application's version as the project file takes it (docs/VERSION-PLAN.md):
+// An application's version as the project file takes it:
 // major.minor.patch, with an optional pre-release, like 1.2.0 or 2.0.0-beta.1.
 
 /** A version as the project file takes it. */

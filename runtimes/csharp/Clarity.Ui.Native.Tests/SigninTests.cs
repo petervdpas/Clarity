@@ -199,6 +199,27 @@ public sealed class SigninTests
         Signin.Yours(true);
     }
 
+    /// <summary>A provider's settings go to Clarity.Auth, its secret read from the protected store, empty when not kept.</summary>
+    [Fact]
+    public void Signin_block_carries_a_provider_s_settings()
+    {
+        var github = new SigninStrategy("github", ["email"]) { Options = [("client", "app"), ("secret", "setting:githubSecret"), ("claim", "email")] };
+        var source = new SigninSource("members", "SignIn") { Program = "club", Strategies = [github, new SigninStrategy("password", ["email", "password_hash"])] };
+        var kept = new Dictionary<string, string>();
+        Secrets.Store = ((program, key) => kept.GetValueOrDefault($"{program}:{key}"), (program, key, value) => kept[$"{program}:{key}"] = value);
+        try
+        {
+            Assert.Equal("""{"client":"app","secret":"","claim":"email"}""", source.OptionsOf(github).ToJsonString());
+            kept["club:githubSecret"] = "s3cret";
+            Assert.Equal("""{"client":"app","secret":"s3cret","claim":"email"}""", source.OptionsOf(github).ToJsonString());
+            Assert.Equal("{}", source.OptionsOf(source.Strategies[1]).ToJsonString());
+        }
+        finally
+        {
+            Secrets.Store = null;
+        }
+    }
+
     [Fact]
     public void Signin_me_is_the_record_signed_in_and_nobody_is_refused()
     {

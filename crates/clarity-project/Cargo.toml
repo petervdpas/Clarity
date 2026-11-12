@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 clarity-spec.workspace = true
 clarity-formats = { path = "../../runtimes/rust-formats", version = "0.2.0" }
-clarity-auth = { path = "../../runtimes/rust-auth", version = "0.1.0" }
+clarity-auth = { path = "../../runtimes/rust-auth", version = "0.2.0" }
 clarity-db.workspace = true
 serde.workspace = true
 # Clarity's folders, kept in folders.json.

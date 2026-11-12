@@ -115,6 +115,9 @@ fn new_parts_get_the_first_free_name() {
         bind: None,
         part: None,
         height: None,
+        input: None,
+        strategy: None,
+        shows: None,
     };
     let text = apply(None, &markup, &edit).unwrap().text;
     // `button1` is taken, so the new button is `button2`, with its kind's own caption (written only when it differs).

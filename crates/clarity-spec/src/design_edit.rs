@@ -476,7 +476,7 @@ impl Editor<'_> {
                 Ok(Some(*target))
             }
             Edit::PlaceWidget { container, props } => self.place_widget(designed, *container, props),
-            Edit::CreateWidget { container, kind, col, row, width, caption, bind, part, height } => {
+            Edit::CreateWidget { container, kind, col, row, width, caption, bind, part, height, input, strategy, shows } => {
                 let mut props = widgets::new_props(*kind, *col, *row);
                 if let Some(width) = width {
                     props.width = *width;
@@ -489,6 +489,9 @@ impl Editor<'_> {
                     props.caption = caption.clone();
                 }
                 props.bind = bind.clone();
+                props.input = input.clone();
+                props.strategy = strategy.clone();
+                props.shows = shows.clone();
                 self.place_widget(designed, *container, &props)
             }
             Edit::UpdateWidget { item, container, props } => self.update_widget(designed, *item, *container, props),

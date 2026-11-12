@@ -265,8 +265,8 @@ fn settings_kept(project: &Project, entity: &Entity) -> String {
 /// (docs/APP-CAPABILITIES-PLAN.md step 5): snake_case, so no Clarity field
 /// (camelCase) has its name.
 const VERSION_FIELD: &str = "row_version";
-/// Its name on the wire to Clarity.UI, camelCase as every name there.
-const VERSION_WIRE: &str = "rowVersion";
+/// Its name on the wire to Clarity.UI, the same on every stack.
+const VERSION_WIRE: &str = Project::VERSION_WIRE;
 
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;

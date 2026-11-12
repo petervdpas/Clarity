@@ -15,7 +15,6 @@
   import { themeChoice } from "@clarity/ui/screen/scheme.svelte.ts";
   import StackFields from "./StackFields.svelte";
   import FormatOptions from "./FormatOptions.svelte";
-  import SigninSettings from "./SigninSettings.svelte";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { AuthKind } from "@clarity/ui/generated/AuthKind.ts";
   import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
@@ -408,18 +407,6 @@
             Clarity does.
           </p>
         </div>
-      </section>
-
-      <section>
-        <h2>Who is using it</h2>
-        <p class="intro">People sign in to the program, by the strategies the project picks.</p>
-        <SigninSettings
-          signin={settings.signin ?? null}
-          strategies={catalog.strategies}
-          entities={preview.project.files.flatMap((f) => f.entities).filter((e) => !e.settings && !e.record)}
-          targets={settings.stack.targets}
-          onchange={(signin) => save({ signin })}
-        />
       </section>
 
       <section>

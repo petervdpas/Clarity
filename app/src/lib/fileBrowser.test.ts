@@ -1,4 +1,4 @@
-// What Clarity's file browser gives back for each use (docs/PROJECT-BROWSER-PLAN.md):
+// What Clarity's file browser gives back for each use:
 // a project, a folder, a file, or a new file's place and name.
 
 import { test } from "node:test";

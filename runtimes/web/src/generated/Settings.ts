@@ -21,11 +21,11 @@ title: string | null,
 /**
  * The application's icon, a picture among its resources (`icon "app.png"`):
  * its windows, its taskbar button, its program file and its web page show
- * it. Without one, Clarity's (docs/APP-ICON-SPLASH-PLAN.md).
+ * it. Without one, Clarity's.
  */
 icon: string | null, 
 /**
- * The application's version (`version "1.2.0"`, docs/VERSION-PLAN.md):
+ * The application's version (`version "1.2.0"`):
  * `app.version` in code and `{app.version}` in texts; optional.
  */
 version: string | null, stack: Stack, datasources: Array<DataSource>, 

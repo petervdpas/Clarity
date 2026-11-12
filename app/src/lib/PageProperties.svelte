@@ -1,6 +1,7 @@
 <script lang="ts">
   import { VERSION_PATTERN, versionWritten } from "./version";
   import type { Settings } from "@clarity/ui/generated/Settings.ts";
+  import type { Selected } from "./selection";
   import IconField from "./IconField.svelte";
   import FrameProperties from "./FrameProperties.svelte";
   import TextField from "./TextField.svelte";
@@ -11,6 +12,7 @@
   import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
   import { eventHandler, freePartName, partGrowsEdit, wireEvent } from "./codeParts";
   import { applyEdit } from "./applyEdit";
+  import { signinChoices, signinViews } from "./signinView";
   import type { Orientation } from "@clarity/ui/generated/Orientation.ts";
   import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -38,6 +40,7 @@
     app = null,
     settings = null,
     onsavesettings = null,
+    onopen = null,
   }: {
     preview: Preview;
     /** The window, view or app (as a page) of what is picked. */
@@ -52,6 +55,8 @@
     /** The project file's settings, which the app's version is one of; with how to save them. */
     settings?: Settings | null;
     onsavesettings?: ((settings: Settings) => void) | null;
+    /** Opens another part of the project in the main area, as the project tree does. */
+    onopen?: ((selected: Selected) => void) | null;
   } = $props();
 
   const location = $derived(selected === null ? null : locateWidget(preview, page, selected));
@@ -338,6 +343,39 @@
       <span>Name</span>
       <input value={p.name ?? partName} title="The name the code behind uses" onchange={(e) => update({ name: textOf(e) ?? partName })} />
     </label>
+
+    {#if p.kind === "signin"}
+      <!-- What the sign-in part offers is the project's sign-in setup, not the window's. -->
+      <p class="note">
+        {#if preview.project.signin}
+          Offers {preview.project.signin.strategies.map((s) => s.name).join(", ") || "nothing yet"}, as the project's sign-in setup says.
+        {:else}
+          The project signs nobody in yet.
+        {/if}
+      </p>
+      {#if onopen}
+        <button class="open-signin" onclick={() => onopen?.({ kind: "signin", name: "" })}>Open the sign-in setup</button>
+      {/if}
+    {/if}
+
+    {#if p.kind === "signinField" || p.kind === "signinButton" || p.kind === "signinOther"}
+      <!-- What a sign-in part signs in with: an input or strategy of the project's sign-in setup, or another sign-in view. -->
+      {@const field = p.kind === "signinField" ? "input" : p.kind === "signinButton" ? "strategy" : "shows"}
+      {@const choices = signinChoices(p.kind, preview.project.signin ?? null, page.name.name, signinViews(preview.project.files.flatMap((f) => f.pages)))}
+      {@const current = p.kind === "signinField" ? p.input : p.kind === "signinButton" ? p.strategy : p.shows}
+      <label class="prop">
+        <span>{p.kind === "signinField" ? "Input" : p.kind === "signinButton" ? "Signs in with" : "Shows"}</span>
+        <select value={current ?? ""} onchange={(e) => update({ [field]: e.currentTarget.value || null })}>
+          {#if !current}<option value="">(choose)</option>{/if}
+          {#each choices as choice (choice)}<option value={choice}>{choice}</option>{/each}
+        </select>
+      </label>
+    {/if}
+    {#if info.category === "signin"}
+      {#if onopen}
+        <button class="open-signin" onclick={() => onopen?.({ kind: "signin", name: "" })}>Open the sign-in setup</button>
+      {/if}
+    {/if}
 
     {#if p.kind === "markdown" || p.kind === "image"}
       <!-- A key whose value in each language is a file of the resources, set under i18n. -->
@@ -1549,6 +1587,14 @@
     font-size: 12px;
   }
 
+  .note {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .open-signin {
+    align-self: flex-start;
+  }
   .muted {
     color: var(--text-muted);
     font-weight: 400;

@@ -1,4 +1,4 @@
-//! Windows, views and the app as `.cxaml` (docs/CXAML-SOURCE-PLAN.md):
+//! Windows, views and the app as `.cxaml`:
 //! every page and app of every example, and of the fixture with every part,
 //! written as its `.cxaml` and read back is the same; each part's span is
 //! its element's place in the file.

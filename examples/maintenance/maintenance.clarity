@@ -1,0 +1,247 @@
+module maintenance
+
+// A project whose development ledger is reviewed: its name and the folder
+// of its ledger, which holds an index (README.md) and one Markdown file per
+// piece. Clarity is one of them.
+entity Project
+    name: text(80), required, unique, label @projectNameLabel
+    ledgerFolder: text(400), required, label @projectLedgerFolderLabel
+
+// Who reviewed an entry.
+enum Reviewer
+    Peter label @reviewerPeter
+    Claude label @reviewerClaude
+
+// A row of the ledger's tree: a group of the index, or an entry under it.
+record Entry
+    key: text
+    parent: text
+    label: text
+    status: text
+    reviewed: text
+    body: text
+
+// What the person sets for themselves: the ledger folder the picked project
+// points the ledger store at, and the project picked last.
+settings
+    language
+    theme
+    ledgerFolder: folder, label @ledgerFolderSetting
+    lastProject: text, label @lastProjectSetting
+
+// The rest of the first line that starts with `prefix`; empty when none does.
+function lineAfter(body: text, prefix: text) -> text
+    for line in split(body, "\n")
+        if startsWith(line, prefix)
+            return trim(slice(line, length(prefix) + 1, length(line)))
+    return ""
+
+// An entry's title, its first heading; the piece's name when it has none.
+function titleOf(body: text, piece: text) -> text
+    let title = lineAfter(body, "# ")
+    if title == ""
+        return piece
+    return title
+
+// The word of an entry's status line: built, partial, not built, needs decision.
+function statusOf(body: text) -> text
+    let line = lineAfter(body, "Status: ")
+    let stop = indexOf(line, ".")
+    if stop == 0
+        return line
+    return slice(line, 1, stop - 1)
+
+// The lines under a `## heading`, up to the next heading.
+function sectionOf(body: text, heading: text) -> text
+    let lines: list<text> = []
+    let inside = false
+    for line in split(body, "\n")
+        if startsWith(line, "## ")
+            inside = trim(slice(line, 4, length(line))) == heading
+        else
+            if inside
+                lines = lines + [line]
+    return trim(join(lines, "\n"))
+
+// The other entries an entry links to, as `[name](name.md)`, each once.
+function linksOf(body: text) -> text
+    let names: list<text> = []
+    let pieces = split(body, "](")
+    for i in 2 to count(pieces)
+        let rest = pieces[i]
+        let stop = indexOf(rest, ".md)")
+        if stop > 1
+            let name = slice(rest, 1, stop - 1)
+            if indexOf(name, "/") == 0 and not (names contains name)
+                names = names + [name]
+    return join(names, ", ")
+
+// The piece a ledger file is about: its name without `.md`.
+function pieceOf(fileName: text) -> text
+    return slice(fileName, 1, length(fileName) - 3)
+
+code Main
+    handler windowOpened
+        loadProjects()
+
+    // Projects may have been added, changed or removed.
+    handler windowReturned
+        loadProjects()
+
+    handler loadProjects
+        projects = find p in Project order by p.name
+        for p in projects
+            if p.name == settings.lastProject
+                projectList.selected = p
+                showLedger(p)
+
+    handler projectPicked
+        showLedger(projectList.selected)
+
+    // Points the ledger store at the project's ledger and lists its entries.
+    handler showLedger(project: Project)
+        settings.ledgerFolder = project.ledgerFolder
+        settings.lastProject = project.name
+        projectName = project.name
+        loadEntries()
+
+    handler reloadClicked
+        loadEntries()
+
+    // The entries in the groups and order of the ledger's index, then the
+    // entries the index does not list yet.
+    handler loadEntries
+        let rows: list<Entry> = []
+        let found = files f in ledger where f.extension == "md" order by f.path
+        let index = ""
+        for f in found
+            if f.path == "README.md"
+                index = read text of f
+        let listed: list<text> = []
+        let group = ""
+        for line in split(index, "\n")
+            if startsWith(line, "### ")
+                group = trim(slice(line, 5, length(line)))
+                let g = new Entry
+                g.key = "group:" + group
+                g.label = group
+                rows = rows + [g]
+            else
+                if startsWith(line, "| [")
+                    let piece = slice(line, 4, indexOf(line, "]") - 4)
+                    listed = listed + [piece]
+                    rows = rows + [entryOf(found, piece, "group:" + group)]
+        let unlisted: list<Entry> = []
+        for f in found
+            let piece = pieceOf(f.name)
+            if indexOf(f.path, "/") == 0 and f.path != "README.md" and not (listed contains piece)
+                unlisted = unlisted + [entryOf(found, piece, "group:unlisted")]
+        if count(unlisted) > 0
+            let g = new Entry
+            g.key = "group:unlisted"
+            g.label = @notInIndexGroup
+            rows = rows + [g] + unlisted
+        entries = rows
+        clearEntry()
+
+    handler clearEntry
+        piece = ""
+        entryTitle = ""
+        entryStatus = ""
+        entryBody = ""
+
+    handler entryPicked
+        let e = entryTree.selected
+        if e.parent == ""
+            return
+        piece = e.key
+        entryTitle = e.label
+        entryStatus = e.status
+        entryBody = e.body
+        related = linksOf(e.body)
+        codePaths = sectionOf(e.body, "Code") + "\n\n" + sectionOf(e.body, "Tests")
+        oldReferences = sectionOf(e.body, "Was")
+        reviewed = false
+        reviewer = Reviewer.Peter
+        reviewedOn = ""
+        notes = ""
+        ownReferences = ""
+        let found = files f in ledger where f.path == "reviews/" + piece + ".md"
+        for f in found
+            let r = read text of f
+            reviewed = lineAfter(r, "Reviewed: ") == "yes"
+            if lineAfter(r, "By: ") == "Claude"
+                reviewer = Reviewer.Claude
+            reviewedOn = lineAfter(r, "On: ")
+            notes = sectionOf(r, "Notes")
+            ownReferences = sectionOf(r, "References")
+
+    handler reviewClicked
+        if piece == ""
+            message info @pickAnEntry
+            return
+        reviewPanel.visible = true
+
+    // Writes the review beside the ledger, where Claude reads and writes
+    // reviews too, and marks the entry in the tree.
+    handler saveReviewClicked
+        if piece == ""
+            return
+        if reviewed and reviewedOn == ""
+            reviewedOn = "" + today()
+        let by = "Peter"
+        if reviewer == Reviewer.Claude
+            by = "Claude"
+        let mark = "no"
+        if reviewed
+            mark = "yes"
+        write reviewFile(piece, mark, by, reviewedOn, notes, ownReferences) to ledger "reviews/" + piece + ".md"
+        let rows: list<Entry> = []
+        for e in entries
+            if e.key == piece
+                if reviewed
+                    e.reviewed = "yes"
+                else
+                    e.reviewed = ""
+            rows = rows + [e]
+        entries = rows
+        message info @reviewSaved(piece = piece)
+
+// One row of the tree for the ledger file of `piece`, with its review's mark.
+action entryOf(found: list<file>, piece: text, parent: text) -> Entry
+    effects files.read
+    let e = new Entry
+    e.key = piece
+    e.parent = parent
+    e.label = piece
+    for f in found
+        if f.path == piece + ".md"
+            e.body = read text of f
+            e.label = titleOf(e.body, piece)
+            e.status = statusOf(e.body)
+        if f.path == "reviews/" + piece + ".md"
+            if lineAfter(read text of f, "Reviewed: ") == "yes"
+                e.reviewed = "yes"
+    return e
+
+// A review as the file keeps it.
+function reviewFile(piece: text, mark: text, by: text, on: text, notes: text, references: text) -> text
+    return "# Review: " + piece + "\n\nReviewed: " + mark + "\nBy: " + by + "\nOn: " + on + "\n\n## Notes\n\n" + notes + "\n\n## References\n\n" + references + "\n"
+
+code Projects
+    handler projectsOpened
+        projects = find p in Project order by p.name
+
+    handler projectAdded
+        let p = new Project
+        p.name = @newProjectName
+        p.ledgerFolder = @newProjectFolder
+        save p
+        projects = find x in Project order by x.name
+
+    handler projectChanged
+        save projectTable.selected
+
+    handler projectRemoved
+        delete projectTable.selected
+        projects = find x in Project order by x.name

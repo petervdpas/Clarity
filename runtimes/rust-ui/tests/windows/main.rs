@@ -31,6 +31,7 @@ mod dialogs_long_call;
 mod dialogs_windows;
 mod signin;
 mod signin_part;
+mod signin_view;
 mod slideouts;
 mod splash;
 mod frame_keyboard;

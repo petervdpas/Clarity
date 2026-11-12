@@ -268,7 +268,7 @@ fn a_placed_part_is_named_after_what_it_shows() {
     use clarity_spec::widgets::WidgetKind;
     let markup = card();
     let page = read_page(&markup, "").0.expect("the page").span.start;
-    let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from), part: None, height: None };
+    let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from), part: None, height: None, input: None, strategy: None, shows: None };
     let text = apply(None, &markup, &create(WidgetKind::Table, Some("orders"))).unwrap().text;
     assert!(part_line(&text, "<Table").starts_with("<Table name=\"ordersTable\" "), "{text}");
     // A new button with its kind's own caption, written only when it differs.

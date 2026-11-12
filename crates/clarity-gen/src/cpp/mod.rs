@@ -192,7 +192,11 @@ pub(crate) fn signin_source(project: &Project, settings: &Settings) -> Option<St
     let strategies: Vec<String> = plan
         .strategies
         .iter()
-        .map(|(name, columns)| format!("{{{}, {{{}}}}}", string(name), columns.iter().map(|c| string(c)).collect::<Vec<_>>().join(", ")))
+        .map(|(name, columns)| {
+            // A provider's settings for Clarity.Auth; left out for a strategy without them.
+            let options = plan.options.get(name).map(|o| format!(", {{{}}}", o.iter().map(|(k, v)| format!("{{{}, {}}}", string(k), string(v))).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+            format!("{{{}, {{{}}}{options}}}", string(name), columns.iter().map(|c| string(c)).collect::<Vec<_>>().join(", "))
+        })
         .collect();
     Some(format!(
         "\n/// Who uses the program and how they sign in (the project's `signin`).\nconst clarity::SigninSource signin_source{{.source = {}, .table = {}, .key = {}, .page = {}, .targets = {{{}}}, .strategies = {{{}}}, .session_seconds = {}, .tries = {}, .tries_seconds = {}, .program = {}, .remember_seconds = {}{}}};\n",

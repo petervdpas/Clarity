@@ -1,4 +1,4 @@
-// Clarity's own file browser for the whole app (docs/PROJECT-BROWSER-PLAN.md),
+// Clarity's own file browser for the whole app,
 // in place of the system's file and folder windows: `browse({...})` shows it
 // (FileBrowser.svelte, mounted once in App) and gives the path chosen, or
 // null on Cancel, as Clarity's dialogs module does for its dialogs.

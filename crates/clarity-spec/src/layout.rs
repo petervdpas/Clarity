@@ -33,6 +33,9 @@ pub const ROW_HEIGHT: u32 = 36;
 /// The size of a splash page that names none, in the screen's units.
 pub const SPLASH_SIZE: (u32, u32) = (480, 280);
 
+/// The size of a sign-in window that names none, in the screen's units.
+pub const SIGNIN_SIZE: (u32, u32) = (420, 380);
+
 /// The least and most a project's `row height` may be, in pixels.
 pub const ROW_HEIGHTS: (u32, u32) = (24, 64);
 

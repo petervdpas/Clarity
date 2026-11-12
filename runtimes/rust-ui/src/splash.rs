@@ -1,4 +1,4 @@
-//! An application's splash screen (docs/APP-ICON-SPLASH-PLAN.md, step 3):
+//! An application's splash screen:
 //! the page the app names shows first while the app's `on start` runs (on
 //! the desktop in a borderless window in the middle of the screen, in the
 //! browser over the whole page); it says what loads as code sets

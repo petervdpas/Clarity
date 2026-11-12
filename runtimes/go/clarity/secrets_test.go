@@ -50,3 +50,27 @@ func TestASecretGoesToTheStoreOnlyWhenItChanged(t *testing.T) {
 		t.Fatalf("an empty secret never kept was written")
 	}
 }
+
+// A provider's settings go to Clarity.Auth in the block, its secret read
+// from the program's protected store, empty when it is not kept.
+func TestSigninBlockCarriesProviderOptions(t *testing.T) {
+	defer func() { Secrets = nil }()
+	source := SigninSource{Program: "shop", Strategies: []SigninStrategy{
+		{Name: "github", Columns: []string{"email"}, Options: [][2]string{{"client", "abc"}, {"secret", "setting:githubSecret"}, {"claim", "email"}}},
+		{Name: "password", Columns: []string{"email", "password_hash"}},
+	}}
+	optionsOf := func(at int) map[string]string {
+		return source.block()["strategies"].([]map[string]any)[at]["options"].(map[string]string)
+	}
+	if got := optionsOf(0)["secret"]; got != "" {
+		t.Errorf("secret without a store %q, want empty", got)
+	}
+	Secrets = &countingStore{kept: map[string]string{"shop/githubSecret": "s3cret"}}
+	got := optionsOf(0)
+	if got["client"] != "abc" || got["secret"] != "s3cret" || got["claim"] != "email" {
+		t.Errorf("options %v", got)
+	}
+	if got := optionsOf(1); len(got) != 0 {
+		t.Errorf("password options %v, want none", got)
+	}
+}

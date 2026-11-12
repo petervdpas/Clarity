@@ -28,6 +28,10 @@ obj/
 
 # The Release Helper's plans; it deletes each when done.
 /releases/
+# The native libraries a Release build copies into each C# package for packing;
+# the release workflow places every system's own.
 /runtimes/csharp/Clarity.Audio/runtimes/
 /runtimes/csharp/Clarity.Video/runtimes/
 /runtimes/csharp/Clarity.Image/runtimes/
+/runtimes/csharp/Clarity.Formats/runtimes/
+/runtimes/csharp/Clarity.Auth/runtimes/

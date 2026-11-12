@@ -1,4 +1,4 @@
-//! What Clarity's own file browser lists of a folder (docs/PROJECT-BROWSER-PLAN.md).
+//! What Clarity's own file browser lists of a folder.
 //! The backend lists and the screen shows: folders first, then files, by
 //! name; hidden ones only when asked; only the kinds of file a use can pick;
 //! and Clarity's projects told exactly, with the reader opening uses: a

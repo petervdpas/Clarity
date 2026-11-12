@@ -16,7 +16,7 @@ import { gapOf, rowAt, type DesignKey } from "@clarity/ui/screen/pages.ts";
 
 /** What is dragged onto the window: a new part, a field, a part moved or sized, or a frame region. */
 export type PageDragSource =
-  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string }
+  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string; input?: string; strategy?: string; shows?: string }
   | { kind: "field"; widget: WidgetKind; bind: string; caption: string; width: number; height: number; label: string }
   | { kind: "move"; item: DesignKey; from: DesignKey; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
   | { kind: "resize"; item: DesignKey; props: WidgetProps; label: string }

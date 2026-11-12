@@ -42,7 +42,16 @@ pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clar
     let _ = std::fs::remove_dir_all(&root);
     copy(&fixtures.join("everything"), &root.join("everything"));
     let file = root.join("everything.clarity");
-    let project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp desktop cli", &format!("stack {stack}"));
+    let mut project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp desktop cli", &format!("stack {stack}"));
+    if !stack.split_whitespace().any(|t| t == "desktop") {
+        // In a browser alone people sign in on the web, and nothing remembers them: no keep me signed in.
+        project_text = project_text.replace("signin Member on desktop cli", "signin Member on web cli").replace("        remember 30 days when asked\n", "");
+        let view = root.join("everything/design/PasswordView.cxaml");
+        let markup = std::fs::read_to_string(&view).unwrap();
+        let kept: Vec<&str> = markup.lines().filter(|l| !l.trim_start().starts_with("<SigninRemember")).collect();
+        assert!(kept.len() < markup.lines().count(), "the password view keeps people signed in when asked");
+        std::fs::write(&view, kept.join("\n") + "\n").unwrap();
+    }
     std::fs::write(&file, &project_text).unwrap();
     let settings = clarity_project::parse(&project_text).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
     let module = root.join("everything/everything.clarity");

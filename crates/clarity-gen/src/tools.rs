@@ -267,7 +267,7 @@ fn compiler(probe: &dyn Probe, compilers: &[&str]) -> Option<String> {
     })
 }
 
-/// The manual's page on installing the build tools (docs/manual/setup.tools.md).
+/// The manual's page on installing the build tools (manual/setup.tools.md).
 pub const SETUP_TOPIC: &str = "setup.tools";
 
 /// Where that page tells how to install something: a heading's anchor per
@@ -500,7 +500,7 @@ pub fn report(stacks: &[StackTools]) -> String {
         out.push_str(&format!("{}: {}\n", stack_name(s.backend, s.ui), said.join("; ")));
     }
     if stacks.iter().any(|s| !s.missing.is_empty()) {
-        out.push_str("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n");
+        out.push_str("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or manual/setup.tools.md).\n");
     }
     out
 }

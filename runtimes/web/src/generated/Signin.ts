@@ -40,4 +40,9 @@ rememberAsks: boolean,
  * being the default (`shows password, recovery, account`); empty for
  * every strategy of the block that works on the target, in block order.
  */
-shows: Array<string>, };
+shows: Array<string>, 
+/**
+ * Whether the sign-in part lets people pick their language (`language
+ * picker`); off without the line.
+ */
+languagePicker: boolean, };

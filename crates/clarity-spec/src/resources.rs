@@ -341,6 +341,17 @@ fn names_contain(names: &[&str], name: &str) -> bool {
     names.contains(&name)
 }
 
+/// Every part of `widgets`, at any depth, in the order `each_widget` visits them.
+pub(crate) fn all_widgets<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
+    for widget in widgets {
+        out.push(widget);
+        all_widgets(&widget.children, out);
+        for page in &widget.pages {
+            all_widgets(&page.children, out);
+        }
+    }
+}
+
 pub(crate) fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {
     for widget in widgets {
         found(widget);

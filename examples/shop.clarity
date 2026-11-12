@@ -7,6 +7,12 @@ project Shop
     language "en"
     currency EUR
     theme Shop Night Day
+    signin Clerk on desktop
+        password name passwordHash
+            minimum 8
+        account name
+        language picker
+        remember 30 days when asked
     datasource main sqlite "data/shop.db"
     datasource prices csv "data/prices.csv" external
         separator ";"

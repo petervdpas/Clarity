@@ -861,7 +861,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
-    // The texts that show the app's version carry it, in every stack (docs/VERSION-PLAN.md).
+    // The texts that show the app's version carry it, in every stack.
     let filled = clarity_spec::translations::with_app_slots(project);
     let project = &filled;
     check_stores(project, settings)?;
@@ -900,7 +900,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if settings.stack.has(clarity_project::Target::Desktop) {
         with_codecs(&mut files, crate::codec_libraries(project, settings)?, settings.stack.backend);
     }
-    // The package carries the app's version, as each stack's build keeps it (docs/VERSION-PLAN.md).
+    // The package carries the app's version, as each stack's build keeps it.
     if let Some(version) = &project.version {
         versioned(&mut files, version);
     }

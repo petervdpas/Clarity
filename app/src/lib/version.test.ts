@@ -1,4 +1,4 @@
-// The version a field writes into the project file (docs/VERSION-PLAN.md).
+// The version a field writes into the project file.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -6,7 +6,7 @@
      runtimes/csharp/v followed by the version. The test projects are not packed. -->
 <Project>
   <PropertyGroup>
-    <Version>0.92.0</Version>
+    <Version>0.93.0</Version>
     <Authors>Peter van de Pas</Authors>
     <PackageLicenseFile>assets/LICENSE.txt</PackageLicenseFile>
     <PackageIcon>assets/icon.png</PackageIcon>

@@ -50,6 +50,23 @@
       <rect x="10" y="3" width="28" height="6" rx="1.5" />
       <rect x="10" y="11" width="28" height="6" rx="1.5" />
       <rect x="22" y="19" width="16" height="6" rx="1.5" class="fill" />
+    {:else if kind === "signinField"}
+      <line x1="6" y1="7" x2="20" y2="7" />
+      <rect x="4" y="11" width="40" height="12" rx="2" />
+    {:else if kind === "signinButton"}
+      <rect x="4" y="8" width="40" height="12" rx="2" class="fill" />
+      <line x1="16" y1="14" x2="32" y2="14" />
+    {:else if kind === "signinRemember"}
+      <rect x="6" y="9" width="10" height="10" rx="2" class="fill" />
+      <line x1="20" y1="14" x2="42" y2="14" />
+    {:else if kind === "signinLanguage"}
+      <line x1="6" y1="7" x2="20" y2="7" />
+      <rect x="4" y="11" width="40" height="12" rx="2" />
+      <polyline points="34,15 37,18 40,15" />
+    {:else if kind === "signinOther"}
+      <line x1="6" y1="16" x2="36" y2="16" />
+    {:else if kind === "signinRefusal"}
+      <line x1="6" y1="14" x2="40" y2="14" />
     {:else if kind === "switch"}
       <rect x="14" y="8" width="20" height="12" rx="6" class="fill" />
       <circle cx="28" cy="14" r="4" />

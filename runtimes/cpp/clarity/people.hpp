@@ -36,15 +36,19 @@ class Terminal;
 /// The name of the session cookie a served program sets.
 inline constexpr const char* session_cookie = "clarity_session";
 
-/// One strategy the project uses: its name in Clarity.Auth's catalog and
-/// the columns of the table of people it names, in the catalog's order of
-/// roles (`password email passwordHash` is {"email", "password_hash"}).
 /// The name of the remembered desktop sign-in among the program's secrets.
 inline constexpr const char* remembered_name = "clarityRemembered";
 
+/// One strategy the project uses: its name in Clarity.Auth's catalog and
+/// the columns of the table of people it names, in the catalog's order of
+/// roles (`password email passwordHash` is {"email", "password_hash"}).
+/// A provider's settings for Clarity.Auth (client, secret, tenant, issuer,
+/// register, claim) are its options; a secret of `setting:<name>` is the
+/// program's secret setting of that name. None for a strategy that is no provider.
 struct SigninStrategy {
     std::string name;
     std::vector<std::string> columns;
+    std::vector<std::pair<std::string, std::string>> options;
 };
 
 /// The project's `signin` block as the program uses it: where its people
@@ -80,6 +84,9 @@ struct SigninSource {
     bool on(const std::string& target) const;
     /// Whether the project names strategy `name`.
     bool uses(const std::string& name) const;
+    /// The settings of `strategy` as Clarity.Auth takes them, the secret
+    /// read from the program's protected store; "" when it is not kept.
+    nlohmann::json options_of(const SigninStrategy& strategy) const;
 };
 
 /// Clarity's words when signing in did not work: signinRefused.

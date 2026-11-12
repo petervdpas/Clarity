@@ -1,4 +1,4 @@
-// What Clarity's file browser gives back for each use (docs/PROJECT-BROWSER-PLAN.md),
+// What Clarity's file browser gives back for each use,
 // apart from the window, so it is tested on its own.
 
 import type { ProjectInfo } from "@clarity/ui/generated/ProjectInfo.ts";

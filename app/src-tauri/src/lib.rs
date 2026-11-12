@@ -28,6 +28,7 @@ mod migrations;
 mod splash;
 mod backups;
 mod resource_urls;
+mod own_build;
 
 use crate::fail_safe::Held;
 use std::path::{Path, PathBuf};
@@ -120,7 +121,7 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         p == file
             || *p == dir.join(clarity_spec::README_FILE)
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
-            // A window's or view's own file, in its module's folder (docs/CXAML-SOURCE-PLAN.md).
+            // A window's or view's own file, in its module's folder.
             || (clarity_spec::cxaml::is_page_file(&p.to_string_lossy()) && clarity_spec::cxaml::project_dir_of(p) == Some(dir))
             // A web API's description and the module Clarity writes from it (DESIGN 5.23).
             || *p == apis
@@ -229,7 +230,7 @@ fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistorySt
     if let Err(err) = clarity_project::ide::set_open_project(&file) {
         logging::line(&err);
     }
-    // The file browser's Recent projects (docs/PROJECT-BROWSER-PLAN.md).
+    // The file browser's Recent projects.
     if let Err(err) = clarity_project::recent::remember_project(&file) {
         logging::line(&err);
     }
@@ -277,7 +278,7 @@ fn apply_edit(
 }
 
 /// Moves every page still written in a module's file into its own `.cxaml`
-/// in `design/` (docs/CXAML-SOURCE-PLAN.md): Move pages into design, under
+/// in `design/`: Move pages into design, under
 /// Problems, as `clarity convert-pages` does. One change for Undo.
 #[tauri::command]
 fn move_pages_out(state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
@@ -790,6 +791,8 @@ fn window_title(name: &str, version: &str, dev_release: Option<&str>) -> String 
 }
 
 pub fn run() {
+    // First, before any thread: nothing the IDE starts sees its own build folder on the library path.
+    own_build::leave_out_own_build();
     tauri::Builder::default()
         .setup(|app| {
             // The splash screen first, so something shows while the rest starts.

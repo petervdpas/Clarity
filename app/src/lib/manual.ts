@@ -1,6 +1,6 @@
 // Clarity's manual in its window: where a link on a page leads, and which
 // page F1 opens on each tab. Headings' anchors come from markdown.ts; the
-// pages are the Markdown files of docs/manual, which the backend embeds.
+// pages are the Markdown files of manual, which the backend embeds.
 
 /** Where a link leads: a topic (or the language reference, "reference"),
  *  a heading on it, or null for anywhere the manual's window does not go. */

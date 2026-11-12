@@ -13,7 +13,9 @@ fn call(op: &str, args: Value) -> Result<Value, clarity_auth::Problem> {
 fn the_catalog_names_each_strategy_its_fields_inputs_and_targets() {
     let catalog = call("catalog", json!({})).unwrap();
     let names: Vec<&str> = catalog.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["password", "account", "token", "recovery"]);
+    assert_eq!(names, ["password", "account", "token", "recovery", "github", "microsoft", "openid"]);
+    assert_eq!(catalog[4]["provider"], json!(true));
+    assert_eq!(catalog[0]["provider"], json!(false));
     let password = &catalog[0];
     assert_eq!(password["inputs"], json!(["name", "password"]));
     assert_eq!(password["fields"], json!([{"role": "match", "kinds": ["text", "email"]}, {"role": "secret", "kinds": ["text"], "hash": "argon2id"}]));
@@ -89,7 +91,7 @@ fn a_session_names_its_record_until_it_expires_or_is_closed() {
 #[test]
 fn what_it_does_not_know_it_says() {
     let unknown = call("find", json!({"strategy": "carrier pigeon", "inputs": {}})).unwrap_err();
-    assert_eq!((unknown.kind, unknown.text.as_str()), (clarity_auth::ProblemKind::UnknownStrategy, "there is no sign-in strategy 'carrier pigeon'; there are password, account, token, recovery"));
+    assert_eq!((unknown.kind, unknown.text.as_str()), (clarity_auth::ProblemKind::UnknownStrategy, "there is no sign-in strategy 'carrier pigeon'; there are password, account, token, recovery, github, microsoft, openid"));
     let missing = call("find", json!({"strategy": "password", "inputs": {"name": "ann"}})).unwrap_err();
     assert_eq!((missing.kind, missing.text.as_str()), (clarity_auth::ProblemKind::BadInput, "the password strategy needs the input 'password'"));
     assert_eq!(call("shout", json!({})).unwrap_err().kind, clarity_auth::ProblemKind::Failed);

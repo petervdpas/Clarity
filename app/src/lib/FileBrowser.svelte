@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's own file browser (docs/PROJECT-BROWSER-PLAN.md), shown by
+  // Clarity's own file browser, shown by
   // `browse()` in place of the system's file and folder windows. Browsing is
   // the way: click into a folder, Up to go back; the address bar shows where
   // you are, and a path typed there jumps to it. Clarity's projects are

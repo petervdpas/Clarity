@@ -1,6 +1,6 @@
 //! The program file's resources on Windows: its icon
-//! (docs/APP-ICON-SPLASH-PLAN.md, step 2) and its version
-//! (docs/VERSION-PLAN.md, step 3). Clarity converts the picture the project
+//! and its version
+//!. Clarity converts the picture the project
 //! names (`icon "app.png"`: PNG, JPEG, WebP or SVG) itself: it draws every
 //! size Explorer and the taskbar pick from and writes them as a Windows icon
 //! (`windows/app.ico`, which C# takes as its ApplicationIcon). It wraps the
@@ -351,7 +351,7 @@ pub fn ico_file(project: &clarity_spec::Project) -> Option<OutFile> {
 }
 
 /// The program's resources on Windows: its icon, and its version with
-/// `title` and the program's name `program` (docs/VERSION-PLAN.md).
+/// `title` and the program's name `program`.
 pub fn program_resources(project: &clarity_spec::Project, title: &str, program: &str) -> Vec<Resource> {
     let mut out = project_images(project).map(|images| icon_resources(&images)).unwrap_or_default();
     if let Some(version) = &project.version {

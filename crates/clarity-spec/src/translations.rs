@@ -290,18 +290,28 @@ pub const SIGNIN_KEYS: [(&str, &str); 4] = [
     ("notYours", "This record is not yours."),
 ];
 
-/// What the sign-in part shows for the strategies it offers: the labels of
-/// their inputs and their buttons. A project with a sign-in part has them.
-pub const SIGNIN_PART_KEYS: [(&str, &str); 9] = [
+/// What the sign-in part, and the parts of a sign-in view, show for the
+/// strategies they offer: the labels of their inputs, their buttons and the
+/// other ways. A project with a sign-in part or a sign-in view has them.
+pub const SIGNIN_PART_KEYS: [(&str, &str); 11] = [
     ("signinName", "Name"),
     ("signinPassword", "Password"),
     ("signinButton", "Sign in"),
     ("signinCode", "Recovery code"),
     ("signinUseCode", "Use a recovery code"),
+    ("signinUsePassword", "Sign in with a password"),
+    ("signinUseToken", "Use a token"),
     ("signinToken", "Token"),
     ("signinAccountButton", "Use this computer's account"),
     ("signinBack", "Back"),
     ("signinNothing", "No way to sign in here"),
+];
+
+/// The buttons of the providers a project signs in with, each once the block names it.
+pub const SIGNIN_PROVIDER_KEYS: [(&str, &str); 3] = [
+    ("signinGithub", "Sign in with GitHub"),
+    ("signinMicrosoft", "Sign in with Microsoft"),
+    ("signinOpenid", "Sign in with your account"),
 ];
 
 /// The sign-in part's box that keeps a person signed in, for a block with
@@ -757,7 +767,8 @@ fn shown(project: &Project) -> Shown {
     let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
     let graphs = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Graph));
-    let signin_part = project.signin.is_some() && project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Signin));
+    // The sign-in part on the splash, or the parts of a sign-in view.
+    let signin_part = project.signin.is_some() && project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Signin || crate::widgets::info(w.props.kind).category == crate::widgets::Category::Signin));
     // A graph has the zoom bar a zooming canvas has.
     let zooms = graphs || project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
     let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
@@ -776,7 +787,8 @@ fn shown(project: &Project) -> Shown {
     }));
     // The pickers' headings, which also label the settings' own `language` and `theme`.
     let setting = |ty: FieldType| project.entities().any(|e| e.settings && e.fields.iter().any(|f| f.ty == ty));
-    let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language);
+    // A sign-in part with its language picker opens the language picker too.
+    let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language) || (signin_part && project.signin.as_ref().is_some_and(|s| s.language_picker));
     let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
     let commands = project.files.iter().any(|f| !f.commands.is_empty());
     let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
@@ -854,6 +866,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.is_some() { SIGNIN_KEYS.as_slice() } else { &[] })
         .chain(if signin_part { SIGNIN_PART_KEYS.as_slice() } else { &[] })
+        .chain(SIGNIN_PROVIDER_KEYS.iter().filter(|(key, _)| signin_part && project.signin.as_ref().is_some_and(|s| s.strategies.iter().any(|line| provider_key(&line.name) == Some(*key)))))
         .chain(if signin_part && project.signin.as_ref().is_some_and(|s| s.remember_asks) { SIGNIN_REMEMBER_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.as_ref().is_some_and(|s| s.strategies.iter().any(|line| line.minimum.is_some())) { SECRET_RULE_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.as_ref().is_some_and(|s| s.targets.iter().any(|t| t == "cli")) { SIGNIN_CLI_KEYS.as_slice() } else { &[] });
@@ -862,6 +875,16 @@ fn shown(project: &Project) -> Shown {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false });
     }
     shown
+}
+
+/// The key of a provider's button: `signinGithub` for `github`; none for a strategy that is no provider.
+pub fn provider_key(strategy: &str) -> Option<&'static str> {
+    match strategy {
+        "github" => Some("signinGithub"),
+        "microsoft" => Some("signinMicrosoft"),
+        "openid" => Some("signinOpenid"),
+        _ => None,
+    }
 }
 
 /// Every key the project uses, each once, in the order the project first
@@ -943,7 +966,7 @@ pub fn parse(text: &str) -> (Translation, Vec<Diagnostic>) {
 }
 
 /// The project with `{app.version}` filled in every text by key, as Clarity
-/// fills it itself (docs/VERSION-PLAN.md); unchanged without a version.
+/// fills it itself; unchanged without a version.
 pub fn with_app_slots(project: &Project) -> Project {
     let mut filled = project.clone();
     if let Some(version) = &project.version {

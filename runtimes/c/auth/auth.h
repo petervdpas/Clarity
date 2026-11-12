@@ -33,10 +33,16 @@
 /// One strategy the project uses: its name in Clarity.Auth's catalog and
 /// the columns of the table of people it names, in the catalog's order of
 /// roles (`password email passwordHash` is {"email", "password_hash"}).
+/// A provider's settings for Clarity.Auth (client, secret, tenant, issuer,
+/// register, claim) are `options`, key and value in turn, `option_count`
+/// pairs; a secret of `setting:<name>` is the program's secret setting of
+/// that name. None for a strategy that is no provider.
 typedef struct {
     const char* name;
     const char* const* columns;
     size_t column_count;
+    const char* const* options;
+    size_t option_count;
 } ClaritySigninStrategy;
 
 /// The project's `signin` block as the program uses it. A zero
@@ -79,6 +85,11 @@ typedef struct {
 /// databases opened (and again after `connect` opens them anew). Copies
 /// what it is given.
 bool clarity_db_add_signin(ClarityDb* db, const ClaritySigninSource* source);
+
+/// The settings of `strategy` as Clarity.Auth takes them, as a new object
+/// the caller deletes; the secret read from the protected store of
+/// `program`, "" when it is not kept.
+cJSON* clarity_signin_options(const char* program, const ClaritySigninStrategy* strategy);
 
 /// Signs a person in with `strategy` and its `inputs` (an object: `name`,
 /// `password`, `token`, as the catalog names them): `*id` the record signed

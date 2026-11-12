@@ -198,6 +198,19 @@ toolboxColumns: number | null,
  */
 does: string | null, 
 /**
+ * `input password`: the input of a strategy a sign-in field takes
+ * (`name`, `password`, `code`, `token`), as Clarity.Auth's catalog names it.
+ */
+input: string | null, 
+/**
+ * `strategy password`: the strategy of the project's `signin` block a sign-in button signs in with.
+ */
+strategy: string | null, 
+/**
+ * `shows CodeView`: the sign-in view an "other way" part shows in the sign-in window's content.
+ */
+shows: string | null, 
+/**
  * `brush 4`: how wide a canvas paints or draws, in pixels.
  */
 brush: number | null, 

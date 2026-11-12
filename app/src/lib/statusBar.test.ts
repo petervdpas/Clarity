@@ -10,6 +10,7 @@ test("what is open is named with its kind", () => {
   assert.equal(openLabel({ kind: "settings", name: "" }), "Project settings");
   assert.equal(openLabel({ kind: "api", name: "shop" }), "Web API shop");
   assert.equal(openLabel({ kind: "readme", name: "" }), "README");
+  assert.equal(openLabel({ kind: "signin", name: "" }), "Sign-in");
   assert.equal(openLabel(null), "Nothing open");
 });
 

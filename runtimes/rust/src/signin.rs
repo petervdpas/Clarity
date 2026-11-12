@@ -34,6 +34,10 @@ pub const REMEMBERED: &str = "clarityRemembered";
 pub struct SigninStrategy {
     pub name: String,
     pub columns: Vec<String>,
+    /// A provider's settings for Clarity.Auth (`client`, `secret` as
+    /// `setting:<name>`, `tenant`, `issuer`, `register`, `claim`); empty for
+    /// a strategy that is no provider.
+    pub options: Vec<(String, String)>,
 }
 
 /// The project's `signin` block as the program uses it: where its people
@@ -76,7 +80,7 @@ impl SigninSource {
 
     /// Adds the strategy `name` with its columns by role.
     pub fn strategy(mut self, name: &str, columns: &[&str]) -> SigninSource {
-        self.strategies.push(SigninStrategy { name: name.into(), columns: columns.iter().map(|c| c.to_string()).collect() });
+        self.strategies.push(SigninStrategy { name: name.into(), columns: columns.iter().map(|c| c.to_string()).collect(), options: Vec::new() });
         self
     }
 
@@ -342,56 +346,33 @@ impl Db {
         Err(Error::Refused(refused()))
     }
 
+    /// One attempt, decided by Clarity.Auth (`attempt`): this looks the
+    /// person up and stores what it is told. `counted` attempts count failed tries.
     fn attempt(&self, strategy: &str, inputs: &Map<String, Value>, counted: bool) -> Result<Id> {
+        use clarity_auth::attempt::{Begun, Decided};
         let people = self.people()?;
         let target = self.target();
-        let refuse = || Error::Refused(refused());
-        // Only a strategy the project names, on a target the catalog lets it work on.
-        let Some(used) = people.strategies.iter().find(|s| s.name == strategy) else { return Err(refuse()) };
-        let Some(info) = clarity_auth::catalog().iter().find(|s| s.name == strategy) else { return Err(refuse()) };
-        if !info.targets.contains(&target) {
-            return Err(refuse());
-        }
-        let found = clarity_auth::find(strategy, inputs).map_err(|_| refuse())?;
-        let mut keys = vec![format!("account:{}", found.equals)];
-        if let Some(address) = CALL.with(|c| c.borrow().as_ref().map(|c| c.address.clone())).filter(|a| !a.is_empty()) {
-            keys.push(format!("address:{address}"));
-        }
+        let block = block_of(people);
+        let address = CALL.with(|c| c.borrow().as_ref().map(|c| c.address.clone()));
         let now = clarity_auth::now();
-        if counted && keys.iter().any(|k| !clarity_auth::tries_allowed(k, people.tries, people.tries_seconds, now)) {
-            return Err(Error::Refused(too_many_tries()));
-        }
-        let column = |role: &str| info.fields.iter().position(|f| f.role == role).and_then(|at| used.columns.get(at)).cloned();
-        let failed = || {
-            if counted {
-                for key in &keys {
-                    clarity_auth::tries_failed(key, now);
-                }
-            }
-            refuse()
+        let refused = |key: &str| Error::Refused(if key == clarity_auth::attempt::TOO_MANY_TRIES { too_many_tries() } else { refused() });
+        let (column, secret, equals, keys) = match clarity_auth::attempt::signin_begin(&block, strategy, inputs, target, address.as_deref(), now) {
+            Begun::Lookup { column, secret, equals, keys } => (column, secret, equals, keys),
+            Begun::Refused(key) => return Err(refused(key)),
         };
-        let Some(by) = column(&found.role) else { return Err(failed()) };
-        let secret = column("secret");
-        let id = match self.person_by(people, &by, secret.as_deref(), &found.equals)? {
-            Some((id, stored)) => {
-                let mut kept = Map::new();
-                kept.insert("secret".into(), Value::from(stored));
-                if !clarity_auth::check(strategy, inputs, &kept).unwrap_or(false) {
-                    return Err(failed());
-                }
-                // What signing in changes of what is stored: a recovery code is used up.
-                let changed = clarity_auth::after_signin(strategy, inputs, &kept).map_err(|_| failed())?;
-                self.store_after(people, info, used, id, &changed)?;
+        let keys = if counted { keys } else { Vec::new() };
+        let found = self.person_by(people, &column, secret.as_deref(), &equals)?;
+        let no_people = found.is_none() && self.no_people(people)?;
+        let id = match clarity_auth::attempt::signin_decide(&block, strategy, inputs, &keys, found.as_ref().map(|(_, s)| s.as_str()), no_people, now) {
+            Decided::SignedIn { store } => {
+                let id = found.map(|(id, _)| id).unwrap_or_default();
+                self.store_columns(people, id, &store)?;
                 id
             }
-            None if info.first_account && self.no_people(people)? => self.first_account(people, info, used, strategy, inputs).map_err(|_| failed())?,
-            None => return Err(failed()),
+            // A first account that cannot be made (a required field without a default) refuses, as on every stack.
+            Decided::Make { columns } => self.make_person(people, &columns).map_err(|_| refused(clarity_auth::attempt::REFUSED))?,
+            Decided::Refused(key) => return Err(refused(key)),
         };
-        if counted {
-            for key in &keys {
-                clarity_auth::tries_cleared(key);
-            }
-        }
         self.signed_in(id, people.session_seconds);
         if target == "desktop" && remembers(people, inputs) {
             self.remember(people, secret.as_deref(), id);
@@ -419,13 +400,14 @@ impl Db {
     }
 
     /// Writes back the fields (by role) a sign-in changed, in one UPDATE.
-    fn store_after(&self, people: &SigninSource, info: &clarity_auth::Strategy, used: &SigninStrategy, id: Id, changed: &Map<String, Value>) -> Result<()> {
+    /// Writes `store`, values by column, to the person's record `id`.
+    fn store_columns(&self, people: &SigninSource, id: Id, store: &Map<String, Value>) -> Result<()> {
         let mut conn = self.conn(&people.source)?;
         let d = conn.dialect();
         let mut sets = Vec::new();
         let mut values = Vec::new();
-        for (field, column) in info.fields.iter().zip(&used.columns) {
-            if let Some(value) = changed.get(field.role).and_then(Value::as_str) {
+        for (column, value) in store {
+            if let Some(value) = value.as_str() {
                 values.push(sql::text(value));
                 sets.push(format!("{} = {}", d.quote(column), d.mark(values.len())));
             }
@@ -481,20 +463,13 @@ impl Db {
         Ok(count == 0)
     }
 
-    /// Inserts the first person, with only the fields the strategy names.
-    fn first_account(&self, people: &SigninSource, info: &clarity_auth::Strategy, used: &SigninStrategy, strategy: &str, inputs: &Map<String, Value>) -> Result<Id> {
-        let made = clarity_auth::first_account(strategy, inputs).map_err(|p| Error::Value(p.text))?;
-        let mut columns = Vec::new();
-        let mut values = Vec::new();
-        for (field, column) in info.fields.iter().zip(&used.columns) {
-            if let Some(value) = made.get(field.role).and_then(Value::as_str) {
-                columns.push(column.as_str());
-                values.push(sql::text(value));
-            }
-        }
+    /// Inserts a person with only `columns` (values by column); the other columns take their defaults.
+    fn make_person(&self, people: &SigninSource, columns: &Map<String, Value>) -> Result<Id> {
+        let names: Vec<&str> = columns.keys().map(String::as_str).collect();
+        let values: Vec<SqlValue> = columns.values().map(|v| sql::text(v.as_str().unwrap_or_default())).collect();
         let mut conn = self.conn(&people.source)?;
         let d = conn.dialect();
-        Ok(conn.insert(&d.insert(&people.table, &people.key, &columns), &values)?)
+        Ok(conn.insert(&d.insert(&people.table, &people.key, &names), &values)?)
     }
 
     fn signed_in(&self, id: Id, seconds: u64) {
@@ -542,6 +517,41 @@ impl Db {
 
 /// Whether a sign-in with these inputs is remembered: always, unless the
 /// sign-in part asks (`when asked`) and its box's answer is not "true".
+/// The block as Clarity.Auth's attempt takes it.
+fn block_of(people: &SigninSource) -> clarity_auth::attempt::Block {
+    let strategies = people.strategies.iter().map(|s| clarity_auth::attempt::BlockStrategy { name: s.name.clone(), columns: s.columns.clone(), options: options_of(people, s) }).collect();
+    clarity_auth::attempt::Block { strategies, tries: people.tries, tries_seconds: people.tries_seconds }
+}
+
+/// A provider's settings as Clarity.Auth takes them, the secret read from
+/// the program's protected store (DESIGN 5.27); empty when it is not kept.
+fn options_of(people: &SigninSource, strategy: &SigninStrategy) -> Map<String, Value> {
+    strategy
+        .options
+        .iter()
+        .map(|(key, value)| {
+            let value = match value.strip_prefix("setting:").filter(|_| key == "secret") {
+                Some(name) => kept_secret(&people.program, name),
+                None => value.clone(),
+            };
+            (key.clone(), Value::from(value))
+        })
+        .collect()
+}
+
+/// A secret setting of the program; empty when the store has none.
+fn kept_secret(program: &str, name: &str) -> String {
+    #[cfg(feature = "secrets")]
+    {
+        crate::secrets::get(program, name).unwrap_or_default()
+    }
+    #[cfg(not(feature = "secrets"))]
+    {
+        let _ = (program, name);
+        String::new()
+    }
+}
+
 fn remembers(people: &SigninSource, inputs: &Map<String, Value>) -> bool {
     !people.remember_asks || inputs.get("remember").and_then(Value::as_str) == Some("true")
 }

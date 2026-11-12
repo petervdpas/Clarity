@@ -36,7 +36,7 @@ fn source_of(file: &Value) -> SigninSource {
         key: people["key"].as_str().unwrap().into(),
         page: block["page"].as_str().unwrap().into(),
         targets: texts(&block["targets"]),
-        strategies: block["strategies"].as_array().unwrap().iter().map(|s| SigninStrategy { name: s["name"].as_str().unwrap().into(), columns: texts(&s["columns"]) }).collect(),
+        strategies: block["strategies"].as_array().unwrap().iter().map(|s| SigninStrategy { name: s["name"].as_str().unwrap().into(), columns: texts(&s["columns"]), options: Vec::new() }).collect(),
         session_seconds: block["sessionMinutes"].as_u64().unwrap() * 60,
         tries: block["tries"].as_u64().unwrap() as u32,
         tries_seconds: block["triesMinutes"].as_u64().unwrap() * 60,

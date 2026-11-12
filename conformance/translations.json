@@ -132,7 +132,7 @@
         "gives": "nowhere"
       },
       {
-        "what": "the app's version, which Clarity fills itself (docs/VERSION-PLAN.md)",
+        "what": "the app's version, which Clarity fills itself",
         "language": "nl",
         "key": "versionLine",
         "values": {},

@@ -425,7 +425,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         required = required(project, entity),
         version_column = version_column.as_deref().map(|c| format!("    public static string? VersionColumn => {};\n", string(c))).unwrap_or_default(),
         // On the wire as C and Go name it.
-        version = if version_column.is_some() { "    [System.Text.Json.Serialization.JsonPropertyName(\"rowVersion\")]\n    public long Version { get; set; }\n" } else { "" },
+        version = if version_column.is_some() { format!("    [System.Text.Json.Serialization.JsonPropertyName(\"{}\")]\n    public long Version {{ get; set; }}\n", Project::VERSION_WIRE) } else { String::new() },
         table = string(&entity.table_name()),
         key = string(entity.key_column()),
     )

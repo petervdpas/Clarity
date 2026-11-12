@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Where the clerks sign in: the shop's name, and the ways of signing in, one view at a time. -->
+<SignIn class="staff.SignIn" title="@signInTitle" width="433" height="508">
+  <Heading name="signInHeading" at="1,1" span="12" caption="@shopTitle" />
+  <Content name="ways" at="1,2" span="12" rows="10">
+    <View name="SignInView" />
+  </Content>
+</SignIn>

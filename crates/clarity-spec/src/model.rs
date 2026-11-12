@@ -949,6 +949,16 @@ pub struct WidgetProps {
     /// `does pencil`: the built-in action of a toolbox's tool (TOOL_ACTIONS).
     #[serde(default)]
     pub does: Option<String>,
+    /// `input password`: the input of a strategy a sign-in field takes
+    /// (`name`, `password`, `code`, `token`), as Clarity.Auth's catalog names it.
+    #[serde(default)]
+    pub input: Option<String>,
+    /// `strategy password`: the strategy of the project's `signin` block a sign-in button signs in with.
+    #[serde(default)]
+    pub strategy: Option<String>,
+    /// `shows CodeView`: the sign-in view an "other way" part shows in the sign-in window's content.
+    #[serde(default)]
+    pub shows: Option<String>,
     /// `brush 4`: how wide a canvas paints or draws, in pixels.
     #[serde(default)]
     pub brush: Option<u32>,
@@ -1512,12 +1522,12 @@ pub struct Project {
     pub locale: Locale,
     /// The application's icon, a picture among its resources, as the project
     /// file names it (`icon "app.png"`); none for Clarity's own
-    /// (docs/APP-ICON-SPLASH-PLAN.md).
+    ///.
     #[serde(default)]
     pub icon: Option<String>,
     /// The application's version as the project file says it (`version
     /// "1.2.0"`): `app.version` in code, `{app.version}` in texts; none
-    /// without one (docs/VERSION-PLAN.md).
+    /// without one.
     #[serde(default)]
     pub version: Option<String>,
     /// The project's translations per language: each text a person sees,
@@ -1660,7 +1670,7 @@ impl Project {
 
     /// Where the project reads its version: the first `app.version` in its
     /// code, or the first text that shows `{app.version}`, as its file and
-    /// span (docs/VERSION-PLAN.md); none when it reads it nowhere.
+    /// span; none when it reads it nowhere.
     pub fn app_version_use(&self) -> Option<(String, crate::span::Span)> {
         let mut found: Option<(String, crate::span::Span)> = None;
         for file in &self.files {
@@ -1737,6 +1747,10 @@ impl Project {
     pub fn entity(&self, name: &str) -> Option<&Entity> {
         self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
     }
+
+    /// The name a record's version has on the wire to Clarity.UI and in the
+    /// JSON every stack writes: one name for every generator and runtime.
+    pub const VERSION_WIRE: &'static str = "rowVersion";
 
     /// The column that holds the version of each record of entity `name`,
     /// which a save and a delete check (docs/APP-CAPABILITIES-PLAN.md step 5):

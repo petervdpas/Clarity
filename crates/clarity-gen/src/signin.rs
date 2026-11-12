@@ -26,6 +26,29 @@ pub(crate) struct SigninPlan {
     /// when asked`): the runtime then remembers only a sign-in whose input
     /// `remember` is "true".
     pub remember_asks: bool,
+    /// Each provider strategy's settings for Clarity.Auth, by strategy:
+    /// `client`, `secret` (a secret setting, `setting:<name>`, which the
+    /// runtime reads from the program's protected store), `tenant`,
+    /// `issuer`, `register`, and `claim`: `email` when the field it matches
+    /// is an e-mail address, else `login`. None for a strategy that is no provider.
+    pub options: std::collections::BTreeMap<String, Vec<(String, String)>>,
+}
+
+/// A provider strategy's settings as Clarity.Auth takes them.
+fn provider_options(line: &clarity_spec::signin::SigninStrategy, entity: &clarity_spec::model::Entity) -> Option<Vec<(String, String)>> {
+    let settings = line.provider.as_ref()?;
+    let mut options = vec![("client".to_string(), settings.client.clone())];
+    for (key, value) in [("secret", &settings.secret), ("tenant", &settings.tenant), ("issuer", &settings.issuer)] {
+        if let Some(value) = value {
+            options.push((key.to_string(), value.clone()));
+        }
+    }
+    if settings.register {
+        options.push(("register".into(), "true".into()));
+    }
+    let email = line.fields.first().and_then(|f| entity.field(f)).is_some_and(|f| matches!(f.ty, clarity_spec::model::FieldType::Email));
+    options.push(("claim".into(), if email { "email" } else { "login" }.into()));
+    Some(options)
 }
 
 /// The project's signin source; none without a `signin` block or its entity.
@@ -45,6 +68,7 @@ pub(crate) fn signin_plan(project: &Project) -> Option<SigninPlan> {
         tries_seconds: u64::from(signin.tries_minutes) * 60,
         remember_seconds: signin.remember_days.map(|d| u64::from(d) * 24 * 60 * 60),
         remember_asks: signin.remember_asks,
+        options: signin.strategies.iter().filter_map(|s| provider_options(s, entity).map(|o| (s.name.clone(), o))).collect(),
     })
 }
 
@@ -90,8 +114,8 @@ mod tests {
     fn project() -> Project {
         let mut signin = clarity_spec::signin::Signin::new("Member", vec!["desktop".into(), "web".into()]);
         signin.strategies = vec![
-            clarity_spec::signin::SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12) },
-            clarity_spec::signin::SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None },
+            clarity_spec::signin::SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12), provider: None },
+            clarity_spec::signin::SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None, provider: None },
         ];
         signin.session_minutes = 60;
         clarity_spec::load_in_signed([("family/people.clarity", PEOPLE)], [], &[], Some(&signin))

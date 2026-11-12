@@ -8,6 +8,9 @@
 //! other strategies, waits behind "Use a recovery code", which swaps to its
 //! name and code and a Back. When the block's `remember` asks, a check box
 //! "Keep me signed in" goes with every sign-in as the input `remember`.
+//! When the block turns on its `language picker`, a dropdown of the
+//! program's languages, each by its own name, stands above the fields;
+//! picking one shows every text in it, as the frame's language picker does.
 //! The words are Clarity's own, translated.
 //!
 //! The fields and buttons are the text boxes and buttons every window has,
@@ -16,6 +19,10 @@
 //! a strategy's button, or Enter in one of its fields, signs in through the
 //! host the same way a `signin <strategy>` button does; a refusal shows on
 //! a line under the fields.
+//!
+//! In the IDE's designer (its markup carries `designItem`) the part is a
+//! placeholder: a dashed frame naming the strategies it offers, no fields.
+//! What it offers is the project's sign-in setup, not the window's.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -23,6 +30,7 @@ use std::rc::Rc;
 
 use clarity_runtime::ui::{Level, PartState, Text};
 use serde_json::{Map, Value};
+use skia_safe::{Paint, PaintStyle, PathEffect};
 
 use crate::element::{self, Cx, Element, GridPanel, Node};
 use crate::facts::{SigninFacts, SigninStrategyFacts};
@@ -45,7 +53,7 @@ const USE_CODE: &str = "signinUseCode";
 const BACK: &str = "signinBack";
 
 /// Clarity's own words of the part, by their keys, with the English they fall back to.
-const WORDS: [(&str, &str); 10] = [
+const WORDS: [(&str, &str); 16] = [
     ("signinName", "Name"),
     ("signinPassword", "Password"),
     ("signinToken", "Token"),
@@ -53,9 +61,15 @@ const WORDS: [(&str, &str); 10] = [
     ("signinButton", "Sign in"),
     ("signinAccountButton", "Use this computer's account"),
     ("signinUseCode", "Use a recovery code"),
+    ("signinUsePassword", "Sign in with a password"),
+    ("signinUseToken", "Use a token"),
     ("signinBack", "Back"),
     ("signinRemember", "Keep me signed in"),
     ("signinNothing", "No way to sign in here"),
+    ("languagePicker", "Language"),
+    ("signinGithub", "Sign in with GitHub"),
+    ("signinMicrosoft", "Sign in with Microsoft"),
+    ("signinOpenid", "Sign in with your account"),
 ];
 
 /// The words of an input as written in a part's caption: Clarity's key, `@` first.
@@ -79,7 +93,7 @@ fn button_caption(strategy: &str) -> &'static str {
 }
 
 /// One of the part's words in the language shown.
-fn word(key: &str) -> Option<String> {
+pub fn word(key: &str) -> Option<String> {
     WORDS.iter().find(|(k, _)| *k == key).map(|(k, english)| locale::translate(k, english))
 }
 
@@ -113,12 +127,19 @@ pub struct SigninHost {
     strategies: Vec<SigninStrategyFacts>,
     /// Whether the part asks to keep the person signed in.
     remember_asks: bool,
+    /// Whether the part lets people pick their language.
+    language_picker: bool,
 }
 
 impl SigninHost {
     /// The name of the check box "Keep me signed in": `signin.remember`.
     pub fn remember_name(&self) -> String {
         [self.prefix.as_str(), "remember"].join(".")
+    }
+
+    /// The name of the language dropdown: `signin.language`.
+    pub fn language_name(&self) -> String {
+        [self.prefix.as_str(), "language"].join(".")
     }
 
     /// The name of the field of `input` of `strategy`: `signin.password.name`.
@@ -190,11 +211,29 @@ impl SigninHost {
 
 impl PartHost for SigninHost {
     fn read(&self, path: &str) -> Option<Value> {
+        if self.language_picker && path == self.language_name() {
+            return Some(Value::from(crate::choices::language()));
+        }
         self.window.read(path)
     }
 
+    /// Picking a language shows every text in it, as the frame's picker does.
     fn write(&self, part: &str, path: &str, value: Value) {
+        if self.language_picker && path == self.language_name() {
+            if let Some(language) = value.as_str() {
+                crate::choices::choose_language(language);
+            }
+            self.bump();
+            return;
+        }
         self.window.write(part, path, value);
+    }
+
+    fn choices(&self, path: &str) -> Vec<crate::parts::Choice> {
+        if self.language_picker && path == self.language_name() {
+            return crate::choices::languages().into_iter().map(|o| crate::parts::Choice { value: Value::from(o.name), label: o.label, cells: None }).collect();
+        }
+        self.window.choices(path)
     }
 
     /// What is typed in the part is no edit of the window: it stays here.
@@ -358,6 +397,20 @@ fn rows_of(own: &SigninHost, strategies: &[&SigninStrategyFacts], default: Optio
     }
 }
 
+/// The language dropdown with its label, from row `row`.
+fn language_rows(own: &SigninHost, row: &mut i64, specs: &mut Vec<PartSpec>) {
+    let name = own.language_name();
+    let mut label = spec_of("label", &[name.as_str(), "label"].join("."), *row);
+    label.props.insert("caption".into(), Value::from("@languagePicker"));
+    label.props.insert("for".into(), Value::from(name.as_str()));
+    specs.push(label);
+    *row += 1;
+    let mut dropdown = spec_of("dropdown", &name, *row);
+    dropdown.props.insert("bind".into(), Value::from(name.as_str()));
+    specs.push(dropdown);
+    *row += 1;
+}
+
 /// A button of the part's own (Use a recovery code, Back) in row `row`.
 fn own_button(own: &SigninHost, which: &str, handler: &str, caption: &str, row: i64) -> PartSpec {
     let mut button = spec_of("button", &own.button_name(which), row);
@@ -371,6 +424,8 @@ pub struct SigninPart {
     own: Rc<SigninHost>,
     /// Whether the recovery code showed when it was last laid out: the focus follows a swap.
     laid_recovering: Cell<bool>,
+    /// Drawn by the IDE's designer: a placeholder without fields.
+    designed: bool,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
@@ -381,16 +436,24 @@ impl SigninPart {
     pub fn new(spec: PartSpec, host: Rc<dyn PartHost>) -> SigninPart {
         let block = host.signin();
         let strategies = block.as_ref().map(|block| offered(block, this_target())).unwrap_or_default();
-        let remember_asks = block.is_some_and(|b| b.remember_asks);
+        let remember_asks = block.as_ref().is_some_and(|b| b.remember_asks);
+        let language_picker = block.as_ref().is_some_and(|b| b.language_picker);
         let prefix = spec.name().filter(|n| !n.is_empty()).unwrap_or("signin").to_string();
         let only_recovery = strategies.iter().all(|s| s.name == RECOVERY);
-        let own = Rc::new(SigninHost { window: host.clone(), prefix, states: RefCell::default(), changed: Cell::new(0), refusal: RefCell::default(), recovering: Cell::new(false), strategies, remember_asks });
+        let own = Rc::new(SigninHost { window: host.clone(), prefix, states: RefCell::default(), changed: Cell::new(0), refusal: RefCell::default(), recovering: Cell::new(false), strategies, remember_asks, language_picker });
+        let designed = spec.props.contains_key(crate::markup::DESIGN_ITEM);
         let mut base = PartBase::new(spec, host);
+        if designed {
+            return SigninPart { base, own, laid_recovering: Cell::new(false), designed };
+        }
         let (front, recovery): (Vec<&SigninStrategyFacts>, Vec<&SigninStrategyFacts>) = own.strategies.iter().partition(|s| s.name != RECOVERY || only_recovery);
         // The first strategy shown is the default: Enter anywhere in the window presses its button.
         let default = front.first().map(|s| s.name.clone());
         let mut specs = Vec::new();
         let mut row = 1;
+        if language_picker {
+            language_rows(&own, &mut row, &mut specs);
+        }
         rows_of(&own, &front, default.as_deref(), remember_asks, &mut row, &mut specs);
         if !recovery.is_empty() {
             specs.push(own_button(&own, "useCode", USE_CODE, "@signinUseCode", row));
@@ -403,7 +466,18 @@ impl SigninPart {
             specs.push(own_button(&own, "back", BACK, "@signinBack", row));
             base.node.add(Box::new(Side { node: Self::holding(container::grid_of(&specs, 1, GAP, &shared)), own: own.clone(), recovery: true }));
         }
-        SigninPart { base, own, laid_recovering: Cell::new(false) }
+        SigninPart { base, own, laid_recovering: Cell::new(false), designed }
+    }
+
+    /// What the designer's placeholder says: `Sign in: password, account`; none outside the designer.
+    pub fn placeholder(&self) -> Option<String> {
+        if !self.designed {
+            return None;
+        }
+        let names: Vec<&str> = self.own.strategies.iter().map(|s| s.name.as_str()).collect();
+        let offers = if names.is_empty() { word("signinNothing").unwrap_or_default() } else { names.join(", ") };
+        let picker = if self.own.language_picker { format!("; {}", word("languagePicker").unwrap_or_default()) } else { String::new() };
+        Some(format!("{}: {offers}{picker}", word("signinButton").unwrap_or_default()))
     }
 
     fn holding(grid: GridPanel) -> Node {
@@ -450,6 +524,9 @@ impl Element for SigninPart {
 
     /// The room it needs beyond its rows: its fields and buttons, and the line under them.
     fn around(&self) -> f64 {
+        if self.designed {
+            return 0.0;
+        }
         let needed = self.side().map(|s| container::least_of(s.grid())).unwrap_or(0.0);
         container::around_for(&self.base.spec, GAP + self.message_height(), needed)
     }
@@ -471,6 +548,21 @@ impl Element for SigninPart {
 
     fn draw(&self, p: &Painter) {
         let bounds = self.base.node.bounds;
+        if let Some(says) = self.placeholder() {
+            let look = p.look;
+            let mut dashed = Paint::default();
+            dashed.set_color(look.color("strong_border"));
+            dashed.set_anti_alias(true);
+            dashed.set_style(PaintStyle::Stroke);
+            dashed.set_stroke_width(look.border() as f32);
+            dashed.set_path_effect(PathEffect::dash(&[4.0, 4.0], 0.0));
+            let radius = look.radius("panel") as f32;
+            p.canvas.draw_round_rect(bounds.inset(look.border() / 2.0).sk(), radius, radius, &dashed);
+            let words = bounds.inset(2.0 * look.padding());
+            let size = look.size("small");
+            p.text(&p.fit(&says, words.width, size, "text", false), words, look.color("muted"), size, "text", false, TextAlign::Center);
+            return;
+        }
         if self.own.strategies.is_empty() {
             let row = Rect { height: bounds.height.min(row_height()), ..bounds };
             p.text(&word("signinNothing").unwrap_or_default(), row.inset(6.0), p.look.color("muted"), p.look.size("small"), "text", false, TextAlign::Left);

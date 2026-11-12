@@ -237,6 +237,24 @@ TEST(signin_signs_people_in_as_every_stack_does) {
     secret_store = {};
 }
 
+// A provider's settings go to Clarity.Auth, the secret read from the protected store, "" when not kept.
+TEST(signin_a_provider_s_settings_go_to_clarity_auth) {
+    SigninSource source;
+    source.program = "club";
+    SigninStrategy github{"github", {"email"}, {{"client", "app"}, {"secret", "setting:githubSecret"}, {"claim", "email"}}};
+    auto kept = std::make_shared<std::map<std::string, std::string>>();
+    secret_store.get = [kept](const std::string& program, const std::string& key) -> std::optional<std::string> {
+        auto found = kept->find(program + ":" + key);
+        return found == kept->end() ? std::nullopt : std::optional<std::string>(found->second);
+    };
+    secret_store.set = [kept](const std::string& program, const std::string& key, const std::string& value) { (*kept)[program + ":" + key] = value; };
+    CHECK_EQ(source.options_of(github), json::parse(R"({"client":"app","secret":"","claim":"email"})"));
+    (*kept)["club:githubSecret"] = "s3cret";
+    CHECK_EQ(source.options_of(github), json::parse(R"({"client":"app","secret":"s3cret","claim":"email"})"));
+    CHECK_EQ(source.options_of(SigninStrategy{"password", {"email", "password_hash"}}), json::object());
+    secret_store = {};
+}
+
 TEST(me_allow_and_yours_refuse_in_clarity_words) {
     Db db = people_with(json::parse(R"([{"name":"Ann","email":"ann@me.test","password_hash":{"hash":"argon2id","text":"pw"}}])"));
     SigninSource source;

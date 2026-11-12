@@ -47,6 +47,7 @@ entity Friend
 entity Member
     email: email, unique, required, label @memberEmail
     passwordHash: text, hashed, label @memberPasswordHash
+    codes: text, hashed, label @memberCodes
 
 entity Folder
     name: text(80), required, label @folderName

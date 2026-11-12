@@ -54,7 +54,7 @@ A plan, worked out with the user 2026-11-09; nothing is built yet.
 6. The report page kind, bands and the designer, with the preview.
 7. The flow part, groups, sums, page numbers; the agent and the manual.
 
-In the agreed work order (2026-11-09) this comes after the MCP server's first five steps and the `.cxaml` refactor (CXAML-SOURCE-PLAN.md), since a report is a `.cxaml` page.
+In the agreed work order (2026-11-09) this comes after the MCP server's first five steps and the `.cxaml` refactor, since a report is a `.cxaml` page.
 
 ## To confirm with the user before building
 

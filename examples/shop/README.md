@@ -8,8 +8,19 @@ customers' credit.
 
 ## What you see and can do
 
-The app opens on the Customer card. Its menu has File (Customer card with
-`Ctrl+K`, Language, Theme, Quit with `Ctrl+Q`), Customers (All customers),
+Clerks sign in first, on the Sign in window: with their name and a password
+of at least eight characters, or with this computer's account. A language
+dropdown above the fields lets them pick English or Dutch before they sign in,
+and **Keep me signed in** remembers them for 30 days. The first clerk to sign
+in with a password becomes the first clerk. These are options of the
+project's sign-in setup (**Sign-in** in the project tree). The Sign in window
+is a window of its own: its content shows the view `SignInView`, made of the
+sign-in parts the designer offers there (the language dropdown, the name and
+password fields, Keep me signed in, a button per way of signing in and the
+refusal).
+
+The app then opens on the Customer card. Its menu has File (Customer card with
+`Ctrl+K`, Language, Theme, Sign out, Quit with `Ctrl+Q`), Customers (All customers),
 Orders (All orders, and the Sales dashboard, which opens in a window of
 its own) and Suppliers (All suppliers, Price list). The toolbar opens the same windows,
 and the footer shows the status.
@@ -56,7 +67,7 @@ Rust, desktop. An example builds only for the stack its project file names.
 - `sales.clarity`: the Order and OrderLine entities and the order statuses, the Pricing engine, the credit check, the `approve` action, the code behind the order windows, editor and dashboard, and the order's data events.
 - `suppliers.clarity`: the Supplier entity (name, e-mail, phone and website) and the code behind its browse window and editor.
 - `counter.clarity`: the module of the Customer card window; it holds no code of its own.
-- `design/`: `Shop.cxaml` (the app with its menu, toolbar and footer), `CustomerCard.cxaml` and `CustomerCardView.cxaml` (the card), `CustomerBrowse.cxaml` and `CustomerBrowseView.cxaml` (the customer table with its slide-out), `CustomerEditor.cxaml` (the customer form), `OrderBrowse.cxaml` and `OrderBrowseView.cxaml` (the order table with its slide-out), `OrderEditor.cxaml` (an order and its lines), `SalesDashboard.cxaml` and `SalesDashboardView.cxaml` (the charts), `SupplierBrowse.cxaml` and `SupplierBrowseView.cxaml` (the supplier table), `SupplierEditor.cxaml` and `SupplierEditorView.cxaml` (a supplier).
+- `design/`: `Shop.cxaml` (the app with its menu, toolbar and footer), `CustomerCard.cxaml` and `CustomerCardView.cxaml` (the card), `CustomerBrowse.cxaml` and `CustomerBrowseView.cxaml` (the customer table with its slide-out), `CustomerEditor.cxaml` (the customer form), `OrderBrowse.cxaml` and `OrderBrowseView.cxaml` (the order table with its slide-out), `OrderEditor.cxaml` (an order and its lines), `SalesDashboard.cxaml` and `SalesDashboardView.cxaml` (the charts), `SupplierBrowse.cxaml` and `SupplierBrowseView.cxaml` (the supplier table), `SupplierEditor.cxaml` and `SupplierEditorView.cxaml` (a supplier), `SignIn.cxaml` and `SignInView.cxaml` (where the clerks sign in).
 - `engines/pricing/`: the engine's Rust source; `engines/pricing.wasm` is the built engine the app loads.
 - `resources/logo.png`: the logo on the Customer card.
 - `translations/`: English and Dutch.

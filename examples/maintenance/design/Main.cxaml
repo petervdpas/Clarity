@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="maintenance.Main" title="@mainTitle">
+  <Data name="projects" type="list&lt;Project&gt;" />
+  <Content name="main" at="1,1" span="12">
+    <View name="MainView" />
+  </Content>
+</Window>

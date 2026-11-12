@@ -172,7 +172,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     // version it was read with, which travels with the record to the screen and back.
     let version = project.version_column(name);
     if version.is_some() {
-        rows.push(vec!["RowVersion".into(), "int64".into(), "`json:\"rowVersion\"`".into()]);
+        rows.push(vec!["RowVersion".into(), "int64".into(), format!("`json:\"{}\"`", Project::VERSION_WIRE)]);
     }
     let defaults: Vec<String> = fields.iter().filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
     // A file has the column of its name beside its own.

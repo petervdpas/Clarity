@@ -8,6 +8,8 @@ use ts_rs::TS;
 use crate::names::camel_case;
 use crate::model::{DEFAULT_PAGE_COLUMNS, Entity, Field, FieldType, Project, WidgetProps, default_label};
 use crate::model::Handler;
+
+mod signin;
 use crate::widgets::{self, Event, WidgetKind, new_props};
 
 /// What a new window starts with.
@@ -278,7 +280,7 @@ pub fn new_window(project: &Project, name: &str, template: &PageTemplate) -> Res
             alone(page)
         }
         PageTemplate::Toolbox => alone(toolbox_page(name)),
-        PageTemplate::SignIn => alone(signin_page(name, &title)),
+        PageTemplate::SignIn => signin::signin_window(project, name, &title),
         PageTemplate::Blank => {
             free_name(project, &format!("{name}View"))?;
             Ok(in_content_of(page_of(name, PageKind::Window, Some(title)), None))
@@ -330,20 +332,6 @@ pub fn new_app(project: &Project, name: &str) -> Result<Made, String> {
         span: crate::span::Span::default(),
     };
     Ok(Made { designed: vec![crate::design_edit::Designed::App(app)], code: Vec::new() })
-}
-
-/// The sign-in window to start from: one sign-in part across the window,
-/// which offers the strategies of the project's `signin` block. Parts named
-/// after a strategy's inputs and `-> signin <strategy>` buttons stay for a
-/// layout of one's own.
-fn signin_page(name: &str, title: &str) -> crate::model::Page {
-    let mut page = page_of(name, crate::model::PageKind::Signin, Some(title.to_string()));
-    page.size = Some(crate::model::WindowSize { width: 420, height: 300 });
-    let mut part = new_props(WidgetKind::Signin, 1, 1);
-    part.name = Some("signIn".to_string());
-    part.width = DEFAULT_PAGE_COLUMNS;
-    page.widgets = vec![widget_of(part)];
-    page
 }
 
 /// A painting canvas's tools to start from, on a grid of 4 (docs/IMAGE-PLAN.md).

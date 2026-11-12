@@ -26,16 +26,23 @@ pub struct Strategy {
     pub targets: &'static [&'static str],
     /// Whether the first account can be made with it, when there is none yet.
     pub first_account: bool,
+    /// A provider (GitHub, Microsoft, an OpenID provider): the browser signs
+    /// in at the provider, who says who it is (`crate::providers`).
+    pub provider: bool,
 }
 
 const MATCH_TEXT: Field = Field { role: "match", kinds: &["text", "email"], hash: None };
 
 const STRATEGIES: &[Strategy] = &[
-    Strategy { name: "password", fields: &[MATCH_TEXT, Field { role: "secret", kinds: &["text"], hash: Some("argon2id") }], inputs: &["name", "password"], targets: &["desktop", "web", "cli"], first_account: true },
-    Strategy { name: "account", fields: &[Field { role: "match", kinds: &["text"], hash: None }], inputs: &[], targets: &["desktop", "cli"], first_account: true },
-    Strategy { name: "token", fields: &[Field { role: "secret", kinds: &["text"], hash: Some("sha256") }], inputs: &["token"], targets: &["desktop", "web", "cli"], first_account: false },
+    Strategy { name: "password", fields: &[MATCH_TEXT, Field { role: "secret", kinds: &["text"], hash: Some("argon2id") }], inputs: &["name", "password"], targets: &["desktop", "web", "cli"], first_account: true, provider: false },
+    Strategy { name: "account", fields: &[Field { role: "match", kinds: &["text"], hash: None }], inputs: &[], targets: &["desktop", "cli"], first_account: true, provider: false },
+    Strategy { name: "token", fields: &[Field { role: "secret", kinds: &["text"], hash: Some("sha256") }], inputs: &["token"], targets: &["desktop", "web", "cli"], first_account: false, provider: false },
     // One-time codes shown once; a code that signs in is used up (`after_signin`).
-    Strategy { name: "recovery", fields: &[MATCH_TEXT, Field { role: "secret", kinds: &["text"], hash: Some("sha256-lines") }], inputs: &["name", "code"], targets: &["desktop", "web", "cli"], first_account: false },
+    Strategy { name: "recovery", fields: &[MATCH_TEXT, Field { role: "secret", kinds: &["text"], hash: Some("sha256-lines") }], inputs: &["name", "code"], targets: &["desktop", "web", "cli"], first_account: false, provider: false },
+    // Providers: they match the field of the e-mail address or the login name the provider gives, and take nothing typed.
+    Strategy { name: "github", fields: &[MATCH_TEXT], inputs: &[], targets: &["desktop", "web"], first_account: true, provider: true },
+    Strategy { name: "microsoft", fields: &[MATCH_TEXT], inputs: &[], targets: &["desktop", "web"], first_account: true, provider: true },
+    Strategy { name: "openid", fields: &[MATCH_TEXT], inputs: &[], targets: &["desktop", "web"], first_account: true, provider: true },
 ];
 
 pub fn catalog() -> &'static [Strategy] {
@@ -57,7 +64,7 @@ pub fn catalog_json() -> String {
                     field
                 })
                 .collect();
-            json!({"name": s.name, "fields": fields, "inputs": s.inputs, "targets": s.targets, "firstAccount": s.first_account})
+            json!({"name": s.name, "fields": fields, "inputs": s.inputs, "targets": s.targets, "firstAccount": s.first_account, "provider": s.provider})
         })
         .collect();
     Value::Array(list).to_string()

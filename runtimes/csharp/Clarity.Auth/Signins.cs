@@ -22,7 +22,15 @@ namespace Clarity.Auth;
 /// table of people it names, in the catalog's order of roles (<c>password email passwordHash</c>
 /// is <c>["email", "password_hash"]</c>).
 /// </summary>
-public sealed record SigninStrategy(string Name, IReadOnlyList<string> Columns);
+public sealed record SigninStrategy(string Name, IReadOnlyList<string> Columns)
+{
+    /// <summary>
+    /// A provider's settings for Clarity.Auth (<c>client</c>, <c>secret</c>, <c>tenant</c>,
+    /// <c>issuer</c>, <c>register</c>, <c>claim</c>); a <c>secret</c> of <c>setting:&lt;name&gt;</c> is
+    /// the program's secret setting of that name. None for a strategy that is no provider.
+    /// </summary>
+    public IReadOnlyList<(string Key, string Value)> Options { get; init; } = [];
+}
 
 /// <summary>
 /// The project's <c>signin</c> block as the program uses it: the people in <paramref name="Table"/>,
@@ -54,6 +62,20 @@ public sealed record SigninSource(string Table, string Page)
 
     /// <summary>The program's name, under which its secrets are kept (the remembered sign-in).</summary>
     public string Program { get; init; } = "";
+
+    /// <summary>
+    /// The settings of <paramref name="strategy"/> as Clarity.Auth takes them, the secret read
+    /// from the program's protected store; empty when it is not kept.
+    /// </summary>
+    public JsonObject OptionsOf(SigninStrategy strategy)
+    {
+        var options = new JsonObject();
+        foreach (var (key, value) in strategy.Options)
+            options[key] = key == "secret" && value.StartsWith("setting:", StringComparison.Ordinal)
+                ? Secrets.Get(Program, value["setting:".Length..]) ?? ""
+                : value;
+        return options;
+    }
 
     /// <summary>
     /// How long the desktop program keeps a sign-in between runs (<c>remember N days</c>) in the
@@ -101,17 +123,15 @@ public static class Signins
     static string Text(string json) => JsonNode.Parse(json)?.GetValue<string>() ?? "";
 }
 
-/// <summary>A strategy of Clarity.Auth's catalog: its fields' roles in order, its targets, whether it makes the first account.</summary>
-sealed record Strategy(string Name, IReadOnlyList<string> Roles, IReadOnlyList<string> Targets, bool FirstAccount)
+/// <summary>A strategy of Clarity.Auth's catalog: its fields' roles in order.</summary>
+sealed record Strategy(string Name, IReadOnlyList<string> Roles)
 {
     /// <summary>The catalog, read once from Clarity.Auth.</summary>
     public static readonly Lazy<IReadOnlyList<Strategy>> Catalog = new(() =>
     [
         .. JsonNode.Parse(AuthCalls.Call("catalog", "{}"))!.AsArray().Select(s => new Strategy(
             s!["name"]!.GetValue<string>(),
-            [.. s["fields"]!.AsArray().Select(f => f!["role"]!.GetValue<string>())],
-            [.. s["targets"]!.AsArray().Select(t => t!.GetValue<string>())],
-            s["firstAccount"]?.GetValue<bool>() ?? false)),
+            [.. s["fields"]!.AsArray().Select(f => f!["role"]!.GetValue<string>())])),
     ]);
 }
 
@@ -126,94 +146,89 @@ sealed class People(SigninSource source) : IPeople
 
     public bool Uses(string strategy) => source.Strategies.Any(s => s.Name == strategy);
 
-    static RefusedException Refuse() => new(Clarity.Runtime.Signin.Refused());
-
+    /// <summary>
+    /// One attempt, decided by Clarity.Auth (<c>signinBegin</c>, <c>signinDecide</c>): this looks
+    /// the person up and stores what it is told. Attempts not <paramref name="counted"/> count no
+    /// failed tries.
+    /// </summary>
     public long Signin(Db db, string strategy, JsonObject inputs, string target, string? address, bool counted)
     {
-        // Only a strategy the project names, on a target the catalog lets it work on.
-        var used = source.Strategies.FirstOrDefault(s => s.Name == strategy) ?? throw Refuse();
-        var info = Strategy.Catalog.Value.FirstOrDefault(s => s.Name == strategy) ?? throw Refuse();
-        if (!info.Targets.Contains(target))
-            throw Refuse();
-        string role, equals;
-        try
-        {
-            var found = JsonNode.Parse(AuthCalls.Call("find", new JsonObject { ["strategy"] = strategy, ["inputs"] = inputs.DeepClone() }.ToJsonString()))!;
-            role = found["role"]!.GetValue<string>();
-            equals = found["equals"]!.GetValue<string>();
-        }
-        catch (ValueException)
-        {
-            // An input missing, or no account to find by: nothing to count it against.
-            throw Refuse();
-        }
-        List<string> keys = [$"account:{equals}"];
+        var block = Block();
+        var begin = new JsonObject { ["block"] = block.DeepClone(), ["strategy"] = strategy, ["inputs"] = inputs.DeepClone(), ["target"] = target };
         if (address is not null)
-            keys.Add($"address:{address}");
-        if (counted && keys.Any(k => !Bool(AuthCalls.Call("triesAllowed", new JsonObject { ["key"] = k, ["tries"] = source.Tries, ["window"] = source.TriesSeconds }.ToJsonString()))))
-            throw new RefusedException(Clarity.Runtime.Signin.TooManyTries());
-        RefusedException Failed()
-        {
-            if (counted)
-                foreach (var key in keys)
-                    AuthCalls.Call("triesFailed", new JsonObject { ["key"] = key }.ToJsonString());
-            return Refuse();
-        }
-        string? Column(string named) => info.Roles.ToList().IndexOf(named) is var at and >= 0 && at < used.Columns.Count ? used.Columns[at] : null;
-        var by = Column(role) ?? throw Failed();
+            begin["address"] = address;
+        var begun = JsonNode.Parse(AuthCalls.Call("signinBegin", begin.ToJsonString()))!.AsObject();
+        if (Refusal(begun) is { } early)
+            throw early;
+        var column = begun["column"]!.GetValue<string>();
+        var secret = begun["secret"] is JsonValue s && s.TryGetValue<string>(out var named) ? named : null;
+        var equals = begun["equals"]!.GetValue<string>();
+        var keys = counted ? begun["keys"]!.DeepClone() : new JsonArray();
         var conn = db.Driver(source.Source);
+        var found = PersonBy(conn, column, secret, equals);
+        var decide = new JsonObject
+        {
+            ["block"] = block,
+            ["strategy"] = strategy,
+            ["inputs"] = inputs.DeepClone(),
+            ["keys"] = keys,
+            ["found"] = found is ({ }, { } stored) ? new JsonObject { ["stored"] = stored } : null,
+            ["noPeople"] = found is null && NoPeople(conn),
+        };
+        var decided = JsonNode.Parse(AuthCalls.Call("signinDecide", decide.ToJsonString()))!.AsObject();
+        if (Refusal(decided) is { } refused)
+            throw refused;
         long id;
-        if (PersonBy(conn, by, Column("secret"), equals) is ({ } person, { } stored))
-        {
-            var check = new JsonObject { ["strategy"] = strategy, ["inputs"] = inputs.DeepClone(), ["stored"] = new JsonObject { ["secret"] = stored } };
-            bool holds;
-            try
-            {
-                holds = Bool(AuthCalls.Call("check", check.ToJsonString()));
-            }
-            catch (ValueException)
-            {
-                holds = false;
-            }
-            if (!holds)
-                throw Failed();
-            id = person;
-            // What Clarity.Auth says to store after it (a recovery code used up), by role.
-            JsonObject after;
-            try
-            {
-                after = JsonNode.Parse(AuthCalls.Call("afterSignin", check.ToJsonString()))!.AsObject();
-            }
-            catch (ValueException)
-            {
-                throw Failed();
-            }
-            foreach (var (changedRole, value) in after)
-                if (Column(changedRole) is { } column && value is JsonValue v && v.TryGetValue<string>(out var text))
-                {
-                    var d = conn.Dialect;
-                    conn.Execute($"UPDATE {d.Quote(source.Table)} SET {d.Quote(column)} = {d.Mark(1)} WHERE {d.Quote(source.Key)} = {d.Mark(2)}", [text, id]);
-                }
-        }
-        else if (info.FirstAccount && NoPeople(conn))
+        if (decided["make"] is JsonObject make)
         {
             try
             {
-                id = FirstAccount(conn, info, used, strategy, inputs);
+                id = MakePerson(conn, make);
             }
             catch (ClarityException)
             {
-                throw Failed();
+                throw new RefusedException(Clarity.Runtime.Signin.Refused());
             }
         }
         else
-            throw Failed();
-        if (counted)
-            foreach (var key in keys)
-                AuthCalls.Call("triesCleared", new JsonObject { ["key"] = key }.ToJsonString());
+        {
+            id = found!.Value.Id;
+            StoreColumns(conn, id, decided["store"] as JsonObject ?? []);
+        }
         if (target == "desktop" && source.Remembers(inputs))
-            Remember(conn, Column("secret"), id);
+            Remember(conn, secret, id);
         return id;
+    }
+
+    /// <summary>The project's <c>signin</c> block as Clarity.Auth's attempt takes it.</summary>
+    JsonObject Block() => new()
+    {
+        ["strategies"] = new JsonArray([.. source.Strategies.Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["columns"] = new JsonArray([.. s.Columns.Select(c => (JsonNode)c)]), ["options"] = source.OptionsOf(s) })]),
+        ["tries"] = source.Tries,
+        ["triesSeconds"] = source.TriesSeconds,
+    };
+
+    /// <summary>Clarity's refusal when Clarity.Auth refused the attempt (<c>signinRefused</c>, <c>signinTooManyTries</c>); null when it did not.</summary>
+    static RefusedException? Refusal(JsonObject answer) => answer["refused"] is JsonValue key
+        ? new(key.GetValue<string>() == "signinTooManyTries" ? Clarity.Runtime.Signin.TooManyTries() : Clarity.Runtime.Signin.Refused())
+        : null;
+
+    /// <summary>Writes <paramref name="store"/>, values by column, to the person <paramref name="id"/>, in one UPDATE.</summary>
+    void StoreColumns(IDriver conn, long id, JsonObject store)
+    {
+        var d = conn.Dialect;
+        var sets = new List<string>();
+        var values = new List<object?>();
+        foreach (var (column, value) in store)
+            if (value is JsonValue v && v.TryGetValue<string>(out var text))
+            {
+                values.Add(text);
+                sets.Add($"{d.Quote(column)} = {d.Mark(values.Count)}");
+            }
+        if (sets.Count == 0)
+            return;
+        values.Add(id);
+        conn.Execute($"UPDATE {d.Quote(source.Table)} SET {string.Join(", ", sets)} WHERE {d.Quote(source.Key)} = {d.Mark(values.Count)}", values);
     }
 
     /// <summary>
@@ -302,22 +317,18 @@ sealed class People(SigninSource source) : IPeople
         return Sql.GetInteger("count", rows.FirstOrDefault()?[0]) == 0;
     }
 
-    /// <summary>Inserts the first person, with only the fields the strategy names.</summary>
-    long FirstAccount(IDriver conn, Strategy info, SigninStrategy used, string strategy, JsonObject inputs)
+    /// <summary>Inserts a person with only <paramref name="columns"/> (values by column); the other columns take their defaults.</summary>
+    long MakePerson(IDriver conn, JsonObject columns)
     {
-        var made = JsonNode.Parse(AuthCalls.Call("firstAccount", new JsonObject { ["strategy"] = strategy, ["inputs"] = inputs.DeepClone() }.ToJsonString()))!.AsObject();
-        var columns = new List<string>();
+        var names = new List<string>();
         var values = new List<object?>();
-        foreach (var (role, column) in info.Roles.Zip(used.Columns))
-            if (made[role] is JsonValue value && value.TryGetValue<string>(out var text))
-            {
-                columns.Add(column);
-                values.Add(text);
-            }
-        return conn.Insert(conn.Dialect.Insert(source.Table, source.Key, columns), values);
+        foreach (var (column, value) in columns)
+        {
+            names.Add(column);
+            values.Add(value is JsonValue v && v.TryGetValue<string>(out var text) ? text : "");
+        }
+        return conn.Insert(conn.Dialect.Insert(source.Table, source.Key, names), values);
     }
-
-    static bool Bool(string json) => JsonNode.Parse(json)?.GetValue<bool>() ?? false;
 
     public string OpenSession(long record) =>
         JsonNode.Parse(AuthCalls.Call("sessionOpen", new JsonObject { ["record"] = record, ["seconds"] = source.SessionSeconds }.ToJsonString()))!.GetValue<string>();

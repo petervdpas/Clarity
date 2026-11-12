@@ -70,9 +70,13 @@ page Main: window
     button \"Greet\" name greet at 1,2 span 2 on click: greetClicked
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Main
     handler greetClicked
@@ -83,16 +87,19 @@ const PLAIN: &str = "module notes\n\nentity Note\n    text: text(200)\n\npage No
 
 fn signin() -> Signin {
     let mut signin = Signin::new("Member", vec!["desktop".into(), "cli".into()]);
-    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12) });
-    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None });
-    signin.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None });
+    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12), provider: None });
+    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None, provider: None });
+    signin.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None, provider: None });
     signin.session_minutes = 120;
     signin
 }
 
 fn files(source: &str, signs_in: bool, cli: bool) -> Vec<clarity_gen::OutFile> {
-    let signin = signin();
-    let signin = signs_in.then_some(&signin);
+    files_with(source, signs_in.then(signin), cli)
+}
+
+fn files_with(source: &str, signin: Option<Signin>, cli: bool) -> Vec<clarity_gen::OutFile> {
+    let signin = signin.as_ref();
     let sources = clarity_spec::converted([("club/club.clarity", source)]);
     // The people's table, as its migration makes it.
     let step = "migration \"Members\"\n    add entity Member\n        name: text(80)\n        email: email, unique, required\n        passwordHash: text, hashed\n        apiToken: text, hashed\n        recoveryCodes: text, hashed\n        role: Role, default Plain\n";
@@ -149,6 +156,20 @@ fn the_people_are_named_after_the_databases_open() {
     let cli = files(CLUB, true, true);
     has(file(&cli, "src/main.cpp"), "db.add_signin(club::signin_source);");
     assert!(!file(&files(PLAIN, false, false), "src/main.cpp").contains("add_signin"));
+}
+
+#[test]
+fn a_provider_strategy_carries_its_settings() {
+    let mut with = signin();
+    let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+    with.strategies.push(SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
+    // The app's secret is kept under a secret setting the project declares.
+    let kept = format!("{CLUB}\nsettings\n    githubSecret: secret\n");
+    let desktop = files_with(&kept, Some(with), false);
+    let main = file(&desktop, "src/main.cpp");
+    has(main, "{\"github\", {\"email\"}, {{\"client\", \"app\"}, {\"secret\", \"setting:githubSecret\"}, {\"claim\", \"email\"}}}");
+    // A strategy without settings has no options.
+    has(main, "{\"password\", {\"email\", \"password_hash\"}}, ");
 }
 
 #[test]
@@ -244,7 +265,11 @@ fn the_club_builds_and_runs_in_cpp() {
         let out = root.join("target/generated").join(format!("clarity-gen-signin-cpp-{}-{}", if cli { "cli" } else { "desktop" }, std::process::id()));
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
-        clarity_gen::write_out(&out, &files(CLUB, true, cli), &["build", "data"]).unwrap();
+        // A provider too, so its settings are built.
+        let mut with = signin();
+        let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+        with.strategies.push(SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
+        clarity_gen::write_out(&out, &files_with(CLUB, Some(with), cli), &["build", "data"]).unwrap();
         let run = |tool: &str, args: &[&str]| {
             let done = std::process::Command::new(tool).env("CLARITY_UI", &folder).args(args).current_dir(&out).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
             let said = format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr));

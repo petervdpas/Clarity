@@ -1,4 +1,4 @@
-//! The file browser's memory (docs/PROJECT-BROWSER-PLAN.md): the projects
+//! The file browser's memory: the projects
 //! opened last, newest first, and the folder each use of the browser was
 //! left in. The user: "10 recent, remember last folder". Kept in
 //! `recent.json` in Clarity's own folder, beside `ide.json`, and changed key

@@ -293,6 +293,28 @@ void signing_in_is_as_every_runtime_does(void) {
     no_people();
 }
 
+/* A provider's settings go to Clarity.Auth, the secret read from the protected store, "" when not kept. */
+void a_provider_s_settings_go_to_clarity_auth(void) {
+    static const char* const columns[] = {"email"};
+    static const char* const options[] = {"client", "app", "secret", "setting:githubSecret", "claim", "email"};
+    const ClaritySigninStrategy github = {"github", columns, 1, options, 3};
+    memset(kept_secret, 0, sizeof kept_secret);
+    clarity_secret_store = (ClaritySecretStore){memory_get, memory_set};
+    cJSON* got = clarity_signin_options("club", &github);
+    CHECK_JSON(got, "{\"client\":\"app\",\"secret\":\"\",\"claim\":\"email\"}");
+    cJSON_Delete(got);
+    memory_set("club", "githubSecret", "s3cret");
+    got = clarity_signin_options("club", &github);
+    CHECK_JSON(got, "{\"client\":\"app\",\"secret\":\"s3cret\",\"claim\":\"email\"}");
+    cJSON_Delete(got);
+    const ClaritySigninStrategy password = {"password", columns, 1};
+    got = clarity_signin_options("club", &password);
+    CHECK_JSON(got, "{}");
+    cJSON_Delete(got);
+    memset(kept_secret, 0, sizeof kept_secret);
+    clarity_secret_store = (ClaritySecretStore){0};
+}
+
 void allow_readable_and_hashed_say_clarity_words(void) {
     CHECK(clarity_allow(true));
     CHECK(!clarity_allow(false));

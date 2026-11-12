@@ -1,6 +1,6 @@
 //! The program file's resources on Windows: its icon
-//! (docs/APP-ICON-SPLASH-PLAN.md, step 2) and its version
-//! (docs/VERSION-PLAN.md, step 3), checked against Windows' own formats
+//! and its version
+//!, checked against Windows' own formats
 //! with real tools where the machine has them: MinGW links a program with
 //! Clarity's resource object, and llvm-readobj reads the resources back out
 //! of the program. Skipped where the tools are missing.

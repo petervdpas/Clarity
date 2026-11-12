@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Signing in with an e-mail address and a recovery code. -->
+<View class="everything.CodeView">
+  <SigninField name="codeName" at="1,1" span="12" rows="2" input="name" />
+  <SigninField name="codeField" at="1,3" span="12" rows="2" input="code" />
+  <SigninButton name="codeButton" at="1,5" span="12" strategy="recovery" />
+  <SigninOther name="usePassword" at="1,6" span="12" shows="PasswordView" />
+  <SigninRefusal name="codeRefusal" at="1,7" span="12" />
+</View>

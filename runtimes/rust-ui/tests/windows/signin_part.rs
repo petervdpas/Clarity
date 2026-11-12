@@ -268,3 +268,51 @@ fn its_fields_have_accessible_names() {
     assert_eq!(name_of(named(&screen, "signin.password.name")), "Name");
     assert_eq!(name_of(named(&screen, "signin.password.password")), "Password");
 }
+
+/// In the IDE's designer the part is a placeholder: no fields or buttons,
+/// only a frame naming what it offers; the project's sign-in setup decides
+/// the rest, and the running program draws it.
+#[test]
+fn in_the_designer_it_is_a_placeholder_naming_what_it_offers() {
+    const DESIGNED: &str = r#"<Window name="SignIn" designItem="SignIn.cxaml">
+  <Signin name="signin" at="1,1" span="12" rows="3" designItem="SignIn.cxaml:signin" />
+</Window>
+"#;
+    let files = AppFiles { windows: &[("Main", HOME), ("SignIn", DESIGNED)], ..FILES };
+    let (screen, _) = signing_in(files);
+    assert!(shown(&screen).is_empty(), "{:?}", shown(&screen));
+    assert_eq!(part(&screen).placeholder().as_deref(), Some("Sign in: password, account, token, recovery"));
+    assert_eq!(part(&screen).around(), 0.0, "a placeholder asks no room beyond its rows");
+}
+
+/// With `language picker` the part offers the program's languages above its
+/// fields, each by its own name, the one shown chosen; without it, none.
+/// (Choosing one is the frame picker's `choose_language`, tested there.)
+#[test]
+fn its_language_picker_is_there_only_when_the_block_turns_it_on() {
+    const PICKING: &str = r#"{
+  "project": {
+    "locale": {"language": "en"},
+    "translations": {"en": {}, "nl": {}},
+    "signin": {"entity": "Member", "targets": ["desktop"], "languagePicker": true, "strategies": [
+      {"name": "password", "fields": ["email", "passwordHash"], "inputs": ["name", "password"], "targets": ["desktop", "web", "cli"]}
+    ], "sessionMinutes": 480, "tries": 5, "triesMinutes": 15},
+    "files": [{"pages": [
+      {"name": {"name": "Main"}, "kind": "window", "title": "Orders"},
+      {"name": {"name": "SignIn"}, "kind": "signin", "title": "Sign in"}
+    ]}]
+  }
+}"#;
+    let (screen, _) = signing_in(AppFiles { model: PICKING, ..FILES });
+    assert_eq!(shown(&screen)[..3], ["signin.language.label", "signin.language", "signin.password.name.label"]);
+    let own = part(&screen).own().clone();
+    use clarity_ui::parts::PartHost;
+    let offered: Vec<(String, String)> = own.choices("signin.language").into_iter().map(|c| (c.value.as_str().unwrap_or_default().to_string(), c.label)).collect();
+    // The languages the program offers, each by its own name, as the frame's picker offers them.
+    let languages: Vec<(String, String)> = clarity_ui::choices::languages().into_iter().map(|o| (o.name, o.label)).collect();
+    assert!(!languages.is_empty());
+    assert_eq!(offered, languages);
+    assert_eq!(own.read("signin.language"), Some(serde_json::Value::from(clarity_ui::choices::language())));
+    let (plain, _) = signing_in(FILES);
+    assert!(!shown(&plain).iter().any(|n| n.starts_with("signin.language")), "{:?}", shown(&plain));
+}

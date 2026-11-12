@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::parts::{Choice, FieldFacts, Formats};
 
@@ -71,6 +71,8 @@ pub struct SigninFacts {
     pub shows: Vec<String>,
     /// Whether a sign-in part asks to keep the person signed in (`remember ... asks`).
     pub remember_asks: bool,
+    /// Whether a sign-in part lets people pick their language (`language picker`).
+    pub language_picker: bool,
 }
 
 /// One strategy of the block: its name, its inputs (`name`, `password`,
@@ -81,6 +83,9 @@ pub struct SigninStrategyFacts {
     pub name: String,
     pub inputs: Vec<String>,
     pub works_on: Vec<String>,
+    /// A provider's settings the browser part needs (`client`, `tenant`,
+    /// `issuer`); its secret stays with the program. Empty for the others.
+    pub provider: Map<String, Value>,
 }
 
 impl SigninFacts {
@@ -98,11 +103,13 @@ impl SigninFacts {
             let inputs = texts(line.get("inputs")).or_else(|| known.map(|k| from_catalog(k.inputs)));
             let works_on = texts(line.get("targets")).or_else(|| known.map(|k| from_catalog(k.targets)));
             let (Some(inputs), Some(works_on)) = (inputs, works_on) else { continue };
-            strategies.push(SigninStrategyFacts { name: name.to_string(), inputs, works_on });
+            let provider = line.get("provider").and_then(Value::as_object).map(|p| p.iter().filter(|(k, _)| k.as_str() != "secret").map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
+            strategies.push(SigninStrategyFacts { name: name.to_string(), inputs, works_on, provider });
         }
         let shows = texts(block.get("shows")).unwrap_or_default();
         let remember_asks = block.get("rememberAsks").and_then(Value::as_bool).unwrap_or(false);
-        Some(SigninFacts { targets, strategies, shows, remember_asks })
+        let language_picker = block.get("languagePicker").and_then(Value::as_bool).unwrap_or(false);
+        Some(SigninFacts { targets, strategies, shows, remember_asks, language_picker })
     }
 }
 

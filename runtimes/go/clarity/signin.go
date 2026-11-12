@@ -2,8 +2,9 @@
 // generated program names its entity of people and its strategies once,
 // after its databases open (Db.AddSignin), with the function that reaches
 // Clarity.Auth (an AuthCall, its cgo binding in the program). Db.Signin
-// then finds the person by what Clarity.Auth says, checks them and makes
-// them the current person. On the desktop that is one person for the
+// then asks Clarity.Auth where to look the person up and what comes of it,
+// reads and writes the table of people as it says and makes them the
+// current person. On the desktop that is one person for the
 // program; served, each call is the person of its session cookie
 // (Db.Served), so Me is read per call. Refusals are Clarity's own words, by
 // key (conformance/signin.json).
@@ -19,6 +20,7 @@ package clarity
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -37,9 +39,14 @@ type AuthCall func(op, args string) (string, error)
 // SigninStrategy is one strategy the project uses: its name in Clarity.Auth's
 // catalog and the columns of the table of people it names, in the catalog's
 // order of roles (`password email passwordHash` is ["email", "password_hash"]).
+//
+// Options are a provider's settings for Clarity.Auth (client, secret,
+// tenant, issuer, register, claim), as pairs; a secret of
+// setting:<name> is the program's secret setting of that name.
 type SigninStrategy struct {
 	Name    string
 	Columns []string
+	Options [][2]string
 }
 
 // SigninSource is the project's signin block as the program uses it: where
@@ -80,16 +87,12 @@ func (s SigninSource) on(target string) bool {
 	return false
 }
 
-// authStrategy is a strategy of Clarity.Auth's catalog.
+// authStrategy is a strategy of Clarity.Auth's catalog: its fields by role.
 type authStrategy struct {
 	Name   string `json:"name"`
 	Fields []struct {
 		Role string `json:"role"`
-		Hash string `json:"hash"`
 	} `json:"fields"`
-	Inputs       []string `json:"inputs"`
-	Targets      []string `json:"targets"`
-	FirstAccount bool     `json:"firstAccount"`
 }
 
 // people is what the database handle knows of who is using the program.
@@ -353,105 +356,118 @@ func (db *Db) Signin(strategy string, inputs map[string]string) (int64, error) {
 	return db.attempt(strategy, inputs, true)
 }
 
+// attempt is one sign-in, decided by Clarity.Auth (signinBegin, then
+// signinDecide): this looks the person up and stores what it is told. A
+// counted attempt counts failed tries; the computer's account at the start
+// is not counted.
 func (db *Db) attempt(strategy string, inputs map[string]string, counted bool) (int64, error) {
 	p := db.people
 	target := db.target()
-	// Only a strategy the project names, on a target the catalog lets it work on.
-	var used *SigninStrategy
-	for i := range p.source.Strategies {
-		if p.source.Strategies[i].Name == strategy {
-			used = &p.source.Strategies[i]
-		}
-	}
-	info := strategyOf(p.catalog, strategy)
-	if used == nil || info == nil || !contains(info.Targets, target) {
-		return 0, SigninRefused()
-	}
 	if inputs == nil {
 		inputs = map[string]string{}
 	}
-	var found struct {
-		Role   string `json:"role"`
-		Equals string `json:"equals"`
+	block := p.source.block()
+	begin := map[string]any{"block": block, "strategy": strategy, "inputs": inputs, "target": target}
+	if v := p.visit; v != nil && v.address != "" {
+		begin["address"] = v.address
 	}
-	if authCall(p.call, "find", map[string]any{"strategy": strategy, "inputs": inputs}, &found) != nil {
+	var begun struct {
+		Column  string   `json:"column"`
+		Secret  *string  `json:"secret"`
+		Equals  string   `json:"equals"`
+		Keys    []string `json:"keys"`
+		Refused string   `json:"refused"`
+	}
+	if authCall(p.call, "signinBegin", begin, &begun) != nil {
 		return 0, SigninRefused()
 	}
-	keys := []string{"account:" + found.Equals}
-	if v := p.visit; v != nil && v.address != "" {
-		keys = append(keys, "address:"+v.address)
+	if begun.Refused != "" {
+		return 0, signinRefusal(begun.Refused)
 	}
-	if counted {
-		for _, key := range keys {
-			var allowed bool
-			if err := authCall(p.call, "triesAllowed", map[string]any{"key": key, "tries": p.source.Tries, "window": p.source.TriesSeconds}, &allowed); err != nil || !allowed {
-				return 0, SigninTooManyTries()
-			}
-		}
+	keys := []string{}
+	if counted && begun.Keys != nil {
+		keys = begun.Keys
 	}
-	failed := func() error {
-		if counted {
-			for _, key := range keys {
-				_ = authCall(p.call, "triesFailed", map[string]string{"key": key}, nil)
-			}
-		}
-		return SigninRefused()
+	secret := ""
+	if begun.Secret != nil {
+		secret = *begun.Secret
 	}
-	column := func(role string) string {
-		for at, f := range info.Fields {
-			if f.Role == role && at < len(used.Columns) {
-				return used.Columns[at]
-			}
-		}
-		return ""
-	}
-	by := column(found.Role)
-	if by == "" {
-		return 0, failed()
-	}
-	id, stored, has, err := db.personBy(by, column("secret"), found.Equals)
+	id, stored, has, err := db.personBy(begun.Column, secret, begun.Equals)
 	if err != nil {
 		return 0, err
 	}
+	// What the lookup found: the stored secret, or nobody (and then whether there are no people at all).
+	var found any
+	none := false
+	if has {
+		found = map[string]string{"stored": stored}
+	} else if none, err = db.noPeople(); err != nil {
+		return 0, err
+	}
+	var decided struct {
+		SignedIn bool           `json:"signedIn"`
+		Store    map[string]any `json:"store"`
+		Make     map[string]any `json:"make"`
+		Refused  string         `json:"refused"`
+	}
+	decide := map[string]any{"block": block, "strategy": strategy, "inputs": inputs, "keys": keys, "found": found, "noPeople": none}
+	if authCall(p.call, "signinDecide", decide, &decided) != nil {
+		return 0, SigninRefused()
+	}
 	switch {
-	case has:
-		kept := map[string]string{"secret": stored}
-		var ok bool
-		if authCall(p.call, "check", map[string]any{"strategy": strategy, "inputs": inputs, "stored": kept}, &ok) != nil || !ok {
-			return 0, failed()
-		}
-		// What signing in changes of what is stored: a recovery code is used up.
-		var changed map[string]string
-		if authCall(p.call, "afterSignin", map[string]any{"strategy": strategy, "inputs": inputs, "stored": kept}, &changed) != nil {
-			return 0, failed()
-		}
-		if err := db.storeAfter(info, used, id, changed); err != nil {
+	case decided.Refused != "":
+		return 0, signinRefusal(decided.Refused)
+	case decided.SignedIn && has:
+		if err := db.storeColumns(id, decided.Store); err != nil {
 			return 0, err
 		}
-	case info.FirstAccount:
-		none, err := db.noPeople()
-		if err != nil {
-			return 0, err
-		}
-		if !none {
-			return 0, failed()
-		}
-		if id, err = db.firstAccount(info, used, strategy, inputs); err != nil {
-			return 0, failed()
+	case decided.Make != nil:
+		// A first account that cannot be made (a required field without a default) refuses, as on every stack.
+		if id, err = db.makePerson(decided.Make); err != nil {
+			return 0, SigninRefused()
 		}
 	default:
-		return 0, failed()
-	}
-	if counted {
-		for _, key := range keys {
-			_ = authCall(p.call, "triesCleared", map[string]string{"key": key}, nil)
-		}
+		return 0, SigninRefused()
 	}
 	db.signedIn(id)
 	if target == "desktop" && p.source.remembers(inputs) {
-		db.remember(column("secret"), id)
+		db.remember(secret, id)
 	}
 	return id, nil
+}
+
+// signinRefusal is Clarity's refusal by the key Clarity.Auth gives.
+func signinRefusal(key string) error {
+	if key == "signinTooManyTries" {
+		return SigninTooManyTries()
+	}
+	return SigninRefused()
+}
+
+// block is the signin block as Clarity.Auth's attempt takes it.
+func (s SigninSource) block() map[string]any {
+	strategies := make([]map[string]any, len(s.Strategies))
+	for i, used := range s.Strategies {
+		strategies[i] = map[string]any{"name": used.Name, "columns": used.Columns, "options": s.options(used)}
+	}
+	return map[string]any{"strategies": strategies, "tries": s.Tries, "triesSeconds": s.TriesSeconds}
+}
+
+// options are a strategy's settings as Clarity.Auth takes them, the secret
+// read from the program's protected store; "" when it is not kept.
+func (s SigninSource) options(used SigninStrategy) map[string]string {
+	options := make(map[string]string, len(used.Options))
+	for _, pair := range used.Options {
+		key, value := pair[0], pair[1]
+		if name, found := strings.CutPrefix(value, "setting:"); found && key == "secret" {
+			value = ""
+			if Secrets != nil {
+				value = Secrets.Get(s.Program, name)
+			}
+		}
+		options[key] = value
+	}
+	return options
 }
 
 // remembered is the person of the remembered sign-in when it still holds:
@@ -566,8 +582,9 @@ func (db *Db) personBy(column, secret, equals string) (int64, string, bool, erro
 	return id, stored, true, nil
 }
 
-// storeAfter writes what signing in changed (by role) to the person's row.
-func (db *Db) storeAfter(info *authStrategy, used *SigninStrategy, id int64, changed map[string]string) error {
+// storeColumns writes store, values by column, to the person's record id
+// in one UPDATE; columns in name order, so the statement is the same every time.
+func (db *Db) storeColumns(id int64, store map[string]any) error {
 	p := db.people
 	s, err := db.source(p.source.Source)
 	if err != nil {
@@ -576,10 +593,10 @@ func (db *Db) storeAfter(info *authStrategy, used *SigninStrategy, id int64, cha
 	d := s.driver.dialect()
 	var sets []string
 	var values []any
-	for at, f := range info.Fields {
-		if value, ok := changed[f.Role]; ok && at < len(used.Columns) {
+	for _, column := range sortedKeys(store) {
+		if value, ok := store[column].(string); ok {
 			values = append(values, value)
-			sets = append(sets, d.Quote(used.Columns[at])+" = "+d.Mark(len(values)))
+			sets = append(sets, d.Quote(column)+" = "+d.Mark(len(values)))
 		}
 	}
 	if len(sets) == 0 {
@@ -588,6 +605,16 @@ func (db *Db) storeAfter(info *authStrategy, used *SigninStrategy, id int64, cha
 	values = append(values, id)
 	_, err = s.driver.execute("UPDATE "+d.Quote(p.source.Table)+" SET "+strings.Join(sets, ", ")+" WHERE "+d.Quote(p.source.Key)+" = "+d.Mark(len(values)), values)
 	return err
+}
+
+// sortedKeys are the keys of values in name order.
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // secretColumns are the columns of the people that hold a secret, by the catalog.
@@ -686,26 +713,21 @@ func (db *Db) noPeople() (bool, error) {
 	return n == 0, err
 }
 
-// firstAccount inserts the first person, with only the fields the strategy names.
-func (db *Db) firstAccount(info *authStrategy, used *SigninStrategy, strategy string, inputs map[string]string) (int64, error) {
+// makePerson inserts a person with only columns (values by column); the
+// other columns take their defaults from the table.
+func (db *Db) makePerson(columns map[string]any) (int64, error) {
 	p := db.people
-	var made map[string]string
-	if err := authCall(p.call, "firstAccount", map[string]any{"strategy": strategy, "inputs": inputs}, &made); err != nil {
-		return 0, err
-	}
-	var columns []string
-	var values []any
-	for at, f := range info.Fields {
-		if value, ok := made[f.Role]; ok && at < len(used.Columns) {
-			columns = append(columns, used.Columns[at])
-			values = append(values, value)
-		}
+	names := sortedKeys(columns)
+	values := make([]any, len(names))
+	for i, name := range names {
+		text, _ := columns[name].(string)
+		values[i] = text
 	}
 	s, err := db.source(p.source.Source)
 	if err != nil {
 		return 0, err
 	}
-	return s.driver.insert(s.driver.dialect().insert(p.source.Table, p.source.Key, columns), values)
+	return s.driver.insert(s.driver.dialect().insert(p.source.Table, p.source.Key, names), values)
 }
 
 func (db *Db) signedIn(id int64) {

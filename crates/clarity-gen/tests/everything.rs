@@ -78,7 +78,9 @@ fn the_every_part_project_uses_every_part() {
             kinds(&sidebar.widgets, &mut used);
         }
     }
-    let missing: Vec<String> = widgets::catalog().into_iter().map(|w| w.keyword).filter(|k| !used.contains(k)).collect();
+    // A project signs in on the splash or on the sign-in window, not both: this one uses the
+    // sign-in window and its views; the sign-in part of the splash is the todo example's.
+    let missing: Vec<String> = widgets::catalog().into_iter().map(|w| w.keyword).filter(|k| !used.contains(k) && k != "signin").collect();
     assert!(missing.is_empty(), "parts the every-part project does not use yet: {}", missing.join(", "));
 }
 

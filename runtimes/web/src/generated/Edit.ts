@@ -27,7 +27,19 @@ part: string | null,
 /**
  * Overrides the catalog height, as a custom part's declared size does.
  */
-height: number | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addMenu", item: number, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, rows: number | null, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "setPageStyle", page: number, style: string, } | { "op": "setPageAllow", page: number, allow: string, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
+height: number | null, 
+/**
+ * A sign-in field's input (`input password`), as the palette of a sign-in view offers it.
+ */
+input: string | null, 
+/**
+ * A sign-in button's strategy (`strategy password`).
+ */
+strategy: string | null, 
+/**
+ * The sign-in view an "other way" shows (`shows CodeView`).
+ */
+shows: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addMenu", item: number, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, rows: number | null, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "setPageStyle", page: number, style: string, } | { "op": "setPageAllow", page: number, allow: string, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
 /**
  * `data.field`
  */

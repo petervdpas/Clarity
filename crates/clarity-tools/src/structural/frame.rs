@@ -975,7 +975,7 @@ mod tests {
         // A button on the view, as the designer places one.
         let project = places::model_project(&dir).unwrap();
         let view = places::frame_owner(&project, &dir, "MainView").unwrap();
-        let place = Edit::CreateWidget { container: view.start, kind: clarity_spec::widgets::WidgetKind::Button, col: 1, row: 1, width: None, caption: Some("Save".into()), bind: None, part: None, height: None };
+        let place = Edit::CreateWidget { container: view.start, kind: clarity_spec::widgets::WidgetKind::Button, col: 1, row: 1, width: None, caption: Some("Save".into()), bind: None, part: None, height: None, input: None, strategy: None, shows: None };
         crate::edits::apply(&dir, &view.file, &place).unwrap();
         let project = places::model_project(&dir).unwrap();
         let view = places::frame_owner(&project, &dir, "MainView").unwrap();

@@ -110,7 +110,7 @@ pub fn load_sources_signed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a s
         files.push(file);
         diagnostics.extend(file_diagnostics);
     }
-    // Windows and views in `.cxaml` (docs/CXAML-SOURCE-PLAN.md): each its own
+    // Windows and views in `.cxaml`: each its own
     // file of the module its folder is named after.
     for (path, text) in markup {
         let (file, file_diagnostics) = cxaml::page_file(path, text, &files);
@@ -153,7 +153,7 @@ pub fn load_sources_signed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a s
         stores: None,
         translations: BTreeMap::new(),
     };
-    // A window, view or app has a file of its own (docs/CXAML-SOURCE-PLAN.md): one still written in a module's file is an error, which Move pages into design fixes.
+    // A window, view or app has a file of its own: one still written in a module's file is an error, which Move pages into design fixes.
     project.diagnostics.extend(cxaml::pages_left_in_modules(&project));
     project
 }

@@ -56,6 +56,18 @@ pub enum WidgetKind {
     /// Signs in with the project's `signin` block: per strategy its inputs
     /// and button, in Clarity's own words (docs/APP-CAPABILITIES-PLAN.md step 4).
     Signin,
+    /// A field of the sign-in view for one input of a strategy (`input password`), labelled in Clarity's words.
+    SigninField,
+    /// A button of the sign-in view that signs in with a strategy of the project (`strategy password`).
+    SigninButton,
+    /// "Keep me signed in" on the sign-in view, with `remember ... when asked`.
+    SigninRemember,
+    /// The language dropdown of the sign-in view, with `language picker`.
+    SigninLanguage,
+    /// A link that shows another sign-in view (`shows CodeView`): another way to sign in.
+    SigninOther,
+    /// Where a refused sign-in says why, on the sign-in view.
+    SigninRefusal,
     Number,
     Checkbox,
     Switch,
@@ -138,6 +150,8 @@ pub enum Category {
     Time,
     /// The parts of a toolbox (`page X: toolbox`): tools, groups of them, size, opacity and colours.
     Tools,
+    /// The parts of a sign-in view: fields, buttons, keep me signed in, language, other way, refusal.
+    Signin,
 }
 
 /// Something that happens to a part, which a handler in the code behind
@@ -451,6 +465,12 @@ pub enum WidgetProperty {
     Beside,
     /// `does pencil`: the built-in action a toolbox's tool does on its canvas.
     Does,
+    /// `input password`: the input of a strategy a sign-in field takes.
+    Input,
+    /// `strategy password`: the strategy a sign-in button signs in with.
+    Strategy,
+    /// `shows CodeView`: the sign-in view an "other way" part shows.
+    Shows,
     /// `width 420`: how wide a slide-out at the left or right is, in pixels.
     SlideWidth,
     /// `height 300`: how high a slide-out at the top or bottom is, in pixels.
@@ -531,6 +551,14 @@ pub struct WidgetInfo {
     #[serde(rename = "codeLanguages")]
     #[ts(rename = "codeLanguages")]
     pub code_languages: Vec<String>,
+    /// Whether it may stand on a sign-in view (`on_signin_view`).
+    #[serde(rename = "signinView")]
+    #[ts(rename = "signinView")]
+    pub signin_view: bool,
+    /// Whether it may stand on the sign-in window itself (`on_signin_window`).
+    #[serde(rename = "signinWindow")]
+    #[ts(rename = "signinWindow")]
+    pub signin_window: bool,
 }
 
 struct Entry {
@@ -691,6 +719,14 @@ const ENTRIES: &[Entry] = &[
         // Only its place and look: the project's signin block says what it offers.
         properties: &[],
     },
+    // The parts of a sign-in view (docs/APP-CAPABILITIES-PLAN.md, "The sign-in window is designed, and guided"):
+    // each keeps its place and look; what it signs in with is the project's signin block.
+    signin_part(WidgetKind::SigninField, "signinField", "Field", (6, 2), &[WidgetProperty::Input]),
+    signin_part(WidgetKind::SigninButton, "signinButton", "Sign-in button", (6, 1), &[WidgetProperty::Strategy]),
+    signin_part(WidgetKind::SigninRemember, "signinRemember", "Keep me signed in", (6, 1), &[]),
+    signin_part(WidgetKind::SigninLanguage, "signinLanguage", "Language", (6, 2), &[]),
+    signin_part(WidgetKind::SigninOther, "signinOther", "Other way", (6, 1), &[WidgetProperty::Shows]),
+    signin_part(WidgetKind::SigninRefusal, "signinRefusal", "Refusal", (6, 1), &[]),
     input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
         caption: Some("Check box"),
@@ -1346,6 +1382,25 @@ fn entry(kind: WidgetKind) -> &'static Entry {
 }
 
 /// The full catalog, in palette order.
+/// A part of a sign-in view: no binding, no events, Clarity's own words unless its caption says others.
+const fn signin_part(kind: WidgetKind, keyword: &'static str, name: &'static str, size: (u32, u32), properties: &'static [WidgetProperty]) -> Entry {
+    Entry { kind, keyword, name, category: Category::Signin, size, caption: None, bind: BindTarget::Nothing, field_types: &[], input: false, container: None, clickable: false, events: &[], properties }
+}
+
+/// The parts that decorate a sign-in window and its views: a heading, a
+/// label, a picture (a logo), a line and a link.
+pub const SIGNIN_DECORATION: [WidgetKind; 5] = [WidgetKind::Heading, WidgetKind::Label, WidgetKind::Image, WidgetKind::Separator, WidgetKind::Link];
+
+/// Whether a part may stand on a sign-in view: the sign-in parts and the decoration.
+pub fn on_signin_view(kind: WidgetKind) -> bool {
+    entry(kind).category == Category::Signin || SIGNIN_DECORATION.contains(&kind)
+}
+
+/// Whether a part may stand on the sign-in window itself: its content, which shows the sign-in views, and the decoration.
+pub fn on_signin_window(kind: WidgetKind) -> bool {
+    kind == WidgetKind::Content || SIGNIN_DECORATION.contains(&kind)
+}
+
 pub fn catalog() -> Vec<WidgetInfo> {
     ENTRIES.iter().map(|e| info(e.kind)).collect()
 }
@@ -1369,6 +1424,8 @@ pub fn info(kind: WidgetKind) -> WidgetInfo {
         events: e.events.to_vec(),
         properties: e.properties.to_vec(),
         code_languages: if e.properties.contains(&WidgetProperty::Code) { CODE_LANGUAGES.iter().map(|l| l.to_string()).collect() } else { Vec::new() },
+        signin_view: on_signin_view(e.kind),
+        signin_window: on_signin_window(e.kind),
     }
 }
 
@@ -1634,6 +1691,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         toolbox_page: None,
         toolbox_columns: None,
         does: None,
+        input: None,
+        strategy: None,
+        shows: None,
         brush: None,
         ink: None,
         order: None,
@@ -1967,6 +2027,15 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(does) = &props.does {
         parts.push(format!("does {does}"));
     }
+    if let Some(input) = &props.input {
+        parts.push(format!("input {input}"));
+    }
+    if let Some(strategy) = &props.strategy {
+        parts.push(format!("strategy {strategy}"));
+    }
+    if let Some(shows) = &props.shows {
+        parts.push(format!("shows {shows}"));
+    }
     if let Some(brush) = props.brush {
         parts.push(format!("brush {brush}"));
     }
@@ -2261,6 +2330,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Beside, props.beside.is_some(), "beside"),
         (WidgetProperty::Toolbox, props.toolbox.is_some(), "toolbox"),
         (WidgetProperty::Does, props.does.is_some(), "does"),
+        (WidgetProperty::Input, props.input.is_some(), "input"),
+        (WidgetProperty::Strategy, props.strategy.is_some(), "strategy"),
+        (WidgetProperty::Shows, props.shows.is_some(), "shows"),
         (WidgetProperty::SlideWidth, props.slide_width.is_some(), "width"),
         (WidgetProperty::SlideHeight, props.slide_height.is_some(), "height"),
         (WidgetProperty::Pinnable, props.pinnable, "pinnable"),

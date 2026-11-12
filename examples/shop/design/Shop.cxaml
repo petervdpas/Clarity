@@ -7,6 +7,7 @@
       <Item kind="separator" />
       <Item caption="@languageItem" name="languageItem" opens="language" />
       <Item caption="@themeItem" name="themeItem" opens="theme" />
+      <Item caption="@signOutItem" name="signOutItem" opens="signout" />
       <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
     </Item>
     <Item caption="@customersItem" name="customersItem">

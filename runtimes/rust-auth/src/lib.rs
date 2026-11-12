@@ -3,10 +3,13 @@
 //! name with JSON arguments (`call`), which is what the C table offers.
 
 mod account;
+pub mod attempt;
 mod catalog;
 mod hash;
 #[cfg(feature = "openid")]
 pub mod openid;
+#[cfg(feature = "openid")]
+pub mod providers;
 mod remember;
 mod sessions;
 mod tries;
@@ -51,6 +54,9 @@ pub struct Find {
 /// Which field to find the person by, for this strategy and these inputs.
 pub fn find(strategy: &str, inputs: &Map<String, Value>) -> Result<Find, Problem> {
     let s = catalog::strategy(strategy)?;
+    if s.provider {
+        return Ok(Find { role: "match".into(), equals: provider_identity(strategy, inputs)? });
+    }
     let input = |name: &str| catalog::input(s, inputs, name);
     // Every input the strategy takes is given, not only the one it finds by.
     for name in s.inputs {
@@ -66,10 +72,27 @@ pub fn find(strategy: &str, inputs: &Map<String, Value>) -> Result<Find, Problem
     Ok(Find { role: role.into(), equals })
 }
 
+/// Who signed in at a provider, by the code its browser brought back.
+fn provider_identity(strategy: &str, inputs: &Map<String, Value>) -> Result<String, Problem> {
+    #[cfg(feature = "openid")]
+    {
+        providers::identity(strategy, inputs).map_err(|text| Problem::new(ProblemKind::Failed, text))
+    }
+    #[cfg(not(feature = "openid"))]
+    {
+        let _ = inputs;
+        Err(Problem::new(ProblemKind::Failed, format!("this program carries no sign-in with a provider ({strategy}); its Clarity.Auth is built without the feature openid")))
+    }
+}
+
 /// Whether the person found (their fields by role, as stored) is signed in.
 pub fn check(strategy: &str, inputs: &Map<String, Value>, stored: &Map<String, Value>) -> Result<bool, Problem> {
     let s = catalog::strategy(strategy)?;
     let secret = stored.get("secret").and_then(Value::as_str).unwrap_or("");
+    // The provider said who signed in when the person was found.
+    if s.provider {
+        return Ok(true);
+    }
     Ok(match s.name {
         "password" => hash::verify(catalog::input(s, inputs, "password")?, secret),
         "account" => true,
@@ -96,6 +119,7 @@ pub fn first_account(strategy: &str, inputs: &Map<String, Value>) -> Result<Map<
             made.insert("secret".into(), Value::from(hash::hash("argon2id", catalog::input(s, inputs, "password")?)?));
         }
         "account" => {}
+        _ if s.provider => {}
         _ => unreachable!("every strategy that makes the first account says its fields"),
     }
     Ok(made)
@@ -174,6 +198,23 @@ pub fn call(op: &str, args: &str) -> Result<String, Problem> {
         "sessionCloseOthers" => {
             session_close_others(number("record")?, text("token")?);
             Value::Null
+        }
+        "signinBegin" => {
+            let address = args.get("address").and_then(Value::as_str);
+            match attempt::signin_begin(&attempt::block_of(&args["block"]), text("strategy")?, &object("inputs"), text("target")?, address, at) {
+                attempt::Begun::Lookup { column, secret, equals, keys } => json!({"column": column, "secret": secret, "equals": equals, "keys": keys}),
+                attempt::Begun::Refused(key) => json!({"refused": key}),
+            }
+        }
+        "signinDecide" => {
+            let keys: Vec<String> = args.get("keys").and_then(Value::as_array).map(|k| k.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            let stored = args.get("found").and_then(|f| f.get("stored")).map(|s| s.as_str().unwrap_or_default().to_string());
+            let no_people = args.get("noPeople").and_then(Value::as_bool).unwrap_or(false);
+            match attempt::signin_decide(&attempt::block_of(&args["block"]), text("strategy")?, &object("inputs"), &keys, stored.as_deref(), no_people, at) {
+                attempt::Decided::SignedIn { store } => json!({"signedIn": true, "store": store}),
+                attempt::Decided::Make { columns } => json!({"make": columns}),
+                attempt::Decided::Refused(key) => json!({"refused": key}),
+            }
         }
         _ => return Err(Problem::new(ProblemKind::Failed, format!("Clarity.Auth has no operation '{op}'"))),
     };

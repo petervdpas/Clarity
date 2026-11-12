@@ -87,6 +87,8 @@ translation en
     signinButton "Sign in"
     signinCode "Recovery code"
     signinUseCode "Use a recovery code"
+    signinUsePassword "Sign in with a password"
+    signinUseToken "Use a token"
     signinToken "Token"
     signinAccountButton "Use this computer's account"
     signinBack "Back"

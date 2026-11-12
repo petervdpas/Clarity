@@ -34,6 +34,11 @@ pub struct Provider {
     pub client_id: String,
     /// Fields the provider's sign-in page is asked for besides the standard ones.
     pub extra: Vec<(String, String)>,
+    /// The app's secret at the provider, sent when the code is traded; a
+    /// program that can keep none (a desktop program with PKCE) has none.
+    pub secret: Option<String>,
+    /// Whether it is asked for a refresh token (`offline_access`); GitHub knows no such scope.
+    pub renews: bool,
 }
 
 /// What a sign-in or a renewal gives.
@@ -81,7 +86,7 @@ fn with_renewal(scope: &str) -> String {
 impl Provider {
     /// A provider by its endpoints.
     pub fn new(name: &str, authorize_endpoint: &str, token_endpoint: &str, client_id: &str) -> Provider {
-        Provider { name: name.to_string(), authorize_endpoint: authorize_endpoint.to_string(), token_endpoint: token_endpoint.to_string(), client_id: client_id.to_string(), extra: Vec::new() }
+        Provider { name: name.to_string(), authorize_endpoint: authorize_endpoint.to_string(), token_endpoint: token_endpoint.to_string(), client_id: client_id.to_string(), extra: Vec::new(), secret: None, renews: true }
     }
 
     /// Microsoft Entra ID: `authority` is [`ENTRA_AUTHORITY`] (another
@@ -96,7 +101,7 @@ impl Provider {
 
     /// The provider's sign-in page, which sends the browser back to `redirect` with a code.
     pub fn authorize_url(&self, redirect: &str, scope: &str, state: &str, pkce: &Pkce) -> String {
-        let scope = with_renewal(scope);
+        let scope = self.scope_of(scope);
         let mut fields: Vec<(&str, &str)> = vec![
             ("client_id", &self.client_id),
             ("response_type", "code"),
@@ -113,14 +118,17 @@ impl Provider {
 
     /// Trades the browser's code for tokens.
     pub fn redeem(&self, code: &str, redirect: &str, verifier: &str, scope: &str) -> Result<Tokens, String> {
-        self.token(&[
-            ("client_id", &self.client_id),
-            ("grant_type", "authorization_code"),
-            ("code", code),
-            ("redirect_uri", redirect),
-            ("code_verifier", verifier),
-            ("scope", &with_renewal(scope)),
-        ])
+        let scope = self.scope_of(scope);
+        let mut fields = vec![("client_id", self.client_id.as_str()), ("grant_type", "authorization_code"), ("code", code), ("redirect_uri", redirect), ("code_verifier", verifier), ("scope", scope.as_str())];
+        if let Some(secret) = &self.secret {
+            fields.push(("client_secret", secret));
+        }
+        self.token(&fields)
+    }
+
+    /// The scope asked for, with the refresh scope when the provider renews.
+    fn scope_of(&self, scope: &str) -> String {
+        if self.renews { with_renewal(scope) } else { scope.to_string() }
     }
 
     /// A fresh access token from a refresh token.
@@ -134,6 +142,8 @@ impl Provider {
         let mut response = agent
             .post(&self.token_endpoint)
             .header("Content-Type", "application/x-www-form-urlencoded")
+            // GitHub answers in JSON only when asked; the others do anyway.
+            .header("Accept", "application/json")
             .send(form(fields))
             .map_err(|err| format!("cannot reach {name}'s sign-in: {err}"))?;
         let status = response.status().as_u16();

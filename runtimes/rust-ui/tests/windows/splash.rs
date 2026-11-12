@@ -1,4 +1,4 @@
-//! An application's splash screen (docs/APP-ICON-SPLASH-PLAN.md, step 3):
+//! An application's splash screen:
 //! the page the app names shows on its own while `on start` runs elsewhere,
 //! says what loads in its part `status`, and the main window follows with
 //! what `on start` answered. As in Avalonia, the markup says it all: the

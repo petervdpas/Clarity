@@ -1951,11 +1951,11 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 82] = [
+pub const LINE_WORDS: [&str; 85] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
-    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color",
+    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows",
 ];
 
 fn parse_widget_props(
@@ -2008,6 +2008,9 @@ fn parse_widget_props(
         toolbox_page: None,
         toolbox_columns: None,
         does: None,
+        input: None,
+        strategy: None,
+        shows: None,
         brush: None,
         ink: None,
         order: None,
@@ -2191,6 +2194,18 @@ fn parse_widget_props(
             "does" => {
                 applies(WidgetProperty::Does)?;
                 props.does = Some(cursor.expect_ident("what the tool does, as in does pencil")?.name);
+            }
+            "input" => {
+                applies(WidgetProperty::Input)?;
+                props.input = Some(cursor.expect_ident("the input it takes, as in input password")?.name);
+            }
+            "strategy" => {
+                applies(WidgetProperty::Strategy)?;
+                props.strategy = Some(cursor.expect_ident("the strategy it signs in with, as in strategy password")?.name);
+            }
+            "shows" => {
+                applies(WidgetProperty::Shows)?;
+                props.shows = Some(cursor.expect_ident("the sign-in view it shows, as in shows CodeView")?.name);
             }
             "beside" => {
                 applies(WidgetProperty::Beside)?;

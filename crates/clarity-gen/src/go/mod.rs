@@ -284,7 +284,9 @@ pub(crate) fn add_signin(project: &Project, settings: &Settings) -> String {
     if plan.remember_asks {
         remember.push_str(", RememberAsks: true");
     }
-    let strategies = plan.strategies.iter().map(|(name, columns)| format!("{{Name: {}, Columns: []string{{{}}}}}", string(name), list(columns))).collect::<Vec<_>>().join(", ");
+    // A provider's settings for Clarity.Auth; left out for a strategy without them.
+    let options = |name: &str| plan.options.get(name).map(|o| format!(", Options: [][2]string{{{}}}", o.iter().map(|(k, v)| format!("{{{}, {}}}", string(k), string(v))).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+    let strategies = plan.strategies.iter().map(|(name, columns)| format!("{{Name: {}, Columns: []string{{{}}}{}}}", string(name), list(columns), options(name))).collect::<Vec<_>>().join(", ");
     // The program's name, under which the secret store keeps the remembered sign-in.
     let program = string(&crate::settings_program(settings));
     format!(
@@ -599,7 +601,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     files.push(text("go.mod", go_mod_text));
     files.push(text("go.sum", go_sum(&groups) + &part_sums + &library_sums));
-    // The program file's icon and version on Windows: a .syso per processor, which go build links for its own (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md).
+    // The program file's icon and version on Windows: a .syso per processor, which go build links for its own.
     files.extend(crate::windows_resources::object_files(project, &clarity_project::title(settings), &module, crate::windows_resources::syso_path));
     Ok(files)
 }

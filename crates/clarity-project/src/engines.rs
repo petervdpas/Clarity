@@ -203,7 +203,7 @@ fn type_text(ty: &TypeRef) -> String {
 
 const VALUE: &str = "clarity_engine::serde_json::Value";
 
-/// The Rust type a value of `ty` arrives as, from its JSON (docs/manual/code.engines.md).
+/// The Rust type a value of `ty` arrives as, from its JSON (manual/code.engines.md).
 fn rust_type(ty: &TypeRef, is_enum: &dyn Fn(&str) -> bool) -> String {
     match &ty.kind {
         TypeRefKind::Text | TypeRefKind::Decimal | TypeRefKind::Money => "String".into(),

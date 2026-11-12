@@ -11,6 +11,10 @@ fn word(token: &Token) -> Option<&str> {
     (token.kind == TokenKind::Ident).then_some(token.text.as_str())
 }
 
+fn text(token: &Token) -> Option<String> {
+    (token.kind == TokenKind::Str).then(|| token.text.clone())
+}
+
 fn number(token: &Token) -> Option<u32> {
     (token.kind == TokenKind::Number).then(|| token.text.parse::<u32>().ok()).flatten().filter(|n| *n > 0)
 }
@@ -67,8 +71,12 @@ pub fn line(signin: &mut Signin, line: u32, indent: usize, strategy_indent: &mut
         last.minimum = Some(n.ok_or_else(|| format!("line {line}: write the fewest characters a secret may have, like: minimum 12"))?);
         return Ok(());
     }
+    // A provider's settings, indented under its line.
+    if PROVIDER_SETTINGS.contains(&keyword) && strategy_indent.is_some_and(|i| indent > i) {
+        return provider_line(signin, line, keyword, args);
+    }
     if strategy_indent.is_some_and(|i| indent > i) {
-        return Err(format!("line {line}: unexpected indented line under a strategy; only 'minimum' goes there"));
+        return Err(format!("line {line}: unexpected indented line under a strategy; only 'minimum' and a provider's settings go there"));
     }
     match keyword {
         "session" => {
@@ -105,6 +113,13 @@ pub fn line(signin: &mut Signin, line: u32, indent: usize, strategy_indent: &mut
                 return Err(format!("line {line}: 'remember' keeps a sign-in on the desktop; add desktop to the signin line"));
             }
         }
+        "language" => {
+            // `language picker`: the sign-in part lets people pick their language.
+            if !matches!(args, [picker] if word(picker) == Some("picker")) {
+                return Err(format!("line {line}: write language picker to let people pick their language on the sign-in part"));
+            }
+            signin.language_picker = true;
+        }
         "shows" => {
             let named: Vec<String> = args.iter().filter(|t| t.kind != TokenKind::Comma).filter_map(|t| word(t)).map(str::to_string).collect();
             if named.is_empty() || named.len() != args.iter().filter(|t| t.kind != TokenKind::Comma).count() {
@@ -139,7 +154,7 @@ pub fn line(signin: &mut Signin, line: u32, indent: usize, strategy_indent: &mut
             if not_here.len() == signin.targets.len() {
                 return Err(format!("line {line}: the {name} strategy works on {}, not on {}", info.targets.join(", "), not_here.join(", ")));
             }
-            signin.strategies.push(SigninStrategy { name: name.to_string(), fields, minimum: None });
+            signin.strategies.push(SigninStrategy { name: name.to_string(), fields, minimum: None, provider: None });
             *strategy_indent = Some(indent);
         }
     }
@@ -180,6 +195,60 @@ pub fn finish(signin: &Signin, stack: Option<&Stack>) -> Result<(), String> {
     Ok(())
 }
 
+/// The settings a provider's line may have indented under it.
+const PROVIDER_SETTINGS: [&str; 5] = ["client", "secret", "tenant", "issuer", "register"];
+
+/// A provider's setting under its line: `client "..."`, `secret "setting:..."`,
+/// `tenant "..."`, `issuer "..."`, `register`.
+fn provider_line(signin: &mut Signin, line: u32, keyword: &str, args: &[&Token]) -> Result<(), String> {
+    let last = signin.strategies.last_mut().expect("a strategy line comes first");
+    let is_provider = signin::strategy_info(&last.name).is_some_and(|info| info.provider);
+    if !is_provider {
+        return Err(format!("line {line}: the {} strategy is no provider, so it has no {keyword}", last.name));
+    }
+    let name = last.name.clone();
+    let settings = last.provider.get_or_insert_with(Default::default);
+    if keyword == "register" {
+        if !args.is_empty() {
+            return Err(format!("line {line}: write register alone, so a first sign-in makes the person's record"));
+        }
+        if settings.register {
+            return Err(format!("line {line}: 'register' is written twice"));
+        }
+        settings.register = true;
+        return Ok(());
+    }
+    let value = match args {
+        [value] => text(value),
+        _ => None,
+    }
+    .ok_or_else(|| format!("line {line}: write the {keyword} in quotes, like: {keyword} \"...\""))?;
+    let slot = match keyword {
+        "client" => {
+            if !settings.client.is_empty() {
+                return Err(format!("line {line}: 'client' is written twice"));
+            }
+            settings.client = value;
+            return Ok(());
+        }
+        "secret" => {
+            if !value.starts_with("setting:") {
+                return Err(format!("line {line}: the secret is a secret setting, never the secret itself: secret \"setting:{name}Secret\""));
+            }
+            &mut settings.secret
+        }
+        "tenant" if name != "microsoft" => return Err(format!("line {line}: only the microsoft strategy has a tenant")),
+        "tenant" => &mut settings.tenant,
+        "issuer" if name != "openid" => return Err(format!("line {line}: only the openid strategy has an issuer")),
+        _ => &mut settings.issuer,
+    };
+    if slot.is_some() {
+        return Err(format!("line {line}: '{keyword}' is written twice"));
+    }
+    *slot = Some(value);
+    Ok(())
+}
+
 /// The block's lines as the writer writes them: (key, indent, text).
 pub fn lines(signin: &Signin) -> Vec<(String, usize, String)> {
     let mut header = format!("signin {}", signin.entity);
@@ -193,6 +262,20 @@ pub fn lines(signin: &Signin) -> Vec<(String, usize, String)> {
         if let Some(minimum) = s.minimum {
             lines.push((format!("signin {} minimum", s.name), 3, format!("minimum {minimum}")));
         }
+        if let Some(p) = &s.provider {
+            let quoted = |word: &str, value: &str| format!("{word} {}", serde_json::Value::from(value));
+            if !p.client.is_empty() {
+                lines.push((format!("signin {} client", s.name), 3, quoted("client", &p.client)));
+            }
+            for (word, value) in [("secret", &p.secret), ("tenant", &p.tenant), ("issuer", &p.issuer)] {
+                if let Some(value) = value {
+                    lines.push((format!("signin {} {word}", s.name), 3, quoted(word, value)));
+                }
+            }
+            if p.register {
+                lines.push((format!("signin {} register", s.name), 3, "register".to_string()));
+            }
+        }
     }
     if signin.session_minutes != signin::DEFAULT_SESSION_MINUTES {
         lines.push(("signin session".into(), 2, format!("session {}", span(signin.session_minutes))));
@@ -202,6 +285,9 @@ pub fn lines(signin: &Signin) -> Vec<(String, usize, String)> {
     }
     if !signin.shows.is_empty() {
         lines.push(("signin shows".into(), 2, format!("shows {}", signin.shows.join(", "))));
+    }
+    if signin.language_picker {
+        lines.push(("signin language".into(), 2, "language picker".to_string()));
     }
     if let Some(days) = signin.remember_days {
         lines.push(("signin remember".into(), 2, format!("remember {days} days{}", if signin.remember_asks { " when asked" } else { "" })));

@@ -1,3 +1,5 @@
+//go:build clarityauth
+
 // Signing in through the wire (docs/APP-CAPABILITIES-PLAN.md, step 4): the
 // start says when sign-in comes first, signin and signout answer, and a
 // served call runs as the person of its clarity_session cookie, a call
@@ -14,18 +16,18 @@ import (
 	"testing"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
-	"github.com/petervdpas/Clarity/runtimes/go/internal/authfake"
+	"github.com/petervdpas/Clarity/runtimes/go/internal/authlib"
 )
 
 // signinService is the cards service with people who sign in on targets.
 func signinService(t *testing.T, targets ...string) *Service {
 	c, _ := service(t)
 	db := c.Options().Db
-	if err := db.Batch("", "CREATE TABLE members (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, password_hash TEXT, login TEXT); INSERT INTO members (email, password_hash) VALUES ('ann@shell.test', '"+authfake.Hash("pw")+"')"); err != nil {
+	if err := db.Batch("", "CREATE TABLE members (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, password_hash TEXT, login TEXT); INSERT INTO members (email, password_hash) VALUES ('ann@shell.test', '"+authlib.Hash("argon2id", "pw")+"')"); err != nil {
 		t.Fatal(err)
 	}
 	source := clarity.SigninSource{Table: "members", Page: "SignIn", Targets: targets, Strategies: []clarity.SigninStrategy{{Name: "password", Columns: []string{"email", "password_hash"}}}}
-	if err := db.AddSignin(source, authfake.New().Call); err != nil {
+	if err := db.AddSignin(source, authlib.Call); err != nil {
 		t.Fatal(err)
 	}
 	return c

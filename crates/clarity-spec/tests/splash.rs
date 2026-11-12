@@ -1,4 +1,4 @@
-//! An application's splash screen (docs/APP-ICON-SPLASH-PLAN.md, step 3):
+//! An application's splash screen:
 //! a page of the kind `splash`, which the app names (`splash Welcome for 2
 //! seconds`) and the application shows itself while it starts. It is
 //! optional: an app without the line starts as it always did.

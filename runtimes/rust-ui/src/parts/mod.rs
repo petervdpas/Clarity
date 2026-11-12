@@ -14,6 +14,7 @@ pub mod heading;
 pub mod label;
 pub mod markdown_memo;
 pub mod signin;
+pub mod signin_view;
 pub mod sound;
 pub mod video;
 pub mod text_box;
@@ -262,6 +263,17 @@ pub trait PartHost {
     /// step 4), as a `signin <strategy>` button does: on success the sign-in
     /// window closes and the main window opens; a refusal is given back, for
     /// the part to show. A host without a program refuses.
+    /// The last refused sign-in of the window, which a sign-in view's refusal shows; none before one or after one that worked.
+    fn signin_refusal(&self) -> Option<Text> {
+        None
+    }
+
+    /// The way of signing in of sign-in view `view`: the strategy of its first button that takes typed inputs.
+    fn signin_way(&self, view: &str) -> Option<String> {
+        let _ = view;
+        None
+    }
+
     fn sign_in(&self, strategy: &str, inputs: Map<String, Value>) -> Result<(), Text> {
         let _ = (strategy, inputs);
         Err(Text::keyed("signinRefused", "Signing in did not work. Check what you typed and try again."))
@@ -613,7 +625,7 @@ pub fn drawn() -> Vec<String> {
 
 /// Every kind Clarity.UI draws itself: the first parts and each group's.
 fn own_kinds() -> impl Iterator<Item = &'static (&'static str, MakePart)> {
-    DRAWN.iter().chain(inputs::KINDS).chain(containers::KINDS).chain(data::KINDS)
+    DRAWN.iter().chain(inputs::KINDS).chain(containers::KINDS).chain(data::KINDS).chain(signin_view::KINDS.iter())
 }
 
 fn maker(kind: &str) -> Option<MakePart> {

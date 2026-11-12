@@ -194,7 +194,7 @@ fn a_part_that_code_hides_takes_no_pointer() {
     assert_ne!(Some(label), screen.at(20.0, 10.0));
 }
 
-/// A window in the source's own dialect (docs/CXAML-SOURCE-PLAN.md): the root
+/// A window in the source's own dialect: the root
 /// names it in its class, its data and tells are the program's, a content's
 /// page is the view it shows with the view's parts inside, and a tree's
 /// levels are worked out into its rows.

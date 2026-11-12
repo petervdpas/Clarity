@@ -15,13 +15,14 @@ fn the_signin_block_is_read_with_its_strategies_and_options() {
         Signin {
             entity: "Member".into(),
             targets: vec!["desktop".into(), "web".into()],
-            strategies: vec![SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12) }, SigninStrategy { name: "account".into(), fields: vec!["login".into()], minimum: None }],
+            strategies: vec![SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12), provider: None }, SigninStrategy { name: "account".into(), fields: vec!["login".into()], minimum: None, provider: None }],
             session_minutes: 2 * 24 * 60,
             tries: 3,
             tries_minutes: 10,
             remember_days: Some(30),
             remember_asks: false,
             shows: Vec::new(),
+            language_picker: false,
             line: 3,
         }
     );
@@ -55,7 +56,7 @@ fn the_block_is_written_back_as_it_was_read() {
 #[test]
 fn what_does_not_fit_the_catalog_or_the_stack_says_so() {
     let wrong = |block: &str| clarity_project::parse(&format!("project Club\n    stack go desktop web\n{block}")).unwrap_err();
-    assert_eq!(wrong("    signin Member\n        pigeon email\n"), "line 4: there is no sign-in strategy 'pigeon'; there are password, account, token, recovery");
+    assert_eq!(wrong("    signin Member\n        pigeon email\n"), "line 4: there is no sign-in strategy 'pigeon'; there are password, account, token, recovery, github, microsoft, openid");
     assert_eq!(wrong("    signin Member\n        password email\n"), "line 4: the password strategy names 2 fields of Member (match, secret), like: password email passwordHash");
     assert_eq!(wrong("    signin Member\n"), "line 3: name at least one strategy under 'signin', indented, like: password email passwordHash");
     assert_eq!(wrong("    signin\n        password email passwordHash\n"), "line 3: write 'signin' and the entity of people, like: signin Member on desktop web");
@@ -74,7 +75,7 @@ fn a_minimum_belongs_under_a_strategy_people_choose_a_secret_for() {
     assert_eq!(wrong("    signin Member\n        password email passwordHash\n        minimum 12\n"), "line 5: write 'minimum' indented under the strategy it belongs to");
     assert_eq!(wrong("    signin Member on desktop\n        account login\n            minimum 12\n"), "line 5: the account strategy keeps no secret people choose, so it has no minimum");
     assert_eq!(wrong("    signin Member\n        password email passwordHash\n            minimum zero\n"), "line 5: write the fewest characters a secret may have, like: minimum 12");
-    assert_eq!(wrong("    signin Member\n        password email passwordHash\n            session 2 hours\n"), "line 5: unexpected indented line under a strategy; only 'minimum' goes there");
+    assert_eq!(wrong("    signin Member\n        password email passwordHash\n            session 2 hours\n"), "line 5: unexpected indented line under a strategy; only 'minimum' and a provider's settings go there");
     // The recovery strategy is in the catalog like the others.
     let settings = clarity_project::parse("project Club\n    stack go web\n    signin Member\n        password email passwordHash\n        recovery email recoveryCodes\n").unwrap();
     assert_eq!(settings.signin.unwrap().strategies[1].fields, vec!["email".to_string(), "recoveryCodes".to_string()]);
@@ -97,4 +98,44 @@ fn the_block_says_what_the_sign_in_part_shows_and_whether_it_asks_to_remember() 
     assert_eq!(wrong("    signin Member on desktop\n        password email passwordHash\n        shows password, password\n"), "line 5: password is shown twice");
     assert_eq!(wrong("    signin Member on desktop\n        password email passwordHash\n        shows\n"), "line 5: write the strategies the sign-in part shows, first the default, like: shows password, account");
     assert_eq!(wrong("    signin Member on desktop\n        password email passwordHash\n        remember 30 days if asked\n"), "line 5: write how many days a sign-in is remembered, like: remember 30 days (or remember 30 days when asked)");
+}
+
+/// `language picker` lets people pick their language on the sign-in part;
+/// without the line the part has none, and it is written back only when on.
+#[test]
+fn the_block_may_give_the_sign_in_part_a_language_picker() {
+    let text = "project Family\n    stack go desktop\n    signin Member on desktop\n        password email passwordHash\n        language picker\n";
+    let settings = clarity_project::parse(text).unwrap();
+    assert!(settings.signin.as_ref().unwrap().language_picker);
+    assert_eq!(clarity_project::write(Some(text), &settings).unwrap(), text);
+    let mut off = settings.clone();
+    off.signin.as_mut().unwrap().language_picker = false;
+    assert!(!clarity_project::write(Some(text), &off).unwrap().contains("language picker"));
+    let plain = clarity_project::parse("project Family\n    stack go desktop\n    signin Member on desktop\n        password email passwordHash\n").unwrap();
+    assert!(!plain.signin.unwrap().language_picker);
+    let wrong = clarity_project::parse("project Club\n    stack go desktop\n    signin Member on desktop\n        password email passwordHash\n        language box\n").unwrap_err();
+    assert_eq!(wrong, "line 5: write language picker to let people pick their language on the sign-in part");
+}
+
+/// A provider's settings are indented under its line: its client, its
+/// secret as a secret setting (never the secret itself), Microsoft's
+/// tenant, an OpenID provider's issuer, and whether a first sign-in makes
+/// the person's record (`register`).
+#[test]
+fn a_provider_has_its_settings_indented_under_its_line() {
+    let text = "project Club\n    stack rust desktop\n    signin Member on desktop\n        password email passwordHash\n        github email\n            client \"Ov23li\"\n            secret \"setting:githubSecret\"\n            register\n        microsoft email\n            client \"app\"\n            tenant \"contoso.onmicrosoft.com\"\n        openid email\n            client \"web\"\n            issuer \"https://accounts.google.com\"\n";
+    let settings = clarity_project::parse(text).unwrap();
+    let signin = settings.signin.as_ref().unwrap();
+    let github = signin.strategy("github").unwrap().provider.as_ref().unwrap();
+    assert_eq!((github.client.as_str(), github.secret.as_deref(), github.register), ("Ov23li", Some("setting:githubSecret"), true));
+    assert_eq!(signin.strategy("microsoft").unwrap().provider.as_ref().unwrap().tenant.as_deref(), Some("contoso.onmicrosoft.com"));
+    assert_eq!(signin.strategy("openid").unwrap().provider.as_ref().unwrap().issuer.as_deref(), Some("https://accounts.google.com"));
+    assert!(signin.strategy("password").unwrap().provider.is_none());
+    assert_eq!(clarity_project::write(Some(text), &settings).unwrap(), text);
+    let fail = |lines: &str| clarity_project::parse(&format!("project Club\n    stack rust desktop\n    signin Member on desktop\n        github email\n{lines}")).unwrap_err();
+    assert_eq!(fail("            secret \"hunter2\"\n"), "line 5: the secret is a secret setting, never the secret itself: secret \"setting:githubSecret\"");
+    assert_eq!(fail("            tenant \"x\"\n"), "line 5: only the microsoft strategy has a tenant");
+    assert_eq!(fail("            client \"a\"\n            client \"b\"\n"), "line 6: 'client' is written twice");
+    let password = clarity_project::parse("project Club\n    stack rust desktop\n    signin Member on desktop\n        password email passwordHash\n            client \"a\"\n").unwrap_err();
+    assert_eq!(password, "line 5: the password strategy is no provider, so it has no client");
 }

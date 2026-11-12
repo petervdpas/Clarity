@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Where people sign in: the sign-in part, drawn from the project's signin block. -->
+<!-- Where people sign in: the ways of signing in, one view at a time. -->
 <SignIn class="everything.SignIn" title="@signInTitle">
-  <Signin name="signIn" at="1,1" span="12" rows="6" />
+  <Heading name="signInHeading" at="1,1" span="12" caption="@signInTitle" />
+  <Content name="ways" at="1,2" span="12" rows="10">
+    <View name="PasswordView" />
+    <View name="CodeView" />
+  </Content>
 </SignIn>

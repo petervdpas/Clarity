@@ -1,4 +1,4 @@
-//! Windows and views as `.cxaml` (docs/CXAML-SOURCE-PLAN.md): the markup
+//! Windows and views as `.cxaml`: the markup
 //! Clarity.UI reads on every stack, and the source a page is designed in.
 //! `page_source` writes a page as its `.cxaml` file, `read_page` reads one
 //! back into the same page, each element's place in the file being its span.
@@ -1099,7 +1099,7 @@ pub fn page_file(path: &str, text: &str, modules: &[crate::model::SpecFile]) -> 
 }
 
 /// The files a project's `.clarity` files become with their pages and app
-/// moved into `.cxaml` (docs/CXAML-SOURCE-PLAN.md): each page block and the
+/// moved into `.cxaml`: each page block and the
 /// app block, with the comment above it, leaves its file for
 /// `design/<Page>.cxaml` or `design/<App>.cxaml`.
 /// Gives the changed `.clarity` files and the new `.cxaml` files, or what

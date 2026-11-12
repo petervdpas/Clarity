@@ -1,8 +1,9 @@
+//go:build clarityauth
+
 // Who is using the program on the Go runtime (conformance/signin.json):
 // signing in with each strategy, refusals in Clarity's own words, the first
 // account, failed tries, signing out, served sessions by their cookie, and
-// the command line. With the tag clarityauth against Clarity.Auth itself,
-// else against its stand-in (internal/authfake).
+// the command line. Against Clarity.Auth itself, with the tag clarityauth.
 
 package clarity
 

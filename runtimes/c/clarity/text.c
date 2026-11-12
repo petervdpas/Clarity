@@ -231,7 +231,7 @@ static void forget_translations(void) {
 }
 
 // `text` with each {app.version} as `version`, the project's version, which
-// Clarity fills itself (docs/VERSION-PLAN.md); a copy of `text` without one.
+// Clarity fills itself; a copy of `text` without one.
 static char* with_version(const char* text, const char* version) {
     static const char slot[] = "{app.version}";
     const size_t slot_len = sizeof slot - 1;

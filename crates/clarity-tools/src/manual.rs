@@ -1,53 +1,53 @@
-//! Clarity's manual: Markdown topics in docs/manual, one file per topic,
+//! Clarity's manual: Markdown topics in manual, one file per topic,
 //! named by its id (`code.queries.md`). A topic's first line is its title
 //! (`# Queries`), the sentence under it its summary, and the rest the page.
 //! People read the files as they are; the agent gets the list of titles and
-//! summaries, and reads a page when it needs one. docs/manual/README.md lists
+//! summaries, and reads a page when it needs one. manual/README.md lists
 //! the topics in the same order for people.
 
 /// Every topic, in the order of the manual. A topic file that is not listed
 /// here fails the tests, and so does a listed one that the index leaves out.
 const TOPICS: [(&str, &str); 40] = [
-    ("start.overview", include_str!("../../../docs/manual/start.overview.md")),
-    ("start.first-project", include_str!("../../../docs/manual/start.first-project.md")),
-    ("project.file", include_str!("../../../docs/manual/project.file.md")),
-    ("project.run-build", include_str!("../../../docs/manual/project.run-build.md")),
-    ("project.signin", include_str!("../../../docs/manual/project.signin.md")),
-    ("setup.tools", include_str!("../../../docs/manual/setup.tools.md")),
-    ("design.windows", include_str!("../../../docs/manual/design.windows.md")),
-    ("design.parts", include_str!("../../../docs/manual/design.parts.md")),
-    ("design.frame", include_str!("../../../docs/manual/design.frame.md")),
-    ("design.custom-parts", include_str!("../../../docs/manual/design.custom-parts.md")),
-    ("design.sound", include_str!("../../../docs/manual/design.sound.md")),
-    ("design.video", include_str!("../../../docs/manual/design.video.md")),
-    ("design.text", include_str!("../../../docs/manual/design.text.md")),
-    ("code.language", include_str!("../../../docs/manual/code.language.md")),
-    ("code.handlers", include_str!("../../../docs/manual/code.handlers.md")),
-    ("code.functions", include_str!("../../../docs/manual/code.functions.md")),
-    ("code.queries", include_str!("../../../docs/manual/code.queries.md")),
-    ("code.data-events", include_str!("../../../docs/manual/code.data-events.md")),
-    ("code.libraries", include_str!("../../../docs/manual/code.libraries.md")),
-    ("code.web-apis", include_str!("../../../docs/manual/code.web-apis.md")),
-    ("code.formats", include_str!("../../../docs/manual/code.formats.md")),
-    ("code.engines", include_str!("../../../docs/manual/code.engines.md")),
-    ("data.entities", include_str!("../../../docs/manual/data.entities.md")),
-    ("data.migrations", include_str!("../../../docs/manual/data.migrations.md")),
-    ("data.diagrams", include_str!("../../../docs/manual/data.diagrams.md")),
-    ("data.sources", include_str!("../../../docs/manual/data.sources.md")),
-    ("data.pictures-files", include_str!("../../../docs/manual/data.pictures-files.md")),
-    ("languages", include_str!("../../../docs/manual/languages.md")),
-    ("themes", include_str!("../../../docs/manual/themes.md")),
-    ("stacks.rust", include_str!("../../../docs/manual/stacks.rust.md")),
-    ("stacks.csharp", include_str!("../../../docs/manual/stacks.csharp.md")),
-    ("stacks.go", include_str!("../../../docs/manual/stacks.go.md")),
-    ("stacks.c", include_str!("../../../docs/manual/stacks.c.md")),
-    ("stacks.cpp", include_str!("../../../docs/manual/stacks.cpp.md")),
-    ("ai.agent", include_str!("../../../docs/manual/ai.agent.md")),
-    ("ai.connections", include_str!("../../../docs/manual/ai.connections.md")),
-    ("ai.mcp", include_str!("../../../docs/manual/ai.mcp.md")),
-    ("ai.your-agent", include_str!("../../../docs/manual/ai.your-agent.md")),
-    ("vault", include_str!("../../../docs/manual/vault.md")),
-    ("app.keys", include_str!("../../../docs/manual/app.keys.md")),
+    ("start.overview", include_str!("../../../manual/start.overview.md")),
+    ("start.first-project", include_str!("../../../manual/start.first-project.md")),
+    ("project.file", include_str!("../../../manual/project.file.md")),
+    ("project.run-build", include_str!("../../../manual/project.run-build.md")),
+    ("project.signin", include_str!("../../../manual/project.signin.md")),
+    ("setup.tools", include_str!("../../../manual/setup.tools.md")),
+    ("design.windows", include_str!("../../../manual/design.windows.md")),
+    ("design.parts", include_str!("../../../manual/design.parts.md")),
+    ("design.frame", include_str!("../../../manual/design.frame.md")),
+    ("design.custom-parts", include_str!("../../../manual/design.custom-parts.md")),
+    ("design.sound", include_str!("../../../manual/design.sound.md")),
+    ("design.video", include_str!("../../../manual/design.video.md")),
+    ("design.text", include_str!("../../../manual/design.text.md")),
+    ("code.language", include_str!("../../../manual/code.language.md")),
+    ("code.handlers", include_str!("../../../manual/code.handlers.md")),
+    ("code.functions", include_str!("../../../manual/code.functions.md")),
+    ("code.queries", include_str!("../../../manual/code.queries.md")),
+    ("code.data-events", include_str!("../../../manual/code.data-events.md")),
+    ("code.libraries", include_str!("../../../manual/code.libraries.md")),
+    ("code.web-apis", include_str!("../../../manual/code.web-apis.md")),
+    ("code.formats", include_str!("../../../manual/code.formats.md")),
+    ("code.engines", include_str!("../../../manual/code.engines.md")),
+    ("data.entities", include_str!("../../../manual/data.entities.md")),
+    ("data.migrations", include_str!("../../../manual/data.migrations.md")),
+    ("data.diagrams", include_str!("../../../manual/data.diagrams.md")),
+    ("data.sources", include_str!("../../../manual/data.sources.md")),
+    ("data.pictures-files", include_str!("../../../manual/data.pictures-files.md")),
+    ("languages", include_str!("../../../manual/languages.md")),
+    ("themes", include_str!("../../../manual/themes.md")),
+    ("stacks.rust", include_str!("../../../manual/stacks.rust.md")),
+    ("stacks.csharp", include_str!("../../../manual/stacks.csharp.md")),
+    ("stacks.go", include_str!("../../../manual/stacks.go.md")),
+    ("stacks.c", include_str!("../../../manual/stacks.c.md")),
+    ("stacks.cpp", include_str!("../../../manual/stacks.cpp.md")),
+    ("ai.agent", include_str!("../../../manual/ai.agent.md")),
+    ("ai.connections", include_str!("../../../manual/ai.connections.md")),
+    ("ai.mcp", include_str!("../../../manual/ai.mcp.md")),
+    ("ai.your-agent", include_str!("../../../manual/ai.your-agent.md")),
+    ("vault", include_str!("../../../manual/vault.md")),
+    ("app.keys", include_str!("../../../manual/app.keys.md")),
 ];
 
 /// A page of the manual.
@@ -103,7 +103,7 @@ mod tests {
     use std::path::Path;
 
     fn folder() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/manual")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manual")
     }
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
         files.sort();
         let mut listed: Vec<String> = TOPICS.iter().map(|(id, _)| id.to_string()).collect();
         listed.sort();
-        assert_eq!(files, listed, "docs/manual and the list of topics differ");
+        assert_eq!(files, listed, "manual and the list of topics differ");
 
         // The index for people names every topic, in the same order.
         let readme = std::fs::read_to_string(folder().join("README.md")).unwrap();
@@ -129,7 +129,7 @@ mod tests {
             .filter_map(|l| l.split(".md)").next())
             .collect();
         let order: Vec<&str> = TOPICS.iter().map(|(id, _)| *id).collect();
-        assert_eq!(linked, order, "docs/manual/README.md must link every topic, in the manual's order");
+        assert_eq!(linked, order, "manual/README.md must link every topic, in the manual's order");
     }
 
     #[test]

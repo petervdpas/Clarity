@@ -287,7 +287,7 @@ fn creates_widgets_with_catalog_defaults() {
     let markup = card();
     let (text, _) = edit(
         &markup,
-        Edit::CreateWidget { container: el(&markup, "<Panel"), kind: WidgetKind::Textbox, col: 1, row: 2, width: Some(5), caption: None, bind: Some("c.email".into()), part: None, height: None },
+        Edit::CreateWidget { container: el(&markup, "<Panel"), kind: WidgetKind::Textbox, col: 1, row: 2, width: Some(5), caption: None, bind: Some("c.email".into()), part: None, height: None, input: None, strategy: None, shows: None },
     );
     assert!(text.contains("    <Label at=\"1,1\" span=\"3\" caption=\"Inside\" />\n    <Textbox name=\"email\" at=\"1,2\" span=\"5\" bind=\"c.email\" />\n"), "{text}");
 }
@@ -300,8 +300,8 @@ fn applies_a_batch_as_one_edit() {
         &markup,
         Edit::Batch {
             edits: vec![
-                Edit::CreateWidget { container: page, kind: WidgetKind::Label, col: 1, row: 2, width: Some(2), caption: Some("E-mail".into()), bind: None, part: None, height: None },
-                Edit::CreateWidget { container: page, kind: WidgetKind::Textbox, col: 3, row: 2, width: None, caption: None, bind: Some("c.email".into()), part: None, height: None },
+                Edit::CreateWidget { container: page, kind: WidgetKind::Label, col: 1, row: 2, width: Some(2), caption: Some("E-mail".into()), bind: None, part: None, height: None, input: None, strategy: None, shows: None },
+                Edit::CreateWidget { container: page, kind: WidgetKind::Textbox, col: 3, row: 2, width: None, caption: None, bind: Some("c.email".into()), part: None, height: None, input: None, strategy: None, shows: None },
             ],
         },
     );
@@ -314,7 +314,7 @@ fn applies_a_batch_as_one_edit() {
     // One failing edit refuses the whole batch.
     let failing = Edit::Batch {
         edits: vec![
-            Edit::CreateWidget { container: page, kind: WidgetKind::Label, col: 1, row: 2, width: None, caption: None, bind: None, part: None, height: None },
+            Edit::CreateWidget { container: page, kind: WidgetKind::Label, col: 1, row: 2, width: None, caption: None, bind: None, part: None, height: None, input: None, strategy: None, shows: None },
             Edit::Remove { item: 9999 },
         ],
     };

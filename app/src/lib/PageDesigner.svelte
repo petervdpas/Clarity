@@ -16,6 +16,7 @@
   import { portal } from "./portal";
   import { commandsOf, grown, nudged } from "./designLayer";
   import { applyEdit } from "./applyEdit";
+  import { guided, signinTiles, signinViews, type SigninTile } from "./signinView";
   import type { Category } from "@clarity/ui/generated/Category.ts";
   import type { PartDecl } from "@clarity/ui/generated/PartDecl.ts";
   import type { App } from "@clarity/ui/generated/App.ts";
@@ -28,6 +29,7 @@
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import type { Settings } from "@clarity/ui/generated/Settings.ts";
+  import type { Selected } from "./selection";
   import type { WidgetInfo } from "@clarity/ui/generated/WidgetInfo.ts";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "@clarity/ui/screen/frame.ts";
   import { describeType, themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
@@ -61,6 +63,7 @@
     app = null,
     settings = null,
     onsavesettings = null,
+    onopen = null,
   }: {
     preview: Preview;
     /** The page, or the app shown as a page (see `appAsPage`). */
@@ -72,6 +75,8 @@
     /** The project file's settings (the app's version among them), and how to save them. */
     settings?: Settings | null;
     onsavesettings?: ((settings: Settings) => void) | null;
+    /** Opens another part of the project in the main area, as the project tree does. */
+    onopen?: ((selected: Selected) => void) | null;
   } = $props();
 
   const CATEGORIES: { key: Category; name: string }[] = [
@@ -83,6 +88,7 @@
     { key: "media", name: "Media" },
     { key: "time", name: "Time" },
     { key: "tools", name: "Toolbox" },
+    { key: "signin", name: "Sign-in" },
   ];
 
   // A toolbox (`page X: toolbox`) holds its tools, buttons, labels, headings and lines; a window or a view holds no tools.
@@ -91,10 +97,14 @@
   }
   const TOOLBOX_ALSO = ["button", "label", "heading", "separator"];
   function paletteHolds(category: Category): boolean {
-    return designingToolbox() ? category === "tools" || category === "text" || category === "containers" || category === "basicInput" : category !== "tools";
+    if (guiding) return preview.catalog.some((w) => w.category === category && paletteOffers(w.kind));
+    return designingToolbox() ? category === "tools" || category === "text" || category === "containers" || category === "basicInput" : category !== "tools" && category !== "signin";
   }
   function paletteOffers(kind: string): boolean {
-    return !designingToolbox() || TOOLBOX_ALSO.includes(kind) || preview.catalog.some((w) => w.kind === kind && w.category === "tools");
+    const info = preview.catalog.find((w) => w.kind === kind);
+    if (guiding === "view") return !!info?.signinView && info.category !== "signin";
+    if (guiding === "window") return !!info?.signinWindow;
+    return !designingToolbox() || TOOLBOX_ALSO.includes(kind) || info?.category === "tools";
   }
 
   let canvas: HTMLElement | undefined = $state();
@@ -117,6 +127,13 @@
   // A window's content shows its views' parts, designed in place; each thing is known by its key (shownPage).
   const shown = $derived(shownPage(preview, ownPage, file));
   const page = $derived(shown.page);
+
+  // The sign-in window holds its content and decoration, a sign-in view its sign-in parts and decoration (the checker's rules too).
+  const pages = $derived(preview.project.files.flatMap((f) => f.pages));
+  const guiding = $derived(app ? null : guided(page, pages));
+  /** On a sign-in view: its sign-in parts, made from the project's sign-in setup. */
+  const tiles = $derived(guiding === "view" ? signinTiles(preview.project.signin ?? null, page.name.name, signinViews(pages)) : []);
+
   // What is picked: its file, the window, view or app it is in, and its place there; else this window.
   // The inspector and the code show it in its own file, and its edits change that file.
   const picked = $derived(placeOf(preview, pageDesigner.selected));
@@ -306,6 +323,9 @@
           // A custom part arrives at its declared size (DESIGN 5.19).
           part: source.part ?? null,
           height: source.part ? at.height : null,
+          input: source.input ?? null,
+          strategy: source.strategy ?? null,
+          shows: source.shows ?? null,
         }, at.container);
         break;
       case "field": {
@@ -326,6 +346,9 @@
             bind: source.bind,
             part: null,
             height: null,
+            input: null,
+            strategy: null,
+            shows: null,
           }, at.container);
         } else {
           await apply({ op: "placeField", container: into.at, col: at.col, row: at.row, room, bind: source.bind }, at.container);
@@ -368,6 +391,10 @@
 
   function pressPalette(e: PointerEvent, info: WidgetInfo) {
     pageDesigner.press(e, { kind: "new", widget: info.kind, width: info.width, height: info.height, label: info.name });
+  }
+
+  function pressSignin(e: PointerEvent, tile: SigninTile) {
+    pageDesigner.press(e, { kind: "new", widget: tile.kind, width: tile.width, height: tile.height, label: tile.label, input: tile.input, strategy: tile.strategy, shows: tile.shows });
   }
 
   // The custom parts the project declares (DESIGN 5.19), dropped at their declared size.
@@ -499,6 +526,14 @@
     <div class="tiles">
       {#each customParts as part (part.name.name)}
         <PartTile kind="custom" name={part.name.name} title="Drawn by its library; drag onto the window." onpointerdown={(e) => pressCustom(e, part)} />
+      {/each}
+    </div>
+  {/if}
+  {#if tiles.length > 0}
+    <h4>Sign-in</h4>
+    <div class="tiles">
+      {#each tiles as tile (tile.kind + (tile.input ?? tile.strategy ?? tile.shows ?? ""))}
+        <PartTile kind={tile.kind} name={tile.label} title="Signs in as the project's sign-in setup says; drag onto the view." onpointerdown={(e) => pressSignin(e, tile)} />
       {/each}
     </div>
   {/if}
@@ -639,7 +674,7 @@
         </span>
       </div>
       <div class="properties" class:hidden={coding}>
-        <PageProperties {preview} page={inspected.page} selected={inspected.at} {app} {settings} {onsavesettings} onedit={(e) => edit(e, pageDesigner.selected)} {onapplied} />
+        <PageProperties {preview} page={inspected.page} selected={inspected.at} {app} {settings} {onsavesettings} {onopen} onedit={(e) => edit(e, pageDesigner.selected)} {onapplied} />
       </div>
       <!-- Mounted once opened, so switching tabs keeps unsaved text. -->
       {#if codeOpened}

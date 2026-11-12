@@ -72,9 +72,13 @@ page Main: window
     button \"Greet\" name greet at 1,2 span 2 on click: greetClicked
 
 page SignIn: signin
-    textbox name name at 1,1 span 4
-    password name password at 1,2 span 4
-    button \"Sign in\" name signIn at 1,3 span 2 on click -> signin password
+    content name ways at 1,1 span 12 rows 6
+        view PasswordView
+
+page PasswordView: view
+    signinField name nameField at 1,1 span 12 rows 2 input name
+    signinField name passwordField at 1,3 span 12 rows 2 input password
+    signinButton name signInButton at 1,5 span 12 strategy password
 
 code Club
     handler aboutClicked
@@ -89,9 +93,9 @@ const PLAIN: &str = "module notes\n\nentity Note\n    text: text(200)\n\npage No
 
 fn signin() -> Signin {
     let mut signin = Signin::new("Member", vec!["desktop".into(), "cli".into()]);
-    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12) });
-    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None });
-    signin.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None });
+    signin.strategies.push(SigninStrategy { name: "password".into(), fields: vec!["email".into(), "passwordHash".into()], minimum: Some(12), provider: None });
+    signin.strategies.push(SigninStrategy { name: "token".into(), fields: vec!["apiToken".into()], minimum: None, provider: None });
+    signin.strategies.push(SigninStrategy { name: "recovery".into(), fields: vec!["email".into(), "recoveryCodes".into()], minimum: None, provider: None });
     signin.session_minutes = 120;
     signin
 }
@@ -156,6 +160,21 @@ fn the_people_are_named_after_the_databases_open() {
     has(opened, "if (!clarity_db_add_signin(db, &signin_source)) return closed(db);");
     let cli = files(CLUB, true, true);
     has(file(&cli, "src/main.c"), "if (!clarity_db_add_signin(db, &signin_source)) return failed(db);");
+}
+
+#[test]
+fn a_provider_strategy_carries_its_settings() {
+    let mut with = signin();
+    let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+    with.strategies.push(SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
+    // The app's secret is kept under a secret setting the project declares.
+    let kept = format!("{CLUB}\nsettings\n    githubSecret: secret\n");
+    let desktop = files_with(&kept, Some(with), false);
+    let main = file(&desktop, "src/main.c");
+    has(main, "static const char* const signin_github_options[] = {\"client\", \"app\", \"secret\", \"setting:githubSecret\", \"claim\", \"email\"};");
+    has(main, "{\"github\", signin_github, 1, signin_github_options, 3}");
+    // A strategy without settings has no options.
+    has(main, "{\"password\", signin_password, 2}");
 }
 
 #[test]
@@ -225,6 +244,9 @@ fn the_club_builds_in_c() {
         // Remembered for 30 days, so the desktop program carries the protected store too.
         let mut remembered = signin();
         remembered.remember_days = Some(30);
+        // A provider too, so its settings are built.
+        let provider = clarity_spec::signin::ProviderSettings { client: "app".into(), secret: Some("setting:githubSecret".into()), ..Default::default() };
+        remembered.strategies.push(SigninStrategy { name: "github".into(), fields: vec!["email".into()], minimum: None, provider: Some(provider) });
         clarity_gen::write_out(&out, &files_with(CLUB, Some(remembered), cli), &["build", "data"]).unwrap();
         let built = std::process::Command::new("cmake").args(["--workflow", "--preset", "debug"]).env("CLARITY_UI", &folder).current_dir(&out).output().unwrap();
         let said = format!("{}{}", String::from_utf8_lossy(&built.stdout), String::from_utf8_lossy(&built.stderr));

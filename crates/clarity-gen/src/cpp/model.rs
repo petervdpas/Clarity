@@ -337,8 +337,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let mut from = String::new();
     // The version travels with the record, as a window's data does.
     if version.is_some() {
-        to.push_str("    out[\"rowVersion\"] = r.version;\n");
-        from.push_str("    if (in.contains(\"rowVersion\") && in[\"rowVersion\"].is_number()) r.version = in[\"rowVersion\"].get<int64_t>();\n");
+        let wire = Project::VERSION_WIRE;
+        to.push_str(&format!("    out[\"{wire}\"] = r.version;\n"));
+        from.push_str(&format!("    if (in.contains(\"{wire}\") && in[\"{wire}\"].is_number()) r.version = in[\"{wire}\"].get<int64_t>();\n"));
     }
     for f in &entity.fields {
         let key = string(&f.name.name);

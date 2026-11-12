@@ -1,3 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- The entry picked: its title, its status and its text as Markdown. -->
 <View class="maintenance.MainView">
+  <Data name="entryTitle" type="text" />
+  <Data name="entryStatus" type="text" />
+  <Data name="entryBody" type="text" />
+  <Text name="entryTitleText" at="1,1" span="9" bind="entryTitle" />
+  <Text name="entryStatusText" at="10,1" span="3" bind="entryStatus" />
+  <Markdown name="entryText" at="1,2" span="12" rows="15" bind="entryBody" />
 </View>

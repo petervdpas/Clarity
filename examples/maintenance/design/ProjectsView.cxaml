@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Projects shows: the table of projects. -->
+<View class="maintenance.ProjectsView">
+  <Data name="projects" type="list&lt;Project&gt;" />
+  <Table name="projectTable" at="1,1" span="12" rows="11" bind="projects" columns="name, ledgerFolder" edit="name, ledgerFolder" add="true" remove="true" confirm="true" onadd="projectAdded" onremove="projectRemoved" onchange="projectChanged" />
+  <Button name="backButton" at="10,12" span="3" caption="@backCaption" opens="close" icon="arrow-left" />
+</View>

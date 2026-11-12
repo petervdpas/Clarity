@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The projects whose ledgers are reviewed: a name and the folder of the
+     ledger, edited in the table. -->
+<Window class="maintenance.Projects" title="@projectsTitle" onopen="projectsOpened">
+  <Content name="projectsContent" at="1,1" span="12" rows="12">
+    <View name="ProjectsView" />
+  </Content>
+</Window>

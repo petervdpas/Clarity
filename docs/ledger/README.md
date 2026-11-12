@@ -89,7 +89,7 @@ Plain ASCII, no em-dashes, short lines.
 | [build-tools](build-tools.md) | partial | library check on Windows and macOS |
 | [offline](offline.md) | not built | `clarity prepare`, `clarity vendor` |
 | [release-ci](release-ci.md) | partial | a Windows job in checks.yml |
-| [examples](examples.md) | partial | maintenance, the app that reviews ledgers |
+| [examples](examples.md) | built | maintenance not yet tried on a real ledger |
 | [stack-rust](stack-rust.md) | built | list fields not loaded |
 | [stack-go](stack-go.md) | built | file-source tests skipped in CI |
 | [stack-c](stack-c.md) | built | server databases |

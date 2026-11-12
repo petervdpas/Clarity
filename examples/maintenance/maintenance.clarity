@@ -128,14 +128,14 @@ code Main
                 rows = rows + [g]
             else
                 if startsWith(line, "| [")
-                    let piece = slice(line, 4, indexOf(line, "]") - 4)
-                    listed = listed + [piece]
-                    rows = rows + [entryOf(found, piece, "group:" + group)]
+                    let listedPiece = slice(line, 4, indexOf(line, "]") - 4)
+                    listed = listed + [listedPiece]
+                    rows = rows + [entryOf(found, listedPiece, "group:" + group)]
         let unlisted: list<Entry> = []
         for f in found
-            let piece = pieceOf(f.name)
-            if indexOf(f.path, "/") == 0 and f.path != "README.md" and not (listed contains piece)
-                unlisted = unlisted + [entryOf(found, piece, "group:unlisted")]
+            let filePiece = pieceOf(f.name)
+            if indexOf(f.path, "/") == 0 and f.path != "README.md" and not (listed contains filePiece)
+                unlisted = unlisted + [entryOf(found, filePiece, "group:unlisted")]
         if count(unlisted) > 0
             let g = new Entry
             g.key = "group:unlisted"
@@ -232,6 +232,7 @@ code Projects
     handler projectsOpened
         projects = find p in Project order by p.name
 
+code ProjectsView
     handler projectAdded
         let p = new Project
         p.name = @newProjectName

@@ -31,6 +31,10 @@ Clarity is one language and a designer-first IDE whose projects are transpiled t
 - After a change, run the tests of the module changed (`--test <file> <filter>`), not whole crate suites. When a check fails, run only what failed.
 - Whole suites, packing NuGets, release builds of the libraries and installers are what GitHub Actions does: don't redo them locally.
 - A slice is done only when every example builds on its own stack (`crates/clarity-gen/tests/examples_build.rs`, one at a time).
+- An example joins `EXAMPLES` in `examples_build.rs` and the checks' example list only once it checks clean and builds on its own stack; a half-built example stays out of both.
+- A test known to fail is named in the reply to the user when the work stops, with why. A note in the ledger or in memory alone is not enough.
+- Windows and views (`.cxaml`) are written through Clarity's tools; one written by hand passes `cargo test -p clarity-spec --test cxaml` before it counts as done.
+- A test that reads an example sees it as a fresh checkout does: what git ignores (an example's `data/` and `out/`) is not there in the checks, so a test passing only because a local database exists does not count.
 - Say a thing is ready only when it is built and checked.
 - The machine has 7.5 GB of memory: `CARGO_BUILD_JOBS=2`, one heavy build at a time, no builds in `/tmp`, check free memory first.
 - Never run `cargo fmt`; format by hand in the surrounding style.
@@ -56,6 +60,7 @@ A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runt
 - Before writing or changing a release plan or its progress file, read the Release Helper's own README (`~/Projects/ReleaseHelper/README.md`): its plan format, step kinds and options. Never weaken a step's check to let the next step go; `"next_after": "workflow"` keeps the check and frees the next step.
 - The user commits, pushes and tags; Claude never does. Releases go through the Release Helper: a plan in `releases/<YYYY-MM-DD-HHMM>.json` (not committed), with the commit message, the checks and the tags in their order (a crate before the crate that needs it, a library before what fetches it, Go sums after the Go tag).
 - Before writing a plan: run the generated-file guards, make every version bump, and name agreed features that are not built yet.
+- Before writing a plan, also: run the test targets of every crate changed since the last tag, one at a time (and svelte-check and the app's tests when `app/` or a model type changed); run `clarity spec check` on every example in the checks' list and the build test of each example added or changed since the last tag; look in `docs/ledger/` for entries marked partial and tests noted as failing, and name each to the user. A failing one blocks the plan until it is fixed or the user decides.
 - While the user releases, leave the tree alone: the helper does not tag with uncommitted changes. When a check fails, find which workflow and step failed before changing anything.
 - A new NuGet package needs nothing on nuget.org: the trusted publishing policy covers the repository and workflow.
 - The C# runtime step gets `"next_after": "workflow"`: nuget.org indexes slowly and nothing after it needs the packages listed (Go, the IDE). The Go sums step is a manual step with its own `commit_message`.

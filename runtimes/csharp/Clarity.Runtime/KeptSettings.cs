@@ -58,6 +58,17 @@ public static partial class KeptSettings
         return absolute ? chosen : $"{settingsFolder}/{chosen}";
     }
 
+    /// <summary>
+    /// The value a file store reads for its folder setting <paramref name="setting"/>: what
+    /// the running handler set (<paramref name="held"/>), else what was kept, else nothing
+    /// (conformance/settings.json, <c>now</c>).
+    /// </summary>
+    public static string Now(JsonObject held, JsonObject kept, string setting)
+    {
+        static string? Text(JsonObject o, string key) => o[key] is JsonValue v && v.TryGetValue<string>(out var text) ? text : null;
+        return Text(held, setting) ?? Text(kept, setting) ?? "";
+    }
+
     /// <summary>The settings <paramref name="program"/> kept; none when it kept none, or they cannot be read.</summary>
     public static JsonObject Read(string program)
     {

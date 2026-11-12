@@ -36,6 +36,11 @@ type Db struct {
 	stores map[string]string
 	// storeSettings are the file stores whose folder is a folder setting, by name.
 	storeSettings map[string]storeSetting
+	// held are the settings of the running handler: the window's data had
+	// them when the call began, and its code sets them before they are kept;
+	// a file store whose folder is a setting reads them first
+	// (conformance/settings.json, `now`).
+	held map[string]any
 	// history is what undo takes back and redo does again (DESIGN 5.29).
 	history history
 	// people is who uses the program and how they sign in (signin.go); nil without a signin block.

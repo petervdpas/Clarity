@@ -88,7 +88,7 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
     // The checker decides what is valid: an edit that adds an error anywhere in the project (an overlap, a wrong binding) is refused.
     let after = clarity_project::load_modules_with_files(dir, &replaced).map_err(read_err)?;
     if let Some(error) = clarity_spec::new_error(&before, &after) {
-        return Err(error.message.clone());
+        return Err(refusal(dir, &replaced, error));
     }
     for (path, _) in &new_pages {
         if path.exists() {
@@ -121,6 +121,23 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
         changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
     }
     Ok(Applied { changes, focus })
+}
+
+/// The error an edit would add, with the file and line it would be at, so
+/// the agent finds what to change first.
+fn refusal(dir: &Path, replaced: &[(&Path, &str)], error: &clarity_spec::Diagnostic) -> String {
+    if error.path.is_empty() {
+        return error.message.clone();
+    }
+    let path = dir.join(&error.path);
+    let text = replaced.iter().find(|(p, _)| *p == path.as_path()).map(|(_, t)| t.to_string()).or_else(|| std::fs::read_to_string(&path).ok());
+    match text {
+        Some(text) => {
+            let line = text.get(..error.span.start as usize).map_or(1, |before| before.matches('\n').count() + 1);
+            format!("{} ({}:{line})", error.message, error.path)
+        }
+        None => format!("{} ({})", error.message, error.path),
+    }
 }
 
 /// Whether `path` is a window's, view's or app's own `.cxaml`.

@@ -1036,6 +1036,9 @@ impl<'a> Emitter<'a> {
                 let place = if matches!(to, TypeInfo::Record(_)) { deref(&place) } else { place };
                 out.push_str(&pre);
                 let _ = writeln!(out, "{place} = {};", bare(code));
+                if let Some(setting) = crate::held_setting(self.project, |e| self.types.type_of(e), target) {
+                    let _ = writeln!(out, "clarity_hold_setting(db, {}, {place});", string(setting));
+                }
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name));
                     // A text value shows its text in the person's language, as a label does.

@@ -396,6 +396,14 @@ const DESIGNED: &str = r#"<Window name="Main" designItem="10">
     </Tab>
     <Tab title="Two" designItem="80" />
   </Tabs>
+  <List name="items" at="1,6" span="3" rows="2" designItem="45" />
+  <Sidebar side="left" name="side" width="200" columns="2" designItem="90">
+    <Label name="sideLabel" at="1,1" span="2" caption="Side" designItem="91" />
+    <List name="sideList" at="1,2" span="2" rows="3" designItem="92" />
+  </Sidebar>
+  <Footer columns="12" designItem="95">
+    <Label name="footLabel" at="1,1" span="3" caption="Foot" designItem="96" />
+  </Footer>
 </Window>
 "#;
 
@@ -441,12 +449,22 @@ fn the_designers_layer_finds_each_part_and_grid_by_its_design_item() {
     assert_eq!(window["columns"], json!(12));
     assert_eq!(window["gap"], json!(8.0));
     let rows: Vec<f64> = window["rows"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
-    assert_eq!(rows.len(), 4, "{window}");
+    assert_eq!(rows.len(), 7, "{window}");
     assert_eq!(rows[0], 36.0);
     let panel_grid = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!("30")).unwrap();
     assert_eq!(panel_grid["columns"], json!(6));
     place(&layout, "grids", "60");
     assert!(!layout["grids"].as_array().unwrap().iter().any(|g| g["item"] == json!("80")), "a hidden tab's grid shows not");
+    // A sidebar's and the footer's grids too, so their parts are moved and resized as any.
+    let side = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!("90")).unwrap_or_else(|| panic!("no sidebar grid in {layout}"));
+    assert_eq!(side["columns"], json!(2));
+    let foot = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!("95")).unwrap_or_else(|| panic!("no footer grid in {layout}"));
+    assert_eq!(foot["columns"], json!(12));
+    place(&layout, "parts", "91");
+    place(&layout, "parts", "96");
+    // In the designer rows keep their height (docs/LANGUAGE.md): a list is as high as its rows, on the window and in a sidebar alike.
+    assert_eq!(place(&layout, "parts", "45")[3], 2.0 * 36.0 + 8.0, "{layout}");
+    assert_eq!(place(&layout, "parts", "92")[3], 3.0 * 36.0 + 2.0 * 8.0, "{layout}");
 }
 
 #[test]

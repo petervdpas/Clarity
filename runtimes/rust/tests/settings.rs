@@ -47,6 +47,34 @@ fn a_folder_setting_is_where_every_runtime_puts_a_store() {
     }
 }
 
+#[test]
+fn a_store_reads_the_folder_a_handler_set_as_on_every_stack() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/settings.json")).unwrap();
+    for c in cases["now"].as_array().unwrap() {
+        let found = clarity_runtime::settings::now(c["held"].as_object().unwrap(), c["kept"].as_object().unwrap(), c["setting"].as_str().unwrap());
+        assert_eq!(found, c["value"].as_str().unwrap(), "{c}");
+    }
+}
+
+/// A file store whose folder is a setting finds its files in the folder a
+/// handler set, before the settings are kept.
+#[test]
+fn a_store_follows_the_folder_a_handler_set() {
+    let root = std::env::temp_dir().join(format!("clarity-held-{}", std::process::id()));
+    let (old, new) = (root.join("old"), root.join("new"));
+    std::fs::create_dir_all(&new).unwrap();
+    std::fs::write(new.join("a.md"), "new").unwrap();
+    let mut db = clarity_runtime::Db::memory().unwrap();
+    db.add_store_setting("ledger", "clarity-held-test", "ledgerFolder", &old.display().to_string()).unwrap();
+    assert!(db.files("ledger").unwrap().is_empty());
+    db.hold_settings(&json!({ "ledgerFolder": new.display().to_string() }));
+    let names: Vec<String> = db.files("ledger").unwrap().into_iter().map(|f| f.name).collect();
+    assert_eq!(names, ["a.md"]);
+    db.hold_setting("ledgerFolder", &old.display().to_string());
+    assert!(db.files("ledger").unwrap().is_empty());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A setting of a case as the runtime describes it. The cases are read once
 /// and live as long as the test, so their names and values can be static.
 fn setting_of(s: &Value) -> clarity_runtime::settings::Setting {

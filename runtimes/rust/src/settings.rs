@@ -116,6 +116,13 @@ pub fn store_folder_in(os: &str, settings_folder: &str, store: &str, kept: &Valu
     if absolute { chosen.to_string() } else { format!("{settings_folder}/{chosen}") }
 }
 
+/// The value a file store reads for its folder setting `setting`: what the
+/// running handler set (`held`), else what was kept, else nothing
+/// (conformance/settings.json, `now`).
+pub fn now(held: &Map<String, Value>, kept: &Map<String, Value>, setting: &str) -> String {
+    held.get(setting).and_then(Value::as_str).or_else(|| kept.get(setting).and_then(Value::as_str)).unwrap_or_default().to_string()
+}
+
 /// The settings `program` kept; none when it kept none, or they cannot be read.
 pub fn read(program: &str) -> Map<String, Value> {
     file(program)

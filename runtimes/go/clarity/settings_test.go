@@ -6,6 +6,7 @@ package clarity
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -78,5 +79,70 @@ func TestAFolderSettingIsWhereEveryRuntimePutsAStore(t *testing.T) {
 		if found := StoreFolderIn(c.OS, c.SettingsFolder, c.Store, c.Kept, c.Default); found != c.Folder {
 			t.Errorf("%v: found %q, wanted %q", c, found, c.Folder)
 		}
+	}
+}
+
+func TestAStoreReadsTheFolderAHandlerSetAsOnEveryStack(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct {
+		Now []struct {
+			Held    map[string]any `json:"held"`
+			Kept    map[string]any `json:"kept"`
+			Setting string         `json:"setting"`
+			Value   string         `json:"value"`
+		} `json:"now"`
+	}
+	if err := json.Unmarshal(text, &cases); err != nil {
+		t.Fatal(err)
+	}
+	if len(cases.Now) == 0 {
+		t.Fatal("no cases")
+	}
+	for _, c := range cases.Now {
+		if found := SettingNow(c.Held, c.Kept, c.Setting); found != c.Value {
+			t.Errorf("%v: found %q, wanted %q", c, found, c.Value)
+		}
+	}
+}
+
+// A file store whose folder is a setting finds its files in the folder a
+// handler set, before the settings are kept.
+func TestAStoreFollowsTheFolderAHandlerSet(t *testing.T) {
+	root := t.TempDir()
+	old, now := filepath.Join(root, "old"), filepath.Join(root, "new")
+	if err := os.MkdirAll(now, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(now, "a.md"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := Memory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.AddStoreSetting("ledger", "clarity-held-test", "ledgerFolder", old); err != nil {
+		t.Fatal(err)
+	}
+	count := func() int {
+		files, err := db.Files("ledger")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(files)
+	}
+	if count() != 0 {
+		t.Fatal("the old folder is empty")
+	}
+	db.HoldSettings(map[string]any{"ledgerFolder": now})
+	if count() != 1 {
+		t.Fatal("the folder the handler set holds a.md")
+	}
+	db.HoldSetting("ledgerFolder", old)
+	if count() != 0 {
+		t.Fatal("the folder set last is read")
 	}
 }

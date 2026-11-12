@@ -56,6 +56,8 @@ pub struct SidebarSpec {
     pub maximizable: bool,
     pub columns: i64,
     pub parts: Vec<PartSpec>,
+    /// What it is in the design (`designItem`): the designer finds its grid by it.
+    pub item: Option<String>,
 }
 
 impl SidebarSpec {
@@ -74,6 +76,8 @@ pub struct FooterSpec {
     pub status: Option<String>,
     pub columns: i64,
     pub parts: Vec<PartSpec>,
+    /// What it is in the design (`designItem`): the designer finds its grid by it.
+    pub item: Option<String>,
 }
 
 /// The regions of one frame, a window's own or its app's; each is none where the frame has none.
@@ -108,7 +112,7 @@ impl FrameSpec {
                 }
                 "Footer" => {
                     let columns = region.attribute("columns").and_then(|c| c.trim().parse::<f64>().ok()).filter(|c| *c >= 1.0).map(|c| c as i64).unwrap_or(FOOTER_COLUMNS);
-                    frame.footer = Some(FooterSpec { status: region.attribute("status").map(str::to_string), columns, parts: parts_of(region) });
+                    frame.footer = Some(FooterSpec { status: region.attribute("status").map(str::to_string), columns, parts: parts_of(region), item: region.attribute(markup::DESIGN_ITEM).map(str::to_string) });
                 }
                 _ => {}
             }
@@ -164,6 +168,7 @@ fn sidebar_of(sidebar: &XmlElement) -> SidebarSpec {
         maximizable: flag("maximizable"),
         columns: (number("columns").unwrap_or(1.0) as i64).max(1),
         parts: parts_of(sidebar),
+        item: sidebar.attribute(markup::DESIGN_ITEM).map(str::to_string),
     }
 }
 

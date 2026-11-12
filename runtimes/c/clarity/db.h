@@ -179,6 +179,12 @@ bool clarity_add_store(ClarityDb* db, const char* name, const char* at);
 /// of `program`, or `fallback` while it is not kept; read again at every
 /// use, so a folder chosen while the application runs takes effect at once.
 bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* program, const char* setting, const char* fallback);
+/// The settings the running handler has, as its window's data had them when
+/// the call began (copied): a file store whose folder is a setting reads them
+/// before what is kept.
+void clarity_hold_settings(ClarityDb* db, const cJSON* settings);
+/// A setting the running handler's code set, before the settings are kept.
+void clarity_hold_setting(ClarityDb* db, const char* setting, const char* value);
 /// The picture of field `column` of record `id`, read from the database
 /// or from its file store; `out->data` is NULL when the record has none.
 bool clarity_picture(ClarityDb* db, const ClarityEntity* entity, int64_t id, const char* column, ClarityBytes* out);

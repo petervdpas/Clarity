@@ -4,7 +4,7 @@ Status: partial. One set of design-and-generate tools for every agent (the IDE's
 
 ## Code
 - Spec: structural edits shared with the designer (`clarity_spec::edit`); field renames `crates/clarity-spec/src/field_rename.rs`
-- Tools: `crates/clarity-tools/src/lib.rs` (62 tools, none builds, runs or touches a database; general tools :807-920; `write_file` refuses `.cxaml` and declaration-written files :491-499; `design` reads `docs/DESIGN.md` by `include_str!` :33, `reference` reads `docs/LANGUAGE.md` :30), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`
+- Tools: `crates/clarity-tools/src/lib.rs` (64 tools, none builds, runs or touches a database; general tools :807-920; `write_file` refuses `.cxaml` and declaration-written files :491-499; `design` reads `docs/DESIGN.md` by `include_str!` :33, `reference` reads `docs/LANGUAGE.md` :30), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`
 - MCP server: `crates/clarity-mcp/src/lib.rs` on `rmcp` over stdio (`LEFT_OUT` :27, `WITHOUT_PROJECT` :31, `WHEN_OFF` :35, `for_turn` :101, call log without file contents :126)
 - CLI: `clarity mcp [--turn <file>]` (`crates/clarity-cli/src/main.rs:318`); the open project from `ide.json` (`crates/clarity-project/src/ide.rs`)
 - Claude Code hook: `~/.claude/hooks/clarity-tools-only.sh`, user-level, outside the repository; denies Write/Edit/MultiEdit on `.clarity` and `.cxaml` outside the Clarity repo
@@ -23,6 +23,7 @@ Status: partial. One set of design-and-generate tools for every agent (the IDE's
 - Who writes the decision trees (Clarity per kind of question, or the agent per case): needs decision.
 - Whether clarify-form answers are kept in the project or only go back to the agent: needs decision.
 - Where the questionnaire falls beside clarity-pdf ([reports-pdf](reports-pdf.md)): the user's choice.
+- A view's tells in the IDE designer (the view's Tells, the view line's handlers): NOT BUILT; the tools and edits have them.
 - Tool schemas listing existing entities, windows and parts as choices: PARTIAL. Only fixed lists are enums.
 - `diagram_view` gives the class view too: PARTIAL; see [diagrams](diagrams.md).
 - The Claude Code hook: PARTIAL. Nothing in the repository installs or documents it; a shell write still slips past it.
@@ -50,6 +51,11 @@ Status: partial. One set of design-and-generate tools for every agent (the IDE's
 - 2026-11-10: every AI uses the tools (ACP refusals, the Claude Code hook). User: "all ai must use tools!"
 
 - 2026-11-12: `add_data` declares what the designer's Data panel does: a record of an entity or a record type, a list of them, or a value (a plain type or an enum); it took only entities, which blocked the maintenance example. Test `data_fields_and_tabs_go_on_by_name`. User: "A, fix the tool... and we continue tomorrow, bc it wont be in this instance"
+
+- 2026-11-12: `change_field` with only `length` (or only `precision` or `scale`) keeps the field's type and changes its size; it said "nothing changed". Test `entities_and_fields_by_name`.
+- 2026-11-12: a view's tells through the tools: `add_tell` and `remove_tell` on a view (edit `SetPageTell`), and `wire_event` with `view` wires a tell on the content's view line with a handler that takes the tell's values (edit `SetViewTell`). Asked for the maintenance review slide-out as a view that tells its window `saved`. Tests `a_view_tells_and_its_window_hears_it` (frame.rs), `the_designer_edits_what_a_view_tells_and_who_hears_it` (clarity-spec tests/content.rs). The IDE designer has no property for either yet.
+- 2026-11-12: a refused edit names the file and line of the error it would add (`refusal` in `edits.rs`); `remove_data` of data the code still uses says the code uses it. Test `data_fields_and_tabs_go_on_by_name`.
+- 2026-11-12: Clarity's own words of parts in a sidebar or footer (a tree's Expand and Collapse) were added but then warned "not used anywhere": the check looked only at a window's grid. It walks every list of parts now (`part_lists` in `translations.rs`). Test `a_tree_in_a_sidebar_uses_clarity_s_own_words` (clarity-spec tests/trees.rs).
 
 ## Was
 - DESIGN 17.3, roadmap A1, M8 (MCP half)

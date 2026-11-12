@@ -248,12 +248,39 @@ fn change_field(tools: &mut ProjectTools, input: &Value) -> Result<String, Strin
     if input.get("name").is_some_and(|n| !n.is_null()) {
         return Err("a field is renamed with the rename tool, so its data follows".into());
     }
-    let type_text = type_text(&project, input)?.unwrap_or_else(|| field.type_text.clone());
+    let type_text = match type_text(&project, input)? {
+        Some(written) => written,
+        None => resized(&field.type_text, input)?,
+    };
     let mut modifiers = field.modifiers.clone();
     set_modifiers(&project, input, &type_text, &mut modifiers)?;
     let edit = Edit::UpdateField { item: field.span.start, spec: FieldSpec { name: field.name.name.clone(), type_text, modifiers } };
     let applied = edits::apply(&dir, &file, &edit)?;
     tools.applied(&format!("Changed field {} of {}", field.name.name, entity.name.name), applied)
+}
+
+/// The field's own type with a new `length` (text) or `precision` and `scale`
+/// (decimal) when change_field gives those without a type.
+fn resized(type_text: &str, input: &Value) -> Result<String, String> {
+    let number = |key: &str| input.get(key).and_then(Value::as_u64);
+    let (length, precision, scale) = (number("length"), number("precision"), number("scale"));
+    if length.is_none() && precision.is_none() && scale.is_none() {
+        return Ok(type_text.to_string());
+    }
+    let base = type_text.split('(').next().unwrap_or(type_text).trim();
+    let sizes: Vec<u64> = type_text.split_once('(').map(|(_, rest)| rest.trim_end_matches(')').split(',').filter_map(|n| n.trim().parse().ok()).collect()).unwrap_or_default();
+    match base {
+        "text" if precision.is_none() && scale.is_none() => Ok(match length {
+            Some(n) => format!("text({n})"),
+            None => type_text.to_string(),
+        }),
+        "decimal" if length.is_none() => {
+            let p = precision.or(sizes.first().copied()).ok_or("a decimal field needs precision and scale, like 10 and 2")?;
+            let s = scale.or(sizes.get(1).copied()).ok_or("a decimal field needs precision and scale, like 10 and 2")?;
+            Ok(format!("decimal({p}, {s})"))
+        }
+        _ => Err(format!("a field of type {type_text} has no length, precision or scale; give type to change it")),
+    }
 }
 
 /// Every type add_field takes.
@@ -489,6 +516,12 @@ mod tests {
         assert!(module().contains("    email: email, unique,"), "{}", module());
         ok(&mut tools, "change_field", json!({"entity": "Customer", "field": "name", "type": "text", "length": 120}));
         assert!(module().contains("    name: text(120)"), "{}", module());
+        // A length alone keeps the field's type.
+        ok(&mut tools, "change_field", json!({"entity": "Customer", "field": "name", "length": 200}));
+        assert!(module().contains("    name: text(200)"), "{}", module());
+        ok(&mut tools, "change_field", json!({"entity": "Customer", "field": "limit", "scale": 4}));
+        assert!(module().contains("    limit: decimal(10, 4), min 0"), "{}", module());
+        assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "email", "length": 40})).contains("length"));
         assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "mail", "unique": true})).contains("there is no field mail in Customer; the fields of Customer are name, email, limit and referrer"));
 
         assert!(refused(&mut tools, "remove_model_item", json!({"kind": "field", "entity": "Customer", "name": "phone"})).contains("fields of Customer are"));

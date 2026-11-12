@@ -63,3 +63,18 @@ fn csharp_keeps_a_sidebar_s_state() {
     has(vm, "if (Nav.IsCollapsed)");
     has(vm, "Nav.IsMaximized = !Nav.IsMaximized;");
 }
+
+/// The designer's markup marks a sidebar and the footer with their keys, as
+/// it marks parts: the designer finds their grids by them, so a part in a
+/// sidebar or the footer is moved and resized as any.
+#[test]
+fn the_designer_finds_a_sidebar_s_and_the_footer_s_grid() {
+    use clarity_gen::preview::{Shown, files_json};
+    let text = SHOP.replace("    button \"Menu\"", "    footer\n        status \"Ready\"\n        text name footText at 1,1 span 3 bind shown\n    button \"Menu\"");
+    let project = clarity_spec::keyed::load_keyed([("shop.clarity", text.as_str())], &[], "en");
+    let files: serde_json::Value = serde_json::from_str(&files_json(&project, "Shop", &Shown::Window("Main".into()), true, &Default::default())).unwrap();
+    let markup = files["windows"]["Main"].as_str().expect("the window's markup");
+    let line = |element: &str| markup.lines().find(|l| l.trim_start().starts_with(element)).unwrap_or_else(|| panic!("no {element} in {markup}")).to_string();
+    assert!(line("<Sidebar").contains("designItem=\""), "{markup}");
+    assert!(line("<Footer").contains("designItem=\""), "{markup}");
+}

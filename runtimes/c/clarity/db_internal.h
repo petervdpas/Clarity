@@ -72,6 +72,10 @@ struct ClarityDb {
     /// program names no people. `forget_people` frees it with the database.
     struct ClarityPeople* people;
     void (*forget_people)(struct ClarityPeople* people);
+    /// The settings of the running handler: the window's data had them when
+    /// the call began, and its code sets them before they are kept; a file
+    /// store whose folder is a setting reads them first (conformance/settings.json, `now`).
+    cJSON* held_settings;
 };
 
 /// A copy that outlives the scratch arena, to free.

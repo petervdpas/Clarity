@@ -176,6 +176,12 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool("remove_data", "Removes data declared on a window or view.", schema(json!({ "page": page_prop(), "name": { "type": "string" } }), &["page", "name"])),
         tool(
+            "add_tell",
+            "Declares what a view tells the window it shows in, as in saved or saved(name: text); its code says tell saved(name), and the window hears it with wire_event on the view. A tell of the same name is replaced.",
+            schema(json!({ "page": page_prop(), "message": { "type": "string", "description": "The tell and its values, like saved(name: text)" } }), &["page", "message"]),
+        ),
+        tool("remove_tell", "Removes a tell a view declares.", schema(json!({ "page": page_prop(), "tell": { "type": "string" } }), &["page", "tell"])),
+        tool(
             "set_part_grows",
             "Whether a custom part grows with its window (its declaration's grows line).",
             schema(json!({ "part": { "type": "string", "description": "The custom part's declared name" }, "grows": { "type": "boolean" } }), &["part", "grows"]),
@@ -201,6 +207,8 @@ pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Resul
         "remove_tab" => remove_tab(tools, input),
         "add_data" => add_data(tools, input),
         "remove_data" => remove_data(tools, input),
+        "add_tell" => add_tell(tools, input),
+        "remove_tell" => remove_tell(tools, input),
         "set_part_grows" => set_part_grows(tools, input),
         _ => return None,
     };
@@ -574,7 +582,24 @@ fn remove_data(tools: &mut ProjectTools, input: &Value) -> Result<String, String
     let (dir, at) = page_of(tools, input)?;
     let name = required(input, "name")?;
     let item = places::page_data(&at.page, &name)?.span.start;
-    make(tools, &dir, &at.file, &Edit::Remove { item }, &format!("Removed data {name} from {}", at.page.name.name))
+    make(tools, &dir, &at.file, &Edit::Remove { item }, &format!("Removed data {name} from {}", at.page.name.name)).map_err(|err| {
+        if err.starts_with(&format!("unknown name '{name}'")) { format!("the code uses {name}, so it stays until that code changes: {err}") } else { err }
+    })
+}
+
+fn add_tell(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
+    let (dir, at) = page_of(tools, input)?;
+    let message = required(input, "message")?;
+    let name: String = message.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    let edit = Edit::SetPageTell { page: at.page.span.start, name: name.clone(), message: Some(message.clone()) };
+    make(tools, &dir, &at.file, &edit, &format!("{} tells {message}", at.page.name.name))
+}
+
+fn remove_tell(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
+    let (dir, at) = page_of(tools, input)?;
+    let tell = required(input, "tell")?;
+    let edit = Edit::SetPageTell { page: at.page.span.start, name: tell.clone(), message: None };
+    make(tools, &dir, &at.file, &edit, &format!("{} no longer tells {tell}", at.page.name.name))
 }
 
 fn set_part_grows(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
@@ -717,6 +742,24 @@ mod tests {
         assert!(plain_list.is_error && plain_list.text.contains("list"), "{}", plain_list.text);
         let unknown = tools.call("add_data", &json!({"page": "MainView", "name": "thing", "entity": "Thing"}));
         assert!(unknown.is_error && unknown.text.contains("Row") && unknown.text.contains("text"), "{}", unknown.text);
+        // Plain data is removed by name like any other.
+        let flag = tools.call("add_data", &json!({"page": "MainView", "name": "reviewed", "entity": "bool"}));
+        assert!(!flag.is_error, "{}", flag.text);
+        let removed = tools.call("remove_data", &json!({"page": "MainView", "name": "reviewed"}));
+        assert!(!removed.is_error, "{}", removed.text);
+        assert!(!view(&dir, "MainView").contains("name=\"reviewed\""), "{}", view(&dir, "MainView"));
+        let flag = tools.call("add_data", &json!({"page": "Main", "name": "reviewed", "entity": "bool"}));
+        assert!(!flag.is_error, "{}", flag.text);
+        let removed = tools.call("remove_data", &json!({"page": "Main", "name": "reviewed"}));
+        assert!(!removed.is_error, "{}", removed.text);
+        assert!(!view(&dir, "Main").contains("name=\"reviewed\""), "{}", view(&dir, "Main"));
+        // Data the code still uses stays, and the answer says where the code uses it.
+        let noted = tools.call("add_data", &json!({"page": "MainView", "name": "memo", "entity": "text"}));
+        assert!(!noted.is_error, "{}", noted.text);
+        let module = std::fs::read_to_string(dir.join("todo.clarity")).unwrap();
+        std::fs::write(dir.join("todo.clarity"), format!("{module}\ncode MainView\n    handler memoShown\n        memo = \"x\"\n")).unwrap();
+        let used = tools.call("remove_data", &json!({"page": "MainView", "name": "memo"}));
+        assert!(used.is_error && used.text.contains("the code uses memo") && used.text.contains("todo.clarity:"), "{}", used.text);
 
         let placed = tools.call("place_field", &json!({"page": "MainView", "field": "task.title", "col": 1, "row": 1}));
         assert!(!placed.is_error, "{}", placed.text);

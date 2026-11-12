@@ -335,6 +335,12 @@ public:
     /// at every use, so a folder chosen while the application runs takes
     /// effect at once.
     void add_store_setting(const std::string& name, const std::string& program, const std::string& setting, const std::string& fallback);
+    /// The settings the running handler has, as its window's data had them
+    /// when the call began: a file store whose folder is a setting reads
+    /// them before what is kept.
+    void hold_settings(const nlohmann::json& settings);
+    /// A setting the running handler's code set, before the settings are kept.
+    void hold_setting(const std::string& setting, const std::string& value);
 
     /// The picture of field `column` of record `id`, read from the database
     /// or from its file store; none when the record has none.
@@ -426,6 +432,10 @@ private:
         std::string program, setting, fallback;
     };
     std::map<std::string, StoreSetting> store_settings_;
+    /// The settings of the running handler: the window's data had them when
+    /// the call began, and its code sets them before they are kept; a file
+    /// store whose folder is a setting reads them first (conformance/settings.json, `now`).
+    nlohmann::json held_settings_ = nlohmann::json::object();
 
     /// A row of a table as it was before a change and as the change left
     /// it; none where it was not there. A versioned row (`version`) carries

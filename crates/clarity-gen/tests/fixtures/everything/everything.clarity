@@ -140,6 +140,8 @@ code Albums
 
     handler leftChanged
         settings.pageSize = settings.pageSize + 10
+        // A folder setting the code sets: the store reads it at once (conformance/settings.json, `now`).
+        settings.scansFolder = "scans"
         rightToggle.checked = not leftToggle.checked
         if notesAccordion.open == 0
             notesAccordion.open = 2

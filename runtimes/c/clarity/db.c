@@ -50,6 +50,7 @@ void clarity_db_close(ClarityDb* db) {
     for (size_t i = 0; i < db->step_count; ++i) free_changes(&db->steps[i].changes);
     free(db->steps);
     free(db->held);
+    cJSON_Delete(db->held_settings);
     for (size_t i = 0; i < db->count; ++i) {
         db->sources[i].driver->close(db->sources[i].driver);
         free(db->sources[i].name);

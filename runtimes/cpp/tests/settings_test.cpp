@@ -88,6 +88,14 @@ TEST(a_secret_goes_to_the_store_only_when_it_changed) {
 #endif
 }
 
+TEST(a_store_reads_the_folder_a_handler_set_as_on_every_stack) {
+    json cases = conformance("settings.json");
+    CHECK(!cases["now"].empty());
+    for (const auto& c : cases["now"]) {
+        CHECK(setting_now(c["held"], c["kept"], c["setting"].get<std::string>()) == c["value"].get<std::string>());
+    }
+}
+
 TEST(a_folder_setting_is_where_every_runtime_puts_a_store) {
     json cases = conformance("settings.json");
     for (const auto& c : cases["folders"]) {
@@ -125,6 +133,14 @@ TEST(a_store_keeps_its_files_in_a_folder_setting) {
         keep_settings(program, json{{"photosFolder", chosen.string()}});
         db.write_text("photos", "second.txt", "second");
         CHECK(std::filesystem::exists(chosen / "second.txt"));
+        // Set by a handler, before the settings are kept: the store follows it at once.
+        auto held = home / "held";
+        db.hold_settings(json{{"photosFolder", held.string()}});
+        db.write_text("photos", "third.txt", "third");
+        CHECK(std::filesystem::exists(held / "third.txt"));
+        db.hold_setting("photosFolder", chosen.string());
+        db.write_text("photos", "fourth.txt", "fourth");
+        CHECK(std::filesystem::exists(chosen / "fourth.txt"));
     }
     std::filesystem::remove_all(home);
 #ifdef _WIN32

@@ -653,9 +653,13 @@ pub fn as_part(element: &dyn Element) -> Option<&dyn Part> {
     element.as_part()
 }
 
-/// The place in a grid of a part made from `spec`.
+/// The place in a grid of a part made from `spec`. In the designer (a part
+/// with its `designItem`) rows keep their height, so a part stands on the
+/// cells it is written on (docs/LANGUAGE.md); a running program's growing
+/// parts share the height to spare.
 pub fn place_of(part: &dyn Part) -> GridItem {
-    part.base().spec.place(part.grows())
+    let spec = &part.base().spec;
+    spec.place(part.grows() && spec.text(crate::markup::DESIGN_ITEM).is_none())
 }
 
 /// A kind of part Clarity.UI does not draw yet, or one that failed: which kind, and why, in its place.

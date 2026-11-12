@@ -15,7 +15,7 @@ Status: partial. This folder: one entry per piece, read through the index; it re
 - Phase 3, the `design` tool reads the ledger instead of DESIGN.md: NOT BUILT (Rust, ask first).
 - Phase 4, delete the plans, WINDOWS-TESTS.md, MODULAR-PLAN.md, the three status documents and DESIGN.md: NOT BUILT (after 2 and 3).
 - Phase 5, Claude's memory notes point at entries instead of holding status: NOT BUILT.
-- Reviewing the entries: through the maintenance example (see [examples](examples.md)), reviews kept as `docs/ledger/reviews/<piece>.md`.
+- Reviewing the entries: through the maintenance example (see [examples](examples.md)), reviews kept in that app's database, not in this folder.
 - The repository README's first line still states the struck goal (see [vision](vision.md)).
 
 ## Conflicts

@@ -117,6 +117,7 @@ fn widget_edits(widgets: &[Widget], out: &mut Vec<Edit>) {
             out.push(Edit::SetTitle { target: inner.span.start, title: "Renamed".into() });
             out.push(Edit::SetPaneSpan { target: inner.span.start, columns: Some(3) });
             out.push(Edit::SetPageView { target: inner.span.start, view: Some("OtherView".into()) });
+            out.push(Edit::SetViewTell { target: inner.span.start, tell: "saved".into(), handler: Some("otherSaved".into()) });
             out.push(Edit::SetPageColor { target: inner.span.start, color: Some("#ff0000".into()) });
             out.push(Edit::CreateWidget { container: inner.span.start, kind: WidgetKind::Button, col: 1, row: 20, width: None, caption: None, bind: None, part: None, height: None, input: None, strategy: None, shows: None });
             // A part moved into the page of another.
@@ -156,6 +157,10 @@ fn edits_of(markup: &str) -> Vec<Edit> {
     out.push(Edit::SetSize { page: at, width: None, height: None });
     out.push(Edit::SetPageStyle { page: at, style: "accent".into() });
     out.push(Edit::SetPageStyle { page: at, style: String::new() });
+    out.push(Edit::SetPageTell { page: at, name: "saved".into(), message: Some("saved(name: text)".into()) });
+    for tell in &page.tells {
+        out.push(Edit::SetPageTell { page: at, name: tell.name.name.clone(), message: None });
+    }
     out.push(Edit::AddData { page: at, name: "extra".into(), entity: "Thing".into(), list: true });
     out.push(Edit::SetOwnerEvent { owner: at, event: Event::Open, handler: Some("opened".into()) });
     out.push(Edit::SetOwnerEvent { owner: at, event: Event::Open, handler: None });

@@ -198,16 +198,17 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "wire_event",
-            "Wires an event of a part (or a tell of a custom part) to a handler, written in the code behind when it is new; without a handler it is unwired. A click that runs a handler opens no window.",
+            "Wires an event of a part (or a tell of a custom part, or of a view shown by the window's content) to a handler, written in the code behind when it is new; without a handler it is unwired. A click that runs a handler opens no window.",
             schema(
                 json!({
                     "window": owner,
                     "part": { "type": "string", "description": "The part's name, like saveButton." },
+                    "view": { "type": "string", "description": "Instead of part: a view the window's content shows, like ReviewView; give its tell." },
                     "event": { "type": "string", "enum": events(), "description": "One of the part's events; the parts tool lists each kind's." },
-                    "tell": { "type": "string", "description": "Instead of event: a tell of a custom part, like scored." },
+                    "tell": { "type": "string", "description": "Instead of event: a tell of a custom part, like scored, or of the view." },
                     "handler": { "type": "string", "description": "Like saveClicked; leave it out to unwire." }
                 }),
-                &["window", "part"],
+                &["window"],
             ),
         ),
         tool(
@@ -694,6 +695,9 @@ fn set_event(tools: &mut ProjectTools, input: &Value) -> Result<String, String> 
 fn wire_event(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
     let (dir, project) = loaded(tools)?;
     let owner = places::frame_owner(&project, &dir, &required(input, "window")?)?;
+    if let Some(view) = text(input, "view").filter(|v| !v.is_empty()) {
+        return wire_view_tell(tools, &project, &owner, &view, input);
+    }
     let part = required(input, "part")?;
     let widget = places::frame_part(&owner, &part)?;
     let handler = text(input, "handler").filter(|h| !h.is_empty());
@@ -745,6 +749,29 @@ fn wire_event(tools: &mut ProjectTools, input: &Value) -> Result<String, String>
     let what = match &handler {
         Some(h) => format!("Wired {said} of {part} to {h}"),
         None => format!("Unwired {said} of {part}"),
+    };
+    apply(tools, &what, &owner.file.clone(), &edit)
+}
+
+/// A tell of `view` wired on the line of the window's content that shows
+/// it, with a handler that takes the tell's values; unwired without a handler.
+fn wire_view_tell(tools: &mut ProjectTools, project: &clarity_spec::Project, owner: &places::FrameOwner, view: &str, input: &Value) -> Result<String, String> {
+    if text(input, "event").is_some_and(|e| !e.is_empty()) {
+        return Err(format!("a view's line hears its tells, not events; give tell, one that {view} tells"));
+    }
+    let line = places::view_line(owner, view)?;
+    let tell = text(input, "tell").filter(|t| !t.is_empty()).ok_or_else(|| format!("give tell, one that {view} tells"))?;
+    let shown = project.pages().find(|p| p.name.name == view).ok_or_else(|| format!("there is no view {view}"))?;
+    let Some(message) = shown.tells.iter().find(|t| t.name.name == tell) else {
+        let names: Vec<&str> = shown.tells.iter().map(|t| t.name.name.as_str()).collect();
+        return Err(if names.is_empty() { format!("{view} tells nothing; add_tell declares a tell") } else { format!("{view} has no tell {tell}; it tells {}", crate::listed(&names)) });
+    };
+    let params = message.params.iter().map(|p| format!("{}: {}", p.name.name, clarity_spec::cxaml::type_text(&p.ty))).collect::<Vec<_>>().join(", ");
+    let handler = text(input, "handler").filter(|h| !h.is_empty());
+    let wire = Edit::SetViewTell { target: line.span.start, tell: tell.clone(), handler: handler.clone() };
+    let (edit, what) = match &handler {
+        Some(h) => (Edit::Batch { edits: vec![wire, Edit::AddHandlerWith { owner: owner.name.clone(), name: h.clone(), params }] }, format!("Wired {tell} of {view} to {h}")),
+        None => (wire, format!("Unwired {tell} of {view}")),
     };
     apply(tools, &what, &owner.file.clone(), &edit)
 }
@@ -884,6 +911,31 @@ mod tests {
     /// A page of the module, written as its own file: a root of `kind` (Window, Splash).
     fn add_page(dir: &Path, kind: &str, name: &str) {
         std::fs::write(dir.join(format!("design/{name}.cxaml")), format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{kind} class=\"todo.{name}\">\n</{kind}>\n")).unwrap();
+    }
+
+    /// A view says what it tells; the window that shows it hears a tell on
+    /// the view's line, with a handler that takes the tell's values.
+    #[test]
+    fn a_view_tells_and_its_window_hears_it() {
+        let (root, _, dir, mut tools) = project("tells");
+        assert!(refused(&mut tools, "add_tell", json!({"page": "Main", "message": "saved"})).contains("only a view tells"));
+        ok(&mut tools, "add_tell", json!({"page": "MainView", "message": "saved(name: text)"}));
+        assert!(read(&dir, "design/MainView.cxaml").contains("<Tells message=\"saved(name: text)\" />"), "{}", read(&dir, "design/MainView.cxaml"));
+
+        let wired = ok(&mut tools, "wire_event", json!({"window": "Main", "view": "MainView", "tell": "saved", "handler": "mainSaved"}));
+        assert!(wired.contains("Wired saved of MainView to mainSaved"), "{wired}");
+        assert!(read(&dir, "design/Main.cxaml").contains("<View name=\"MainView\" onsaved=\"mainSaved\" />"), "{}", read(&dir, "design/Main.cxaml"));
+        assert!(read(&dir, "todo.clarity").contains("handler mainSaved(name: text)"), "{}", read(&dir, "todo.clarity"));
+        assert!(refused(&mut tools, "wire_event", json!({"window": "Main", "view": "MainView", "tell": "closed", "handler": "x"})).contains("MainView has no tell closed; it tells saved"));
+        assert!(refused(&mut tools, "wire_event", json!({"window": "Main", "view": "OtherView", "tell": "saved", "handler": "x"})).contains("Main shows no view OtherView; it shows MainView"));
+        assert!(refused(&mut tools, "wire_event", json!({"window": "Main", "view": "MainView", "event": "click", "handler": "x"})).contains("tell"));
+
+        ok(&mut tools, "wire_event", json!({"window": "Main", "view": "MainView", "tell": "saved"}));
+        assert!(read(&dir, "design/Main.cxaml").contains("<View name=\"MainView\" />"), "{}", read(&dir, "design/Main.cxaml"));
+        ok(&mut tools, "remove_tell", json!({"page": "MainView", "tell": "saved"}));
+        assert!(!read(&dir, "design/MainView.cxaml").contains("<Tells"), "{}", read(&dir, "design/MainView.cxaml"));
+        assert!(refused(&mut tools, "remove_tell", json!({"page": "MainView", "tell": "saved"})).contains("tells no saved"));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

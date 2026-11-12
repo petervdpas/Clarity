@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn, resizedBy, resizedTo } from "./designLayer.ts";
+import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn, resizedBy, resizedTo, rowStep } from "./designLayer.ts";
 import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
@@ -211,4 +211,10 @@ test("a resize follows how far the handle moved, in whole cells, not the cell un
   assert.deepEqual(resizedTo(at, { columns: 0, rows: 2 }, 12), { width: 4, height: 9 }, "past the last row");
   assert.deepEqual(resizedTo(at, { columns: -9, rows: -9 }, 12), { width: 1, height: 1 });
   assert.deepEqual(resizedTo(at, { columns: 20, rows: 0 }, 12), { width: 12, height: 7 }, "not past the last column");
+});
+
+test("a resize moves a row per row of the design, however high the grid is drawn", () => {
+  assert.equal(rowStep(36, 8, 540, 2), 44, "a sidebar's grid drawn 540 high with two rows still moves 44 a row");
+  assert.equal(rowStep(10, 0, 560, 56), 10, "a page's exact cells");
+  assert.equal(rowStep(0, 8, 300, 3), 100, "without a row height, the grid's height shared by its rows");
 });

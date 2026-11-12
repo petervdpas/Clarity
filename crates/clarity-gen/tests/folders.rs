@@ -20,6 +20,11 @@ page Preferences: dialog
 page Albums: window
     data album: Album
     image name photo at 1,1 span 3 rows 3 bind album.photo
+    button \"Elsewhere\" name elsewhereButton at 4,1 span 2 on click: elsewhereClicked
+
+code Albums
+    handler elsewhereClicked
+        settings.photosFolder = \"elsewhere\"
 ";
 
 fn files(backend: Backend, ui: Ui) -> String {
@@ -56,4 +61,27 @@ fn the_rust_program_opens_the_folder_picker_through_clarity_ui() {
     let rust = files(Backend::Rust, Ui::Clarity);
     has(&rust, "clarity_runtime::native_ui::run(app, FILES)");
     assert!(!rust.contains("tauri"), "{rust}");
+}
+
+/// A handler that sets the folder and then reads the store in one go reads
+/// the folder it set (conformance/settings.json, `now`): each call holds the
+/// settings it began with, and a folder setting the code sets is held at once.
+#[test]
+fn every_stack_holds_the_folder_a_handler_sets() {
+    let rust = files(Backend::Rust, Ui::Clarity);
+    has(&rust, "db.hold_settings(settings);");
+    has(&rust, "db.hold_setting(\"photosFolder\", &");
+    let go = files(Backend::Go, Ui::Clarity);
+    has(&go, "db.HoldSettings(");
+    has(&go, "db.HoldSetting(\"photosFolder\", ");
+    // C# keeps a setting the moment code changes it, so the store reads it at once.
+    let csharp = files(Backend::Csharp, Ui::Clarity);
+    has(&csharp, "settings.PropertyChanged += (_, e) =>");
+    has(&csharp, "KeptSettings.Keep(ProgramName, settings.ToJson()");
+    let c = files(Backend::C, Ui::Clarity);
+    has(&c, "clarity_hold_settings(db, ");
+    has(&c, "clarity_hold_setting(db, \"photosFolder\", ");
+    let cpp = files(Backend::Cpp, Ui::Clarity);
+    has(&cpp, "db.hold_settings(");
+    has(&cpp, "db.hold_setting(\"photosFolder\", ");
 }

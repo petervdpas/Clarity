@@ -44,6 +44,14 @@ const char* clarity_settings_os(void) {
 
 const char* clarity_settings_file(const char* program) { return clarity_settings_file_in(clarity_settings_os(), from_system, NULL, program); }
 
+const char* clarity_setting_now(const cJSON* held, const cJSON* kept, const char* setting) {
+    const cJSON* set = cJSON_GetObjectItemCaseSensitive(held, setting);
+    if (cJSON_IsString(set)) return set->valuestring;
+    const cJSON* was = cJSON_GetObjectItemCaseSensitive(kept, setting);
+    if (cJSON_IsString(was)) return was->valuestring;
+    return "";
+}
+
 const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback) {
     const char* chosen = cJSON_IsString(kept) && kept->valuestring[0] ? kept->valuestring : fallback;
     if (!chosen || !*chosen) chosen = store;

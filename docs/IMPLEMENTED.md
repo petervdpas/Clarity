@@ -465,7 +465,7 @@ A Tauri app (`app/`): Svelte front end in `app/src`, 133 commands in `app/src-ta
 62 tools in `crates/clarity-tools`, none of which builds, runs or touches a database:
 - **General:** project_overview, read_file, write_file, check, missing_translations, api, pick_api, migrate, rename, parts, manual, reference, design, new_project, generate, read_generated, diagram_view, write_diagram, diagram_proposals, apply_diagram (`src/lib.rs:807-920`).
 - **Data model:** add_entity, add_enum, add_field, change_field, add_enum_value, change_enum_value, set_uses, remove_model_item (`src/structural/model.rs`).
-- **Windows:** add_window, add_view, remove_page, change_page, add_part, place_field, change_part, rename_part, move_part, remove_part, add_tab, change_tab, remove_tab, add_data, remove_data, set_part_grows (`src/structural/windows.rs`).
+- **Windows:** add_window, add_view, remove_page, change_page, add_part, place_field, change_part, rename_part, move_part, remove_part, add_tab, change_tab, remove_tab, add_data, remove_data, add_tell, remove_tell, set_part_grows (`src/structural/windows.rs`).
 - **App and frame:** add_app, set_main_window, set_splash, add_region, add_command, change_command, change_sidebar, change_ribbon, rename_frame_part, set_frame_title, move_frame_part, remove_frame_part, add_context_menu, set_event, wire_event, set_handler_code, name_parts, camel_names (`src/structural/frame.rs`).
 - `write_file` refuses `.cxaml` files and files Clarity writes from a declaration (`src/lib.rs:491-499`).
 

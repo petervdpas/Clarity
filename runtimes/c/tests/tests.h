@@ -29,6 +29,7 @@
     X(a_secret_goes_to_the_store_only_when_it_changed)           \
     X(a_folder_setting_is_where_every_runtime_puts_a_store)      \
     X(a_store_keeps_its_files_in_a_folder_setting)               \
+    X(a_store_reads_the_folder_a_handler_set_as_on_every_stack)  \
     X(a_file_in_a_store_is_kept_under_its_name_in_a_folder_of_its_contents) \
     X(a_copy_goes_to_the_downloads_folder_under_a_free_name)     \
     X(a_file_is_kept_with_its_name_in_the_database_or_its_store) \

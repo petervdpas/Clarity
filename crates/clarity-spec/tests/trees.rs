@@ -138,3 +138,29 @@ fn the_rules_of_a_tree_by_key() {
     says(NODES.replace("key key parent parent show", "key id parent parent show"), "Node has no field 'id'");
     says(NODES.replace("tree name nav at 1,1 span 4 rows 10 bind nodes key key parent parent", "table name nav at 1,1 span 4 rows 10 bind nodes parent parent columns label"), "'parent' does not apply to a table");
 }
+
+/// A tree in a sidebar has Clarity's own words as one on the grid has, and
+/// the check counts them as used: the words are made and checked from the
+/// same parts, wherever on the window they stand.
+#[test]
+fn a_tree_in_a_sidebar_uses_clarity_s_own_words() {
+    let text = "module files
+
+entity Folder
+    name: text(80), required
+    size: integer
+    parent: ref Folder
+    children: list<Folder>
+
+page Files: window
+    data folders: list<Folder>
+    sidebar left name side width 320 grid 1 columns
+        treetable name grid at 1,1 span 1 rows 10 bind folders children children columns name 200, size
+";
+    let p = clarity_spec::keyed::load_keyed([("files.clarity", text)], &[], "en");
+    for (key, word) in clarity_spec::translations::TREE_KEYS {
+        assert_eq!(p.translations["en"].get(key).map(String::as_str), Some(word), "{key}");
+    }
+    let unused: Vec<&String> = p.diagnostics.iter().map(|d| &d.message).filter(|m| m.contains("not used anywhere")).collect();
+    assert!(unused.is_empty(), "{unused:#?}");
+}

@@ -127,6 +127,39 @@ fn the_designer_edits_the_views_of_content() {
     assert!(apply(None, &markup, &Edit::AddTab { item: main.span.start, title: "not a name".into() }).is_err());
 }
 
+/// A view declares what it tells, and the content line that shows it wires
+/// a tell to a handler of the window; both are designer edits.
+#[test]
+fn the_designer_edits_what_a_view_tells_and_who_hears_it() {
+    use clarity_spec::cxaml::{apply, read_page};
+    use clarity_spec::edit::Edit;
+    let file = |name: &str| clarity_spec::converted([("model.clarity", MODEL)]).into_iter().find(|(p, _)| p.ends_with(&format!("design/{name}.cxaml"))).map(|(_, t)| t).expect("the file");
+
+    let view = file("ProjectEditor");
+    let page = read_page(&view, "").0.expect("the view").span.start;
+    let told = apply(None, &view, &Edit::SetPageTell { page, name: "saved".into(), message: Some("saved(name: text)".into()) }).unwrap().text;
+    assert!(told.contains("<Tells message=\"saved(name: text)\" />"), "{told}");
+    let page = read_page(&told, "").0.expect("the view").span.start;
+    let changed = apply(None, &told, &Edit::SetPageTell { page, name: "saved".into(), message: Some("saved".into()) }).unwrap().text;
+    assert_eq!(changed.matches("<Tells").count(), 1, "{changed}");
+    assert!(changed.contains("<Tells message=\"saved\" />"), "{changed}");
+    let page = read_page(&changed, "").0.expect("the view").span.start;
+    let gone = apply(None, &changed, &Edit::SetPageTell { page, name: "saved".into(), message: None }).unwrap().text;
+    assert!(!gone.contains("<Tells"), "{gone}");
+    assert!(apply(None, &view, &Edit::SetPageTell { page, name: "saved".into(), message: Some("closed".into()) }).is_err(), "the message names the tell");
+    assert!(apply(None, &view, &Edit::SetPageTell { page, name: "saved".into(), message: Some("saved(name".into()) }).is_err());
+
+    let window = file("Workspace");
+    let main = &read_page(&window, "").0.expect("the window").widgets[0];
+    let line = main.pages[1].span.start;
+    let wired = apply(None, &window, &Edit::SetViewTell { target: line, tell: "saved".into(), handler: Some("projectSaved".into()) }).unwrap().text;
+    assert!(wired.contains("<View name=\"ProjectEditor\" onsaved=\"projectSaved\" />"), "{wired}");
+    let main = &read_page(&wired, "").0.expect("the window").widgets[0];
+    let unwired = apply(None, &wired, &Edit::SetViewTell { target: main.pages[1].span.start, tell: "saved".into(), handler: None }).unwrap().text;
+    assert!(unwired.contains("<View name=\"ProjectEditor\" />"), "{unwired}");
+    assert!(apply(None, &window, &Edit::SetViewTell { target: line, tell: "saved".into(), handler: Some("not a name".into()) }).is_err());
+}
+
 const SHARED: &str = "module model
 
 page Shop: window

@@ -43,7 +43,7 @@ impl FrameSidebar {
     /// The sidebar on the left (`left`) or right of `frame`, its parts made by their kinds on its grid.
     pub fn new(frame: Rc<WindowFrame>, left: bool) -> FrameSidebar {
         let spec = frame.sidebar(left).expect("a sidebar has its spec").clone();
-        let mut grid = GridPanel::new(spec.columns.max(1));
+        let mut grid = GridPanel::new(spec.columns.max(1)).owned(spec.item.as_deref());
         for part in &spec.parts {
             let made = parts::make(part.clone(), frame.host().clone());
             let place = parts::place_of(made.as_ref());

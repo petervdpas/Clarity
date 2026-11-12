@@ -174,6 +174,11 @@ export function grown(at: { col: number; width: number; height: number }, column
   return { width, height };
 }
 
+/** How far a resize handle moves for one row: a row of the design's height and the gap below it, however high the grid is drawn; without a row height, the grid's height shared by its rows. */
+export function rowStep(rowHeight: number, gap: number, height: number, rows: number): number {
+  return rowHeight > 0 ? rowHeight + gap : height / Math.max(1, rows);
+}
+
 /** The cells a resize handle moved: the pointer's move from `from` to `to`, rounded to whole columns and rows. */
 export function resizedBy(from: { x: number; y: number }, to: { x: number; y: number }, column: number, row: number): { columns: number; rows: number } {
   return { columns: Math.round((to.x - from.x) / column), rows: Math.round((to.y - from.y) / row) };

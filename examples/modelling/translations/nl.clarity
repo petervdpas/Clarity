@@ -35,6 +35,8 @@ translation nl
     removeRow "Verwijderen"
     removeRowAsk "{row} verwijderen?"
     keepRow "Bewaren"
+    expandRow "Uitklappen"
+    collapseRow "Inklappen"
     slideoutClose "Sluiten"
     slideoutPin "Vastzetten"
     slideoutUnpin "Laten wegschuiven"

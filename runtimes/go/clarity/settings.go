@@ -79,6 +79,19 @@ func SettingsFile(program string) (string, bool) {
 	return filepath.FromSlash(file), ok
 }
 
+// SettingNow gives the value a file store reads for its folder setting:
+// what the running handler set (held), else what was kept, else nothing
+// (conformance/settings.json, `now`).
+func SettingNow(held, kept map[string]any, setting string) string {
+	if v, ok := held[setting].(string); ok {
+		return v
+	}
+	if v, ok := kept[setting].(string); ok {
+		return v
+	}
+	return ""
+}
+
 // ReadSettings gives the settings program kept; none when it kept none, or
 // they cannot be read.
 func ReadSettings(program string) map[string]any {

@@ -4,7 +4,7 @@
 // pointer is translated into a cell of the innermost grid under it.
 
 import { designLog } from "./designLog";
-import { resizedBy, resizedTo } from "./designLayer";
+import { resizedBy, resizedTo, rowStep } from "./designLayer";
 import type { Edit } from "@clarity/ui/generated/Edit.ts";
 import type { Dock } from "@clarity/ui/generated/Dock.ts";
 import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -223,7 +223,7 @@ class PageDesigner {
       // As many cells as the pointer moved from where the handle was pressed, so the
       // drawn outline and the grid's cells need not line up, and a part may grow past the last row.
       const rows = grid.style.gridTemplateRows.split(" ").filter((r) => r.trim()).length || 1;
-      const by = resizedBy(this.#from, { x, y }, colWidth + gap, rect.height / rows);
+      const by = resizedBy(this.#from, { x, y }, colWidth + gap, rowStep(Number(grid.dataset.rowHeight) || 0, gap, rect.height, rows));
       return { container, columns, col: p.col, row: p.row, ...resizedTo(p, by, columns) };
     }
 

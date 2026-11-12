@@ -283,6 +283,8 @@ fn sidebar_element(sidebar: &Sidebar, depth: usize, out: &mut String, marks: &Ma
         }
         attributes.push_str(&attribute(&field, &value));
     }
+    // The designer finds its grid by its key.
+    attributes.push_str(&(marks.item)(&sidebar.span));
     let _ = writeln!(out, "{pad}<Sidebar{attributes}>");
     for widget in &sidebar.widgets {
         part(widget, depth + 1, out, marks);
@@ -295,6 +297,7 @@ fn footer_element(footer: &Footer, depth: usize, out: &mut String, marks: &Marks
     let pad = "  ".repeat(depth);
     let mut attributes = footer.status.as_ref().map(|s| attribute("status", &Value::String(s.clone()))).unwrap_or_default();
     attributes.push_str(&attribute("columns", &Value::from(footer.columns)));
+    attributes.push_str(&(marks.item)(&footer.span));
     if footer.widgets.is_empty() {
         let _ = writeln!(out, "{pad}<Footer{attributes} />");
         return;

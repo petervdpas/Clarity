@@ -109,6 +109,17 @@ void a_secret_goes_to_the_store_only_when_it_changed(void) {
 #endif
 }
 
+void a_store_reads_the_folder_a_handler_set_as_on_every_stack(void) {
+    cJSON* cases = conformance("settings.json");
+    const cJSON* c;
+    CHECK(cJSON_GetArraySize(cJSON_GetObjectItem(cases, "now")) > 0);
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "now")) {
+        const char* found = clarity_setting_now(cJSON_GetObjectItem(c, "held"), cJSON_GetObjectItem(c, "kept"), cJSON_GetObjectItem(c, "setting")->valuestring);
+        CHECK_TEXT(found, cJSON_GetObjectItem(c, "value")->valuestring);
+    }
+    cJSON_Delete(cases);
+}
+
 void a_folder_setting_is_where_every_runtime_puts_a_store(void) {
     cJSON* cases = conformance("settings.json");
     const cJSON* c;
@@ -149,6 +160,17 @@ void a_store_keeps_its_files_in_a_folder_setting(void) {
     cJSON_Delete(values);
     CHECK_OK(clarity_write_text(db, "photos", "second.txt", "second"));
     CHECK(clarity_exists(clarity_format("%s/second.txt", chosen)));
+    // Set by a handler, before the settings are kept: the store follows it at once.
+    const char* held = clarity_format("%s/held", home);
+    cJSON* settings = cJSON_CreateObject();
+    cJSON_AddStringToObject(settings, "photosFolder", held);
+    clarity_hold_settings(db, settings);
+    cJSON_Delete(settings);
+    CHECK_OK(clarity_write_text(db, "photos", "third.txt", "third"));
+    CHECK(clarity_exists(clarity_format("%s/third.txt", held)));
+    clarity_hold_setting(db, "photosFolder", chosen);
+    CHECK_OK(clarity_write_text(db, "photos", "fourth.txt", "fourth"));
+    CHECK(clarity_exists(clarity_format("%s/fourth.txt", chosen)));
     clarity_db_close(db);
     remove_tree(home);
 #ifdef _WIN32

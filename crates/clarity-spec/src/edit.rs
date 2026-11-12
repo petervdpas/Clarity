@@ -46,6 +46,13 @@ pub enum Edit {
     /// Set the view a tab, step or section shows (`section "Class" view
     /// ClassEditor`), or none, so it holds parts of its own.
     SetPageView { target: u32, view: Option<String> },
+    /// Declare what a view tells its window (`<Tells message="saved(name:
+    /// text)" />`), in place of a tell named `name`; with no message, remove
+    /// the tell `name`.
+    SetPageTell { page: u32, name: String, message: Option<String> },
+    /// Wire a tell of the view a view line (or tab, step or section) shows
+    /// to a handler of the window (`onsaved="recipeSaved"`), or unwire it.
+    SetViewTell { target: u32, tell: String, handler: Option<String> },
     /// Set the color of an accordion section's header (`section "Chapters"
     /// color "#2e86de"`), or none, so it takes the theme's look.
     SetPageColor { target: u32, color: Option<String> },

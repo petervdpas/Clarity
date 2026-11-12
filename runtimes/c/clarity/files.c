@@ -33,6 +33,17 @@ bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* prog
     return add(db, (ClarityStore){clarity_lasting(name), NULL, clarity_lasting(program), clarity_lasting(setting), clarity_lasting(fallback)}) && clarity_store_folder(db, name, &folder);
 }
 
+void clarity_hold_settings(ClarityDb* db, const cJSON* settings) {
+    cJSON_Delete(db->held_settings);
+    db->held_settings = cJSON_IsObject(settings) ? cJSON_Duplicate(settings, true) : NULL;
+}
+
+void clarity_hold_setting(ClarityDb* db, const char* setting, const char* value) {
+    if (!db->held_settings) db->held_settings = cJSON_CreateObject();
+    cJSON_DeleteItemFromObjectCaseSensitive(db->held_settings, setting);
+    cJSON_AddStringToObject(db->held_settings, setting, value ? value : "");
+}
+
 bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
     // The last one added under a name is the one in use.
     for (size_t i = db->store_count; i-- > 0;) {
@@ -45,7 +56,9 @@ bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
         const char* file = clarity_settings_file(store->program);
         if (!file) return clarity_fail(CLARITY_STORAGE, "this system names no folder for application settings");
         cJSON* kept = clarity_read_settings(store->program);
-        *out = clarity_store_folder_in(clarity_settings_os(), clarity_parent(file), name, cJSON_GetObjectItemCaseSensitive(kept, store->setting), store->fallback);
+        cJSON* now = cJSON_CreateString(clarity_setting_now(db->held_settings, kept, store->setting));
+        *out = clarity_store_folder_in(clarity_settings_os(), clarity_parent(file), name, now, store->fallback);
+        cJSON_Delete(now);
         cJSON_Delete(kept);
         return clarity_make_folders(*out);
     }

@@ -542,6 +542,31 @@ pub fn frame_part<'a>(owner: &FrameOwner<'a>, name: &str) -> Result<&'a clarity_
     Err(format!("{}{hint}", unknown_in_model(&format!("part {name} in {}", owner.name), &format!("parts of {}", owner.name), &names)))
 }
 
+/// The line of the owner's content that shows `view`: `<View name="ReviewView" />`,
+/// or a tab, step or section that shows it.
+pub fn view_line<'a>(owner: &FrameOwner<'a>, view: &str) -> Result<&'a clarity_spec::model::WidgetPage, String> {
+    fn walk<'a>(list: &'a [clarity_spec::model::Widget], out: &mut Vec<&'a clarity_spec::model::WidgetPage>) {
+        for w in list {
+            walk(&w.children, out);
+            for page in &w.pages {
+                if page.view.is_some() {
+                    out.push(page);
+                }
+                walk(&page.children, out);
+            }
+        }
+    }
+    let mut lines = Vec::new();
+    for list in owner.part_lists() {
+        walk(list, &mut lines);
+    }
+    if let Some(found) = lines.iter().find(|p| p.view.as_deref() == Some(view)) {
+        return Ok(found);
+    }
+    let names: Vec<&str> = lines.iter().filter_map(|p| p.view.as_deref()).collect();
+    Err(if names.is_empty() { format!("{} shows no views", owner.name) } else { format!("{} shows no view {view}; it shows {}", owner.name, crate::listed(&names)) })
+}
+
 /// The handlers in the code behind of the window, view or app `owner`.
 pub fn handler_names<'a>(project: &'a clarity_spec::Project, owner: &str) -> Vec<&'a str> {
     project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == owner).flat_map(|b| &b.handlers).map(|h| h.name.name.as_str()).collect()

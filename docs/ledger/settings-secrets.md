@@ -35,6 +35,7 @@ Status: built. One `settings` block of typed values kept per person on their mac
 - 2026-10-25: a secret signs or connects through `setting:name`; `keychain:NAME` is refused with that advice.
 - 2026-10-25: a password input shows or copies its secret. User: "passwords, secrets and alike should have an option (open eye/closed eye) to show it or copy it"
 - 2026-10-29: a store's folder chosen while the program runs is a `folder` setting, read at every use (X2).
+- 2026-11-12: a file store reads its folder setting as the running handler has it: each call holds the settings its window's data began with, and code that sets a folder setting holds it at once (`hold_settings`, `hold_setting` on the Db of R, Go, C, C++, C#); settings are still kept only after the handler ends. The rule is `now` in `conformance/settings.json`, run by every runtime (R `settings.rs`, Go `settings_test.go`, C `settings_test.c`, C++ `settings_test.cpp`, C# `SettingsCaseTests.cs`); the generators write the holds through one helper (`held_setting`, `crates/clarity-gen/src/lib.rs`), pinned by gen `folders.rs`. C# keeps a setting the moment code changes it, so its generator holds nothing. Found by the maintenance example: picking a project set `ledgerFolder` and listed the ledger in one handler, which read the old folder. User chose "Hold settings in memory (Recommended)". Needs a runtime release of R, Go, C, C++ and C#.
 
 ## Was
 - DESIGN 5.17, 5.27 (secrets, eye and copy; "When the databases do not open" is in [databases](databases.md)), roadmap U1g

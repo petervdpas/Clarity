@@ -1172,6 +1172,8 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     }
     let assets = if web { ", Assets: assets" } else { "" };
     // Without a handler anywhere, Dispatch has no use for the screen.
+    // The settings the call began with, which a file store reads before what is kept.
+    let hold = if crate::holds_settings(project) { "\tif settings, ok := state.Data[\"settings\"].(map[string]any); ok {\n\t\tdb.HoldSettings(settings)\n\t}\n" } else { "" };
     let new_ui = if dispatch.is_empty() && app_dispatch.is_empty() { "" } else { "\tui := clarity.NewUi(state)\n" };
     format!(
         "{HEADER}
@@ -1248,7 +1250,7 @@ func (windows) Handler(window, event string) (string, bool) {{
 
 // Dispatch runs a handler on a window's state.
 func (windows) Dispatch(db *clarity.Db, state clarity.WindowState, handler string) (clarity.Reply, error) {{
-{new_ui}\tswitch state.Window {{
+{hold}{new_ui}\tswitch state.Window {{
 {dispatch}\t}}
 \t// The app's handlers run from any window, on the app's own data.
 \tswitch handler {{
@@ -1259,7 +1261,7 @@ func (windows) Dispatch(db *clarity.Db, state clarity.WindowState, handler strin
 // Answer runs the handler the answer to a question goes to (DESIGN 5.14),
 // with the values written for it and the answer last.
 func (windows) Answer(db *clarity.Db, state clarity.WindowState, handler string, values []json.RawMessage) (clarity.Reply, error) {{
-\tui := clarity.NewUi(state)
+{hold}\tui := clarity.NewUi(state)
 \t_ = ui
 \tswitch state.Window {{
 {answers}\t}}

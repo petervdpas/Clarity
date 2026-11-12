@@ -345,6 +345,26 @@ pub(crate) fn uses_picture_functions(project: &Project) -> bool {
     project.calls_any(&|name| clarity_spec::code::check::picture_function(name).is_some() && built_in(project, name).is_some())
 }
 
+/// The folder setting an assignment sets, `settings.ledgerFolder = x`: the
+/// running handler holds it (`hold_setting`), so a file store whose folder it
+/// is reads it at once, before the settings are kept (conformance/settings.json, `now`).
+pub(crate) fn held_setting<'p>(
+    project: &'p Project,
+    type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
+    target: &clarity_spec::code::Expr,
+) -> Option<&'p str> {
+    let clarity_spec::code::ExprKind::Member { object, member } = &target.kind else { return None };
+    let clarity_spec::code::check::TypeInfo::Record(entity) = type_of(object) else { return None };
+    let entity = project.entity(&entity).filter(|e| e.settings)?;
+    entity.field(&member.name).filter(|f| f.ty == clarity_spec::model::FieldType::Folder).map(|f| f.name.name.as_str())
+}
+
+/// Whether the running handler holds the settings: a file store reads a
+/// folder setting, so the settings the call began with come first.
+pub(crate) fn holds_settings(project: &Project) -> bool {
+    !project.folder_settings().is_empty()
+}
+
 pub(crate) fn copied<'e>(
     project: &Project,
     type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,

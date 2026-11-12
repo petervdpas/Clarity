@@ -28,6 +28,10 @@ std::string settings_os();
 std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback);
 /// The settings `program` kept; an empty object when it kept none, or they cannot be read.
 nlohmann::json read_settings(const std::string& program);
+/// The value a file store reads for its folder setting `setting`: what the
+/// running handler set (`held`), else what was kept, else nothing
+/// (conformance/settings.json, `now`).
+std::string setting_now(const nlohmann::json& held, const nlohmann::json& kept, const std::string& setting);
 /// Keeps `values` as the settings of `program`, written whole and then put in place.
 void keep_settings(const std::string& program, const nlohmann::json& values);
 

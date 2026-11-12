@@ -345,6 +345,9 @@ impl<'a> Emitter<'a> {
                 }
                 let code = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {code};\n"));
+                if let Some(setting) = crate::held_setting(self.project, |e| self.types.type_of(e), target) {
+                    out.push_str(&format!("{pad}db.hold_setting({setting:?}, &{place});\n"));
+                }
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name, &pad));
                     // A text value shows its text in the person's language, as a label does.

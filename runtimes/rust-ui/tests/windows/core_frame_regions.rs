@@ -176,7 +176,7 @@ fn what_code_hid_or_disabled_in_a_ribbon_does_not_answer() {
 // -- Sidebars ------------------------------------------------------------------
 
 fn spec(collapsed: bool) -> SidebarSpec {
-    SidebarSpec { side: "left".into(), name: Some("nav".into()), width: 240.0, min: None, max: None, resizable: false, collapsible: true, collapsed, maximizable: true, columns: 3, parts: Vec::new() }
+    SidebarSpec { side: "left".into(), name: Some("nav".into()), width: 240.0, min: None, max: None, resizable: false, collapsible: true, collapsed, maximizable: true, columns: 3, parts: Vec::new(), item: None }
 }
 
 #[test]

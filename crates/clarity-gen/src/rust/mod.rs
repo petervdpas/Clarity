@@ -1057,6 +1057,8 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
     // A store whose folder is a folder setting follows the person's settings.
     let program_name = crate::settings_program(settings);
+    // The settings the call began with, which a file store reads before what is kept.
+    let hold = if crate::holds_settings(project) { "    if let Some(settings) = state.data.get(\"settings\") {\n        db.hold_settings(settings);\n    }\n" } else { "" };
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("    db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?})?;\n"))
@@ -1181,7 +1183,7 @@ fn redraw(db: &Db, mut reply: Reply) -> Result<Reply> {{
 
 /// Runs a handler on a window's state.
 fn run(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
-    let mut ui = Ui::from_state(&state);
+{hold}    let mut ui = Ui::from_state(&state);
     match (state.window.as_str(), handler) {{
 {dispatch}        _ => Err(Error::Invalid(format!("{{}} has no handler {{handler}}", state.window))),
     }}
@@ -1191,7 +1193,7 @@ fn run(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
 /// the values written for it and the answer last.
 #[allow(unused_variables, unused_mut)]
 fn answer_to(db: &Db, state: WindowState, handler: &str, values: Vec<Value>) -> Result<Reply> {{
-    let mut ui = Ui::from_state(&state);
+{hold}    let mut ui = Ui::from_state(&state);
     let value = |i: usize| values.get(i).ok_or_else(|| Error::Invalid(format!("{{handler}} takes more values than the answer gave")));
     let reply = match (state.window.as_str(), handler) {{
 {answers}        _ => Err(Error::Invalid(format!("{{}} has no handler {{handler}} to answer", state.window))),

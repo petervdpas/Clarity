@@ -798,6 +798,8 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     } else {
         String::new()
     };
+    // The settings the call began with, which a file store reads before what is kept.
+    let hold = if crate::holds_settings(project) { "        if (state.data.contains(\"settings\")) db.hold_settings(state.data[\"settings\"]);\n" } else { "" };
     let mut dispatch = String::new();
     // The app's handlers first: a menu item of the app runs its handler whatever window shows, and a window's own handlers throw on a name they do not have.
     for a in &apps {
@@ -900,14 +902,14 @@ public:
     }}
 
     clarity::Reply dispatch([[maybe_unused]] clarity::Db& db, const clarity::WindowState& state, const std::string& handler) override {{
-        clarity::Ui ui(state);
+{hold}        clarity::Ui ui(state);
 {dispatch}        throw clarity::InvalidError(state.window + " has no handler " + handler);
     }}
 
     // Runs the handler the answer to a question goes to (DESIGN 5.14), with
     // the values written for it and the answer last.
     clarity::Reply answer([[maybe_unused]] clarity::Db& db, const clarity::WindowState& state, const std::string& handler, [[maybe_unused]] const nlohmann::json& values) override {{
-        clarity::Ui ui(state);
+{hold}        clarity::Ui ui(state);
 {answers}        throw clarity::InvalidError(state.window + " has no handler " + handler + " to answer");
     }}
 

@@ -1,0 +1,12 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Changes by the agent"
+    add entity Review
+        version
+        piece: text(120)
+        reviewed: bool
+        reviewer: Reviewer, default Peter
+        reviewedOn: date
+        notes: text
+        ownReferences: text
+        project: ref Project

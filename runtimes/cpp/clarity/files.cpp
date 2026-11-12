@@ -31,13 +31,17 @@ void Db::add_store_setting(const std::string& name, const std::string& program, 
     store_folder(name);
 }
 
+void Db::hold_settings(const nlohmann::json& settings) { held_settings_ = settings.is_object() ? settings : nlohmann::json::object(); }
+
+void Db::hold_setting(const std::string& setting, const std::string& value) { held_settings_[setting] = value; }
+
 fs::path Db::store_folder(const std::string& name) {
     if (auto setting = store_settings_.find(name); setting != store_settings_.end()) {
         auto file = settings_file(setting->second.program);
         if (!file) throw StorageError("this system names no folder for application settings");
         nlohmann::json kept = read_settings(setting->second.program);
         std::string settings_folder = fs::path(*file).parent_path().generic_string();
-        fs::path folder = store_folder_in(settings_os(), settings_folder, name, kept.contains(setting->second.setting) ? kept[setting->second.setting] : nlohmann::json(), setting->second.fallback);
+        fs::path folder = store_folder_in(settings_os(), settings_folder, name, nlohmann::json(setting_now(held_settings_, kept, setting->second.setting)), setting->second.fallback);
         std::error_code error;
         fs::create_directories(folder, error);
         if (error) throw StorageError("cannot make the file store " + folder.string() + ": " + error.message());

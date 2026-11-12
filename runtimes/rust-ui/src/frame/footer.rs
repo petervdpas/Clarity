@@ -30,7 +30,7 @@ pub struct FrameFooter {
 impl FrameFooter {
     pub fn new(frame: Rc<WindowFrame>) -> FrameFooter {
         let spec = frame.shown().footer.as_ref().expect("a footer has its spec").value.clone();
-        let mut grid = GridPanel::new(spec.columns.max(1));
+        let mut grid = GridPanel::new(spec.columns.max(1)).owned(spec.item.as_deref());
         for part in &spec.parts {
             let made = parts::make(part.clone(), frame.host().clone());
             // One row: a part that grows keeps the row's height.

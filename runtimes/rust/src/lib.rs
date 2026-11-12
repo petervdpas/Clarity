@@ -462,6 +462,10 @@ pub struct Db {
     stores: Vec<(String, StorePlace)>,
     /// What undo takes back and redo does again (DESIGN 5.29).
     history: RefCell<History>,
+    /// The settings of the running handler: the window's data had them when
+    /// the call began, and its code sets them before they are kept; a file
+    /// store whose folder is a setting reads them first (conformance/settings.json, `now`).
+    held: RefCell<serde_json::Map<String, serde_json::Value>>,
     /// Who is using the program and how people sign in (crate::signin).
     #[cfg(feature = "auth")]
     people: signin::People,
@@ -521,6 +525,7 @@ impl Db {
             sources: vec![Source::new("", driver)],
             stores: Vec::new(),
             history: RefCell::default(),
+            held: RefCell::default(),
             #[cfg(feature = "auth")]
             people: Default::default(),
         }
@@ -538,6 +543,7 @@ impl Db {
             sources,
             stores: Vec::new(),
             history: RefCell::default(),
+            held: RefCell::default(),
             #[cfg(feature = "auth")]
             people: Default::default(),
         })
@@ -577,6 +583,18 @@ impl Db {
         self.store_folder(name).map(|_| ())
     }
 
+    /// The settings the running handler has, as its window's data had them
+    /// when the call began: a file store whose folder is a setting reads them
+    /// before what is kept.
+    pub fn hold_settings(&self, settings: &serde_json::Value) {
+        *self.held.borrow_mut() = settings.as_object().cloned().unwrap_or_default();
+    }
+
+    /// A setting the running handler's code set, before the settings are kept.
+    pub fn hold_setting(&self, setting: &str, value: &str) {
+        self.held.borrow_mut().insert(setting.to_string(), serde_json::Value::String(value.to_string()));
+    }
+
     /// The folder of the file store `name`, made when it is not there yet.
     fn store_folder(&self, name: &str) -> Result<std::path::PathBuf> {
         let place = self.stores.iter().find(|(n, _)| n == name).map(|(_, p)| p).ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))?;
@@ -585,7 +603,7 @@ impl Db {
             StorePlace::Setting { program, setting, default } => {
                 let file = settings::file(program).ok_or_else(|| Error::Storage("this system names no folder for application settings".into()))?;
                 let settings_folder = file.parent().map(|f| f.display().to_string()).unwrap_or_default();
-                let kept = settings::read(program).remove(setting.as_str()).unwrap_or_default();
+                let kept = serde_json::Value::String(settings::now(&self.held.borrow(), &settings::read(program), setting));
                 let folder = std::path::PathBuf::from(settings::store_folder_in(settings::OS, &settings_folder, name, &kept, default));
                 std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
                 Ok(folder)

@@ -35,6 +35,8 @@ translation en
     removeRow "Remove"
     removeRowAsk "Remove {row}?"
     keepRow "Keep"
+    expandRow "Expand"
+    collapseRow "Collapse"
     slideoutClose "Close"
     slideoutPin "Pin it open"
     slideoutUnpin "Let it slide away"

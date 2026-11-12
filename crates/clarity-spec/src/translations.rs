@@ -756,33 +756,33 @@ fn shown(project: &Project) -> Shown {
     // Clarity's own words.
     shown.place = "Clarity".to_string();
     shown.path = project.files.first().map(|f| f.path.clone()).unwrap_or_default();
-    let bound_picture = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+    let bound_picture = part_lists(project).any(|p| any_widget(p, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
-    let wizard = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
-    let bound_file = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+    let wizard = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
+    let bound_file = part_lists(project).any(|p| any_widget(p, &|w| {
         w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
     }));
     let progress = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == crate::code::check::PROGRESS));
-    let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
-    let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
-    let graphs = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Graph));
+    let folders = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
+    let paged = part_lists(project).any(|p| any_widget(p, &|w| w.props.page.is_some()));
+    let graphs = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Graph));
     // The sign-in part on the splash, or the parts of a sign-in view.
-    let signin_part = project.signin.is_some() && project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Signin || crate::widgets::info(w.props.kind).category == crate::widgets::Category::Signin));
+    let signin_part = project.signin.is_some() && part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Signin || crate::widgets::info(w.props.kind).category == crate::widgets::Category::Signin));
     // A graph has the zoom bar a zooming canvas has.
-    let zooms = graphs || project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
-    let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
-        any_widget(&p.widgets, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
+    let zooms = graphs || part_lists(project).any(|p| any_widget(p, &|w| w.props.zoom));
+    let paints = part_lists(project).any(|p| {
+        any_widget(p, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
     });
     // A diagram whose tools draw lines; a painting or a drawing with a toolbox, whose words are its brush's and colours'.
-    let diagrams = project.files.iter().flat_map(|f| &f.pages).any(|p| {
-        any_widget(&p.widgets, &|w| w.props.mode == Some(crate::model::CanvasMode::Objects) && w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect))
+    let diagrams = part_lists(project).any(|p| {
+        any_widget(p, &|w| w.props.mode == Some(crate::model::CanvasMode::Objects) && w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect))
     });
-    let paint_toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| {
-        any_widget(&p.widgets, &|w| w.props.toolbox.is_some() && matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
+    let paint_toolboxes = part_lists(project).any(|p| {
+        any_widget(p, &|w| w.props.toolbox.is_some() && matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
     });
-    let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
-    let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+    let trees = part_lists(project).any(|p| any_widget(p, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
+    let bound_tags = part_lists(project).any(|p| any_widget(p, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Tags && w.props.bind.is_some()
     }));
     // The pickers' headings, which also label the settings' own `language` and `theme`.
@@ -794,18 +794,18 @@ fn shown(project: &Project) -> Shown {
     let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
     let keys_window = crate::frame::clicks_to(project, "keys");
     let screen_engines = project.files.iter().flat_map(|f| &f.engines).any(|e| e.beside);
-    let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
+    let passwords = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let windows = project.files.iter().any(|f| !f.pages.is_empty());
     let required = project.entities().any(|e| !e.settings && e.fields.iter().any(|f| f.modifiers.required));
     let sidebars = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame))).any(|frame| frame.sidebars.iter().any(|s| s.props.collapsible || s.props.maximizable));
-    let slideouts = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Slideout));
-    let toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.toolbox.is_some()));
-    let table_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.add || w.props.remove));
-    let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+    let slideouts = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Slideout));
+    let toolboxes = part_lists(project).any(|p| any_widget(p, &|w| w.props.toolbox.is_some()));
+    let table_rows = part_lists(project).any(|p| any_widget(p, &|w| w.props.add || w.props.remove));
+    let open_rows = part_lists(project).any(|p| any_widget(p, &|w| {
         use crate::widgets::WidgetKind::{List, Table, Tree, TreeTable};
         matches!(w.props.kind, Table | List | Tree | TreeTable) && w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)
     }));
-    let markdown_memos = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.markdown));
+    let markdown_memos = part_lists(project).any(|p| any_widget(p, &|w| w.props.markdown));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
     // Code that divides whole numbers (`a div b`, `a mod b`) can say a division by zero failed.
     let divides = {
@@ -827,7 +827,7 @@ fn shown(project: &Project) -> Shown {
         found
     };
     // A date input, or a table cell of a date field, opens the calendar.
-    let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
+    let dates = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
         || project.entities().any(|e| e.fields.iter().any(|f| matches!(f.ty, FieldType::Date | FieldType::DateTime)));
     let own = RENDERER_KEYS
         .iter()
@@ -1236,6 +1236,14 @@ pub fn table(project: &Project) -> TranslationTable {
 }
 
 /// Whether any part in `widgets`, inside containers too, is one `test` picks.
+/// Every list of parts of every window, view and app: a page's grid, and the
+/// sidebars and footer of each frame, as the keys are made from them.
+fn part_lists(project: &Project) -> impl Iterator<Item = &[Widget]> {
+    let frames = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame)));
+    let framed = frames.flat_map(|frame| frame.sidebars.iter().map(|s| s.widgets.as_slice()).chain(frame.footer.iter().map(|f| f.widgets.as_slice())));
+    project.files.iter().flat_map(|f| &f.pages).map(|p| p.widgets.as_slice()).chain(framed)
+}
+
 pub(crate) fn any_widget(widgets: &[Widget], test: &impl Fn(&Widget) -> bool) -> bool {
     widgets.iter().any(|w| test(w) || any_widget(&w.children, test) || w.pages.iter().any(|p| any_widget(&p.children, test)))
 }

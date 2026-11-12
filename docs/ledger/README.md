@@ -114,6 +114,7 @@ Plain ASCII, no em-dashes, short lines.
 | [agent](agent.md) | partial | local models (ollama, openai-compatible) |
 | [acp](acp.md) | partial | Codex and Copilot checked by hand |
 | [mcp-tools](mcp-tools.md) | partial | the `design` tool reads the ledger; the questionnaire |
+| [app-mcp](app-mcp.md) | not built | generated apps serve their actions over MCP, each change granted by the person |
 
 ### Planned, nothing built
 

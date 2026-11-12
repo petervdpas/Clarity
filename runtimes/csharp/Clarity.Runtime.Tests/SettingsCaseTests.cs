@@ -64,6 +64,17 @@ public class SettingsCaseTests
     }
 
     [Fact]
+    public void A_store_reads_the_folder_a_handler_set_as_on_every_stack()
+    {
+        Assert.NotEmpty(File["now"]!.AsArray());
+        foreach (var c in File["now"]!.AsArray())
+        {
+            var found = KeptSettings.Now(c!["held"]!.AsObject(), c["kept"]!.AsObject(), c["setting"]!.GetValue<string>());
+            Assert.True(found == c["value"]!.GetValue<string>(), $"{c.ToJsonString()}: {found}");
+        }
+    }
+
+    [Fact]
     public void A_folder_setting_is_where_every_runtime_puts_a_store()
     {
         foreach (var c in File["folders"]!.AsArray())
@@ -96,6 +107,14 @@ public class SettingsCaseTests
             KeptSettings.Keep(program, new JsonObject { ["photosFolder"] = chosen });
             db.WriteText("photos", "second.txt", "second");
             Assert.Equal("second", System.IO.File.ReadAllText(Path.Combine(chosen, "second.txt")));
+            // Set by a handler, before the settings are kept: the store follows it at once.
+            var held = Path.Combine(home, "held");
+            db.HoldSettings(new JsonObject { ["photosFolder"] = held });
+            db.WriteText("photos", "third.txt", "third");
+            Assert.Equal("third", System.IO.File.ReadAllText(Path.Combine(held, "third.txt")));
+            db.HoldSetting("photosFolder", chosen);
+            db.WriteText("photos", "fourth.txt", "fourth");
+            Assert.Equal("fourth", System.IO.File.ReadAllText(Path.Combine(chosen, "fourth.txt")));
         }
         Directory.Delete(home, recursive: true);
     }

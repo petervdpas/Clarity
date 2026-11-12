@@ -40,6 +40,13 @@ std::string settings_os() {
 #endif
 }
 
+std::string setting_now(const nlohmann::json& held, const nlohmann::json& kept, const std::string& setting) {
+    for (const auto* from : {&held, &kept}) {
+        if (from->is_object() && from->contains(setting) && (*from)[setting].is_string()) return (*from)[setting].get<std::string>();
+    }
+    return "";
+}
+
 std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback) {
     std::string chosen = kept.is_string() && !kept.get<std::string>().empty() ? kept.get<std::string>() : fallback;
     if (chosen.empty()) chosen = store;

@@ -2,6 +2,8 @@
 // deleted and read through here, with the entity's data events around a
 // save or delete, and migration steps are applied here at startup.
 
+using System.Text.Json.Nodes;
+
 namespace Clarity.Runtime;
 
 public sealed partial class Db : IDisposable
@@ -27,6 +29,11 @@ public sealed partial class Db : IDisposable
 
     /// <summary>The file stores whose folder is a folder setting, by name.</summary>
     readonly Dictionary<string, (string Program, string Setting, string Fallback)> storeSettings = [];
+
+    // The settings of the running handler: the window's data had them when the call began,
+    // and its code sets them before they are kept; a file store whose folder is a setting
+    // reads them first (conformance/settings.json, `now`).
+    JsonObject heldSettings = [];
 
     Db(List<SourceDb> sources) => this.sources = sources;
 
@@ -106,13 +113,22 @@ public sealed partial class Db : IDisposable
         StoreFolder(name);
     }
 
+    /// <summary>
+    /// The settings the running handler has, as its window's data had them when the call
+    /// began: a file store whose folder is a setting reads them before what is kept.
+    /// </summary>
+    public void HoldSettings(JsonObject? settings) => heldSettings = settings?.DeepClone().AsObject() ?? [];
+
+    /// <summary>A setting the running handler's code set, before the settings are kept.</summary>
+    public void HoldSetting(string setting, string value) => heldSettings[setting] = value;
+
     string StoreFolder(string name)
     {
         if (storeSettings.TryGetValue(name, out var s))
         {
             var file = KeptSettings.File(s.Program) ?? throw new StorageException("this system names no folder for application settings");
             var settingsFolder = Path.GetDirectoryName(file)!.Replace('\\', '/');
-            var folder = KeptSettings.StoreFolderIn(KeptSettings.Os, settingsFolder, name, KeptSettings.Read(s.Program)[s.Setting], s.Fallback);
+            var folder = KeptSettings.StoreFolderIn(KeptSettings.Os, settingsFolder, name, KeptSettings.Now(heldSettings, KeptSettings.Read(s.Program), s.Setting), s.Fallback);
             try
             {
                 Directory.CreateDirectory(folder);

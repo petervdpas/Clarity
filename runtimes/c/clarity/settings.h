@@ -25,6 +25,10 @@ const char* clarity_settings_os(void);
 /// named after the store; a relative folder is in `settings_folder`, the
 /// folder of the settings file.
 const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback);
+/// The value a file store reads for its folder setting `setting`: what the
+/// running handler set (`held`), else what was kept, else "" (conformance/settings.json, `now`).
+/// It points into `held` or `kept`.
+const char* clarity_setting_now(const cJSON* held, const cJSON* kept, const char* setting);
 /// The settings `program` kept, as a new object the caller deletes; empty
 /// when it kept none, or they cannot be read.
 cJSON* clarity_read_settings(const char* program);

@@ -233,6 +233,25 @@ func (db *Db) AddStore(name, at string) error {
 // not kept.
 type storeSetting struct{ program, setting, def string }
 
+// HoldSettings gives the settings the running handler has, as its window's
+// data had them when the call began: a file store whose folder is a setting
+// reads them before what is kept.
+func (db *Db) HoldSettings(settings map[string]any) {
+	db.held = map[string]any{}
+	for k, v := range settings {
+		db.held[k] = v
+	}
+}
+
+// HoldSetting keeps a setting the running handler's code set, before the
+// settings are kept.
+func (db *Db) HoldSetting(setting, value string) {
+	if db.held == nil {
+		db.held = map[string]any{}
+	}
+	db.held[setting] = value
+}
+
 // AddStoreSetting adds the file store name whose folder is the folder
 // setting setting of program, or def while it is not kept; read again at
 // every use, so a folder chosen while the application runs takes effect at
@@ -253,7 +272,7 @@ func (db *Db) storeFolder(name string) (string, error) {
 		if !ok {
 			return "", &StorageError{What: "this system names no folder for application settings"}
 		}
-		folder := filepath.FromSlash(StoreFolderIn(settingsOS(), filepath.ToSlash(filepath.Dir(file)), name, ReadSettings(s.program)[s.setting], s.def))
+		folder := filepath.FromSlash(StoreFolderIn(settingsOS(), filepath.ToSlash(filepath.Dir(file)), name, SettingNow(db.held, ReadSettings(s.program), s.setting), s.def))
 		if err := os.MkdirAll(folder, 0o755); err != nil {
 			return "", &StorageError{What: "cannot make the file store " + folder + ": " + err.Error(), Err: err}
 		}

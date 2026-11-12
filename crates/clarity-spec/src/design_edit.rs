@@ -111,7 +111,7 @@ pub fn is_design_edit(edit: &Edit) -> bool {
     use Edit::*;
     match edit {
         Batch { edits } => edits.iter().all(is_design_edit),
-        Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageColor { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
+        Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageTell { .. } | SetViewTell { .. } | SetPageColor { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
         | AddData { .. } | SetGrid { .. } | SetSize { .. } | SetPageStyle { .. } | SetPageAllow { .. } | PlaceField { .. } | NameParts | SetMain { .. } | SetSplash { .. } | SetOwnerEvent { .. } | AddRegion { .. }
         | UpdateSidebar { .. } | UpdateSidebars | UpdateRibbon { .. } | SetName { .. } | AddFrameItem { .. } | UpdateCommand { .. } | MoveSibling { .. } => true,
         _ => false,
@@ -464,6 +464,63 @@ impl Editor<'_> {
                     return fail("a view line of content names a view; remove the line instead");
                 };
                 line.view = Some(view.to_string());
+                Ok(Some(*target))
+            }
+            Edit::SetPageTell { page: at, name, message } => {
+                let page = designed.page("tells")?;
+                if page.span.start != *at || page.kind != crate::model::PageKind::View {
+                    return fail("only a view tells; its window hears it on the line that shows it");
+                }
+                let told = match message.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+                    None => None,
+                    Some(text) => {
+                        let tell = crate::parser::tells_value(text, Span::default(), Span::default()).map_err(|d| EditError(d.message))?;
+                        if tell.name.name != *name {
+                            return fail(format!("the message names the tell {name}, as in {name}(name: text)"));
+                        }
+                        Some(tell)
+                    }
+                };
+                let at_index = page.tells.iter().position(|t| t.name.name == *name);
+                match (at_index, told) {
+                    (Some(i), Some(mut tell)) => {
+                        tell.span = page.tells[i].span;
+                        page.tells[i] = tell;
+                    }
+                    (None, Some(mut tell)) => {
+                        tell.span = self.fresh();
+                        page.tells.push(tell);
+                    }
+                    (Some(i), None) => {
+                        page.tells.remove(i);
+                    }
+                    (None, None) => return fail(format!("the view tells no {name}")),
+                }
+                Ok(Some(*at))
+            }
+            Edit::SetViewTell { target, tell, handler } => {
+                let page = designed.page("views")?;
+                let Some((_, line)) = find_inner(&mut page.widgets, *target) else { return fail("there is no view line there") };
+                if line.view.is_none() {
+                    return fail("only a line that shows a view hears its tells");
+                }
+                if !widgets::is_identifier(tell) {
+                    return fail(format!("'{tell}' is not a tell's name"));
+                }
+                let handler = handler.as_deref().map(str::trim).filter(|h| !h.is_empty());
+                if let Some(h) = handler
+                    && !widgets::is_identifier(h)
+                {
+                    return fail(format!("'{h}' is not a handler's name"));
+                }
+                match (line.tells.iter().position(|t| t.tell == *tell), handler) {
+                    (Some(i), Some(h)) => line.tells[i].handler = h.to_string(),
+                    (None, Some(h)) => line.tells.push(crate::model::TellHandler { tell: tell.clone(), handler: h.to_string() }),
+                    (Some(i), None) => {
+                        line.tells.remove(i);
+                    }
+                    (None, None) => {}
+                }
                 Ok(Some(*target))
             }
             Edit::SetPageColor { target, color } => {

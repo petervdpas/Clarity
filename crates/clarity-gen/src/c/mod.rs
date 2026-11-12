@@ -900,6 +900,8 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
             w.prefix
         );
     }
+    // The settings the call began with, which a file store reads before what is kept.
+    let hold = if crate::holds_settings(project) { "    clarity_hold_settings(db, cJSON_GetObjectItem(state->data, \"settings\"));\n" } else { "" };
     let mut dispatch = String::new();
     // The app's handlers first: a menu item of the app runs its handler whatever window shows, and a window's own handlers throw on a name they do not have.
     for a in &apps {
@@ -1128,7 +1130,7 @@ static const char* windows_handler_of(const char* window, const char* event) {{
 
 /// Runs a handler on a window's state.
 static bool windows_dispatch(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {{
-    ClarityUi* ui = clarity_ui(state);
+{hold}    ClarityUi* ui = clarity_ui(state);
     (void)db;
     (void)ui;
     (void)out;
@@ -1138,7 +1140,7 @@ static bool windows_dispatch(ClarityDb* db, const ClarityWindowState* state, con
 /// Runs the handler the answer to a question goes to (DESIGN 5.14), with
 /// the values written for it and the answer last.
 static bool windows_answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {{
-    ClarityUi* ui = clarity_ui(state);
+{hold}    ClarityUi* ui = clarity_ui(state);
     (void)db;
     (void)ui;
     (void)values;

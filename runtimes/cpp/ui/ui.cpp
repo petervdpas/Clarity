@@ -38,6 +38,12 @@ std::string take(char* text) {
     return out;
 }
 
+std::optional<std::string> agent_ask(const std::string& question, const std::string& form) {
+    char* out = nullptr;
+    if (clarity_agent_ask(question.data(), question.size(), form.data(), form.size(), &out) != CLARITY_OK || !out) return std::nullopt;
+    return take(out);
+}
+
 std::string version() { return clarity_ui_version(); }
 
 bool fits() { return clarity_ui_interface() == CLARITY_UI_INTERFACE; }

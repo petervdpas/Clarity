@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Clarity.AppMcp/Clarity.AppMcp.csproj" />
   <Project Path="Clarity.Audio/Clarity.Audio.csproj" />
   <Project Path="Clarity.Auth/Clarity.Auth.csproj" />
   <Project Path="Clarity.Image/Clarity.Image.csproj" />

@@ -11,6 +11,8 @@ pub mod data_folder;
 pub mod texts;
 pub mod zip;
 pub mod cli;
+#[cfg(feature = "mcp")]
+pub mod agents;
 pub mod dialect;
 pub mod dropdown_options;
 pub mod edits;

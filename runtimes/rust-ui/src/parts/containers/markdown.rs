@@ -338,6 +338,8 @@ pub struct MarkdownPart {
     scroll_y: f64,
     max_scroll_y: f64,
     pressed_link: Option<String>,
+    /// Where on its bar's thumb the pointer took it, while dragging.
+    grab: Option<f64>,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
@@ -349,6 +351,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         scroll_y: 0.0,
         max_scroll_y: 0.0,
         pressed_link: None,
+        grab: None,
     })
 }
 
@@ -408,6 +411,18 @@ impl MarkdownPart {
     pub fn page(&self) -> Rect {
         let b = self.base.node.bounds;
         Rect::new(b.x, b.y - self.scroll_y, (b.width - BAR_ROOM).max(0.0), self.laid.height)
+    }
+
+    /// Its bar's thumb along its height, measured as every bar's is.
+    fn bar(&self) -> crate::geometry::Thumb {
+        crate::geometry::Thumb { track: self.base.node.bounds.height, content: self.laid.height, scroll: self.scroll_y, max: self.max_scroll_y }
+    }
+
+    /// Where its bar's thumb is on the screen.
+    pub fn thumb(&self) -> Rect {
+        let b = self.base.node.bounds;
+        let bar = self.bar();
+        Rect::new(b.right() - BAR_ROOM / 2.0 - 2.0, b.y + bar.at(), 4.0, bar.length())
     }
 
     /// How far it is scrolled down.
@@ -500,10 +515,9 @@ impl Element for MarkdownPart {
             self.draw_runs(p, self.page());
         }
         if self.max_scroll_y > 0.0 && self.laid.height > 0.0 {
-            // A thin bar at the right says how much of the page shows, and where.
-            let shown = bounds.height / self.laid.height;
-            let bar = Rect::new(bounds.right() - BAR_ROOM / 2.0 - 2.0, bounds.y + bounds.height * (self.scroll_y / self.laid.height), 4.0, (bounds.height * shown).max(16.0));
-            p.fill(bar, p.look.color("strong_border"), 2.0);
+            // A thin bar at the right says how much of the page shows, and where; it drags and pages.
+            let color = if self.grab.is_some() || self.base.node.hovered { "muted" } else { "strong_border" };
+            p.fill(self.thumb(), p.look.color(color), 2.0);
         }
     }
 
@@ -523,11 +537,34 @@ impl Element for MarkdownPart {
         (self.base.enabled() && self.laid.link_at(x - b.x, y - b.y + self.scroll_y).is_some()).then_some(Cursor::Hand)
     }
 
-    fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {
+    fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
+        self.grab = None;
+        let width = self.base.node.bounds.width;
+        // On its bar: the thumb drags, a press beside it pages.
+        if self.max_scroll_y > 0.0 && at.x >= width - BAR_ROOM {
+            match self.bar().pressed(at.y, self.base.node.bounds.height) {
+                Ok(grab) => self.grab = Some(grab),
+                Err(to) => {
+                    self.scroll_y = to;
+                    cx.invalidate();
+                }
+            }
+            return;
+        }
         self.pressed_link = self.laid.link_at(at.x, at.y + self.scroll_y).map(str::to_string);
     }
 
+    fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
+        let Some(grab) = self.grab.filter(|_| self.base.node.pressed) else { return };
+        let to = self.bar().dragged(at.y, grab);
+        if to != self.scroll_y {
+            self.scroll_y = to;
+            cx.invalidate();
+        }
+    }
+
     fn on_pointer_released(&mut self, at: PointerInput, _cx: &mut Cx) {
+        self.grab = None;
         let Some(link) = self.pressed_link.take() else { return };
         if self.base.enabled() && self.laid.link_at(at.x, at.y + self.scroll_y) == Some(link.as_str()) {
             if link.starts_with("clarity:") {

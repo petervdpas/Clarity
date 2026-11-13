@@ -49,3 +49,24 @@ fn content_fills_its_rows_as_the_parts_beside_it_do() {
     assert!(memo.height > 6.0 * 36.0 + 5.0 * 8.0 + 1.0, "the memo grows with the window: {}", memo.height);
     assert_eq!(content.height, memo.height, "the content fills its rows as the memo does");
 }
+
+/// A view as high as its content's rows fits in them: its parts end where the
+/// content ends, never under its edge (a memo of a view in the maintenance
+/// app ran past the window, its last line cut off by the window's edge).
+#[test]
+fn a_view_as_high_as_its_content_fits_in_it() {
+    for markdown in ["", r#" markdown="true""#] {
+        let main = format!(r#"<Content name="main" at="1,1" span="12" rows="6">
+  <Tab columns="12"><Memo name="entryText" at="1,1" span="12" rows="6"{markdown} /></Tab>
+</Content>"#);
+        let host = TestHost::new();
+        let mut screen = window_of(&main, host);
+        // Just the window's padding and six rows with their gaps.
+        screen.resize(808.0, 6.0 * 36.0 + 5.0 * 8.0 + 24.0, 1.0);
+        let content = content(&screen).node().bounds;
+        let memo = clarity_ui::testing::part_named(&screen, "entryText");
+        let memo = screen.element(memo).map(|m| m.node().bounds).expect("the memo is on the screen");
+        assert!(memo.bottom() <= content.bottom() + 0.5, "{markdown}: the memo ends at {} under the content's edge at {}", memo.bottom(), content.bottom());
+        assert!(memo.y >= content.y - 0.5, "{memo} in {content}");
+    }
+}

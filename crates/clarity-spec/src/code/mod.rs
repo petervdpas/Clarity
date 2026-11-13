@@ -893,6 +893,9 @@ pub struct CommandDecl {
     pub options: Vec<CommandOption>,
     /// `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
     pub allow: Option<Expr>,
+    /// `agent`: offered to AI agents as a tool of the app's MCP service
+    /// (docs/ledger/app-mcp.md); off without it.
+    pub agent: bool,
     pub body: Vec<Stmt>,
     pub span: Span,
 }

@@ -138,6 +138,11 @@ pub(crate) const SECRET_FILES: [(&str, &str); 2] = [
 
 /// The data formats of code on Clarity.Formats' library (docs/FORMATS-PLAN.md),
 /// carried only when the code reads or writes a format (clarity_use_formats links it).
+/// A program's commands for agents on Clarity.AppMcp's library
+/// (docs/ledger/app-mcp.md), carried only when a command has an `agent`
+/// line (clarity_use_agents links it).
+pub(crate) const AGENTS_FILES: [(&str, &str); 2] = [("agents/agents.hpp", include_str!("../../../../runtimes/cpp/agents/agents.hpp")), ("agents/agents.cpp", include_str!("../../../../runtimes/cpp/agents/agents.cpp"))];
+
 pub(crate) const FORMATS_FILES: [(&str, &str); 4] = [
     ("formats/formats.cpp", include_str!("../../../../runtimes/cpp/formats/formats.cpp")),
     ("formats/formats.hpp", include_str!("../../../../runtimes/cpp/formats/formats.hpp")),
@@ -163,7 +168,7 @@ pub(crate) fn auth_files(project: &Project) -> impl Iterator<Item = &'static (&'
 /// alone) that links a library lying beside Clarity.UI's: Clarity.Formats
 /// or Clarity.Auth (clarity_ui_folder in clarity.cmake includes it).
 pub(crate) fn library_folder_files(project: &Project, settings: &Settings, desktop: bool) -> impl Iterator<Item = &'static (&'static str, &'static str)> {
-    let beside = crate::carries_formats(project, settings) || crate::carries_auth(project);
+    let beside = crate::carries_formats(project, settings) || crate::carries_auth(project) || crate::agent_tools::offers_agents(project);
     std::iter::once(&CLARITY_UI_CMAKE).filter(move |_| beside && !desktop)
 }
 
@@ -281,7 +286,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut files = vec![
         text(
             "CMakeLists.txt",
-            cmake_lists(&program, engines || screen_engines, project.calls_out(), keeps_secrets(project, settings), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program) + &crate::c::audio_cmake_lines(project, settings, &program) + &crate::c::formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program),
+            cmake_lists(&program, engines || screen_engines, project.calls_out(), keeps_secrets(project, settings), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program) + &crate::c::audio_cmake_lines(project, settings, &program) + &crate::c::formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { crate::c::agents_cmake_lines(project, &program) } else { String::new() }),
         ),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
@@ -298,7 +303,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let secret_files = SECRET_FILES.iter().filter(|_| keeps_secrets(project, settings));
     let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
     let auth_files = auth_files(project).chain(library_folder_files(project, settings, desktop));
-    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(picture_files).chain(formats_files).chain(secret_files).chain(auth_files) {
+    // The commands agents call while the app runs, and `<program> mcp` (docs/ledger/app-mcp.md).
+    let agents = desktop && crate::agent_tools::offers_agents(project);
+    let agents_files = AGENTS_FILES.iter().filter(|_| agents);
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(picture_files).chain(formats_files).chain(secret_files).chain(auth_files).chain(agents_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -332,10 +340,21 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         for decl in file.functions.iter().chain(&logic::events(file)) {
             let _ = writeln!(declarations, "{};", logic::signature(project, decl));
         }
+        if agents {
+            for command in &file.commands {
+                let _ = writeln!(declarations, "{};", logic::command_signature(project, command));
+            }
+        }
         let mut body = String::new();
         match logic::emit(project, file, &file_types) {
             Ok(code) => body.push_str(&code),
             Err(mut problems) => errors.append(&mut problems),
+        }
+        if agents {
+            match logic::emit_commands(project, file, &file_types) {
+                Ok(code) => body.push_str(&code),
+                Err(mut problems) => errors.append(&mut problems),
+            }
         }
         match logic::emit_windows(project, file, &file_types, &types) {
             Ok((header, code, mut found)) => {
@@ -355,8 +374,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let engines_include = if engines { "#include \"engines.hpp\"\n" } else { "" };
     files.push(text(
         "src/app.hpp",
-        namespaced(&program, &format!("#pragma once\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/code.hpp\"\n#include \"clarity/ui.hpp\"\n{engines_include}#include \"records.hpp\"\n"), &app),
+        namespaced(&program, &format!("#pragma once\n\n#include <nlohmann/json.hpp>\n\n{}#include \"clarity/code.hpp\"\n#include \"clarity/ui.hpp\"\n{engines_include}#include \"records.hpp\"\n", if agents { "#include \"clarity/cli.hpp\"\n" } else { "" }), &app),
     ));
+    if agents {
+        let (header, source) = cli::agents_desktop(project, settings, &program);
+        files.push(text("src/commands.hpp", header));
+        files.push(text("src/commands.cpp", source));
+    }
     if engines {
         let (header, source) = engines_cpp(project);
         files.push(text("src/engines.hpp", namespaced(&program, "#pragma once\n\n#include \"engine/engine.hpp\"\n", &header)));
@@ -618,6 +642,11 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     if web {
         includes.push_str("#include \"shell/serve.hpp\"\n");
     }
+    // Commands for agents (docs/ledger/app-mcp.md): Clarity.UI serves them while the window runs; `mcp` without one.
+    let agents = desktop && crate::agent_tools::offers_agents(project);
+    if agents {
+        includes.push_str("#include \"commands.hpp\"\n");
+    }
     if desktop {
         includes.push_str("#include \"shell/desktop.hpp\"\n");
         if parts {
@@ -635,6 +664,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     if web {
         ui_files.push_str("\n// The files a browser takes from the web server, compiled in by CMake (clarity_browser_files.cpp).\nextern const clarity::shell::UiFile clarity_browser_files[];\n");
     }
+    let agents_mcp = if agents { format!("        // `mcp` as the only word: agents call the commands without a window (docs/ledger/app-mcp.md).\n        if (argc == 2 && std::strcmp(argv[1], \"mcp\") == 0) {{\n            clarity::load_translations({program}::model());\n            return {program}::agents_mcp(db, argc, argv);\n        }}\n") } else { String::new() };
     let mut desktop_options = format!("        options.facts = {program}::facts();\n");
     if web {
         desktop_options.push_str("        options.browser_files = clarity_browser_files;\n");
@@ -649,6 +679,9 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     let secret_names = crate::secret_names(project);
     if !secret_names.is_empty() {
         let _ = writeln!(desktop_options, "        options.secrets = nlohmann::json::array({{{}}});", secret_names.iter().map(|n| string(n)).collect::<Vec<_>>().join(", "));
+    }
+    if agents {
+        let _ = write!(desktop_options, "        options.agents = {program}::agents_offered();\n        options.agent_call = [&db](const std::vector<std::string>& line, const std::function<std::optional<std::string>(const std::string&, const std::string&)>& ask) {{ return {program}::agent_call(db, line, ask); }};\n");
     }
     if desktop {
         desktop_options.push_str("        options.ui_files = clarity_ui_files;\n");
@@ -948,7 +981,7 @@ public:
                 return 0;
             }}
         }}
-        {program}::AppWindows windows;
+{agents_mcp}        {program}::AppWindows windows;
         clarity::shell::Options options{{{name}, {title}, {main}, {program}::model(), &db, &windows, {{{width}, {height}}}}};
 {desktop_options}{unconnected_options}{run}
     }} catch (const std::exception& e) {{

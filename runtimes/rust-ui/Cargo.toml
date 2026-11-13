@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.23.0"
+version = "0.24.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -17,7 +17,7 @@ include = ["src/**", "fonts/**", "themes/**", "catalog/**", "README.md", "LICENS
 # build leaves it out by its target: the `browser` host takes its place.
 [features]
 default = ["desktop"]
-desktop = ["dep:winit", "dep:glutin", "dep:glutin-winit", "dep:arboard", "dep:rodio", "dep:accesskit_winit"]
+desktop = ["dep:winit", "dep:glutin", "dep:glutin-winit", "dep:arboard", "dep:rodio", "dep:accesskit_winit", "dep:clarity-app-mcp"]
 # Songs (mp3, flac, ogg) through Clarity.Audio: the generator turns it on for
 # a program whose sound parts play them.
 audio = ["desktop", "dep:clarity-audio"]
@@ -26,7 +26,7 @@ audio = ["desktop", "dep:clarity-audio"]
 video = ["audio", "dep:clarity-video"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.58.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.59.0", default-features = false }
 clarity-auth = { path = "../rust-auth", version = "0.2.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/IMAGE-PLAN.md).
 clarity-image = { path = "../rust-image", version = "0.1.0" }
@@ -63,6 +63,9 @@ arboard = { version = "3.7", optional = true }
 rodio = { version = "0.23", optional = true, default-features = false, features = ["playback"] }
 # Clarity.Audio, which plays songs, only with the `audio` feature.
 clarity-audio = { path = "../rust-audio", version = "0.2.0", optional = true }
+# The app's commands for AI agents while it runs (docs/ledger/app-mcp.md):
+# Clarity.UI listens and asks the person for each grant.
+clarity-app-mcp = { path = "../rust-app-mcp", version = "0.1.0", optional = true }
 # Clarity.Video, which plays videos, only with the `video` feature.
 clarity-video = { path = "../rust-video", version = "0.1.0", optional = true }
 # The accessibility tree handed to the system's screen reader: AT-SPI on

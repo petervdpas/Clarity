@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <setjmp.h>
+
 #include "clarity/core.h"
 #include "clarity/decimal.h"
 #include "clarity/values.h"
@@ -56,6 +58,8 @@ typedef struct {
     /// In the order they are declared.
     const ClarityCliCommand* commands;
     size_t command_count;
+    /// Whether agents may call some of them: the help lists `mcp`.
+    bool agents;
 } ClarityCliProgram;
 
 /// Clarity's own words of the command line, in English: what a program
@@ -66,6 +70,11 @@ typedef struct {
 } ClarityCliWord;
 extern const ClarityCliWord CLARITY_CLI_WORDS[];
 extern const size_t CLARITY_CLI_WORD_COUNT;
+/// Clarity's words of a program whose commands agents may call, in English
+/// (conformance/app-mcp.json): what its MCP service says of a refused call,
+/// and its help's line for `mcp`.
+extern const ClarityCliWord CLARITY_AGENT_WORDS[];
+extern const size_t CLARITY_AGENT_WORD_COUNT;
 
 /// The translation of a key in the language shown; NULL or "" for none.
 typedef struct {
@@ -154,6 +163,34 @@ int clarity_cli_ask(const char* question, const ClarityCliAsked* asked, ClarityC
 
 /// Clarity's words of the command line as the translations give them, or their English.
 ClarityCliWords clarity_cli_words(void);
+
+/// An agent running a command (agents/agents.h): what the command asks goes
+/// to `ask`, which gives the answer as the terminal gives it or NULL; what
+/// it prints is kept in `printed`; a question nobody answers keeps its
+/// message in `unanswered` and jumps to `stop`, as a terminal program ends.
+typedef struct {
+    const char* (*ask)(void* context, const char* question, const char* form);
+    void* context;
+    ClarityBuffer printed;
+    jmp_buf stop;
+    const char* unanswered;
+} ClarityCliAgent;
+/// The agent running a command now, or NULL at a terminal.
+extern ClarityCliAgent* clarity_cli_agent;
+/// A question's form as JSON, as conformance/command-line.json writes it.
+const char* clarity_cli_form(const ClarityCliAsked* asked);
+
+/// Runs command `command` with `values` as the program's dispatch does:
+/// whether it worked (else clarity_error says why), and its exit code.
+typedef bool (*ClarityCliRun)(void* context, size_t command, const char** values, int* code);
+
+/// Runs the command line `line` (`count` words) for an AI agent
+/// (docs/ledger/app-mcp.md), as typed: what the command printed goes to
+/// `*text`, and the answer is whether the call is refused (a wrong line, a
+/// refusal, an exit code, a question nobody answered). A question goes to
+/// `ask` with its form as JSON, which gives the answer as the terminal gives
+/// it, or NULL.
+bool clarity_cli_run_line(const ClarityCliProgram* program, size_t count, const char* const* line, const char* (*ask)(void* context, const char* question, const char* form), void* ask_context, ClarityCliRun run, void* context, const char** text);
 /// `print value`: one line on standard output.
 void clarity_cli_print(const ClarityText* text);
 /// `print list columns a, b`: `rows` rows of `columns` cells.

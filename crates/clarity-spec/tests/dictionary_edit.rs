@@ -144,3 +144,17 @@ fn removes_a_theme_declaration() {
     let removed = edit(file, Edit::Remove { item });
     assert!(!removed.contains("Night") && removed.contains("enum Level"), "{removed}");
 }
+
+/// One of Clarity's own settings (`language`, `theme`, and the agents'
+/// `agentReadsWhileClosed`, `agentChangesWhileClosed`) goes into the file's
+/// settings block as its bare word, or starts the block; once is enough.
+#[test]
+fn adds_one_of_clarity_s_own_settings() {
+    let module = "module shop\n\nsettings\n    language\n    pageSize: integer, default 50\n";
+    let text = edit(module, Edit::AddOwnSetting { word: "agentReadsWhileClosed".into() });
+    assert!(text.contains("    pageSize: integer, default 50\n    agentReadsWhileClosed\n"), "{text}");
+    assert_eq!(edit(&text, Edit::AddOwnSetting { word: "agentReadsWhileClosed".into() }), text, "added once");
+    let fresh = edit("module shop\n", Edit::AddOwnSetting { word: "agentChangesWhileClosed".into() });
+    assert!(fresh.contains("settings\n    agentChangesWhileClosed\n"), "{fresh}");
+    assert_eq!(error(module, Edit::AddOwnSetting { word: "pageSize".into() }), "'pageSize' is none of Clarity's own settings: language, theme, agentReadsWhileClosed, agentChangesWhileClosed");
+}

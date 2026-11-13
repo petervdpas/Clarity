@@ -65,13 +65,13 @@ jobs:
         with:
           key: library
       - name: Build the libraries
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi
       - name: Pack the folder
         run: |
           set -euo pipefail
           mkdir -p clarity-ui/include clarity-ui/lib
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h clarity-ui/include/
-          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so target/release/libclarity_formats.so target/release/libclarity_auth.so clarity-ui/lib/
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h runtimes/rust-app-mcp-ffi/include/clarity_app_mcp.h clarity-ui/include/
+          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so target/release/libclarity_formats.so target/release/libclarity_auth.so target/release/libclarity_app_mcp.so clarity-ui/lib/
           python3 .github/scripts/fetch_openh264.py linux-x64 clarity-ui/lib
           ls -lR clarity-ui
       - uses: actions/upload-artifact@v7
@@ -205,6 +205,13 @@ jobs:
           set -euo pipefail
           folder="$GITHUB_WORKSPACE/clarity-ui"
           CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityformats -run Formats ./clarity
+      # A program's commands for agents through Clarity.AppMcp, linked through cgo as a program links it.
+      - name: Test the commands for agents
+        working-directory: runtimes/go
+        run: |
+          set -euo pipefail
+          folder="$GITHUB_WORKSPACE/clarity-ui"
+          CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityagents -run Agents ./clarity
       # Signing in through Clarity.Auth itself, which decides every attempt for every stack: no stand-in.
       - name: Test signing in
         working-directory: runtimes/go
@@ -265,6 +272,8 @@ jobs:
             mkdir -p "$dest"
             cp clarity-ui/lib/libclarity_$part.so "$dest/"
           done
+          mkdir -p runtimes/csharp/Clarity.AppMcp/runtimes/linux-x64/native
+          cp clarity-ui/lib/libclarity_app_mcp.so runtimes/csharp/Clarity.AppMcp/runtimes/linux-x64/native/
           cp clarity-ui/lib/*openh264* runtimes/csharp/Clarity.Video/runtimes/linux-x64/native/ || true
       - name: Build the solution
         run: dotnet build runtimes/csharp/Clarity.slnx -c Release -p:UseSharedCompilation=false -nodeReuse:false
@@ -319,6 +328,8 @@ jobs:
             mkdir -p "$dest"
             cp clarity-ui/lib/libclarity_$part.so "$dest/"
           done
+          mkdir -p runtimes/csharp/Clarity.AppMcp/runtimes/linux-x64/native
+          cp clarity-ui/lib/libclarity_app_mcp.so runtimes/csharp/Clarity.AppMcp/runtimes/linux-x64/native/
           cp clarity-ui/lib/*openh264* runtimes/csharp/Clarity.Video/runtimes/linux-x64/native/ || true
       - name: Build the example
         run: |

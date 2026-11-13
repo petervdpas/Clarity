@@ -402,6 +402,18 @@ internal sealed class ProgramWire : IDesktop
                 return Value(null);
             case "facts":
                 return Facts() is { } facts ? Value(facts) : null;
+            // The commands AI agents may call while the app runs (docs/ledger/app-mcp.md).
+            case "agents":
+                return Agents.Desktop.Offered is { } offered ? Value(new JsonObject { ["tools"] = offered.Tools, ["app"] = offered.App, ["program"] = offered.Program, ["version"] = offered.Version }) : null;
+            case "agent_call":
+                if (Agents.Desktop.Call is not { } call)
+                    return null;
+                return AgentCall(call, given["line"]?.AsArray().Select(w => w?.GetValue<string>() ?? "").ToList() ?? []);
+            case "agent_undo":
+                if (db is null)
+                    return null;
+                db.ReplaySteps([given["step"]?.GetValue<long>() ?? 0], true);
+                return Value(null);
             case "engine_open":
                 return EngineOpen(given["name"]?.GetValue<string>() ?? "");
             case "engine_close":
@@ -917,6 +929,42 @@ internal sealed class ProgramWire : IDesktop
     /// label, format, whether required, range, what it refers to. None when
     /// the application carries none: the library reads its model instead.
     /// </summary>
+    /// <summary>A refused agent's call: its changes go.</summary>
+    sealed class AgentRefused : Exception;
+
+    /// <summary>Runs a command line for an agent as one database step: all of its changes, or none when it
+    /// is refused; the step is what Undo takes back (0 when it changed nothing).</summary>
+    JsonObject AgentCall(Func<IReadOnlyList<string>, Func<string, string, string?>, (string Text, bool Refused)> call, List<string> line)
+    {
+        (string Text, bool Refused) ran = ("", true);
+        long step = 0;
+        if (db is null)
+            ran = call(line, Agents.Desktop.Ask);
+        else
+        {
+            var before = db.LastStep;
+            try
+            {
+                db.Step(() =>
+                {
+                    ran = call(line, Agents.Desktop.Ask);
+                    if (ran.Refused)
+                        throw new AgentRefused();
+                });
+                if (db.LastStep != before)
+                    step = db.LastStep;
+            }
+            catch (AgentRefused)
+            {
+            }
+            catch (Exception e) when (e is ClarityException or IOException)
+            {
+                ran = (e.Message, true);
+            }
+        }
+        return Value(new JsonObject { ["text"] = ran.Text, ["refused"] = ran.Refused, ["step"] = step });
+    }
+
     JsonObject? Facts()
     {
         Type[] types;

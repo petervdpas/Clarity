@@ -78,6 +78,7 @@ unsafe extern "C" {
     fn clarity_desktop_run(program: *const NativeProgram, files: *const Files, exit_code: *mut i32) -> Status;
     fn clarity_desktop_wake();
     fn clarity_translate(key: *const c_char, key_len: usize, english: *const c_char, english_len: usize, out: *mut *mut c_char) -> Status;
+    fn clarity_agent_ask(question: *const c_char, question_len: usize, form: *const c_char, form_len: usize, out: *mut *mut c_char) -> Status;
     fn clarity_custom_register(kind: *const c_char, kind_len: usize, callbacks: *const CustomCallbacks) -> Status;
     fn clarity_custom_bounds(cx: *const RawCx, x: *mut f64, y: *mut f64, width: *mut f64, height: *mut f64) -> Status;
     fn clarity_custom_enabled(cx: *const RawCx, enabled: *mut i32) -> Status;
@@ -221,7 +222,21 @@ pub fn wake() {
 /// Shows the program's windows in desktop windows until they closed, on the
 /// calling (main) thread; with CLARITY_HEADLESS set the library drives it
 /// from standard input instead (DESIGN 1.6), as `clarity_ui::desktop::run`.
+/// Asks the agent whose command runs now, through Clarity.UI (docs/ledger/app-mcp.md).
+fn agent_ask(question: &str, form: &str) -> Option<String> {
+    let mut out: *mut c_char = std::ptr::null_mut();
+    // SAFETY: both texts are (pointer, length); `out` is ours to read and free.
+    let status = unsafe { clarity_agent_ask(question.as_ptr().cast(), question.len(), form.as_ptr().cast(), form.len(), &mut out) };
+    if status != OK || out.is_null() {
+        return None;
+    }
+    let answer = unsafe { std::ffi::CStr::from_ptr(out) }.to_string_lossy().into_owned();
+    unsafe { clarity_string_free(out) };
+    Some(answer)
+}
+
 pub fn run(program: impl Program, app: AppFiles) -> ExitCode {
+    let _ = crate::wire::AGENT_ASK.set(agent_ask);
     match run_native(Arc::new(program), &app) {
         Ok(0) => ExitCode::SUCCESS,
         Ok(code) => ExitCode::from(code.clamp(1, 255) as u8),

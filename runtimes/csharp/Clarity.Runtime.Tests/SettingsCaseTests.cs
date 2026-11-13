@@ -22,6 +22,17 @@ public class SettingsCaseTests
     }
 
     [Fact]
+    public void Keeping_settings_leaves_the_keys_the_program_does_not_keep()
+    {
+        Assert.NotEmpty(File["merge"]!.AsArray());
+        foreach (var c in File["merge"]!.AsArray())
+        {
+            var merged = KeptSettings.Merged(c!["onFile"]!.AsObject(), c["kept"]!.AsObject());
+            Assert.True(JsonNode.DeepEquals(merged, c["written"]), $"{merged.ToJsonString()}: {c["what"]}");
+        }
+    }
+
+    [Fact]
     public void A_kept_value_fits_its_setting_as_on_every_stack()
     {
         foreach (var c in File["fits"]!.AsArray())

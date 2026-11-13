@@ -258,3 +258,20 @@ pub unsafe extern "C" fn clarity_translate(key: *const c_char, key_len: usize, e
         unsafe { put(out, crate::give(&ui::locale::translate(key, english))) }
     })
 }
+
+/// Asks the AI agent whose command the program runs now (inside the program
+/// callback's `agent_call`, docs/ledger/app-mcp.md) `question` of the kind
+/// `form` (JSON, as conformance/command-line.json writes it): the answer as
+/// the terminal gives it in `*out`, which the caller frees with
+/// clarity_string_free; `*out` is NULL when the agent gives none.
+///
+/// # Safety
+/// The texts are (pointer, length); `out` points at writable memory for a string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clarity_agent_ask(question: *const c_char, question_len: usize, form: *const c_char, form_len: usize, out: *mut *mut c_char) -> ClarityStatus {
+    guard(|| {
+        let (question, form) = unsafe { (text(question, question_len)?, text(form, form_len)?) };
+        let answer = ui::program_wire::ask_agent(question, form).map(|a| crate::give(&a)).unwrap_or(std::ptr::null_mut());
+        unsafe { put(out, answer) }
+    })
+}

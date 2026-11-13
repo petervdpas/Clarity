@@ -80,6 +80,10 @@ pub struct TextEditor {
     anchor: usize,
     dragging: bool,
     follow: bool,
+    /// Where on its scroll bar's thumb the pointer took it, while dragging.
+    grab: Option<f64>,
+    /// Where its thumb was drawn last.
+    thumb_place: Cell<Option<Rect>>,
     multiline: bool,
     password: bool,
     /// Shown while it is empty, in the muted color.
@@ -153,6 +157,8 @@ impl TextEditor {
             anchor: 0,
             dragging: false,
             follow: false,
+            grab: None,
+            thumb_place: Cell::new(None),
             multiline,
             password: false,
             placeholder: None,
@@ -701,6 +707,22 @@ impl TextEditor {
 
     /// The main button went down at a point from its top left.
     pub fn pressed(&mut self, at: PointerInput, cx: &mut Cx) {
+        self.grab = None;
+        // On its scroll bar, in its right margin: the thumb drags, a press beside it pages.
+        if let Some((_, thumb)) = self.bar(cx.fonts(), cx.look()) {
+            let inner = self.inner(cx.look());
+            if at.x >= self.node.bounds.width - self.side_gap(cx.look()) - 4.0 {
+                match thumb.pressed(at.y - (inner.y - self.node.bounds.y), inner.height) {
+                    Ok(grab) => self.grab = Some(grab),
+                    Err(to) => {
+                        self.scroll_y = to;
+                        self.follow = false;
+                        cx.invalidate();
+                    }
+                }
+                return;
+            }
+        }
         if !self.enabled {
             return;
         }
@@ -722,6 +744,15 @@ impl TextEditor {
 
     /// The pointer moved; while the button is down it selects.
     pub fn dragged(&mut self, at: PointerInput, cx: &mut Cx) {
+        if let (Some(grab), true) = (self.grab, self.node.pressed) {
+            if let Some((_, thumb)) = self.bar(cx.fonts(), cx.look()) {
+                let inner = self.inner(cx.look());
+                self.scroll_y = thumb.dragged(at.y - (inner.y - self.node.bounds.y), grab);
+                self.follow = false;
+                cx.invalidate();
+            }
+            return;
+        }
         if self.dragging && self.node.pressed {
             let place = self.place_at(at.x, at.y, cx.fonts(), cx.look());
             self.move_to(place, true, cx);
@@ -729,6 +760,7 @@ impl TextEditor {
     }
 
     pub fn released(&mut self) {
+        self.grab = None;
         self.dragging = false;
     }
 
@@ -775,6 +807,29 @@ impl TextEditor {
     }
 
     // -- Lines, as they are laid out --------------------------------------------
+
+    /// Its scroll bar, when its lines do not fit: where its thumb is on the
+    /// screen, and the thumb as every bar measures it.
+    fn bar(&self, fonts: &Fonts, look: &ThemeLook) -> Option<(Rect, crate::geometry::Thumb)> {
+        if !self.multiline || !self.framed {
+            return None;
+        }
+        let laid = self.layout(fonts, look);
+        let inner = self.inner(look);
+        let content = laid.lines.len() as f64 * laid.height;
+        let max = crate::geometry::scroll_room(content, inner.height);
+        if max <= 0.0 {
+            return None;
+        }
+        let thumb = crate::geometry::Thumb { track: inner.height, content, scroll: self.scroll_y, max };
+        let x = self.node.bounds.right() - self.side_gap(look) / 2.0 - 2.0;
+        Some((Rect::new(x, inner.y + thumb.at(), 4.0, thumb.length()), thumb))
+    }
+
+    /// Where its scroll bar's thumb is now; none while its lines fit.
+    pub fn thumb(&self) -> Option<Rect> {
+        self.thumb_place.get()
+    }
 
     fn side_gap(&self, look: &ThemeLook) -> f64 {
         if self.framed { look.padding() * 2.0 } else { 0.0 }
@@ -964,6 +1019,14 @@ impl TextEditor {
             if node.focused {
                 p.focus_ring(bounds, radius);
             }
+        }
+
+        // Its scroll bar in its right margin, when its lines do not fit.
+        let bar = self.bar(p.fonts, look);
+        self.thumb_place.set(bar.map(|(place, _)| place));
+        if let Some((place, _)) = bar {
+            let color = if self.grab.is_some() || node.hovered { "muted" } else { "strong_border" };
+            p.fill(place, fade(look.color(color), faded), 2.0);
         }
 
         let laid = self.layout(p.fonts, look);

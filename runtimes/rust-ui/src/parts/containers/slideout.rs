@@ -457,6 +457,11 @@ impl Element for SlideoutPart {
         self.slide.beside()
     }
 
+    /// It lies over the window from its edge: its rows are no content of the window.
+    fn takes_room(&self) -> bool {
+        false
+    }
+
     /// Against `part`: its handle on the part's edge at its side (inside the
     /// part when its grid has no room beyond it, so the handle is never cut
     /// off), and the band it slides out over beyond it, over whatever lies

@@ -91,3 +91,72 @@ pub fn toolbox_size(columns: u32, rows: u32) -> (u32, u32) {
     let height = PAGE_CHROME.1 + rows * ROW_HEIGHT + (rows - 1) * GAP;
     (width.max(220), height)
 }
+
+/// How high the frame's bars are, as Clarity.UI draws them (conformance/window-room.json).
+pub const MENU_BAR_HEIGHT: u32 = 30;
+pub const TOOLBAR_HEIGHT: u32 = 38;
+pub const RIBBON_TABS_HEIGHT: u32 = 30;
+pub const RIBBON_BODY_HEIGHT: u32 = 92;
+/// A footer with its status line alone.
+pub const STATUS_HEIGHT: u32 = 28;
+/// A footer with parts is a row high and this much more.
+pub const FOOTER_PARTS_BEYOND_ROW: u32 = 8;
+
+/// A bar of the frame above or below a window's grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bar {
+    Menu,
+    Toolbar,
+    /// A ribbon with its body open.
+    Ribbon,
+    /// A ribbon folded to its tabs, or without a tab.
+    RibbonFolded,
+    /// A footer with its status line alone.
+    Status,
+    /// A footer with parts.
+    FooterParts,
+}
+
+impl Bar {
+    /// How high it is at the project's row height.
+    pub fn height(self, row_height: u32) -> u32 {
+        match self {
+            Bar::Menu => MENU_BAR_HEIGHT,
+            Bar::Toolbar => TOOLBAR_HEIGHT,
+            Bar::Ribbon => RIBBON_TABS_HEIGHT + RIBBON_BODY_HEIGHT,
+            Bar::RibbonFolded => RIBBON_TABS_HEIGHT,
+            Bar::Status => STATUS_HEIGHT,
+            Bar::FooterParts => row_height + FOOTER_PARTS_BEYOND_ROW,
+        }
+    }
+}
+
+/// The bars a window has: each of its own, else the app's of the same kind.
+pub fn frame_bars(app: Option<&crate::model::Frame>, own: &crate::model::Frame) -> Vec<Bar> {
+    let mut bars = Vec::new();
+    if own.menu.is_some() || app.is_some_and(|a| a.menu.is_some()) {
+        bars.push(Bar::Menu);
+    }
+    if own.toolbar.is_some() || app.is_some_and(|a| a.toolbar.is_some()) {
+        bars.push(Bar::Toolbar);
+    }
+    if let Some(ribbon) = own.ribbon.as_ref().or(app.and_then(|a| a.ribbon.as_ref())) {
+        bars.push(if ribbon.collapsed || ribbon.tabs.is_empty() { Bar::RibbonFolded } else { Bar::Ribbon });
+    }
+    if let Some(footer) = own.footer.as_ref().or(app.and_then(|a| a.footer.as_ref())) {
+        bars.push(if footer.widgets.is_empty() { Bar::Status } else { Bar::FooterParts });
+    }
+    bars
+}
+
+/// How many rows of the grid a window `height` pixels high holds under `bars`:
+/// its height less its padding and the bars, in rows of `row_height` with gaps.
+pub fn rows_held(height: u32, row_height: u32, bars: &[Bar]) -> u32 {
+    let room = height as i64 - 2 * CONTENT_PADDING as i64 - bars.iter().map(|b| b.height(row_height) as i64).sum::<i64>();
+    ((room + GAP as i64) / (row_height + GAP) as i64).max(0) as u32
+}
+
+/// How high a window must be to hold `rows` rows under `bars`.
+pub fn height_for_rows(rows: u32, row_height: u32, bars: &[Bar]) -> u32 {
+    2 * CONTENT_PADDING + bars.iter().map(|b| b.height(row_height)).sum::<u32>() + rows * row_height + rows.saturating_sub(1) * GAP
+}

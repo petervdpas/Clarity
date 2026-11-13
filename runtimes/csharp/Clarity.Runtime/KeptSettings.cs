@@ -82,9 +82,22 @@ public static partial class KeptSettings
         }
     }
 
-    /// <summary>Keeps <paramref name="values"/> as the settings of <paramref name="program"/>, written whole and then put in place.</summary>
+    /// <summary>What keeping <paramref name="kept"/> over the file's values <paramref name="onFile"/> writes: each kept
+    /// value in place of the file's, the keys the program does not keep (the person's agent switches) as they were
+    /// (conformance/settings.json, <c>merge</c>).</summary>
+    public static JsonObject Merged(JsonObject onFile, JsonObject kept)
+    {
+        var merged = (JsonObject)onFile.DeepClone();
+        foreach (var (key, value) in kept)
+            merged[key] = value?.DeepClone();
+        return merged;
+    }
+
+    /// <summary>Keeps <paramref name="values"/> as the settings of <paramref name="program"/>, merged into the file's
+    /// (<see cref="Merged"/>), written whole and then put in place.</summary>
     public static void Keep(string program, JsonObject values)
     {
+        values = Merged(Read(program), values);
         var file = File(program) ?? throw new InvalidOperationException("this system names no folder for application settings");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var written = file + ".new";

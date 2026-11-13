@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the person sets for themselves: the language, the theme, and what
+     AI agents may do while the app is closed. -->
+<Dialog class="maintenance.Preferences" title="@preferencesTitle">
+  <Form name="settingsForm" at="1,1" span="12" rows="4" bind="settings" labels="3">
+    <Dropdown name="languageBox" at="4,1" span="6" bind="settings.language" />
+    <Dropdown name="themeBox" at="4,2" span="6" bind="settings.theme" />
+    <Checkbox name="agentReadsBox" at="4,3" span="9" caption="@agentReadsWhileClosedSetting" bind="settings.agentReadsWhileClosed" />
+    <Checkbox name="agentChangesBox" at="4,4" span="9" caption="@agentChangesWhileClosedSetting" bind="settings.agentChangesWhileClosed" />
+  </Form>
+  <Button name="closeButton" at="11,6" span="2" caption="@closeButtonCaption" opens="close" cancel="true" />
+</Dialog>

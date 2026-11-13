@@ -48,11 +48,25 @@ public static class DesktopWindow
         }
     }
 
+    /// <summary>Asks the AI agent whose command runs now its question, through the library.</summary>
+    static unsafe string? AskAgent(string question, string form)
+    {
+        byte[] q = Interop.Utf8(question), f = Interop.Utf8(form);
+        fixed (byte* qp = q, fp = f)
+        {
+            if (Lib.AgentAsk(qp, (nuint)q.Length, fp, (nuint)f.Length, out var answer) != 0 || answer is null)
+                return null;
+            return Interop.Take(answer);
+        }
+    }
+
     static void Show(Assembly app, ProgramWire wire, string? title, (double, double)? size)
     {
         CustomParts.RegisterAll();
         // Quitting from code goes through the program's replies.
         DesktopProgram.Current = wire;
+        // A command an AI agent runs in the open app asks the agent through the library (docs/ledger/app-mcp.md).
+        Agents.Desktop.Ask = AskAgent;
         using var files = NativeFiles.Of(app, string.IsNullOrEmpty(title) ? null : title, size);
         using var program = new NativeProgram(wire.Answer);
         Interop.Check(Lib.DesktopRun(program.Handle, files.Handle, out var exit), "clarity_desktop_run");

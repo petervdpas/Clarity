@@ -131,9 +131,21 @@ pub fn read(program: &str) -> Map<String, Value> {
         .unwrap_or_default()
 }
 
-/// Keeps `values` as the settings of `program`, written whole and then put
-/// in place, so a crash leaves the old file or the new one.
+/// What keeping `kept` over the file's values `on_file` writes: each kept
+/// value in place of the file's, the keys the program does not keep (the
+/// person's agent switches) as they were (conformance/settings.json, `merge`).
+pub fn merged(mut on_file: Map<String, Value>, kept: &Map<String, Value>) -> Map<String, Value> {
+    for (key, value) in kept {
+        on_file.insert(key.clone(), value.clone());
+    }
+    on_file
+}
+
+/// Keeps `values` as the settings of `program`, merged into the file's
+/// (`merged`), written whole and then put in place, so a crash leaves the
+/// old file or the new one.
 pub fn keep(program: &str, values: &Map<String, Value>) -> Result<()> {
+    let values = &merged(read(program), values);
     let path = file(program).ok_or_else(|| Error::Invalid("this system names no folder for application settings".into()))?;
     let failed = |err: std::io::Error| Error::Invalid(format!("cannot keep the settings in {}: {err}", path.display()));
     if let Some(folder) = path.parent() {

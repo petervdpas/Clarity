@@ -322,6 +322,15 @@ All drawn by Clarity.UI, never the system's:
 - A file as a data source (`datasource x file "a.csv" external`) is kept in an in-memory SQLite table and written back (`crates/clarity-gen/src/lib.rs:96-136`; runtimes `file_source.*`).
 - Tests: the `conformance/formats-*.json` files in `runtimes/rust-formats/tests`; `formats-runtime.json` on all five.
 
+### Apps for AI agents
+
+- Commands with an `agent` line are tools; `agent/guidance.md` is the instructions; clarity-gen writes the tool list (`crates/clarity-gen/src/agent_tools.rs`) into every program, with what the project file allows while the app is closed (`agents while closed read change`, `whileClosed`).
+- Clarity.AppMcp (`runtimes/rust-app-mcp`): MCP over lines of JSON, arguments checked against each tool's inputs, grants (once, session, refuse; settings while the app is closed), `ask` as elicitation, a call as the command line the program reads, `running.json`. The C table is `runtimes/rust-app-mcp-ffi`; C# has it as the package Clarity.AppMcp.
+- `<program> mcp` in every stack's command-line program (the app closed): R `agents.rs`, Go `agents.go`, C `agents/agents.c`, C++ `agents/agents.cpp`, C# `Agents.cs` and `AgentService.cs`; the person's settings `agentReadsWhileClosed` and `agentChangesWhileClosed`. Keeping settings merges into the file on every runtime.
+- The open app answers: Clarity.UI listens on loopback with a token (`runtimes/rust-ui/src/agents.rs`, `relay`), `<program> mcp` forwards to it; the grant dialog (`dialogs/grant.rs`); the closed-app switches are the app's own settings `agentReadsWhileClosed` and `agentChangesWhileClosed` (spec `parse_settings`, defaults from the project file at generation, `agent_tools::with_agent_defaults`); a command for agents needs no cli target. A change is one database step; the window reads its data again and a note says what the agent did, with Undo (`WindowStack::agent_changed`, the program's `agent_undo`). Every stack's desktop program: Rust `agents::mcp`, Go `agents_host.go`, C and C++ `agents/`, C# `Agents.Desktop`.
+- The IDE's Agents part (`app/src/lib/AgentsView.svelte`): the commands for agents, the closed-app defaults, the guidance's four sections.
+- Tests: `conformance/app-mcp.json` in `runtimes/rust-app-mcp/tests` and through the C table in `runtimes/rust-app-mcp-ffi/tests`; Clarity.UI's `tests/hosts/agents.rs`; the generator's `tests/agent_tools.rs` and `tests/commands.rs`.
+
 ### HTTP and web APIs
 
 - `http get|post|put|patch|delete url [from source] [with body] [header ..] [query ..] [every page]` never throws; the reply has status, ok, text (status 0 when nothing answered). Source auth bearer, api-key, basic; paging by page, offset, cursor. R `http.rs`, Go `http.go`, C and C++ libcurl `http/`, C# `Http.cs`.
@@ -466,6 +475,7 @@ A Tauri app (`app/`): Svelte front end in `app/src`, 133 commands in `app/src-ta
 - **General:** project_overview, read_file, write_file, check, missing_translations, api, pick_api, migrate, rename, parts, manual, reference, design, new_project, generate, read_generated, diagram_view, write_diagram, diagram_proposals, apply_diagram (`src/lib.rs:807-920`).
 - **Data model:** add_entity, add_enum, add_field, change_field, add_enum_value, change_enum_value, set_uses, remove_model_item (`src/structural/model.rs`).
 - **Windows:** add_window, add_view, remove_page, change_page, add_part, place_field, change_part, rename_part, move_part, remove_part, add_tab, change_tab, remove_tab, add_data, remove_data, add_tell, remove_tell, set_part_grows (`src/structural/windows.rs`).
+- **Guidance:** guidance, set_guidance (`src/structural/guidance.rs`).
 - **App and frame:** add_app, set_main_window, set_splash, add_region, add_command, change_command, change_sidebar, change_ribbon, rename_frame_part, set_frame_title, move_frame_part, remove_frame_part, add_context_menu, set_event, wire_event, set_handler_code, name_parts, camel_names (`src/structural/frame.rs`).
 - `write_file` refuses `.cxaml` files and files Clarity writes from a declaration (`src/lib.rs:491-499`).
 

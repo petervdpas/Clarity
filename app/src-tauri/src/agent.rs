@@ -727,6 +727,7 @@ mod tests {
         for dash in ['\u{2014}', '\u{2013}'] {
             assert!(!told.contains(dash), "the instructions hold {dash:?}");
         }
-        assert!(told.len() < 16_000, "the instructions are {} bytes", told.len());
+        // Room for the manual's topic list as it grows; 16 000 was reached with project.agents.
+        assert!(told.len() < 17_000, "the instructions are {} bytes", told.len());
     }
 }

@@ -15,7 +15,7 @@ use crate::design_edit::Designed;
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
 use crate::model::{App, Command, CommandKind, Frame, Literal, Page, Widget, WidgetProps};
 use crate::widgets::WidgetKind;
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -90,6 +90,8 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
     let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable "))) || designs.part(|p| matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable));
     let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::Tags && p.bind.is_some());
     let commands = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("command ")));
+    // A command's `agent` line, indented under it.
+    let agents = commands && modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with(' ') && l.trim() == "agent"));
     // A date input, or a date field a table cell opens the calendar for.
     let dates = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("date ") || (l.starts_with("    ") && l.contains(':') && l.split([':', ',', ' ']).any(|w| w == "date" || w == "datetime"))))
         || designs.part(|p| p.kind == WidgetKind::Date)
@@ -128,6 +130,9 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
         .chain(if clicks_to("language") { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
+        .chain(if agents { AGENT_KEYS.as_slice() } else { &[] })
+        .chain(if agents { AGENT_GRANT_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| matches!(l.trim(), "agentReadsWhileClosed" | "agentChangesWhileClosed"))) { AGENT_SETTING_KEYS.as_slice() } else { &[] })
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
         .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("keys") { KEYS_WINDOW_KEYS.as_slice() } else { &[] })

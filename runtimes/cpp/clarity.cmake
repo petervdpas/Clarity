@@ -166,6 +166,37 @@ function(clarity_use_formats target)
   endif()
 endfunction()
 
+# Clarity.AppMcp (docs/ledger/app-mcp.md), for a program whose commands
+# agents may call (`<program> mcp`). Linked to `target` and put beside it,
+# where the program finds it.
+function(clarity_use_agents target)
+  clarity_ui_folder()
+  if(NOT TARGET clarity_app_mcp)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_app_mcp.h")
+      message(FATAL_ERROR "The program offers commands to agents, but Clarity.AppMcp's library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_app_mcp.h and its library in lib/")
+    endif()
+    add_library(clarity_app_mcp SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_app_mcp PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_APP_MCP_IMPORT NAMES clarity_app_mcp.dll.lib libclarity_app_mcp.dll.a clarity_app_mcp.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_app_mcp PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_app_mcp.dll" IMPORTED_IMPLIB "${CLARITY_APP_MCP_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_app_mcp PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_app_mcp.dylib")
+    else()
+      set_target_properties(clarity_app_mcp PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_app_mcp.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_sources(${target} PRIVATE ${CLARITY_RUNTIME_DIR}/agents/agents.cpp)
+  target_link_libraries(${target} PRIVATE clarity_app_mcp)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_app_mcp> $<TARGET_FILE_DIR:${target}>)
+  if(APPLE)
+    set_target_properties(${target} PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+  elseif(UNIX)
+    set_target_properties(${target} PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  endif()
+endfunction()
+
 # Clarity.Auth (docs/APP-CAPABILITIES-PLAN.md, step 4) for a program whose
 # project signs people in, on any target: its library lies beside
 # Clarity.UI's in the folder CLARITY_UI names (include/clarity_auth.h and

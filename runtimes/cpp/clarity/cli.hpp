@@ -21,6 +21,10 @@ namespace clarity::cli {
 /// Clarity's own words of the command line, in English: what a program
 /// shows for a key its translations leave out.
 extern const std::vector<std::pair<std::string, std::string>> words_in_english;
+/// Clarity's words of a program whose commands agents may call, in English
+/// (conformance/app-mcp.json): what its MCP service says of a refused call,
+/// and its help's line for `mcp`.
+extern const std::vector<std::pair<std::string, std::string>> agent_words_in_english;
 
 /// What an argument or option holds; bool only for an option.
 enum class Kind { text, integer, decimal, money, date, datetime, duration, enumeration, boolean };
@@ -51,6 +55,8 @@ struct Program {
     std::optional<std::string> help;
     /// In the order they are declared.
     std::vector<Command> commands;
+    /// Whether agents may call some of them: the help lists `mcp`.
+    bool agents = false;
 };
 
 using Slots = std::vector<std::pair<std::string, std::string>>;
@@ -134,12 +140,29 @@ std::pair<std::optional<std::string>, int> ask(const std::string& question, cons
 
 namespace clarity::cli {
 
+/// Answers a command's question in place of the terminal (an agent over
+/// MCP, agents/agents.hpp): the question and its form (JSON, as
+/// conformance/command-line.json writes it); the answer as the terminal
+/// gives it, or nothing.
+using Answering = std::function<std::optional<std::string>(const std::string& question, const std::string& form)>;
+
+/// A question nobody answered while an agent ran the command: the command
+/// stops here with this text, as a terminal program ends.
+struct Unanswered {
+    std::string text;
+};
+
+/// A question's form as JSON, as conformance/command-line.json writes it.
+std::string form(const Asked& asked);
+
 /// What a running command prints, says and asks through: standard output,
-/// standard error and the terminal, in the language shown. A question
-/// nobody can answer ends the program.
+/// standard error and the terminal, in the language shown; or, for an
+/// agent, what it prints kept in `printed` and its questions put to the
+/// agent. A question nobody can answer ends the program.
 class Session {
 public:
     explicit Session(Terminal& terminal) : terminal_(terminal) {}
+    Session(Terminal& terminal, Answering agent, std::string& printed) : terminal_(terminal), agent_(std::move(agent)), printed_(&printed) {}
     /// `print value`: one line on standard output.
     void print(const Text& text);
     /// `print list columns a, b`: the records as a table on standard output.
@@ -157,7 +180,10 @@ public:
 
 private:
     std::string answer(const Text& question, const Asked& asked);
+    void out(const std::string& text);
     Terminal& terminal_;
+    Answering agent_;
+    std::string* printed_ = nullptr;
 };
 
 /// Clarity's words of the command line as the translations give them, or their English.
@@ -166,6 +192,12 @@ Words translated_words();
 /// The language to show for the system's locale, among the project's
 /// translations; nothing for the language the project is written in.
 std::optional<std::string> pick_language(const std::string& locale, const std::vector<std::string>& available, const std::string& base);
+
+/// Runs the command line `line` for an AI agent (docs/ledger/app-mcp.md), as
+/// typed: what the command printed, and whether the call is refused (a wrong
+/// line, a refusal, an exit code, a question nobody answered). A question
+/// goes to `ask` with its form as JSON.
+std::pair<std::string, bool> run_line(const Program& program, const std::vector<std::string>& line, const Answering& ask, const std::function<int(Session&, size_t, const std::vector<std::optional<std::string>>&)>& run);
 
 /// Runs a command-line program: reads the command line, writes help or what
 /// is wrong with it, or runs the command it names with its values, and gives

@@ -3,6 +3,7 @@
 //! deterministic: the same project always gives the same files, byte for
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
+pub mod agent_tools;
 pub mod tools;
 pub mod clarity_ui;
 mod c;
@@ -881,8 +882,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
-    // The texts that show the app's version carry it, in every stack.
-    let filled = clarity_spec::translations::with_app_slots(project);
+    // The texts that show the app's version carry it, in every stack; the agent settings start as the project allows.
+    let filled = agent_tools::with_agent_defaults(&clarity_spec::translations::with_app_slots(project), settings);
     let project = &filled;
     check_stores(project, settings)?;
     check_web_secrets(project)?;
@@ -1013,6 +1014,7 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
+    let project = &agent_tools::with_agent_defaults(project, settings);
     // One file per module, its windows' own files (`.cxaml`) folded in, as the generators read a module.
     let project = &compile_engines(with_resource_texts(&consts::inlined(&calls::filled(&clarity_spec::cxaml::folded(project)))), settings)?;
     match settings.stack.backend {
@@ -1467,9 +1469,10 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
 
 /// The crates of the base libraries every Go, C, C++ and Rust desktop program
 /// links: Clarity.UI and Clarity.Audio, Clarity.Video, Clarity.Image,
-/// Clarity.Formats and Clarity.Auth beside it (a program of any target whose
-/// code uses a format links Clarity.Formats too, one that signs people in Clarity.Auth).
-pub const BASE_LIBRARIES: [&str; 6] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi", "clarity-auth-ffi"];
+/// Clarity.Formats, Clarity.Auth and Clarity.AppMcp beside it (a program of any
+/// target whose code uses a format links Clarity.Formats too, one that signs
+/// people in Clarity.Auth, a command-line program with commands for agents Clarity.AppMcp).
+pub const BASE_LIBRARIES: [&str; 7] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi", "clarity-auth-ffi", "clarity-app-mcp-ffi"];
 
 /// Clarity's repository holding `from` or a folder above it; none outside one.
 pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {

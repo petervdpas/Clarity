@@ -26,6 +26,11 @@
     X(dates_and_times_read_and_write_as_text)                     \
     X(the_settings_file_is_where_every_runtime_puts_it)           \
     X(settings_kept_are_read_back)                               \
+    X(keeping_settings_leaves_the_keys_the_program_does_not_keep) \
+    X(an_agent_call_runs_the_command_as_typed) \
+    X(an_agent_is_asked_and_a_command_stops_without_an_answer) \
+    X(while_the_app_is_closed_the_person_s_settings_decide) \
+    X(the_words_of_refusals_are_the_shared_ones) \
     X(a_secret_goes_to_the_store_only_when_it_changed)           \
     X(a_folder_setting_is_where_every_runtime_puts_a_store)      \
     X(a_store_keeps_its_files_in_a_folder_setting)               \
@@ -132,6 +137,7 @@
     X(a_dialog_is_asked_for_and_closes_with_its_value)            \
     X(the_command_line_words_are_the_shared_ones)                 \
     X(command_lines_are_read_as_every_runtime_reads_them)         \
+    X(a_program_with_commands_for_agents_lists_mcp_in_its_help) \
     X(a_printed_table_lines_up_as_every_runtime_does)             \
     X(a_command_asks_on_a_terminal_as_every_runtime_does)        \
     X(every_http_call_gives_the_reply_the_cases_name)            \

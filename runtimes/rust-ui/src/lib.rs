@@ -9,6 +9,7 @@
 #[cfg(feature = "video")]
 pub use clarity_video;
 pub mod access;
+pub mod agent_activity;
 pub mod app_files;
 pub mod browser;
 pub mod choices;
@@ -46,6 +47,8 @@ pub mod xml;
 // The desktop host; a browser build has the `browser` host instead.
 #[cfg(all(feature = "desktop", not(target_os = "emscripten")))]
 pub mod desktop;
+#[cfg(all(feature = "desktop", not(target_os = "emscripten")))]
+pub mod agents;
 
 pub use app_files::AppFiles;
 pub use element::{Cx, Element, ElementId, Node};

@@ -1563,6 +1563,10 @@ pub struct Project {
     /// on it next), from its folder; None when it has none or the folder was
     /// not read.
     pub readme: Option<String>,
+    /// The guidance for AI agents (`agent/guidance.md`, see `guidance`), from
+    /// its folder; None when it has none or the folder was not read.
+    #[serde(default)]
+    pub guidance: Option<String>,
     /// The files of the project's `engines` folder, by name. None when the
     /// project was loaded without its folder.
     #[serde(skip)]

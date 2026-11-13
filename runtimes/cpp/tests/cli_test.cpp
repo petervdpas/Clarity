@@ -62,6 +62,19 @@ TEST(the_command_line_words_are_the_shared_ones) {
     for (const auto& [key, value] : cli::words_in_english) CHECK_EQ(cases["words"][key].get<std::string>(), value);
 }
 
+// A program with commands for agents lists `mcp` in its help (conformance/command-line.json, `agents`).
+TEST(a_program_with_commands_for_agents_lists_mcp_in_its_help) {
+    json cases = conformance("command-line.json");
+    auto program = program_of(cases["program"]);
+    program.agents = true;
+    CHECK(!cases["agents"].empty());
+    for (const auto& c : cases["agents"]) {
+        const auto parsed = cli::parse(program, c["args"].get<std::vector<std::string>>(), english);
+        CHECK(parsed.outcome == cli::Parsed::Outcome::help);
+        CHECK(parsed.help == c["help"].get<std::string>());
+    }
+}
+
 TEST(command_lines_are_read_as_every_runtime_reads_them) {
     json cases = conformance("command-line.json");
     const auto program = program_of(cases["program"]);

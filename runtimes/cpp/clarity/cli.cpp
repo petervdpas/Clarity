@@ -6,6 +6,8 @@
 #include <iostream>
 #include <map>
 
+#include <nlohmann/json.hpp>
+
 #ifdef _WIN32
 #include <io.h>
 #ifndef NOMINMAX
@@ -26,6 +28,12 @@
 #include "clarity/values.hpp"
 
 namespace clarity::cli {
+
+const std::vector<std::pair<std::string, std::string>> agent_words_in_english = {
+    {"agentRefused", "The person using {app} refused this."},
+    {"agentClosed", "{app} is not open; open it to allow this."},
+    {"agentMcp", "Serves the commands for AI agents over MCP"},
+};
 
 const std::vector<std::pair<std::string, std::string>> words_in_english = {
     {"cliUsage", "Usage"},
@@ -55,6 +63,9 @@ std::string Words::say(const std::string& key, const Slots& slots) const {
     if (!text || text->empty()) {
         text = key;
         for (const auto& [k, english] : words_in_english) {
+            if (k == key) text = english;
+        }
+        for (const auto& [k, english] : agent_words_in_english) {
             if (k == key) text = english;
         }
     }
@@ -243,6 +254,7 @@ std::string group_help(const Program& program, const std::vector<std::string>& p
     for (const auto& c : program.commands) {
         if (c.line.size() > path.size() && begins_with(c.line, path)) commands.emplace_back(joined(c.line, " "), c.help.value_or(""));
     }
+    if (path.empty() && program.agents) commands.emplace_back("mcp", words.say("agentMcp"));
     out += section(words.say("cliCommands"), commands) + "\n";
     out += section(words.say("cliOptions"), {{"--help", words.say("cliHelpOption")}});
     return out;
@@ -517,14 +529,40 @@ std::string word(const std::string& key, const std::string& english) {
 
 }  // namespace
 
+std::string form(const Asked& asked) {
+    static const char* const kinds[] = {"text", "integer", "decimal", "money", "date", "datetime", "duration", "enum", "bool"};
+    nlohmann::json out;
+    switch (asked.kind) {
+    case Asked::Kind::confirm:
+        out = {{"kind", "confirm"}, {"yes", asked.yes}, {"no", asked.no}};
+        break;
+    case Asked::Kind::choice:
+        out = {{"kind", "choice"}, {"choices", asked.choices}};
+        break;
+    case Asked::Kind::value:
+        out = {{"kind", "value"}, {"type", kinds[static_cast<int>(asked.param.kind)]}, {"values", asked.param.values}};
+        if (asked.param.fallback) out["default"] = *asked.param.fallback;
+        break;
+    }
+    return out.dump();
+}
+
+void Session::out(const std::string& text) {
+    if (printed_) {
+        *printed_ += text;
+    } else {
+        std::cout << text;
+    }
+}
+
 void Session::print(const Text& text) {
-    std::cout << text.show() << "\n";
+    out(text.show() + "\n");
 }
 
 void Session::print_table(const std::vector<Text>& headings, const std::vector<bool>& right, const std::vector<std::vector<std::string>>& rows) {
     std::vector<std::string> shown;
     for (const auto& h : headings) shown.push_back(h.show());
-    std::cout << table(shown, right, rows);
+    out(table(shown, right, rows));
 }
 
 void Session::message(const Text& text) {
@@ -536,6 +574,12 @@ std::string Session::yes_no(bool value) {
 }
 
 std::string Session::answer(const Text& question, const Asked& asked) {
+    if (agent_) {
+        const std::string shown = question.show();
+        const auto given = agent_(shown, form(asked));
+        if (!given) throw Unanswered{translated_words().say("cliNoTerminal", {{"question", shown}})};
+        return *given;
+    }
     auto [given, code] = cli::ask(question.show(), asked, terminal_, translated_words());
     if (!given) std::exit(code);
     return *given;
@@ -629,6 +673,36 @@ std::optional<DateTime> date_time(const std::optional<std::string>& value) {
 
 std::string text_of(const Decimal& value) {
     return normalized(value.str());
+}
+
+namespace {
+
+std::string without_end(std::string text) {
+    while (!text.empty() && (text.back() == '\n' || text.back() == ' ')) text.pop_back();
+    return text;
+}
+
+}  // namespace
+
+std::pair<std::string, bool> run_line(const Program& program, const std::vector<std::string>& line, const Answering& ask, const std::function<int(Session&, size_t, const std::vector<std::optional<std::string>>&)>& run) {
+    const auto parsed = parse(program, line, translated_words());
+    if (parsed.outcome == Parsed::Outcome::wrong) return {without_end(parsed.said), true};
+    if (parsed.outcome == Parsed::Outcome::help) return {without_end(parsed.help), false};
+    Console console;
+    std::string printed;
+    Session session(console, ask, printed);
+    try {
+        const int code = run(session, parsed.command, parsed.values);
+        const std::string said = without_end(printed);
+        if (code == 0) return {said, false};
+        return {said.empty() ? "exit " + std::to_string(code) : said, true};
+    } catch (const Unanswered& unanswered) {
+        return {unanswered.text, true};
+    } catch (const RefusedError& refused) {
+        return {refused.text.show(), true};
+    } catch (const Error& error) {
+        return {error.what(), true};
+    }
 }
 
 }  // namespace clarity::cli

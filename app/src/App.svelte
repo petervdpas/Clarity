@@ -51,6 +51,7 @@
   import StatusBar from "./lib/StatusBar.svelte";
   import ApiView from "./lib/ApiView.svelte";
   import SigninView from "./lib/SigninView.svelte";
+  import AgentsView from "./lib/AgentsView.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
   import MappingPage from "./lib/MappingPage.svelte";
@@ -474,6 +475,7 @@
       // the sign-in setup too, before the project signs anyone in.
       case "readme":
       case "signin":
+      case "agents":
         return true;
     }
   }
@@ -1643,6 +1645,8 @@
             <MappingPage {preview} name={current.name} formats={projectFile.catalog.formats} onapplied={applyPreview} ondelete={deleteMapping} />
           {:else if current?.kind === "signin" && projectFile}
             <SigninView project={projectFile} {preview} onsave={saveSettings} />
+          {:else if current?.kind === "agents" && projectFile}
+            <AgentsView project={projectFile} {preview} onsave={saveSettings} onapplied={applyPreview} />
           {:else if current?.kind === "api" && projectFile}
             <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
           {:else if current?.kind === "diagram"}

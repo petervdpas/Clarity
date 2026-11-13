@@ -1,11 +1,12 @@
 //! Clarity's own dialogs (DESIGN 7.9), never the system's: a question a
-//! handler asks (`ask`), a dialog window shown over the window that opened
+//! handler asks (`ask`), an AI agent's call the person allows or refuses (`grant`), a dialog window shown over the window that opened
 //! it where the host opens no desktop window of its own (`over`), the keys
 //! window (`keys`) and the bar of a long call with Stop (`long_call`). What
 //! they share is here: their buttons, and the dimmed window with the panel
 //! they are drawn on.
 
 pub mod ask;
+pub mod grant;
 pub mod keys;
 pub mod long_call;
 pub mod over;
@@ -18,6 +19,7 @@ use crate::input::{Key, KeyInput, Modifiers};
 use crate::painter::{Painter, TextAlign};
 
 pub use ask::AskDialog;
+pub use grant::{GrantChoice, GrantDialog};
 pub use keys::KeysWindow;
 pub use long_call::LongCallBar;
 pub use over::DialogOverlay;

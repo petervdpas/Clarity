@@ -159,6 +159,9 @@ pub enum Edit {
     },
     /// Set the modules this file uses, replacing its `use` lines.
     SetUses { uses: Vec<String> },
+    /// Add one of Clarity's own settings (`OWN_SETTINGS`) to the file's
+    /// settings block as its bare word, starting the block when there is none.
+    AddOwnSetting { word: String },
     /// Give every part of the file's windows and app that has no name the
     /// first free one of its kind, as a new part gets: every part has a name.
     NameParts,
@@ -836,6 +839,7 @@ impl Doc {
             Edit::AddVariant { owner, name, label } => self.add_variant(*owner, name, label.as_deref()),
             Edit::UpdateVariant { item, name, label } => self.update_variant(*item, name, label.as_deref()),
             Edit::SetUses { uses } => self.set_uses(uses),
+            Edit::AddOwnSetting { word } => self.add_own_setting(word),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
             Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
@@ -1058,6 +1062,30 @@ impl Doc {
         let line = Self::variant_line(name, label)?;
         set_line_keeping_comment(self.node_mut(&path), line);
         Ok(Some(item))
+    }
+
+    fn add_own_setting(&mut self, word: &str) -> EditResult<Option<u32>> {
+        if !crate::parser::OWN_SETTINGS.contains(&word) {
+            return fail(format!("'{word}' is none of Clarity's own settings: {}", crate::parser::OWN_SETTINGS.join(", ")));
+        }
+        let block = self.nodes.iter().position(|n| n.tokens.len() == 1 && n.tokens[0].text == "settings");
+        let at = match block {
+            Some(at) => at,
+            None => {
+                let mut node = self.fresh_node(0, "settings".to_string());
+                node.leading.push(Trivia { indent: 0, raw_indent: None, text: String::new() });
+                self.nodes.push(node);
+                self.nodes.len() - 1
+            }
+        };
+        if let Some(there) = self.nodes[at].children.iter().find(|c| c.tokens.len() == 1 && c.tokens[0].text == word) {
+            return Ok(Some(there.id));
+        }
+        let indent = self.nodes[at].child_indent();
+        let node = self.fresh_node(indent, word.to_string());
+        let id = node.id;
+        self.nodes[at].children.push(node);
+        Ok(Some(id))
     }
 
     fn set_uses(&mut self, uses: &[String]) -> EditResult<Option<u32>> {

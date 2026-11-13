@@ -108,6 +108,9 @@ const VIDEO_PACKAGE: &str = "Clarity.Video";
 pub(crate) const IMAGE_PACKAGE: &str = "Clarity.Image";
 /// Clarity.Formats' native library (docs/FORMATS-PLAN.md), carried only when code reads or writes a format.
 pub(crate) const FORMATS_PACKAGE: &str = "Clarity.Formats";
+
+/// Clarity.AppMcp's native library (docs/ledger/app-mcp.md), carried only when a command is for agents.
+pub(crate) const APP_MCP_PACKAGE: &str = "Clarity.AppMcp";
 /// Clarity.Auth's native library (docs/APP-CAPABILITIES-PLAN.md step 4), carried only when the project signs people in.
 pub(crate) const AUTH_PACKAGE: &str = "Clarity.Auth";
 
@@ -184,7 +187,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let songs = ui == DESKTOP_PACKAGE && clarity_spec::resources::carries_audio(project);
     let videos = ui == DESKTOP_PACKAGE && clarity_spec::resources::plays_videos(project);
     let pictures = crate::uses_picture_functions(project);
-    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE), (crate::carries_auth(project), AUTH_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
+    // The commands agents call while the app runs, and `<program> mcp` (docs/ledger/app-mcp.md).
+    let agents = ui == DESKTOP_PACKAGE && crate::agent_tools::offers_agents(project);
+    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE), (crate::carries_auth(project), AUTH_PACKAGE), (agents, APP_MCP_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
     let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &media, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
@@ -196,6 +201,12 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
             Err(mut problems) => errors.append(&mut problems),
+        }
+        if agents {
+            match logic::emit_commands(project, file, &file_types) {
+                Ok(commands) => code.push_str(&commands),
+                Err(mut problems) => errors.append(&mut problems),
+            }
         }
         files.push(text(&format!("Modules/{}.cs", pascal(&module.name)), code.trim_end().to_string() + "\n"));
         for page in &file.pages {
@@ -231,6 +242,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
     files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines)));
+    if agents {
+        files.push(text("AgentCommands.cs", cli::agents_desktop(project, settings, &name)));
+    }
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
@@ -555,6 +569,16 @@ pub(super) fn add_signin(project: &Project, settings: &Settings) -> Option<Strin
 }
 
 fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
+    // Commands for agents (docs/ledger/app-mcp.md): Clarity.UI serves them while the window runs; `mcp` without one.
+    let agents = settings.stack.has(clarity_project::Target::Desktop) && settings.stack.ui == clarity_project::Ui::Clarity && crate::agent_tools::offers_agents(project);
+    let (agents_mcp, agents_install) = if agents {
+        (
+            "        // `mcp` as the only word: agents call the commands without a window (docs/ledger/app-mcp.md).\n        if (args is [\"mcp\"])\n        {\n            using var mcpDatabases = OpenDatabases();\n            return AgentCommands.Mcp(mcpDatabases, args);\n        }\n",
+            "        AgentCommands.Install(databases);\n",
+        )
+    } else {
+        ("", "")
+    };
     let check_engines = check_engines(engines);
     let opening = opening(project, databases, drivers, settings, "OpenDatabases");
     let main_window = main_window(project).unwrap_or_default();
@@ -600,7 +624,7 @@ public static class Program
         Remembered.Use({application});
         Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
 {engines_language}        AppThemes.Start();
-{settings_start}{keys_start}        Db opened;
+{settings_start}{keys_start}{agents_mcp}        Db opened;
         try
         {{
             opened = OpenDatabases();
@@ -609,7 +633,7 @@ public static class Program
         {{
 {unconnected}        }}
         using var databases = opened;
-{audio}        DesktopWindow.Run(new {main_window}ViewModel(databases));
+{agents_install}{audio}        DesktopWindow.Run(new {main_window}ViewModel(databases));
         return 0;
     }}
 }}

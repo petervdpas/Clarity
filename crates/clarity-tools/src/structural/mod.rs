@@ -9,8 +9,10 @@
 //! - `windows`: windows and views, their parts, grids, sizes, tabs and data.
 //! - `frame`: the app, its main window and splash, menus, toolbars,
 //!   ribbons, sidebars, events and handlers.
+//! - `guidance`: the app's guidance for AI agents, a section at a time.
 
 pub mod frame;
+pub mod guidance;
 pub mod model;
 pub mod places;
 pub mod windows;
@@ -22,12 +24,12 @@ use crate::ProjectTools;
 
 /// Every structural tool.
 pub fn definitions() -> Vec<ToolDef> {
-    [model::definitions(), windows::definitions(), frame::definitions()].concat()
+    [model::definitions(), windows::definitions(), frame::definitions(), guidance::definitions()].concat()
 }
 
 /// The tool `name`, when it is a structural one: its answer.
 pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Result<String, String>> {
-    model::call(tools, name, input).or_else(|| windows::call(tools, name, input)).or_else(|| frame::call(tools, name, input))
+    model::call(tools, name, input).or_else(|| windows::call(tools, name, input)).or_else(|| frame::call(tools, name, input)).or_else(|| guidance::call(tools, name, input))
 }
 
 /// A tool's definition.

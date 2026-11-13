@@ -33,12 +33,15 @@ record Entry
     body: text
 
 // What the person sets for themselves: the ledger folder the picked project
-// points the ledger store at, and the project picked last.
+// points the ledger store at, the project picked last, and what AI agents
+// may do while the app is closed.
 settings
     language
     theme
     ledgerFolder: folder, label @ledgerFolderSetting
     lastProject: text, label @lastProjectSetting
+    agentReadsWhileClosed
+    agentChangesWhileClosed
 
 // The rest of the first line that starts with `prefix`; empty when none does.
 function lineAfter(body: text, prefix: text) -> text
@@ -99,12 +102,16 @@ code Main
     handler windowReturned
         loadProjects()
 
+    // The ledger is read again only when the picked project changed (another
+    // one, or its folder): coming back from a dialog keeps the entry shown,
+    // and what was typed in it and not saved yet.
     handler loadProjects
         projects = find p in Project order by p.name
         for p in projects
             if p.name == settings.lastProject
                 projectList.selected = p
-                showLedger(p)
+                if project.name != p.name or project.ledgerFolder != p.ledgerFolder
+                    showLedger(p)
 
     handler projectPicked
         showLedger(projectList.selected)
@@ -189,6 +196,26 @@ code Main
             return
         reviewPanel.visible = true
 
+    // Writes the entry as edited back into its file in the ledger, and keeps
+    // the tree and the review's references in step with it.
+    handler saveEntryClicked
+        if piece == ""
+            message info @pickAnEntry
+            return
+        write entryBody to ledger piece + ".md"
+        let rows: list<Entry> = []
+        for e in entries
+            if e.key == piece
+                e.body = entryBody
+                e.label = titleOf(entryBody, piece)
+                e.status = statusOf(entryBody)
+            rows = rows + [e]
+        entries = rows
+        related = linksOf(entryBody)
+        codePaths = sectionOf(entryBody, "Code") + "\n\n" + sectionOf(entryBody, "Tests")
+        oldReferences = sectionOf(entryBody, "Was")
+        message info @entrySaved(piece = piece)
+
     // Stores the review in the app's database and marks the entry in the tree.
     handler saveReviewClicked
         if piece == ""
@@ -242,3 +269,70 @@ code ProjectsView
     handler projectRemoved
         delete projectTable.selected
         projects = find x in Project order by x.name
+
+// The commands for AI agents, which the app serves itself (`maintenance mcp`):
+// the projects and their reviews, kept in the app's own database.
+command project list
+    help @projectListHelp
+    agent
+    let found = find p in Project order by p.name
+    print found columns name, ledgerFolder
+
+command project add(name: text, folder: text)
+    help @projectAddHelp
+    agent
+    let p = new Project
+    p.name = name
+    p.ledgerFolder = folder
+    save p
+    print @projectAdded(name = p.name)
+
+command review list(project: text)
+    help @reviewListHelp
+    agent
+    option all: bool, help @reviewListAllHelp
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let reviews = find r in Review where r.project == owners[1] and r.reviewed order by r.piece
+    if all
+        reviews = find r in Review where r.project == owners[1] order by r.piece
+    print reviews columns piece, reviewed, reviewer, reviewedOn
+
+command review show(project: text, piece: text)
+    help @reviewShowHelp
+    agent
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find r in Review where r.project == owners[1] and r.piece == piece
+    if count(kept) == 0
+        refuse @noReviewYet(piece = piece)
+    print kept columns piece, reviewed, reviewer, reviewedOn
+    print kept[1].notes
+
+// Reviewed when --reviewed is given, else not; the notes stay as they were when none are given.
+command review set(project: text, piece: text)
+    help @reviewSetHelp
+    agent
+    option reviewed: bool, help @reviewSetReviewedHelp
+    option reviewer: Reviewer, default Claude, help @reviewSetReviewerHelp
+    option notes: text, help @reviewSetNotesHelp
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find r in Review where r.project == owners[1] and r.piece == piece
+    let r = new Review
+    if count(kept) > 0
+        r = kept[1]
+    else
+        r.project = owners[1]
+        r.piece = piece
+    r.reviewed = reviewed
+    r.reviewer = reviewer
+    if notes != ""
+        r.notes = notes
+    if reviewed and r.reviewedOn == none
+        r.reviewedOn = today()
+    save r
+    print @reviewStored(piece = piece, project = project)

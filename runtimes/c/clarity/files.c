@@ -33,15 +33,30 @@ bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* prog
     return add(db, (ClarityStore){clarity_lasting(name), NULL, clarity_lasting(program), clarity_lasting(setting), clarity_lasting(fallback)}) && clarity_store_folder(db, name, &folder);
 }
 
+/// Holds `settings` as text in plain memory; NULL holds none.
+static void hold_text(ClarityDb* db, const cJSON* settings) {
+    free(db->held_settings);
+    db->held_settings = NULL;
+    if (!cJSON_IsObject(settings)) return;
+    char* text = cJSON_PrintUnformatted(settings);
+    if (text) db->held_settings = strdup(text);
+}
+
+/// The held settings, read into the scratch arena; NULL when none are held.
+static cJSON* held(const ClarityDb* db) {
+    return db->held_settings ? cJSON_Parse(db->held_settings) : NULL;
+}
+
 void clarity_hold_settings(ClarityDb* db, const cJSON* settings) {
-    cJSON_Delete(db->held_settings);
-    db->held_settings = cJSON_IsObject(settings) ? cJSON_Duplicate(settings, true) : NULL;
+    hold_text(db, settings);
 }
 
 void clarity_hold_setting(ClarityDb* db, const char* setting, const char* value) {
-    if (!db->held_settings) db->held_settings = cJSON_CreateObject();
-    cJSON_DeleteItemFromObjectCaseSensitive(db->held_settings, setting);
-    cJSON_AddStringToObject(db->held_settings, setting, value ? value : "");
+    cJSON* settings = held(db);
+    if (!cJSON_IsObject(settings)) settings = cJSON_CreateObject();
+    cJSON_DeleteItemFromObjectCaseSensitive(settings, setting);
+    cJSON_AddStringToObject(settings, setting, value ? value : "");
+    hold_text(db, settings);
 }
 
 bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
@@ -56,7 +71,7 @@ bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
         const char* file = clarity_settings_file(store->program);
         if (!file) return clarity_fail(CLARITY_STORAGE, "this system names no folder for application settings");
         cJSON* kept = clarity_read_settings(store->program);
-        cJSON* now = cJSON_CreateString(clarity_setting_now(db->held_settings, kept, store->setting));
+        cJSON* now = cJSON_CreateString(clarity_setting_now(held(db), kept, store->setting));
         *out = clarity_store_folder_in(clarity_settings_os(), clarity_parent(file), name, now, store->fallback);
         cJSON_Delete(now);
         cJSON_Delete(kept);

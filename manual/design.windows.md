@@ -44,7 +44,7 @@ A **view** is a piece of a window, designed on its own as a window is: its parts
 </Window>
 ```
 
-The view's parts, data and handlers join the window's, so the window's code sets what it shows. A slide-out shows a view the same way, with a content inside it. Views have their own section in the project tree; **+ New view** there starts a blank one.
+The view's parts, data and handlers join the window's, so the window's code sets what it shows. A slide-out shows a view the same way, with a content inside it. A view's parts end by the rows the window holds from the top of the content area that shows it; an edit cuts them to fit. Views have their own section in the project tree; **+ New view** there starts a blank one.
 
 ## New windows and dialogs
 
@@ -82,6 +82,8 @@ A window has three events of its own, listed under Events in The window and writ
 ## Size
 
 `width="320" height="460"` on the root is the size the window's desktop window opens at, in pixels: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. The desktop window takes the size of the window it shows first; a window opened in place keeps the size it has. Set it as Size under The window in the properties, or drag the window's right edge, bottom edge or bottom-right corner in the designer; the size shows while you drag. The designer shows the window at its size.
+
+The window's parts end by the last row its height holds. That is its height less 12 pixels of padding above and below and the frame's bars (a menu bar is 30 pixels, a toolbar 38, a ribbon 30 and 92 more while it is open, a footer 28, or a row and 8 when it holds parts), in rows of the project's row height with 8 pixels between them. A window of 756 pixels with a toolbar holds 15 rows of 36. A dialog counts only its own bars, as it never shows the app's frame. No edit leaves parts reaching further: the designer, and every agent working through Clarity's tools, cut a part to end by the last row, a slide-out to the rows the window holds, and a view's parts to the rows the window holds from its content area's top (a content area grows to fill the window). The window keeps its size. A part placed wholly below the last row stays where it is, and the checker warns that the window scrolls, with the height that would hold it; a long form may scroll on purpose.
 
 ## The grid
 

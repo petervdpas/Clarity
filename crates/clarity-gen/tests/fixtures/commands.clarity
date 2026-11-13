@@ -28,13 +28,16 @@ cli Shop
 
 command customer add(name: text, email: text)
     help "Adds a customer"
+    agent
     option vip: bool, help "A business customer"
     option limit: money, default 1000, min 0, max 5000, help "The credit limit"
     option since: date, help "Customer since"
+    option kind: Kind, default Person, help "A person or a business"
     let c = addCustomer(name)
     c.email = email
     c.creditLimit = limit
     c.since = since
+    c.kind = kind
     if vip
         c.kind = Business
     save c
@@ -42,6 +45,7 @@ command customer add(name: text, email: text)
 
 command customer list
     help "Lists the customers"
+    agent
     option all: bool, help "Also the ones that left"
     let found = find c in Customer where c.active == true order by c.name
     if all
@@ -50,6 +54,7 @@ command customer list
 
 command customer remove(name: text)
     help "Removes a customer"
+    agent
     let found = find c in Customer where c.name == name
     if count(found) == 0
         refuse "There is no customer {name}"

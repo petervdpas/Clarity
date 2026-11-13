@@ -149,3 +149,13 @@ TEST(a_store_keeps_its_files_in_a_folder_setting) {
     setenv("HOME", was.c_str(), 1);
 #endif
 }
+
+// Keeping settings leaves the keys the program does not keep, such as the
+// person's agent switches (conformance/settings.json, `merge`).
+TEST(keeping_settings_leaves_the_keys_the_program_does_not_keep) {
+    json cases = conformance("settings.json");
+    CHECK(!cases["merge"].empty());
+    for (const auto& c : cases["merge"]) {
+        CHECK(clarity::settings_merged(c["onFile"], c["kept"]) == c["written"]);
+    }
+}

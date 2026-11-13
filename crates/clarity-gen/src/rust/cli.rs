@@ -109,6 +109,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::signin::carries_auth(project) {
         features.push("auth");
     }
+    // Commands for agents (docs/ledger/app-mcp.md): `<program> mcp` through Clarity.AppMcp.
+    if crate::agent_tools::offers_agents(project) {
+        features.push("mcp");
+    }
     features.sort();
     features.dedup();
     let types = check::types(&project.files);
@@ -156,6 +160,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", super::engines_rs(project)));
     }
+    if crate::agent_tools::offers_agents(project) {
+        files.push(text("src/tools.json", crate::agent_tools::tool_list_file(project, settings)));
+    }
     files.push(text("src/main.rs", main_rs(project, settings, &databases)));
     files.push(text("README.md", readme(settings, &name)));
     // Built on the runtime in Clarity's repository when CLARITY_RUNTIME names it.
@@ -164,28 +171,26 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
-fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)]) -> String {
+/// What a Rust program runs its commands with, as code: their description
+/// (`listed`, for `fn program()`), the data each has (the settings) and how
+/// it starts and keeps them, the language a setting names, the dispatch by
+/// command number, and the secret settings' names. The command-line program
+/// and the desktop's commands for agents both use them.
+pub(crate) struct CommandParts {
+    pub listed: String,
+    pub data: String,
+    pub start: String,
+    pub keep: String,
+    pub language: String,
+    pub dispatch: String,
+    pub secrets_const: String,
+}
+
+pub(crate) fn command_parts(project: &Project) -> CommandParts {
     let commands = crate::commands::commands(project);
-    let databases = databases.iter().map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime())).collect::<Vec<_>>().join(", ");
-    let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
-    // A store whose folder is a folder setting follows the person's settings.
-    let program_name = crate::settings_program(settings);
-    let folder_stores: String = crate::folder_stores(project, settings)
-        .iter()
-        .map(|(name, setting, default)| format!("    if let Err(err) = db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n"))
-        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    if let Err(err) = db.add_file({}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n", super::file_source(f))))
-        .collect();
-    let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}.to_string()")).collect();
-    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     // When people sign in on the command line, a command signs in before it runs.
     let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
     let listed: String = commands.iter().map(|c| command(c, signs_in)).collect();
-    let signin = if signs_in {
-        "        db.signin_cli(&clarity_runtime::signin::CliSignin::from_args(&std::env::args().skip(1).collect::<Vec<String>>()), &mut || clarity_runtime::cli::read_password(&format!(\"{}: \", Text::keyed(\"cliPassword\", \"Password\").show())))?;\n"
-    } else {
-        ""
-    };
-    let add_signin = crate::signin::signin_plan(project).map(|plan| format!("    db.add_signin({});\n", super::signin_source(&plan))).unwrap_or_default();
     // The settings, which a command reads and sets as a window does.
     let kept = project.files.iter().find_map(|f| f.entities.iter().find(|e| e.settings).map(|e| (f, e)));
     let (data, start, keep, language) = match kept {
@@ -213,12 +218,11 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
             .iter()
             .chain(&c.options)
             .enumerate()
-            .map(|(at, p)| format!("typed::<{}>(Kind::{}, values[{at}].as_deref())", super::names::value_type(&p.ty), kind(p.kind)))
+            .map(|(at, p)| format!("typed::<{}>(Kind::{}, values[{at}].as_deref())", option_type(project, &p.ty), kind(p.kind)))
             .collect();
         let args: String = values.iter().map(|v| format!(", {v}")).collect();
         dispatch.push_str(&format!("            {i} => modules::{}::{}(&db, cli, &mut data{args}),\n", snake(&c.module), logic::command_function(c.decl)));
     }
-    let engines_mod = if crate::engines(project).is_empty() { "" } else { "mod engines;\n" };
     // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
     let secret_names = crate::secret_names(project);
     let secrets_const = if secret_names.is_empty() {
@@ -234,6 +238,117 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
             keep.replace("clarity_runtime::settings::keep(PROGRAM, &values)", "clarity_runtime::settings::keep_with(PROGRAM, &values, SECRETS)"),
         )
     };
+    CommandParts { listed, data, start, keep, language, dispatch, secrets_const }
+}
+
+/// The desktop program's commands for AI agents (docs/ledger/app-mcp.md), a
+/// module of its own (`src/commands.rs`): what the app offers, and a command
+/// line run on its databases as the command-line program runs it.
+pub(crate) fn agents_module(project: &Project, settings: &Settings) -> String {
+    let CommandParts { listed, data, start, keep, dispatch, secrets_const, .. } = command_parts(project);
+    // The desktop program has the secret settings' names already.
+    let secrets_use = if secrets_const.is_empty() { "" } else { "use crate::SECRETS;\n" };
+    format!(
+        r#"{HEADER}{ALLOW}
+//! The commands AI agents call while the app runs (docs/ledger/app-mcp.md):
+//! each runs as the command line runs it, on the screen's thread, once
+//! Clarity.UI asked the person to allow it.
+
+use clarity_runtime::*;
+use clarity_runtime::cli::{{Command, Kind, Param, Program, typed}};
+use clarity_runtime::program::{{AgentRan, AgentsOffered}};
+use clarity_runtime::ui::Text;
+
+use crate::PROGRAM;
+use crate::modules;
+{secrets_use}
+/// The commands agents may call, as the MCP service lists them.
+const TOOLS: &str = include_str!("tools.json");
+
+{data}
+/// The commands, as the command line reads them.
+fn program() -> Program {{
+    Program {{
+        name: {name:?}.to_string(),
+        help: {help},
+        commands: vec![
+{listed}        ],
+        agents: true,
+    }}
+}}
+
+/// What the app offers agents.
+pub fn offered() -> AgentsOffered {{
+    AgentsOffered {{ tools: TOOLS.to_string(), app: {app:?}.to_string(), program: PROGRAM.to_string(), version: {version:?}.to_string() }}
+}}
+
+/// What `<program> mcp` serves.
+fn agents() -> clarity_runtime::agents::Agents<'static> {{
+    clarity_runtime::agents::Agents {{ tools: TOOLS, app: {app:?}, program: PROGRAM, version: {version:?} }}
+}}
+
+/// Runs command `command` with `values` on the app's databases, as the command line does.
+fn run_command(db: &Db, cli: &mut clarity_runtime::cli::Session<'_>, command: usize, values: Vec<Option<String>>) -> Result<i32> {{
+{start}    let code = match command {{
+{dispatch}        _ => Ok(2),
+    }};
+{keep}    code
+}}
+
+/// Runs the command line `line` for an agent on the app's databases.
+pub fn run(db: &Db, line: &[String], ask: &mut dyn FnMut(&str, &str) -> Option<String>) -> AgentRan {{
+    clarity_runtime::cli::run_line(&program(), line, ask, |cli, command, values| run_command(db, cli, command, values))
+}}
+
+/// `<program> mcp`: the commands for agents without a window, forwarded to
+/// the running app when one answers, else served as the closed app.
+pub fn mcp(db: &Db) -> std::process::ExitCode {{
+    clarity_runtime::agents::mcp(&program(), &agents(), |cli, command, values| run_command(db, cli, command, values))
+}}
+"#,
+        name = crate::commands::program_name(settings),
+        help = said(&crate::commands::program_help(project)),
+        app = clarity_project::title(settings),
+        version = settings.version.as_deref().unwrap_or(""),
+        dispatch = dispatch.lines().map(|l| l.strip_prefix("    ").unwrap_or(l).to_string() + "\n").collect::<String>(),
+    )
+}
+
+fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)]) -> String {
+    let databases = databases.iter().map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime())).collect::<Vec<_>>().join(", ");
+    let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("    if let Err(err) = db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n"))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    if let Err(err) = db.add_file({}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n", super::file_source(f))))
+        .collect();
+    let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}.to_string()")).collect();
+    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
+    // When people sign in on the command line, a command signs in before it runs.
+    let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
+    let signin = if signs_in {
+        "        db.signin_cli(&clarity_runtime::signin::CliSignin::from_args(&std::env::args().skip(1).collect::<Vec<String>>()), &mut || clarity_runtime::cli::read_password(&format!(\"{}: \", Text::keyed(\"cliPassword\", \"Password\").show())))?;\n"
+    } else {
+        ""
+    };
+    let add_signin = crate::signin::signin_plan(project).map(|plan| format!("    db.add_signin({});\n", super::signin_source(&plan))).unwrap_or_default();
+    let CommandParts { listed, data, start, keep, language, dispatch, secrets_const } = command_parts(project);
+    let engines_mod = if crate::engines(project).is_empty() { "" } else { "mod engines;\n" };
+    // Commands for agents: `mcp` serves them (docs/ledger/app-mcp.md).
+    let (tools_const, run_program) = if crate::agent_tools::offers_agents(project) {
+        (
+            "/// The commands agents may call, as the MCP service lists them.\nconst TOOLS: &str = include_str!(\"tools.json\");\n".to_string(),
+            format!(
+                "clarity_runtime::agents::run_program(&program(), &clarity_runtime::agents::Agents {{ tools: TOOLS, app: {:?}, program: PROGRAM, version: {:?} }}, ",
+                clarity_project::title(settings),
+                settings.version.as_deref().unwrap_or("")
+            ),
+        )
+    } else {
+        (String::new(), "clarity_runtime::cli::run_program(&program(), ".to_string())
+    };
     format!(
         r#"{HEADER}{ALLOW}
 mod schema;
@@ -248,7 +363,7 @@ const TEXTS: &str = include_str!("texts.json");
 /// The name the desktop program has, which names the folder the person's
 /// settings are kept in: both programs share them.
 const PROGRAM: &str = {program:?};
-{secrets_const}
+{secrets_const}{tools_const}
 /// The database of each data source: its kind, and its file or connection
 /// (`env:NAME` reads it from that environment variable when the program starts).
 const DATABASES: &[(&str, Dialect, &str)] = &[{databases}];
@@ -263,6 +378,7 @@ fn program() -> Program {{
         help: {help},
         commands: vec![
 {listed}        ],
+        agents: {agents},
     }}
 }}
 
@@ -295,7 +411,7 @@ fn main() -> std::process::ExitCode {{
             return std::process::ExitCode::from(1);
         }}
     }}
-{folder_stores}{add_signin}    let code = clarity_runtime::cli::run_program(&program(), |cli, command, values| {{
+{folder_stores}{add_signin}    let code = {run_program}|cli, command, values| {{
 {signin}        match command {{
 {dispatch}            _ => Ok(2),
         }}
@@ -304,10 +420,22 @@ fn main() -> std::process::ExitCode {{
 }}
 "#,
         program = crate::settings_program(settings),
+        agents = crate::agent_tools::offers_agents(project),
         name = crate::commands::program_name(settings),
         help = said(&crate::commands::program_help(project)),
         languages = languages.join(", "),
     )
+}
+
+/// The type of an argument or option in main.rs: an enum by its module's
+/// path, as main.rs also sees the runtime's own names (`cli::Kind`).
+fn option_type(project: &Project, ty: &check::TypeInfo) -> String {
+    if let check::TypeInfo::Enum(name) = ty
+        && let Some(module) = project.files.iter().find(|f| f.enums.iter().any(|e| &e.name.name == name)).and_then(|f| f.module.as_ref())
+    {
+        return format!("modules::{}::{}", snake(&module.name), super::names::value_type(ty));
+    }
+    super::names::value_type(ty)
 }
 
 fn readme(settings: &Settings, name: &str) -> String {

@@ -32,7 +32,13 @@ const char* clarity_setting_now(const cJSON* held, const cJSON* kept, const char
 /// The settings `program` kept, as a new object the caller deletes; empty
 /// when it kept none, or they cannot be read.
 cJSON* clarity_read_settings(const char* program);
-/// Keeps `values` as the settings of `program`, written whole and then put in place.
+/// What keeping `kept` over the file's values `on_file` writes, as a new
+/// object the caller deletes: each kept value in place of the file's, the
+/// keys the program does not keep (the person's agent switches) as they
+/// were (conformance/settings.json, `merge`).
+cJSON* clarity_settings_merged(const cJSON* on_file, const cJSON* kept);
+/// Keeps `values` as the settings of `program`, merged into the file's
+/// (clarity_settings_merged), written whole and then put in place.
 bool clarity_keep_settings(const char* program, const cJSON* values);
 
 /// The system's protected store of secret settings (DESIGN 5.27): `get`

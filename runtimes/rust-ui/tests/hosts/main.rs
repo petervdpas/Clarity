@@ -10,6 +10,7 @@ mod core_frame_shared;
 #[path = "../common/core_windows_fake.rs"]
 mod core_windows_fake;
 
+mod agents;
 mod browser_host;
 mod browser_page;
 mod desktop_check_fix_hosts;

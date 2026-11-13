@@ -126,6 +126,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::carries_formats(project, settings) {
         features.push("formats");
     }
+    // `<program> mcp` of the desktop program, through Clarity.AppMcp (docs/ledger/app-mcp.md).
+    if clarity && crate::agent_tools::offers_agents(project) {
+        features.push("mcp");
+    }
     // Secret settings (DESIGN 5.27): the system's protected store.
     if !project.secret_settings().is_empty() {
         features.push("secrets");
@@ -170,13 +174,21 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.extend(crate::web_browser::site(project, settings));
     }
 
+    // A desktop program whose commands agents may call runs them itself, with Clarity.UI asking the person.
+    let agents = clarity && crate::agent_tools::offers_agents(project);
+    if agents {
+        files.push(text("src/commands.rs", cli::agents_module(project, settings)));
+        files.push(text("src/tools.json", crate::agent_tools::tool_list_file(project, settings)));
+    }
     let mut modules = Vec::new();
     let mut owners: Vec<Owner> = Vec::new();
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let name = snake(&module.name);
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
-        let mut code = format!("{HEADER}\nuse clarity_runtime::sql;\nuse clarity_runtime::ui::*;\nuse clarity_runtime::*;\n");
+        // The commands agents call while the app runs are in the desktop program too (docs/ledger/app-mcp.md).
+        let session = if agents { "use clarity_runtime::cli::Session;\n" } else { "" };
+        let mut code = format!("{HEADER}\n{session}use clarity_runtime::sql;\nuse clarity_runtime::ui::*;\nuse clarity_runtime::*;\n");
         for used in &file.uses {
             code.push_str(&format!("use super::{}::*;\n", snake(&used.name)));
         }
@@ -185,6 +197,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         match logic::emit(project, file, &file_types) {
             Ok(functions) => code.push_str(&functions),
             Err(mut problems) => errors.append(&mut problems),
+        }
+        if agents {
+            match logic::emit_commands(project, file, &file_types) {
+                Ok(commands) => code.push_str(&commands),
+                Err(mut problems) => errors.append(&mut problems),
+            }
         }
         match logic::emit_windows(project, file, &file_types, &format!("modules::{name}")) {
             Ok((windows, mut found)) => {
@@ -238,8 +256,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
     files.push(text("src/facts.rs", facts_rs(project)));
     let main_text = main_text
-        .replacen("mod modules;\n", "mod modules;\nmod facts;\n", 1)
-        .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}", screen_engines_static(project), screen_engine_fn(project)), 1);
+        .replacen("mod modules;\n", if agents { "mod modules;\nmod facts;\nmod commands;\n// The commands' data, where the command functions name it.\nuse commands::CommandData;\n" } else { "mod modules;\nmod facts;\n" }, 1)
+        .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}{}", screen_engines_static(project), screen_engine_fn(project), if agents { AGENT_FNS } else { "" }), 1);
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
     files.extend(local_patch_file()?);
@@ -826,6 +844,12 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "    engines::close_window(instance);\n",
         )
     };
+    // `<program> mcp`: the commands for agents without a window (docs/ledger/app-mcp.md).
+    let agents_mcp = if clarity_run.is_some() && crate::agent_tools::offers_agents(project) {
+        "    // `mcp` as the only word: agents call the commands without a window (docs/ledger/app-mcp.md).\n    if std::env::args().skip(1).eq([\"mcp\"]) {\n        return commands::mcp(&db);\n    }\n"
+    } else {
+        ""
+    };
     // On Clarity.UI main answers what the window's host ends with.
     let main_returns = if clarity_run.is_some() { " -> std::process::ExitCode" } else { "" };
     // Custom parts (DESIGN 6.5), which Clarity.UI draws.
@@ -1388,10 +1412,48 @@ impl Program for App {{
 fn main(){main_returns} {{
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
-{open_db}{app_new}{start}}}
+{open_db}{agents_mcp}{app_new}{start}}}
 {files_const}"#
     )
 }
+
+/// The desktop program's answers to Clarity.UI about AI agents (docs/ledger/app-mcp.md).
+const AGENT_FNS: &str = "    fn agents(&self) -> Option<clarity_runtime::program::AgentsOffered> {
+        Some(commands::offered())
+    }
+
+    fn agent_call(&self, line: &[String], ask: &mut dyn FnMut(&str, &str) -> Option<String>) -> clarity_runtime::program::AgentRan {
+        // One database step: all of the call's changes, or none when it is refused; Undo takes the step back.
+        let ran = locked(self, |db| {
+            let before = db.last_step();
+            let mut refused = None;
+            let made = db.step(|| {
+                let ran = commands::run(db, line, ask);
+                if ran.refused {
+                    refused = Some(ran);
+                    return Err(clarity_runtime::Error::Invalid(String::new()));
+                }
+                Ok(ran)
+            });
+            match (made, refused) {
+                (_, Some(ran)) => Ok(ran),
+                (Ok(mut ran), None) => {
+                    if db.last_step() != before {
+                        ran.step = db.last_step();
+                    }
+                    Ok(ran)
+                }
+                (Err(err), None) => Err(err),
+            }
+        });
+        ran.unwrap_or_else(|text| clarity_runtime::program::AgentRan { text: text.show(), refused: true, step: 0 })
+    }
+
+    fn agent_undo(&self, step: u64) -> Answer<()> {
+        locked(self, |db| db.replay_steps(&[step], true).map(|_| ()))
+    }
+
+";
 
 /// The Cargo package (and program) name of a project.
 pub fn crate_name(settings: &Settings) -> String {

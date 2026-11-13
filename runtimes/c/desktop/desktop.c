@@ -78,7 +78,76 @@ static char* served(ClarityDesktopProgram* p, const char* command, cJSON* args) 
     return answer ? printed(answer) : NULL;
 }
 
+/// Asks the AI agent whose command runs now, through the library.
+static const char* agent_ask(void* context, const char* question, const char* form) {
+    (void)context;
+    char* out = NULL;
+    if (clarity_agent_ask(question, strlen(question), form, strlen(form), &out) != CLARITY_OK || !out) return NULL;
+    const char* answer = clarity_format("%s", out);
+    clarity_string_free(out);
+    return answer;
+}
+
+/// A call of an agent's, run inside one database step.
+typedef struct {
+    ClarityDesktopProgram* p;
+    size_t count;
+    const char** words;
+    const char* text;
+    bool refused;
+} AgentStep;
+
+/// Runs the call; false (taking its changes back) when it is refused.
+static bool agent_step(void* context) {
+    AgentStep* step = context;
+    ClarityDesktopProgram* p = step->p;
+    step->refused = clarity_cli_run_line(p->options->agent_program(), step->count, step->words, agent_ask, NULL, p->options->agent_run, p->options->agent_context, &step->text);
+    return !step->refused;
+}
+
+/// The library's commands of AI agents (docs/ledger/app-mcp.md): what the app offers, a call run, and its Undo.
+static char* agent_answer(ClarityDesktopProgram* p, const char* command, const char* args, size_t args_len) {
+    if (!p->options->agents) return NULL;
+    if (strcmp(command, "agents") == 0) return copied(clarity_format("{\"value\":%s}", p->options->agents));
+    if (strcmp(command, "agent_undo") == 0) {
+        cJSON* asked = cJSON_ParseWithLength(args ? args : "{}", args ? args_len : 2);
+        const cJSON* number = cJSON_GetObjectItemCaseSensitive(asked, "step");
+        int64_t id = cJSON_IsNumber(number) ? (int64_t)number->valuedouble : 0;
+        cJSON_Delete(asked);
+        bool done = false;
+        char* answer = clarity_replay_steps(p->options->service.db, &id, 1, true, &done) ? copied("{\"value\":null}") : copied(clarity_format("{\"error\":%s}", cJSON_PrintUnformatted(cJSON_CreateString(clarity_error()->message))));
+        command_done();
+        return answer;
+    }
+    cJSON* given = cJSON_ParseWithLength(args ? args : "{}", args ? args_len : 2);
+    const cJSON* line = cJSON_GetObjectItemCaseSensitive(given, "line");
+    size_t count = (size_t)cJSON_GetArraySize(line);
+    const char** words = CLARITY_NEW(const char*, count + 1);
+    for (size_t i = 0; i < count; ++i) words[i] = clarity_format("%s", cJSON_GetArrayItem(line, (int)i)->valuestring);
+    cJSON_Delete(given);
+    // One database step: all of the call's changes, or none when it is refused; Undo takes the step back.
+    AgentStep step = {p, count, words, "", false};
+    ClarityDb* db = p->options->service.db;
+    int64_t before = clarity_last_step(db);
+    bool kept = clarity_step(db, agent_step, &step);
+    int64_t made = kept && !step.refused && clarity_last_step(db) != before ? clarity_last_step(db) : 0;
+    if (!kept && !step.refused) {
+        step.text = clarity_error()->message;
+        step.refused = true;
+    }
+    cJSON* out = cJSON_CreateObject();
+    cJSON* value = cJSON_AddObjectToObject(out, "value");
+    cJSON_AddStringToObject(value, "text", step.text);
+    cJSON_AddBoolToObject(value, "refused", step.refused);
+    cJSON_AddNumberToObject(value, "step", (double)made);
+    char* answer = printed(out);
+    cJSON_Delete(out);
+    command_done();
+    return answer;
+}
+
 char* clarity_desktop_answer(ClarityDesktopProgram* p, const char* command, const char* args, size_t args_len) {
+    if (strcmp(command, "agents") == 0 || strcmp(command, "agent_call") == 0 || strcmp(command, "agent_undo") == 0) return agent_answer(p, command, args, args_len);
     if (clarity_watches_command(command)) {
         cJSON* given = cJSON_ParseWithLength(args ? args : "{}", args ? args_len : 2);
         uint64_t id = id_of(given);

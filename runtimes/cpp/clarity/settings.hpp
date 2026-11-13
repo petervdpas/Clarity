@@ -32,7 +32,12 @@ nlohmann::json read_settings(const std::string& program);
 /// running handler set (`held`), else what was kept, else nothing
 /// (conformance/settings.json, `now`).
 std::string setting_now(const nlohmann::json& held, const nlohmann::json& kept, const std::string& setting);
-/// Keeps `values` as the settings of `program`, written whole and then put in place.
+/// What keeping `kept` over the file's values `on_file` writes: each kept
+/// value in place of the file's, the keys the program does not keep (the
+/// person's agent switches) as they were (conformance/settings.json, `merge`).
+nlohmann::json settings_merged(const nlohmann::json& on_file, const nlohmann::json& kept);
+/// Keeps `values` as the settings of `program`, merged into the file's
+/// (settings_merged), written whole and then put in place.
 void keep_settings(const std::string& program, const nlohmann::json& values);
 
 /// The system's protected store of secret settings (DESIGN 5.27): `get`

@@ -1,0 +1,10 @@
+module themes
+
+// The two looks the person picks between in Preferences: dark to start with, and light.
+theme Dark
+    title @darkTheme
+    mode dark
+
+theme Light
+    title @lightTheme
+    mode light

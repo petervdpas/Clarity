@@ -566,3 +566,30 @@ fn a_memo_toolbox_comes_at_the_caret_and_goes_after_its_action() {
     assert_eq!((0, 0), text_box(&screen, "manuscript").editor().selection());
     assert!(panel_place(&screen).is_some(), "a right-click calls it up");
 }
+
+/// A memo longer than its box has a scroll bar in its right margin: the
+/// thumb drags the text, and a press beside the thumb moves a box's height.
+#[test]
+fn a_long_memo_has_a_scroll_bar_that_drags_and_pages() {
+    let host = TestHost::new();
+    let lines: Vec<String> = (1..=120).map(|i| format!("line {i}")).collect();
+    host.set("notes", json!(lines.join("\n")));
+    let mut screen = window_of(r#"<Memo name="notesBox" at="1,1" span="6" rows="4" bind="notes" />"#, host);
+    Shot::of(&mut screen, 600, 300, 1.0);
+    let id = part_named(&screen, "notesBox");
+    let memo = |screen: &Screen| screen.element(id).and_then(|e| e.as_any().downcast_ref::<TextBoxPart>()).map(|m| (m.editor().scroll_y(), m.editor().thumb(), m.node().bounds)).expect("the memo");
+    let (scroll, thumb, b) = memo(&screen);
+    assert_eq!(scroll, 0.0);
+    let thumb = thumb.expect("a long memo shows its bar");
+    assert!(thumb.right() <= b.right() && thumb.x > b.right() - 12.0, "{thumb} at the right of {b}");
+    let x = thumb.x + thumb.width / 2.0;
+    screen.pointer_pressed(x, thumb.y + 2.0, PointerButton::Left, 1);
+    screen.pointer_moved(x, thumb.y + 40.0);
+    screen.pointer_released(x, thumb.y + 40.0, PointerButton::Left);
+    let (dragged, after, _) = memo(&screen);
+    assert!(dragged > 0.0, "dragging the thumb scrolls the text");
+    let after = after.unwrap();
+    screen.pointer_pressed(x, after.y - 2.0, PointerButton::Left, 1);
+    screen.pointer_released(x, after.y - 2.0, PointerButton::Left);
+    assert!(memo(&screen).0 < dragged, "a press above the thumb goes up a page");
+}

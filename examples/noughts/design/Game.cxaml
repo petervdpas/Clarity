@@ -3,8 +3,8 @@
   <Content name="main" at="1,1" span="12" rows="10">
     <View name="GameView" />
   </Content>
-  <Slideout name="help" at="1,1" span="12" rows="12" caption="@helpHeadingCaption" resizable="true" side="left" slideWidth="320" pinnable="true" max="480" min="240">
-    <Content name="helpContent" at="1,1" span="12" rows="12">
+  <Slideout name="help" at="1,1" span="12" rows="10" caption="@helpHeadingCaption" resizable="true" side="left" slideWidth="320" pinnable="true" max="480" min="240">
+    <Content name="helpContent" at="1,1" span="12" rows="10">
       <View name="HowToPlay" />
     </Content>
   </Slideout>

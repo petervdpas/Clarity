@@ -7,6 +7,7 @@
   import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
   import { projectEngines, engineNote } from "./engines";
   import { commandLine } from "./commandLine";
+  import { offersAgents } from "./agentsPart";
   import { findApp } from "@clarity/ui/screen/frame.ts";
   import { languageName } from "@clarity/ui/screen/translate.ts";
   import { resourceKind, resourceUses } from "@clarity/ui/screen/resources.ts";
@@ -157,6 +158,15 @@
     </button>
   {:else if full}
     <button class="row add" class:current={selected?.kind === "signin"} onclick={() => onselect({ kind: "signin", name: "" })} title="Let people sign in to the program">+ Sign-in</button>
+  {/if}
+  <!-- What the app offers AI agents: its commands for agents, the guidance, what agents may do while it is closed. -->
+  {#if offersAgents(preview.project.files, preview.project.guidance)}
+    <button class="row top" class:current={selected?.kind === "agents"} onclick={() => onselect({ kind: "agents", name: "" })} title="Agents: what the app offers AI agents through its MCP service">
+      <span class="badge">ai</span>
+      Agents
+    </button>
+  {:else if full}
+    <button class="row add" class:current={selected?.kind === "agents"} onclick={() => onselect({ kind: "agents", name: "" })} title="Offer the app to AI agents">+ Agents</button>
   {/if}
 
   <details open>

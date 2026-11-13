@@ -22,4 +22,9 @@ params: Array<Param>, help: Expr | null, options: Array<CommandOption>,
 /**
  * `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
  */
-allow: Expr | null, body: Array<Stmt>, span: Span, };
+allow: Expr | null, 
+/**
+ * `agent`: offered to AI agents as a tool of the app's MCP service
+ * (docs/ledger/app-mcp.md); off without it.
+ */
+agent: boolean, body: Array<Stmt>, span: Span, };

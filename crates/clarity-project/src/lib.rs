@@ -206,6 +206,58 @@ pub struct DataSource {
     pub file: Option<FileFormat>,
 }
 
+/// A window holds the rows its height leaves under its bars
+/// (conformance/window-room.json, `clarity_spec::layout::rows_held`): parts
+/// past its last row make it scroll, which is said (a long form may), and a
+/// slide-out, which lies over it from the edge, is no taller, at the
+/// project's row height (`row height`).
+fn slideout_problems(settings: &Settings, project: &clarity_spec::Project) -> Vec<clarity_spec::Diagnostic> {
+    use clarity_spec::layout;
+    let row = row_height(settings);
+    let app = project.files.iter().flat_map(|f| &f.apps).next().map(|a| &a.frame);
+    let mut found = Vec::new();
+    for f in &project.files {
+        for page in f.pages.iter().filter(|p| matches!(p.kind, clarity_spec::model::PageKind::Window | clarity_spec::model::PageKind::Dialog)) {
+            let height = page.size.as_ref().map_or(layout::WINDOW_HEIGHT, |s| s.height);
+            // A dialog shows its own bars only, never the app's frame.
+            let bars = layout::frame_bars(if page.kind == clarity_spec::model::PageKind::Dialog { None } else { app }, &page.frame);
+            let holds = layout::rows_held(height, row, &bars);
+            let kind = if page.kind == clarity_spec::model::PageKind::Dialog { "dialog" } else { "window" };
+            let slides = |w: &&clarity_spec::model::Widget| w.props.kind == clarity_spec::widgets::WidgetKind::Slideout && w.props.beside.is_none();
+            let placed: Vec<&clarity_spec::model::Widget> = page.widgets.iter().filter(|w| !slides(w) && !clarity_spec::widgets::off_grid(w.props.kind)).collect();
+            let reach = placed.iter().map(|w| w.props.row + w.props.height.max(1) - 1).max().unwrap_or(0);
+            if reach > holds {
+                let at = placed.iter().find(|w| w.props.row + w.props.height.max(1) - 1 == reach).map_or(page.name.span, |w| w.span);
+                let needs = layout::height_for_rows(reach, row, &bars);
+                // Scrolling is allowed (a long form), so it is said, not refused.
+                found.push(clarity_spec::Diagnostic::warning(format!("{kind} {} holds {holds} rows at {height} pixels high, and its parts reach row {reach}, so it scrolls: end them by row {holds}, or make it at least {needs} pixels high", page.name.name), at).in_file(&f.path));
+            }
+            // A view shown in a content area has the rows from the area's top to the window's last (clarity_spec::fit).
+            for (shown, rows) in clarity_spec::fit::shown_views(page, holds) {
+                let Some(view) = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == shown) else { continue };
+                let reaches = view.widgets.iter().filter(|w| !clarity_spec::widgets::off_grid(w.props.kind)).map(|w| w.props.row + w.props.height.max(1) - 1).max().unwrap_or(0);
+                if reaches > rows {
+                    let at = view.widgets.iter().find(|w| w.props.row + w.props.height.max(1) - 1 == reaches).map_or(view.name.span, |w| w.span);
+                    let file = project.files.iter().find(|f| f.pages.iter().any(|p| std::ptr::eq(p, view))).map_or(f.path.as_str(), |f| f.path.as_str());
+                    found.push(clarity_spec::Diagnostic::warning(format!("view {shown} reaches row {reaches}, more than the {rows} rows {kind} {} holds for it, so it scrolls: end its parts by row {rows}", page.name.name), at).in_file(file));
+                }
+            }
+            let room = holds.max(reach);
+            for slide in page.widgets.iter().filter(slides) {
+                let rows = slide.props.height.max(1);
+                if rows > room {
+                    let name = slide.props.name.as_deref().unwrap_or("");
+                    found.push(clarity_spec::Diagnostic::error(format!("slide-out {name} is {rows} rows high, more than {kind} {} holds ({room}): give it at most {room} rows", page.name.name), slide.span).in_file(&f.path));
+                }
+            }
+        }
+    }
+    found
+}
+
+/// How many AI agents a running app serves at once without `agents at most`.
+pub const AGENTS_AT_MOST: u32 = 3;
+
 /// The settings of a project, as the Project tab shows them. The first data
 /// source is the default one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -266,6 +318,18 @@ pub struct Settings {
     /// rather than compiled (DESIGN 5.12): `engines interpreted`.
     #[serde(default)]
     pub engines_interpreted: bool,
+    /// Whether AI agents may read while the app is closed, until the person
+    /// sets it in the app (docs/ledger/app-mcp.md): `agents while closed read`.
+    #[serde(default)]
+    pub agents_read_closed: bool,
+    /// Whether AI agents may change the app's data while it is closed:
+    /// `agents while closed change`.
+    #[serde(default)]
+    pub agents_change_closed: bool,
+    /// How many AI agents the running app serves at once: `agents at most 2`;
+    /// none for AGENTS_AT_MOST.
+    #[serde(default)]
+    pub agents_at_most: Option<u32>,
     /// The port a web application listens on (DESIGN 7.3): `port 8080`;
     /// none for DEFAULT_PORT.
     #[serde(default)]
@@ -428,6 +492,9 @@ pub fn starter(name: &str, module: &str) -> Settings {
         keys_editable: false,
         signin: None,
         engines_interpreted: false,
+        agents_read_closed: false,
+        agents_change_closed: false,
+        agents_at_most: None,
         port: None,
         row_height: None,
     }
@@ -741,6 +808,8 @@ pub struct Catalog {
     pub formats: Vec<FormatChoice>,
     /// The sign-in strategies of Clarity.Auth's catalog, for the signin block.
     pub strategies: Vec<StrategyChoice>,
+    /// How many AI agents a running app serves at once without `agents at most`.
+    pub agents_at_most: u32,
 }
 
 /// A sign-in strategy as Settings offers it under `signin`.
@@ -931,6 +1000,7 @@ pub fn catalog() -> Catalog {
     };
     Catalog {
         starter: starter("", "").stack,
+        agents_at_most: AGENTS_AT_MOST,
         backends: BACKENDS.into_iter().map(backend_info).collect(),
         uis: UIS.into_iter().map(|id| Choice { id, label: ui_label(id) }).collect(),
         targets: vec![
@@ -1192,6 +1262,7 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
     {
         found.push(Diagnostic::error(format!("{name} clicks to keys, the keys window, which opens when the project file says keys editable"), clarity_spec::Span::default()).in_file(file));
     }
+    found.extend(slideout_problems(settings, project));
     let block = project.files.iter().find_map(|f| f.clis.first().map(|c| (f, c)));
     match block {
         None if cli => found.push(
@@ -1209,7 +1280,8 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
     }
     if !cli {
         for f in &project.files {
-            for command in &f.commands {
+            // A command for agents is the desktop program's too (`<app> mcp`); the others need the command line.
+            for command in f.commands.iter().filter(|c| !c.agent) {
                 found.push(
                     Diagnostic::error(
                         format!("command {} is for the command-line program, which needs the cli target: {}", command.line(), with_cli(&settings.stack)),

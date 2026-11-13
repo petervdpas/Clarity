@@ -63,6 +63,16 @@ public class CliCaseTests
     }
 
     [Fact]
+    public void A_program_with_commands_for_agents_lists_mcp_in_its_help()
+    {
+        var cases = Cases();
+        var program = ProgramOf(cases.GetProperty("program")) with { Agents = true };
+        Assert.NotEmpty(cases.GetProperty("agents").EnumerateArray());
+        foreach (var c in cases.GetProperty("agents").EnumerateArray())
+            Assert.Equal(Text(c, "help"), Assert.IsType<CliParsed.Help>(Cli.Parse(program, Texts(c.GetProperty("args")), English)).Text);
+    }
+
+    [Fact]
     public void CommandLinesAreReadAsEveryRuntimeReadsThem()
     {
         var cases = Cases();

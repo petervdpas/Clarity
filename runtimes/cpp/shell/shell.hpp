@@ -110,6 +110,11 @@ struct Options {
     /// Clarity.UI's engine commands (engine_open, engine_hears, engine_frame,
     /// engine_close), from several threads; none for no engine.
     std::function<std::optional<nlohmann::json>(const std::string& command, const nlohmann::json& args)> screen_engines;
+    /// The commands AI agents may call while the app runs (docs/ledger/app-mcp.md):
+    /// what the app offers, as JSON {"tools","app","program","version"}; null for none.
+    nlohmann::json agents;
+    /// Runs a command line for an agent, its questions going to `ask` (form as JSON): what it printed, and whether refused.
+    std::function<std::pair<std::string, bool>(const std::vector<std::string>& line, const std::function<std::optional<std::string>(const std::string&, const std::string&)>& ask)> agent_call;
 };
 
 /// Opens a link in the person's browser; whether it could.

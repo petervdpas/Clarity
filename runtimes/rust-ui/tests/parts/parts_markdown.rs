@@ -230,6 +230,30 @@ fn a_long_paragraph_wraps_to_the_width_and_a_long_text_scrolls() {
     keep(&mut shot, "markdown-scrolled.png");
 }
 
+/// Its bar is a scroll bar: the thumb drags the text, and a press beside the
+/// thumb moves it a place's height that way.
+#[test]
+fn its_scroll_bar_drags_and_pages_with_the_pointer() {
+    let words = vec!["squares"; 400].join(" ");
+    let (mut screen, _) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!(words)), 400, 300);
+    let b = part(&screen).node().bounds;
+    let x = b.right() - BAR_ROOM / 2.0;
+    let thumb = part(&screen).thumb();
+    assert!(thumb.y >= b.y && thumb.height < b.height, "{thumb}");
+    // Dragged halfway down the room the thumb can travel.
+    let travel = b.height - thumb.height;
+    screen.pointer_pressed(x, thumb.y + 2.0, PointerButton::Left, 1);
+    screen.pointer_moved(x, thumb.y + 2.0 + travel / 2.0);
+    screen.pointer_released(x, thumb.y + 2.0 + travel / 2.0, PointerButton::Left);
+    let half = part(&screen).max_scroll_y() / 2.0;
+    assert!((part(&screen).scroll_y() - half).abs() < 1.0, "{} vs {half}", part(&screen).scroll_y());
+    // A press above the thumb goes up a page.
+    let before = part(&screen).scroll_y();
+    screen.pointer_pressed(x, b.y + 1.0, PointerButton::Left, 1);
+    screen.pointer_released(x, b.y + 1.0, PointerButton::Left);
+    assert!((part(&screen).scroll_y() - (before - b.height).max(0.0)).abs() < 0.5, "{}", part(&screen).scroll_y());
+}
+
 #[test]
 fn a_link_opens_through_the_host_and_plain_text_does_not() {
     let (mut screen, host) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!("See [the site](https://example.com) now.")), 800, 400);

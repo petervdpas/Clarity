@@ -101,3 +101,12 @@ fn a_start_takes_back_only_the_kept_values_that_still_fit() {
         assert_eq!(Value::Object(taken), c["takes"], "{c}");
     }
 }
+
+#[test]
+fn keeping_settings_leaves_the_keys_the_program_does_not_keep() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/settings.json")).unwrap();
+    for c in cases["merge"].as_array().unwrap() {
+        let merged = clarity_runtime::settings::merged(c["onFile"].as_object().unwrap().clone(), c["kept"].as_object().unwrap());
+        assert_eq!(Value::Object(merged), c["written"], "{}", c["what"]);
+    }
+}

@@ -12,6 +12,12 @@ An app to review development ledgers: a project's ledger is a folder with an ind
 - **Save** stores the review in the app's own database (entity `Review`, one per project and entry) and marks the entry in the tree. Nothing is written into the ledger.
 - **Reload** reads the ledger again.
 
+## AI agents
+
+The app offers its commands to AI agents: `project list`, `project add`, `review list`, `review show` and `review set`, each called by its words joined with hyphens (`review-set`). The program serves them itself when started as `maintenance mcp`, with the app's guidance (`agent/guidance.md`) as what agents are told first; there is no separate command-line program. While the app is open, each call goes to it: the person allows or refuses it, and the window shows the change with Undo. While the app is closed, **Preferences** decides: "AI agents may read while the app is closed" and "AI agents may change while the app is closed".
+
+    $ claude mcp add maintenance -- /path/to/maintenance mcp
+
 ## Stack
 
 Rust, desktop. An example builds only for the stack its project file names.
@@ -25,3 +31,4 @@ Rust, desktop. An example builds only for the stack its project file names.
 - A markdown part bound to a text of the window, and a memo in Markdown mode.
 - A slide-out at the window's edge, opened from a toolbar button by code (`reviewPanel.visible = true`).
 - A window's own toolbar and sidebar.
+- Commands for AI agents (`agent`) in a desktop program without a command line, the guidance for agents, `maintenance mcp`, and the settings `agentReadsWhileClosed` and `agentChangesWhileClosed` in a Preferences dialog.

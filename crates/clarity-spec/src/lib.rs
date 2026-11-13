@@ -1,5 +1,6 @@
 //! Clarity spec language: lexer, parser, checker and the neutral model.
 
+pub mod agent;
 pub mod check;
 pub mod colors;
 pub mod cxaml;
@@ -21,6 +22,8 @@ pub mod keyed;
 pub mod themes;
 pub mod translations;
 pub mod frame;
+pub mod fit;
+pub mod guidance;
 pub mod highlight;
 pub mod icons;
 pub mod layout;
@@ -144,6 +147,7 @@ pub fn load_sources_signed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a s
         resources: None,
         diagrams: Vec::new(),
         readme: None,
+        guidance: None,
         resource_keys: Default::default(),
         keys_editable: false,
         signin: signin.cloned(),
@@ -795,6 +799,14 @@ pub fn load_dir_signed(dir: &Path, replaced: &[(&Path, &str)], sources: &[Source
     project.diagnostics.extend(missing);
     code::mapping::attach_schemas(&mut project, &|path| std::fs::read_to_string(dir.join(path)).ok());
     project.readme = std::fs::read_to_string(dir.join(README_FILE)).ok();
+    // The guidance for agents, as an edit is about to write it or as it is.
+    let guidance_path = dir.join(guidance::FILE);
+    project.guidance = match replaced.iter().find(|(p, _)| *p == guidance_path) {
+        Some((_, text)) => Some(text.to_string()),
+        None => std::fs::read_to_string(&guidance_path).ok(),
+    };
+    let said = guidance::check(&project, project.guidance.as_deref(), &guidance_path.display().to_string());
+    project.diagnostics.extend(said);
     Ok(project)
 }
 
@@ -836,6 +848,19 @@ pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Pro
 /// The folder of a project's web API descriptions, beside its modules, and
 /// of the modules Clarity writes from them (DESIGN 5.23).
 pub const APIS_DIR: &str = "apis";
+
+/// Every folder of a project whose files Clarity reads, beside its modules:
+/// whatever watches or copies a project goes by this one list.
+pub const PROJECT_FOLDERS: [&str; 8] = [
+    MIGRATIONS_DIR,
+    APIS_DIR,
+    cxaml::DESIGN_DIR,
+    translations::TRANSLATIONS_DIR,
+    engines::ENGINES_DIR,
+    resources::RESOURCES_DIR,
+    diagrams::DIAGRAMS_DIR,
+    guidance::DIR,
+];
 
 /// The module files of the project folder `dir`: its own, then those Clarity
 /// writes into its `apis` folder.

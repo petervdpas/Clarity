@@ -144,7 +144,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, settings, &snake(&program)) + &super::auth_cmake_lines(project, &snake(&program));
+    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, settings, &snake(&program)) + &super::auth_cmake_lines(project, &snake(&program)) + &super::agents_cmake_lines(project, &snake(&program));
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the desktop layer: no window.
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
@@ -152,7 +152,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     let auth_files = super::AUTH_FILES.iter().filter(|_| crate::carries_auth(project)).chain(super::library_folder_files(project, settings, false));
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files) {
+    let agents_files = super::AGENTS_FILES.iter().filter(|_| crate::agent_tools::offers_agents(project));
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files).chain(agents_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_c) = model::emit(project);
@@ -227,6 +228,91 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
+/// What a C program runs its commands with, as code: their description
+/// (`described`, for `program()`), the settings entity, how a command's data
+/// starts and is kept, the function that reads the kept settings, and the
+/// dispatch by command number. The command-line program and the desktop's
+/// commands for agents both use them.
+pub(crate) struct CommandParts<'p> {
+    pub described: String,
+    pub kept: Option<&'p clarity_spec::model::Entity>,
+    pub start: String,
+    pub keep: String,
+    pub kept_settings: String,
+    pub dispatch: String,
+}
+
+pub(crate) fn command_parts(project: &Project) -> CommandParts<'_> {
+    let commands = crate::commands::commands(project);
+    let mut described = String::new();
+    for (i, c) in commands.iter().enumerate() {
+        command(i, c, &mut described);
+    }
+    let kept = project.files.iter().flat_map(|f| &f.entities).find(|e| e.settings);
+    let (start, keep) = match kept {
+        Some(entity) => {
+            let p = prefix(&entity.name.name);
+            let language = entity
+                .fields
+                .iter()
+                .find(|f| f.ty == FieldType::Language)
+                .map(|f| format!("    if (data.settings.{field} && *data.settings.{field}) clarity_set_language(data.settings.{field});\n", field = ident(&f.name.name)))
+                .unwrap_or_default();
+            (
+                format!("    CommandData data = {{kept_settings()}};\n    const char* before = cJSON_PrintUnformatted({p}_json(&data.settings));\n{language}"),
+                format!("    // A command that changed a setting keeps it, as a window does.\n    cJSON* after = {p}_json(&data.settings);\n    if (strcmp(cJSON_PrintUnformatted(after), before) != 0) {{\n        cJSON_DeleteItemFromObjectCaseSensitive(after, \"id\");\n        clarity_keep_settings(PROGRAM, after);\n    }}\n"),
+            )
+        }
+        None => ("    CommandData data = {0};\n".to_string(), String::new()),
+    };
+    let kept_settings = match kept {
+        Some(entity) => {
+            let (name, p) = (&entity.name.name, prefix(&entity.name.name));
+            format!(
+                "/// The settings kept, each one that still fits; the others have their default.\nstatic {name} kept_settings(void) {{\n    {name} settings = {p}_new();\n    cJSON* values = {p}_json(&settings);\n    cJSON* kept = clarity_read_settings(PROGRAM);\n    const cJSON* item;\n    cJSON_ArrayForEach(item, kept) {{\n        if (!cJSON_GetObjectItemCaseSensitive(values, item->string)) continue;\n        cJSON* tried = cJSON_Duplicate(values, 1);\n        cJSON_ReplaceItemInObjectCaseSensitive(tried, item->string, cJSON_Duplicate(item, 1));\n        {name} check;\n        if ({p}_from_json(tried, &check)) values = tried;\n    }}\n    {p}_from_json(values, &settings);\n    return settings;\n}}\n\n"
+            )
+        }
+        None => String::new(),
+    };
+    let mut dispatch = String::new();
+    for (i, c) in commands.iter().enumerate() {
+        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
+        let args: String = values.iter().map(|v| format!(", {v}")).collect();
+        let _ = writeln!(dispatch, "    case {i}:\n        worked = {}(db, &data{args}, &code);\n        break;", logic::command_function(c.decl));
+    }
+    CommandParts { described, kept, start, keep, kept_settings, dispatch }
+}
+
+/// The desktop program's commands for AI agents (docs/ledger/app-mcp.md):
+/// `src/commands.h` and `src/commands.c`, what the app offers Clarity.UI, a
+/// command run on its databases as the command line runs it, and `<program>
+/// mcp` without a window.
+pub(crate) fn agents_desktop(project: &Project, settings: &Settings) -> (String, String) {
+    let CommandParts { described, start, keep, kept_settings, dispatch, .. } = command_parts(project);
+    let count = crate::commands::commands(project).len().max(1);
+    let dispatch = dispatch.replace(", &code);", ", code);");
+    let header = format!(
+        "{HEADER}\n#pragma once\n\n#include <stdbool.h>\n#include <stddef.h>\n\n#include \"clarity/cli.h\"\n#include \"clarity/db.h\"\n\n/// What the app offers AI agents, as JSON (docs/ledger/app-mcp.md).\nconst char* agents_offered(void);\n/// The commands, as the command line reads them; made again for each call.\nconst ClarityCliProgram* agents_program(void);\n/// Runs a command for an agent on the databases `context` (a ClarityDb).\nbool agents_run(void* context, size_t command, const char** values, int* code);\n/// `<program> mcp`: the commands without a window; its exit code.\nint agents_mcp(ClarityDb* db);\n"
+    );
+    let mut source = format!(
+        "{HEADER}\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"agents/agents.h\"\n#include \"app.h\"\n#include \"clarity/settings.h\"\n#include \"commands.h\"\n\n/// The name the person's settings are kept under.\n#define PROGRAM {program}\n\n{tools}/// The commands agents may call, as the MCP service lists them.\nstatic const char* tools(void) {{\n    ClarityBuffer all = {{0}};\n    for (size_t i = 0; tools_parts[i]; i++) clarity_buffer_add(&all, tools_parts[i]);\n    return clarity_buffer_text(&all);\n}}\n\n{kept_settings}const ClarityCliProgram* agents_program(void) {{\n    static ClarityCliProgram made;\n    ClarityCliCommand* commands = CLARITY_NEW(ClarityCliCommand, {count});\n{described}    made = (ClarityCliProgram){{.name = {name}, .help = {help}, .commands = commands, .command_count = {count}, .agents = true}};\n    return &made;\n}}\n\nbool agents_run(void* context, size_t command, const char** values, int* code) {{\n    ClarityDb* db = context;\n{start}    struct {{\n        const char** values;\n    }} parsed = {{values}};\n    bool worked = false;\n    switch (command) {{\n{dispatch}    }}\n{keep}    return worked;\n}}\n\nconst char* agents_offered(void) {{\n    cJSON* offered = cJSON_CreateObject();\n    cJSON_AddStringToObject(offered, \"tools\", tools());\n    cJSON_AddStringToObject(offered, \"app\", {app});\n    cJSON_AddStringToObject(offered, \"program\", PROGRAM);\n    cJSON_AddStringToObject(offered, \"version\", {version});\n    // Kept for the program's life: cJSON's memory is the scratch arena, which each call resets.\n    const char* printed = cJSON_PrintUnformatted(offered);\n    size_t size = strlen(printed) + 1;\n    char* kept = malloc(size);\n    if (kept) memcpy(kept, printed, size);\n    cJSON_Delete(offered);\n    return kept;\n}}\n\nint agents_mcp(ClarityDb* db) {{\n    // The running app answers agents itself, granting each change.\n    if (clarity_agents_forward(PROGRAM)) return 0;\n    ClarityAgents agents = {{.tools = tools(), .app = {app}, .program = PROGRAM, .version = {version}}};\n    cJSON* kept = clarity_read_settings(PROGRAM);\n    bool served = clarity_agents_serve(agents_program(), &agents, kept, NULL, agents_run, db);\n    cJSON_Delete(kept);\n    if (!served) fprintf(stderr, \"%s\\n\", clarity_error()->message);\n    return served ? 0 : 1;\n}}\n",
+        program = string(&crate::settings_program(settings)),
+        tools = long_text("tools", &crate::agent_tools::tool_list_file(project, settings)),
+        name = string(&crate::commands::program_name(settings)),
+        help = said(&crate::commands::program_help(project)),
+        app = string(&clarity_project::title(settings)),
+        version = string(settings.version.as_deref().unwrap_or("")),
+    );
+    let secrets = crate::secret_names(project);
+    if !secrets.is_empty() {
+        let list = string(&format!("[{}]", secrets.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", ")));
+        source = source
+            .replace("clarity_read_settings(PROGRAM)", &format!("clarity_read_settings_with(PROGRAM, cJSON_Parse({list}))"))
+            .replace("clarity_keep_settings(PROGRAM, after)", &format!("clarity_keep_settings_with(PROGRAM, after, cJSON_Parse({list}))"));
+    }
+    (header, source)
+}
+
 fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, String)]) -> String {
     // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
     let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
@@ -267,43 +353,30 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     };
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
-    let mut described = String::new();
-    for (i, c) in commands.iter().enumerate() {
-        command(i, c, &mut described);
-    }
-    let kept = project.files.iter().flat_map(|f| &f.entities).find(|e| e.settings);
-    let (start, keep) = match kept {
-        Some(entity) => {
-            let p = prefix(&entity.name.name);
-            let language = entity
-                .fields
-                .iter()
-                .find(|f| f.ty == FieldType::Language)
-                .map(|f| format!("    if (data.settings.{field} && *data.settings.{field}) clarity_set_language(data.settings.{field});\n", field = ident(&f.name.name)))
-                .unwrap_or_default();
-            (
-                format!("    CommandData data = {{kept_settings()}};\n    const char* before = cJSON_PrintUnformatted({p}_json(&data.settings));\n{language}"),
-                format!("    // A command that changed a setting keeps it, as a window does.\n    cJSON* after = {p}_json(&data.settings);\n    if (strcmp(cJSON_PrintUnformatted(after), before) != 0) {{\n        cJSON_DeleteItemFromObjectCaseSensitive(after, \"id\");\n        clarity_keep_settings(PROGRAM, after);\n    }}\n"),
-            )
-        }
-        None => ("    CommandData data = {0};\n".to_string(), String::new()),
+    let CommandParts { described, kept, start, keep, kept_settings, dispatch } = command_parts(project);
+    // Commands for agents: `mcp` serves them through Clarity.AppMcp (docs/ledger/app-mcp.md).
+    let agents = crate::agent_tools::offers_agents(project);
+    let settings_include = match (kept.is_some() || agents, agents) {
+        (true, true) => "#include \"agents/agents.h\"\n#include \"clarity/settings.h\"\n",
+        (true, false) => "#include \"clarity/settings.h\"\n",
+        _ => "",
     };
-    let kept_settings = match kept {
-        Some(entity) => {
-            let (name, p) = (&entity.name.name, prefix(&entity.name.name));
+    let (agents_functions, agents_serve) = if agents {
+        let agent_dispatch = dispatch.replace("&data", "run->data").replace(", &code);", ", code);");
+        (
             format!(
-                "/// The settings kept, each one that still fits; the others have their default.\nstatic {name} kept_settings(void) {{\n    {name} settings = {p}_new();\n    cJSON* values = {p}_json(&settings);\n    cJSON* kept = clarity_read_settings(PROGRAM);\n    const cJSON* item;\n    cJSON_ArrayForEach(item, kept) {{\n        if (!cJSON_GetObjectItemCaseSensitive(values, item->string)) continue;\n        cJSON* tried = cJSON_Duplicate(values, 1);\n        cJSON_ReplaceItemInObjectCaseSensitive(tried, item->string, cJSON_Duplicate(item, 1));\n        {name} check;\n        if ({p}_from_json(tried, &check)) values = tried;\n    }}\n    {p}_from_json(values, &settings);\n    return settings;\n}}\n\n"
-            )
-        }
-        None => String::new(),
+                "{tools}/// The commands agents may call, as the MCP service lists them.\nstatic const char* tools(void) {{\n    ClarityBuffer all = {{0}};\n    for (size_t i = 0; tools_parts[i]; i++) clarity_buffer_add(&all, tools_parts[i]);\n    return clarity_buffer_text(&all);\n}}\n\n/// What a command an agent calls has: the database and the settings.\ntypedef struct {{\n    ClarityDb* db;\n    CommandData* data;\n}} CommandRun;\n\n/// Runs a command for an agent, as the command line runs it.\nstatic bool run_command(void* context, size_t command, const char** values, int* code) {{\n    CommandRun* run = context;\n    ClarityDb* db = run->db;\n    struct {{\n        const char** values;\n    }} parsed = {{values}};\n    bool worked = false;\n    switch (command) {{\n{agent_dispatch}    }}\n    return worked;\n}}\n\n",
+                tools = long_text("tools", &crate::agent_tools::tool_list_file(project, settings)),
+            ),
+            format!(
+                "    if (argc == 2 && strcmp(argv[1], \"mcp\") == 0) {{\n        // Agents call the commands through Clarity.AppMcp (docs/ledger/app-mcp.md); the running app answers them itself.\n        if (clarity_agents_forward(PROGRAM)) {{\n            clarity_db_close(db);\n            return 0;\n        }}\n        ClarityAgents agents = {{.tools = tools(), .app = {}, .program = PROGRAM, .version = {}}};\n        CommandRun state = {{db, &data}};\n        cJSON* kept = clarity_read_settings(PROGRAM);\n        bool served = clarity_agents_serve(&described, &agents, kept, NULL, run_command, &state);\n        cJSON_Delete(kept);\n        if (!served) fprintf(stderr, \"%s\\n\", clarity_error()->message);\n{keep}        clarity_db_close(db);\n        return served ? 0 : 1;\n    }}\n",
+                string(&clarity_project::title(settings)),
+                string(settings.version.as_deref().unwrap_or("")),
+            ),
+        )
+    } else {
+        (String::new(), String::new())
     };
-    let mut dispatch = String::new();
-    for (i, c) in commands.iter().enumerate() {
-        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
-        let args: String = values.iter().map(|v| format!(", {v}")).collect();
-        let _ = writeln!(dispatch, "    case {i}:\n        worked = {}(db, &data{args}, &code);\n        break;", logic::command_function(c.decl));
-    }
-    let settings_include = if kept.is_some() { "#include \"clarity/settings.h\"\n" } else { "" };
     let mut out = format!(
         "{HEADER}
 #include <stdio.h>
@@ -340,7 +413,7 @@ static const char* texts(void) {{
 {signin_data}{kept_settings}/// The program and its commands, as the command line reads them.
 static ClarityCliProgram program(void) {{
     ClarityCliCommand* commands = CLARITY_NEW(ClarityCliCommand, {count});
-{described}    return (ClarityCliProgram){{.name = {name}, .help = {help}, .commands = commands, .command_count = {count}}};
+{described}    return (ClarityCliProgram){{.name = {name}, .help = {help}, .commands = commands, .command_count = {count}, .agents = {agents}}};
 }}
 
 /// Says what went wrong, and ends the program.
@@ -350,7 +423,7 @@ static int failed(ClarityDb* db) {{
     return 1;
 }}
 
-{secrets_include}int main(int argc, char** argv) {{
+{agents_functions}{secrets_include}int main(int argc, char** argv) {{
 {use_secrets}
     clarity_start();
     clarity_load_translations(texts());
@@ -367,7 +440,7 @@ static int failed(ClarityDb* db) {{
         if (!clarity_migrate(db, sources[i].source, sources[i].steps, sources[i].count, NULL)) return failed(db);
 {stores}
 {add_signin}{given_args}    ClarityCliProgram described = program();
-    ClarityCliParsed parsed = clarity_cli_parse(&described, {given_count}, {given}, clarity_cli_words());
+{agents_serve}    ClarityCliParsed parsed = clarity_cli_parse(&described, {given_count}, {given}, clarity_cli_words());
     if (parsed.outcome == CLARITY_CLI_HELP) {{
         fputs(parsed.help, stdout);
         clarity_db_close(db);
@@ -391,6 +464,7 @@ static int failed(ClarityDb* db) {{
 }}
 ",
         count = commands.len().max(1),
+        agents = crate::agent_tools::offers_agents(project),
         name = string(&crate::commands::program_name(settings)),
         help = said(&crate::commands::program_help(project)),
         languages = languages.iter().map(|l| format!("{l}, ")).collect::<String>(),

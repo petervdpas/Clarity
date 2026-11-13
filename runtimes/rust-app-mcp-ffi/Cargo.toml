@@ -1,0 +1,20 @@
+[package]
+name = "clarity-app-mcp-ffi"
+description = "The C interface of Clarity.AppMcp: the MCP service of the programs C#, Go, C and C++ make with Clarity"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+# Shipped as a native library beside Clarity.UI's, not on crates.io.
+publish = false
+
+# The library's file is clarity_app_mcp on every system: libclarity_app_mcp.so,
+# clarity_app_mcp.dll, libclarity_app_mcp.dylib.
+[lib]
+name = "clarity_app_mcp"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mcp = { package = "clarity-app-mcp", path = "../rust-app-mcp" }
+serde_json = "1"

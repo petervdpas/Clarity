@@ -75,7 +75,8 @@ struct ClarityDb {
     /// The settings of the running handler: the window's data had them when
     /// the call began, and its code sets them before they are kept; a file
     /// store whose folder is a setting reads them first (conformance/settings.json, `now`).
-    cJSON* held_settings;
+    /// Kept as JSON text in plain memory: the scratch arena, where JSON lives, is reset after each command.
+    char* held_settings;
 };
 
 /// A copy that outlives the scratch arena, to free.

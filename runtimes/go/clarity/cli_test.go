@@ -29,6 +29,11 @@ type cliCases struct {
 			Said  string            `json:"said"`
 		} `json:"wrong"`
 	} `json:"parse"`
+	Agents []struct {
+		What string   `json:"what"`
+		Args []string `json:"args"`
+		Help string   `json:"help"`
+	} `json:"agents"`
 	Table []struct {
 		What     string     `json:"what"`
 		Headings []string   `json:"headings"`
@@ -129,6 +134,17 @@ func show(values map[string]*string) map[string]string {
 		}
 	}
 	return out
+}
+
+func TestAProgramWithCommandsForAgentsListsMcpInItsHelp(t *testing.T) {
+	cases := readCliCases(t)
+	program := cases.Program
+	program.Agents = true
+	for _, c := range cases.Agents {
+		if got := ParseCommandLine(program, c.Args, english); got.Help != c.Help {
+			t.Errorf("%s: %q, wanted %q", c.What, got.Help, c.Help)
+		}
+	}
 }
 
 func TestTablesArePrinted(t *testing.T) {

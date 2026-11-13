@@ -492,6 +492,10 @@ impl ProjectTools {
         if self.clarity_s_file(path.trim())? {
             return Err(format!("{path} is Clarity's: Clarity writes it from the declaration, so change the declaration instead"));
         }
+        // The guidance keeps its sections, which the wizard reads back: only its tools write it.
+        if path.trim().trim_start_matches("./") == clarity_spec::guidance::FILE {
+            return Err(format!("{path} is the app's guidance for agents: write it a section at a time with set_guidance, and read it with guidance"));
+        }
         // Windows, views and the app change only through the structural tools (docs/AGENT-TOOLS-PLAN.md).
         if clarity_spec::cxaml::is_page_file(path.trim()) {
             let names: Vec<String> = crate::structural::windows::definitions().into_iter().chain(crate::structural::frame::definitions()).map(|t| t.name).collect();

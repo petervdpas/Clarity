@@ -63,3 +63,46 @@ pub fn scroll_room(content: f64, room: f64) -> f64 {
     let over = content - room;
     if over < 0.5 { 0.0 } else { over }
 }
+
+/// The least length of a scroll bar's thumb, so it is always there to take.
+pub const LEAST_THUMB: f64 = 24.0;
+
+/// A scroll bar's thumb along its track, one way: every part with a bar
+/// measures, pages and drags it alike. `track` is the bar's length, `content`
+/// how long what scrolls is, `scroll` how far it is scrolled, `max` how far it can.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Thumb {
+    pub track: f64,
+    pub content: f64,
+    pub scroll: f64,
+    pub max: f64,
+}
+
+impl Thumb {
+    /// As long as the share of the content in view, never shorter than LEAST_THUMB.
+    pub fn length(&self) -> f64 {
+        if self.content <= 0.0 { self.track } else { self.track.min(LEAST_THUMB.max(self.track * self.track / self.content)) }
+    }
+
+    /// Where it starts along the track.
+    pub fn at(&self) -> f64 {
+        if self.max <= 0.0 { 0.0 } else { (self.track - self.length()) * self.scroll / self.max }
+    }
+
+    /// A press `along` the track: on the thumb, where on it the pointer took
+    /// it (`Ok`); beside it, the scroll a `page` that way (`Err`).
+    pub fn pressed(&self, along: f64, page: f64) -> Result<f64, f64> {
+        let at = self.at();
+        if along >= at && along < at + self.length() {
+            Ok(along - at)
+        } else {
+            Err((self.scroll + if along < at { -page } else { page }).clamp(0.0, self.max))
+        }
+    }
+
+    /// The scroll with the thumb dragged to `along`, taken `grab` from its start.
+    pub fn dragged(&self, along: f64, grab: f64) -> f64 {
+        let travel = self.track - self.length();
+        if travel <= 0.0 { 0.0 } else { ((along - grab) / travel * self.max).clamp(0.0, self.max) }
+    }
+}

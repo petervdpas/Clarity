@@ -357,8 +357,17 @@ fn check_command(env: &Env, command: &CommandDecl, out: &mut Output) {
     };
     let params: Vec<(String, Ty)> = command.params.iter().map(|p| (p.name.name.clone(), typed(&p.name, &p.ty, false, out))).collect();
     let options: Vec<Ty> = command.options.iter().map(|o| typed(&o.name, &o.ty, true, out)).collect();
+    // `<program> mcp` serves the commands for agents (docs/ledger/app-mcp.md).
+    if line.split(' ').next() == Some("mcp") {
+        out.push(Diagnostic::error(format!("command {line}: `mcp` is the program's own word, which serves its commands to AI agents; name the command otherwise"), command.name.span));
+    }
     if command.help.is_none() {
-        out.push(Diagnostic::warning(format!("command {line} has no help; write what it does: help @key"), command.name.span));
+        // An agent picks a tool by what it says it does: a command for agents says it.
+        if command.agent {
+            out.push(Diagnostic::error(format!("command {line} is for agents, which pick it by its help; write what it does: help @key"), command.name.span));
+        } else {
+            out.push(Diagnostic::warning(format!("command {line} has no help; write what it does: help @key"), command.name.span));
+        }
     }
     let mut checker = BodyChecker {
         env,

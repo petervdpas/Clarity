@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Window class="suppliers.SupplierEditor" title="@supplierEditorTitle">
-  <Content name="main" at="1,1" span="12" rows="4">
+  <Content name="main" at="1,1" span="12" rows="5">
     <View name="SupplierEditorView" />
   </Content>
 </Window>

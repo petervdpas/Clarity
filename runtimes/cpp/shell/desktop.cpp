@@ -29,6 +29,37 @@ std::optional<std::string> DesktopProgram::call(std::string_view command_view, s
     }
     if (!args.is_object()) args = json::object();
     if (command == "watches") return value(service_.options().watches).dump();
+    // The commands AI agents may call while the app runs (docs/ledger/app-mcp.md).
+    if (command == "agents" || command == "agent_call" || command == "agent_undo") {
+        const auto& options = service_.options();
+        if (options.agents.is_null() || !options.agent_call) return std::nullopt;
+        if (command == "agents") return value(options.agents).dump();
+        if (command == "agent_undo") {
+            try {
+                options.db->replay_steps({args.value("step", int64_t{0})}, true);
+                return value(nullptr).dump();
+            } catch (const std::exception& e) {
+                return json{{"error", e.what()}}.dump();
+            }
+        }
+        // One database step: all of the call's changes, or none when it is refused; Undo takes the step back.
+        const auto line = args.value("line", std::vector<std::string>{});
+        struct AgentRefused {};
+        std::pair<std::string, bool> ran{"", true};
+        int64_t step = 0;
+        const int64_t before = options.db->last_step();
+        try {
+            options.db->step([&] {
+                ran = options.agent_call(line, ui::agent_ask);
+                if (ran.second) throw AgentRefused{};
+            });
+            if (options.db->last_step() != before) step = options.db->last_step();
+        } catch (const AgentRefused&) {
+        } catch (const std::exception& e) {
+            ran = {e.what(), true};
+        }
+        return value(json{{"text", ran.first}, {"refused", ran.second}, {"step", step}}).dump();
+    }
     // Asked from the screen's thread while the app's on start runs.
     if (command == "splash_status") {
         auto said = clarity::splash::status();

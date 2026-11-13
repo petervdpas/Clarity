@@ -582,6 +582,15 @@ impl<'a> Checker<'a> {
     /// `Settings` theirs.
     fn check_settings(&mut self) {
         let files = self.files;
+        // Clarity's own settings for AI agents belong to an app whose commands agents call.
+        let offers = files.iter().any(|f| f.commands.iter().any(|c| c.agent));
+        for (file, f) in files.iter().enumerate() {
+            for field in f.entities.iter().filter(|e| e.settings).flat_map(|e| &e.fields) {
+                if !offers && matches!(field.name.name.as_str(), "agentReadsWhileClosed" | "agentChangesWhileClosed") && field.ty == FieldType::Bool {
+                    self.error(file, format!("{} is a setting of an app whose commands agents call; no command says agent", field.name.name), field.span);
+                }
+            }
+        }
         // A secret is the person's, kept in the system's store: never a field of a record (DESIGN 5.27).
         for (file, f) in files.iter().enumerate() {
             for entity in f.entities.iter().filter(|e| !e.settings) {

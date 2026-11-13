@@ -65,6 +65,9 @@ fn shop() -> Settings {
         keys_editable: false,
         signin: None,
         engines_interpreted: false,
+        agents_read_closed: false,
+        agents_change_closed: false,
+        agents_at_most: None,
         port: None,
         row_height: None,
     }
@@ -729,6 +732,20 @@ fn the_keys_window_opens_where_the_project_allows_it() {
     assert_eq!(problems(false), ["keysItem clicks to keys, the keys window, which opens when the project file says keys editable"]);
 }
 
+/// A command for agents needs no command-line program: the desktop program
+/// serves it (`<app> mcp`, docs/ledger/app-mcp.md). Any other command does.
+#[test]
+fn a_command_for_agents_needs_no_cli_target() {
+    let module = |agent: &str| format!("module shop\n\napp Shop\n    main Card\n\npage Card: window\n    title \"Card\"\n\ncommand count\n    help \"Counts\"\n{agent}    print \"0\"\n");
+    let problems = |module: &str| -> Vec<String> {
+        let project = clarity_spec::load_converted([("shop.clarity", module)]);
+        let settings = parse(SHOP).unwrap();
+        clarity_project::target_problems(&settings, &project, "shop.clarity").into_iter().map(|d| d.message).filter(|m| m.contains("command")).collect()
+    };
+    assert_eq!(problems(&module("    agent\n")), Vec::<String>::new());
+    assert_eq!(problems(&module("")).len(), 1, "{:?}", problems(&module("")));
+}
+
 /// Every Rust desktop program links Clarity.UI's ready-made library (DESIGN
 /// 7.9). A project file of v0.30.0 that says `ui library` or `ui crate` still
 /// opens, and writing it leaves the line out.
@@ -1021,4 +1038,121 @@ fn settings_offers_every_format_with_labelled_options() {
     let csv = formats.iter().find(|f| f.name == "csv").unwrap();
     assert_eq!(csv.label, "CSV file");
     assert!(csv.options.iter().any(|o| o.name == "noHeader" && o.flag));
+}
+
+/// What AI agents may do while the app is closed, until the person sets it
+/// in the app's AI agents window (docs/ledger/app-mcp.md): `agents while
+/// closed read change`, nothing without the line.
+#[test]
+fn the_project_says_what_agents_may_do_while_the_app_is_closed() {
+    let settings = parse(&format!("{SHOP}    agents while closed read\n")).unwrap();
+    assert!(settings.agents_read_closed && !settings.agents_change_closed);
+    let both = parse(&format!("{SHOP}    agents while closed read change\n")).unwrap();
+    assert!(both.agents_read_closed && both.agents_change_closed);
+    let none = parse(SHOP).unwrap();
+    assert!(!none.agents_read_closed && !none.agents_change_closed);
+    let written = write(Some(SHOP), &both).unwrap();
+    assert!(written.contains("\n    agents while closed read change\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), both);
+    let changes = write(Some(&written), &Settings { agents_read_closed: false, ..both.clone() }).unwrap();
+    assert!(changes.contains("\n    agents while closed change\n"), "{changes}");
+    let off = write(Some(&written), &Settings { agents_read_closed: false, agents_change_closed: false, ..both }).unwrap();
+    assert!(!off.contains("agents"), "{off}");
+    assert_eq!(
+        parse(&format!("{SHOP}    agents while closed sleep\n")).unwrap_err(),
+        "line 11: write 'agents while closed' and 'read', 'change' or both: what AI agents may do while the app is closed, until the person sets it"
+    );
+}
+
+/// How many AI agents the running app serves at once (docs/ledger/app-mcp.md):
+/// `agents at most 2`, 3 without the line; beside `agents while closed`.
+#[test]
+fn the_project_says_how_many_agents_the_app_serves_at_once() {
+    let settings = parse(&format!("{SHOP}    agents at most 2\n    agents while closed read\n")).unwrap();
+    assert_eq!(settings.agents_at_most, Some(2));
+    assert!(settings.agents_read_closed);
+    assert_eq!(parse(SHOP).unwrap().agents_at_most, None);
+    assert_eq!(clarity_project::AGENTS_AT_MOST, 3);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    agents while closed read\n") && written.contains("\n    agents at most 2\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    let back = write(Some(&written), &Settings { agents_at_most: None, ..settings }).unwrap();
+    assert!(!back.contains("at most") && back.contains("agents while closed read"), "{back}");
+    for bad in ["agents at most 0", "agents at most many", "agents at most 101"] {
+        assert_eq!(
+            parse(&format!("{SHOP}    {bad}\n")).unwrap_err(),
+            "line 11: write 'agents at most' and a whole number from 1 to 100: how many AI agents the running app serves at once (3 without the line)"
+        );
+    }
+}
+
+/// A slide-out is no taller than the window it lies over: its rows fit in
+/// what the window's parts reach or what its height holds, at the project's
+/// row height (a taller one made the window scroll and left a blank band).
+#[test]
+fn a_slide_out_is_no_taller_than_its_window() {
+    let module = |rows: u32, reach: u32| format!("module shop\n\napp Shop\n    main Card\n\npage Card: window\n    title \"Card\"\n    size 400 x 300\n    memo name notesBox at 1,1 span 6 rows {reach}\n    slideout \"More\" name more span 6 rows {rows}\n        textbox name moreBox at 1,1 span 6\n");
+    let problems = |module: &str| -> Vec<String> {
+        let project = clarity_spec::load_converted([("shop.clarity", module)]);
+        let settings = parse(SHOP).unwrap();
+        clarity_project::target_problems(&settings, &project, "shop.clarity").into_iter().map(|d| d.message).filter(|m| m.contains("slide-out")).collect()
+    };
+    // 300 pixels hold 6 rows of 36 with gaps of 8 and 12 of padding at each side.
+    assert_eq!(problems(&module(6, 2)), Vec::<String>::new());
+    assert_eq!(problems(&module(7, 2)), ["slide-out more is 7 rows high, more than window Card holds (6): give it at most 6 rows"]);
+    // Parts that reach further make more room.
+    assert_eq!(problems(&module(9, 9)), Vec::<String>::new());
+    // A lower row height fits more rows: 300 pixels hold 8 rows of 24.
+    let low = Settings { row_height: Some(24), ..parse(SHOP).unwrap() };
+    let project = clarity_spec::load_converted([("shop.clarity", module(8, 2).as_str())]);
+    assert!(clarity_project::target_problems(&low, &project, "shop.clarity").iter().all(|d| !d.message.contains("slide-out")));
+}
+
+/// A window's parts fit in the rows its height holds under its bars
+/// (conformance/window-room.json): one that reaches further is refused,
+/// with the height it needs (the maintenance app's main window was 2
+/// pixels short for 16 rows under its toolbar, and scrolled).
+#[test]
+fn a_window_s_parts_fit_its_height() {
+    let module = |reach: u32, toolbar: bool| {
+        let bar = if toolbar { "    toolbar name mainToolbar\n        item \"A\" name aButton\n" } else { "" };
+        format!("module shop\n\napp Shop\n    main Card\n\npage Card: window\n    title \"Card\"\n    size 1280 x 756\n{bar}    memo name notesBox at 1,1 span 6 rows {reach}\n")
+    };
+    let problems = |module: &str| -> Vec<String> {
+        let project = clarity_spec::load_converted([("shop.clarity", module)]);
+        clarity_project::target_problems(&parse(SHOP).unwrap(), &project, "shop.clarity").into_iter().map(|d| d.message).filter(|m| m.contains("holds")).collect()
+    };
+    assert_eq!(problems(&module(16, false)), Vec::<String>::new());
+    assert_eq!(problems(&module(15, true)), Vec::<String>::new());
+    assert_eq!(problems(&module(16, true)), ["window Card holds 15 rows at 756 pixels high, and its parts reach row 16, so it scrolls: end them by row 15, or make it at least 758 pixels high"]);
+    // Scrolling is allowed: it is said as a warning.
+    let project = clarity_spec::load_converted([("shop.clarity", module(16, true).as_str())]);
+    assert!(clarity_project::target_problems(&parse(SHOP).unwrap(), &project, "shop.clarity").iter().all(|d| d.severity == clarity_spec::Severity::Warning));
+    // A slide-out too counts the bars.
+    let slide = module(15, true).replace("    memo name", "    slideout \"More\" name more span 6 rows 16\n        textbox name moreBox at 1,1 span 6\n    memo name");
+    assert_eq!(problems(&slide), ["slide-out more is 16 rows high, more than window Card holds (15): give it at most 15 rows"]);
+}
+
+/// A view shown in a content area fits in the area's rows: one that reaches
+/// further would scroll inside it and cut off its last part.
+#[test]
+fn a_view_fits_in_its_content_area() {
+    let module = "module shop\n";
+    let card = r#"<Window class="shop.Card" title="Card" width="800" height="600">
+  <Content name="main" at="1,1" span="12" rows="8">
+    <View name="CardView" />
+  </Content>
+</Window>"#;
+    let view = |rows: u32| format!(r#"<View class="shop.CardView">
+  <Memo name="notesBox" at="1,1" span="12" rows="{rows}" />
+</View>"#);
+    let app = r#"<App class="shop.Shop" main="Card"></App>"#;
+    let problems = |rows: u32| -> Vec<String> {
+        let view = view(rows);
+        let project = clarity_spec::load_sources(vec![("shop.clarity", module), ("design/Shop.cxaml", app), ("design/Card.cxaml", card), ("design/CardView.cxaml", view.as_str())]);
+        clarity_project::target_problems(&parse(SHOP).unwrap(), &project, "shop.clarity").into_iter().map(|d| d.message).filter(|m| m.contains("view")).collect()
+    };
+    // 600 pixels hold 13 rows; the content area grows to fill them.
+    assert_eq!(problems(13), Vec::<String>::new());
+    assert_eq!(problems(14), ["view CardView reaches row 14, more than the 13 rows window Card holds for it, so it scrolls: end its parts by row 13"]);
 }

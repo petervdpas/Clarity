@@ -85,6 +85,9 @@ const KEYWORDS: &[&str] = &[
     "hashed", "me", "allow", "readable", "writable", "signin", "signout",
     // Versions (docs/APP-CAPABILITIES-PLAN.md step 5): `save customer anyway`, `savedSince @key` on an entity; `version` is above.
     "anyway", "savedSince",
+    // Apps as MCP servers (docs/ledger/app-mcp.md): `agent` offers a command to AI agents;
+    // the project file's `agents while closed read change` is what they may do while the app is closed.
+    "agent", "agents", "while", "closed", "most", "agentReadsWhileClosed", "agentChangesWhileClosed",
 ];
 
 /// Clarity's own types.

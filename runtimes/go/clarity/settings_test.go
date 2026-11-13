@@ -146,3 +146,26 @@ func TestAStoreFollowsTheFolderAHandlerSet(t *testing.T) {
 		t.Fatal("the folder set last is read")
 	}
 }
+
+func TestKeepingSettingsLeavesTheKeysTheProgramDoesNotKeep(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct {
+		Merge []struct {
+			What    string         `json:"what"`
+			OnFile  map[string]any `json:"onFile"`
+			Kept    map[string]any `json:"kept"`
+			Written map[string]any `json:"written"`
+		} `json:"merge"`
+	}
+	if err := json.Unmarshal(text, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases.Merge {
+		if got := MergedSettings(c.OnFile, c.Kept); !reflect.DeepEqual(got, c.Written) {
+			t.Errorf("%s: %v, want %v", c.What, got, c.Written)
+		}
+	}
+}

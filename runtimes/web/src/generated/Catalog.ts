@@ -21,4 +21,8 @@ formats: Array<FormatChoice>,
 /**
  * The sign-in strategies of Clarity.Auth's catalog, for the signin block.
  */
-strategies: Array<StrategyChoice>, };
+strategies: Array<StrategyChoice>, 
+/**
+ * How many AI agents a running app serves at once without `agents at most`.
+ */
+agents_at_most: number, };

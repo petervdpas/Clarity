@@ -136,10 +136,10 @@ void a_folder_setting_is_where_every_runtime_puts_a_store(void) {
 void a_store_keeps_its_files_in_a_folder_setting(void) {
     const char* home = clarity_format("%s/clarity-folder-c-%d", temp_folder(), rand());
 #ifdef _WIN32
-    const char* was = getenv("APPDATA") ? clarity_format("%s", getenv("APPDATA")) : "";
+    char* was = strdup(getenv("APPDATA") ? getenv("APPDATA") : "");
     _putenv_s("APPDATA", home);
 #elif defined(__APPLE__)
-    const char* was = clarity_format("%s", getenv("HOME"));
+    char* was = strdup(getenv("HOME") ? getenv("HOME") : "");
     setenv("HOME", home, 1);
 #else
     setenv("XDG_CONFIG_HOME", home, 1);
@@ -171,11 +171,38 @@ void a_store_keeps_its_files_in_a_folder_setting(void) {
     clarity_hold_setting(db, "photosFolder", chosen);
     CHECK_OK(clarity_write_text(db, "photos", "fourth.txt", "fourth"));
     CHECK(clarity_exists(clarity_format("%s/fourth.txt", chosen)));
+    // The held settings outlive the scratch arena, which each command resets
+    // (an agent's command once overwrote them before the window's next handler).
+    char* lasting = strdup(chosen);
+    char* home_kept = strdup(home);
+    clarity_scratch_reset();
+    memset(clarity_alloc(4096), 'x', 4096);
+    CHECK_OK(clarity_write_text(db, "photos", "fifth.txt", "fifth"));
+    CHECK(clarity_exists(clarity_format("%s/fifth.txt", lasting)));
+    clarity_hold_settings(db, NULL);
+    free(lasting);
     clarity_db_close(db);
-    remove_tree(home);
+    remove_tree(home_kept);
+    free(home_kept);
 #ifdef _WIN32
     _putenv_s("APPDATA", was);
+    free(was);
 #elif defined(__APPLE__)
     setenv("HOME", was, 1);
+    free(was);
 #endif
+}
+
+// Keeping settings leaves the keys the program does not keep, such as the
+// person's agent switches (conformance/settings.json, `merge`).
+void keeping_settings_leaves_the_keys_the_program_does_not_keep(void) {
+    cJSON* cases = conformance("settings.json");
+    const cJSON* c;
+    CHECK(cJSON_GetArraySize(cJSON_GetObjectItem(cases, "merge")) > 0);
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "merge")) {
+        cJSON* merged = clarity_settings_merged(cJSON_GetObjectItem(c, "onFile"), cJSON_GetObjectItem(c, "kept"));
+        CHECK(cJSON_Compare(merged, cJSON_GetObjectItem(c, "written"), true));
+        cJSON_Delete(merged);
+    }
+    cJSON_Delete(cases);
 }

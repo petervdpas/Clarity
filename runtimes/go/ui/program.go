@@ -28,9 +28,11 @@ type Desktop struct {
 	Watches bool
 	// Engines are the engines beside the screen; nil for none.
 	Engines Engines
+	// Agents are the commands agents may call while the app runs; nil for none.
+	Agents *shell.Agents
 }
 
 // NewProgram is the program of desktop, with its service.
 func NewProgram(desktop Desktop) *Program {
-	return shell.NewProgram(shell.ProgramOptions{Options: desktop.Options, Facts: desktop.Facts, Watches: desktop.Watches, Engines: desktop.Engines})
+	return shell.NewProgram(shell.ProgramOptions{Options: desktop.Options, Facts: desktop.Facts, Watches: desktop.Watches, Engines: desktop.Engines, Agents: desktop.Agents})
 }

@@ -8,7 +8,7 @@ Status: partial. The Tauri app's frame: ribbon, project tree, project browser, s
   - Project tree: README, Sign-in, Windows, Views, Data, Mappings, Web APIs, Diagrams, Themes, i18n, Resources, Engines, Custom parts, Libraries, Commands, Modules, each with "+ new" (`lib/ProjectTree.svelte:145-406`)
   - Project browser: `lib/FileBrowser.svelte`, `fileBrowser.ts`, `fileBrowserStore.svelte.ts`; `app/src-tauri/src/browse.rs`; listing and project detection in `crates/clarity-project/src/browse.rs`; 10 recent projects and the last folder per use in `recent.json` (`crates/clarity-project/src/recent.rs`)
   - New project dialog: name, folder, backend, targets; no UI field (`lib/NewProjectDialog.svelte:5`)
-  - Folder watch: outside changes reload (`app/src-tauri/src/lib.rs:140`)
+  - Folder watch: outside changes reload (`app/src-tauri/src/lib.rs`, `watch`, `changes_project`); every project folder from one list, `clarity_spec::PROJECT_FOLDERS`, watched with its subfolders (fixed 2026-11-13: translations/, design/ and agent/ were not watched, so a translation added after a window stayed unseen until the project opened again)
   - Clarity settings: Display, Keys, Folders, Environment, Agent, Logging, System (`lib/AppSettingsView.svelte:24-31`; `folders.rs`, `logging.rs`, `system.rs`, `environment.rs`); Environment is [build-tools](build-tools.md)
   - Keys: IDE commands per layer, rebind, swap, reset (`lib/KeysSettings.svelte`, `lib/keys.svelte.ts`, `runtimes/web/src/host/keys.ts:13-57`); WebView2's own browser keys turned off on Windows (`app/src-tauri/src/browser_keys.rs`)
   - Status bar: what is open, build state, error and warning counts, stack, load meters, last outside-agent call (`lib/StatusBar.svelte`, `statusBar.ts`)

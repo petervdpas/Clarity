@@ -620,7 +620,8 @@ fn parse_access(node: &Node, word: &str, slot: &mut Option<crate::code::Expr>) -
 }
 
 /// The `settings` block (DESIGN 5.17): fields as an entity's, and Clarity's
-/// own `language` and `theme` without a type; read as the record type `Settings`.
+/// own `language`, `theme`, `agentReadsWhileClosed` and `agentChangesWhileClosed`
+/// without a type; read as the record type `Settings`.
 fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
     for child in &node.children {
@@ -628,6 +629,9 @@ fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
         let own = match child.line.tokens.as_slice() {
             [word] if word.text == "language" => Some((FieldType::Language, "@languagePicker")),
             [word] if word.text == "theme" => Some((FieldType::Theme, "@themePicker")),
+            // What AI agents may do while the app is closed (docs/ledger/app-mcp.md).
+            [word] if word.text == "agentReadsWhileClosed" => Some((FieldType::Bool, "@agentReadsWhileClosedSetting")),
+            [word] if word.text == "agentChangesWhileClosed" => Some((FieldType::Bool, "@agentChangesWhileClosedSetting")),
             _ => None,
         };
         let field = match own {
@@ -635,7 +639,7 @@ fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
                 let word = &child.line.tokens[0];
                 Field {
                     name: Ident { name: word.text.clone(), span: word.span },
-                    type_text: word.text.clone(),
+                    type_text: if ty == FieldType::Bool { "bool".into() } else { word.text.clone() },
                     ty,
                     modifiers: Modifiers { label: Some(label.to_string()), ..Modifiers::default() },
                     label: label.to_string(),
@@ -667,6 +671,9 @@ fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
         span,
     }
 }
+
+/// Clarity's own settings, written in the settings block as a bare word.
+pub const OWN_SETTINGS: [&str; 4] = ["language", "theme", "agentReadsWhileClosed", "agentChangesWhileClosed"];
 
 /// The record type of the project's settings.
 pub const SETTINGS_ENTITY: &str = "Settings";

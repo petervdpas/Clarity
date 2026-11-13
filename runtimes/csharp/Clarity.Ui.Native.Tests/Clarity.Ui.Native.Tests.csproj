@@ -22,6 +22,8 @@
     <ProjectReference Include="../Clarity.Video/Clarity.Video.csproj" />
     <ProjectReference Include="../Clarity.Image/Clarity.Image.csproj" />
     <ProjectReference Include="../Clarity.Formats/Clarity.Formats.csproj" />
+    <!-- A program's commands for agents through Clarity.AppMcp (AgentServiceTests). -->
+    <ProjectReference Include="../Clarity.AppMcp/Clarity.AppMcp.csproj" />
     <!-- Who is using the program: people signing in through Clarity.Auth (SigninTests). -->
     <ProjectReference Include="../Clarity.Auth/Clarity.Auth.csproj" />
     <!-- A file as a data source keeps its table in SQLite (FileSourceTests). -->
@@ -34,5 +36,7 @@
   <ItemGroup>
     <!-- The file case of conformance/versions.json (FileVersionTests). -->
     <None Include="../../../conformance/versions.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The words of conformance/app-mcp.json (AgentServiceTests). -->
+    <None Include="../../../conformance/app-mcp.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

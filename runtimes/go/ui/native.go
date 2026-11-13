@@ -29,6 +29,8 @@ import (
 	"errors"
 	"fmt"
 	"unsafe"
+
+	"github.com/petervdpas/Clarity/runtimes/go/shell"
 )
 
 // Version is the library's version, the clarity-ui crate's.
@@ -77,6 +79,20 @@ func given(p *C.char, n C.size_t) string {
 		return ""
 	}
 	return C.GoStringN(p, C.int(n))
+}
+
+// The agent's questions go through the library while it runs a command for it.
+func init() {
+	shell.AgentAsk = func(question, form string) (string, bool) {
+		q, f := C.CString(question), C.CString(form)
+		defer C.free(unsafe.Pointer(q))
+		defer C.free(unsafe.Pointer(f))
+		var out *C.char
+		if C.clarity_agent_ask(q, C.size_t(len(question)), f, C.size_t(len(form)), &out) != 0 || out == nil {
+			return "", false
+		}
+		return taken(out), true
+	}
 }
 
 // taken is text the library gave back, freed once read.

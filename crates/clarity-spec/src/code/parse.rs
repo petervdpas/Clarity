@@ -812,12 +812,17 @@ pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
     };
     let params = if cursor.eat(TokenKind::LParen) { parse_params(&mut cursor)? } else { Vec::new() };
     cursor.expect_end()?;
-    let mut decl = CommandDecl { group, name, params, help: None, options: Vec::new(), allow: None, body: Vec::new(), span: node.span() };
-    let clauses = node.children.iter().take_while(|c| matches!(first_word(c), Some("help" | "option" | "allow"))).count();
+    let mut decl = CommandDecl { group, name, params, help: None, options: Vec::new(), allow: None, agent: false, body: Vec::new(), span: node.span() };
+    let clauses = node.children.iter().take_while(|c| matches!(first_word(c), Some("help" | "option" | "allow" | "agent"))).count();
     for child in &node.children[..clauses] {
         let parsed = (|| {
             let mut line = Cursor::new(child.line);
-            if line.eat_keyword("help") {
+            if line.eat_keyword("agent") {
+                if decl.agent {
+                    return Err(Diagnostic::error("'agent' is written once", child.line.span));
+                }
+                decl.agent = true;
+            } else if line.eat_keyword("help") {
                 decl.help = Some(parse_expr(&mut line)?);
             } else if line.eat_keyword("allow") {
                 let condition = parse_allow(&mut line)?;
@@ -837,7 +842,7 @@ pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
         }
     }
     for child in &node.children[clauses..] {
-        if let Some(word @ ("help" | "option" | "allow")) = first_word(child) {
+        if let Some(word @ ("help" | "option" | "allow" | "agent")) = first_word(child) {
             diagnostics.push(Diagnostic::error(format!("'{word}' goes before the statements"), child.line.span));
         }
     }

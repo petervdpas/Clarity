@@ -75,6 +75,24 @@ void the_command_line_words_are_the_shared_ones(void) {
     cJSON_Delete(cases);
 }
 
+// A program with commands for agents lists `mcp` in its help (conformance/command-line.json, `agents`).
+void a_program_with_commands_for_agents_lists_mcp_in_its_help(void) {
+    cJSON* cases = conformance("command-line.json");
+    REQUIRE(cases);
+    ClarityCliProgram program = program_of(cJSON_GetObjectItem(cases, "program"));
+    program.agents = true;
+    const cJSON* c;
+    CHECK(cJSON_GetArraySize(cJSON_GetObjectItem(cases, "agents")) > 0);
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "agents")) {
+        size_t count;
+        const char* const* args = texts(cJSON_GetObjectItem(c, "args"), &count);
+        ClarityCliParsed parsed = clarity_cli_parse(&program, count, args, english);
+        CHECK(parsed.outcome == CLARITY_CLI_HELP);
+        CHECK_TEXT(parsed.help, text_of(c, "help"));
+    }
+    cJSON_Delete(cases);
+}
+
 void command_lines_are_read_as_every_runtime_reads_them(void) {
     cJSON* cases = conformance("command-line.json");
     REQUIRE(cases);

@@ -78,7 +78,14 @@ nlohmann::json read_settings(const std::string& program) {
     return kept.is_object() ? kept : nlohmann::json::object();
 }
 
-void keep_settings(const std::string& program, const nlohmann::json& values) {
+nlohmann::json settings_merged(const nlohmann::json& on_file, const nlohmann::json& kept) {
+    nlohmann::json out = on_file.is_object() ? on_file : nlohmann::json::object();
+    for (const auto& [key, value] : kept.items()) out[key] = value;
+    return out;
+}
+
+void keep_settings(const std::string& program, const nlohmann::json& given) {
+    const nlohmann::json values = settings_merged(read_settings(program), given);
     auto file = settings_file(program);
     if (!file) throw InvalidError("this system names no folder for application settings");
     namespace fs = std::filesystem;

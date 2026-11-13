@@ -4,6 +4,6 @@
 // mapping (how a file is laid over an entity), or the project's sign-in setup (the project file's signin block).
 
 export type Selected = {
-  kind: "window" | "app" | "entity" | "enum" | "engine" | "part" | "library" | "theme" | "language" | "resource" | "diagram" | "module" | "settings" | "api" | "readme" | "mapping" | "signin";
+  kind: "window" | "app" | "entity" | "enum" | "engine" | "part" | "library" | "theme" | "language" | "resource" | "diagram" | "module" | "settings" | "api" | "readme" | "mapping" | "signin" | "agents";
   name: string;
 };

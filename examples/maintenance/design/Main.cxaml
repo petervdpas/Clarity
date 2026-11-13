@@ -16,16 +16,19 @@
     <Item kind="separator" />
     <Item kind="button" caption="@reloadButtonCaption" name="reloadButton" icon="refresh-cw" onclick="reloadClicked" />
     <Item kind="button" caption="@reviewButtonCaption" name="reviewButton" icon="square-check" onclick="reviewClicked" />
+    <Item kind="button" caption="@saveEntryButtonCaption" name="saveEntryButton" icon="save" onclick="saveEntryClicked" />
+    <Item kind="separator" />
+    <Item kind="button" caption="@preferencesButtonCaption" name="preferencesButton" icon="settings" opens="Preferences" />
   </Toolbar>
   <Sidebar side="left" name="ledgerSidebar" width="420" min="280" max="800" resizable="true" columns="6">
     <List name="projectList" at="1,1" span="6" rows="3" bind="projects" show="name" onselect="projectPicked" />
-    <TreeTable name="entryTree" at="1,4" span="6" rows="13" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:90}" resizable="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
+    <TreeTable name="entryTree" at="1,4" span="6" rows="12" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:90}" resizable="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
   </Sidebar>
-  <Content name="main" at="1,1" span="12" rows="16">
+  <Content name="main" at="1,1" span="12" rows="15">
     <View name="MainView" />
   </Content>
-  <Slideout name="reviewPanel" at="1,1" span="6" rows="22" caption="@reviewSlideout" resizable="true" side="right" slideWidth="480" pinnable="true" max="900" min="320">
-    <Tabs name="reviewTabs" at="1,1" span="6" rows="20">
+  <Slideout name="reviewPanel" at="1,1" span="6" rows="15" caption="@reviewSlideout" resizable="true" side="right" slideWidth="480" pinnable="true" max="900" min="320">
+    <Tabs name="reviewTabs" at="1,1" span="6" rows="13">
       <Tab title="@reviewTab">
         <Checkbox name="reviewedBox" at="1,1" span="6" caption="@reviewedLabel" bind="review.reviewed" />
         <Label name="reviewerLabel" at="1,2" span="2" caption="@reviewerLabel" />
@@ -33,21 +36,21 @@
         <Label name="reviewedOnLabel" at="1,3" span="2" caption="@reviewedOnLabel" />
         <Date name="reviewedOnBox" at="3,3" span="4" bind="review.reviewedOn" />
         <Label name="notesLabel" at="1,4" span="6" caption="@notesLabel" />
-        <Memo name="notesBox" at="1,5" span="6" rows="15" bind="review.notes" markdown="true" />
+        <Memo name="notesBox" at="1,5" span="6" rows="8" bind="review.notes" markdown="true" />
       </Tab>
       <Tab title="@referencesTab">
         <Label name="ownReferencesLabel" at="1,1" span="6" caption="@ownReferencesLabel" />
-        <Memo name="ownReferencesBox" at="1,2" span="6" rows="6" bind="review.ownReferences" />
-        <Label name="relatedLabel" at="1,8" span="6" caption="@relatedLabel" />
-        <Memo name="relatedBox" at="1,9" span="6" rows="6" bind="related" readonly="true" />
+        <Memo name="ownReferencesBox" at="1,2" span="6" rows="5" bind="review.ownReferences" />
+        <Label name="relatedLabel" at="1,7" span="6" caption="@relatedLabel" />
+        <Memo name="relatedBox" at="1,8" span="6" rows="5" bind="related" readonly="true" />
       </Tab>
       <Tab title="@codeTab">
-        <Markdown name="codePathsText" at="1,1" span="6" rows="18" bind="codePaths" />
+        <Markdown name="codePathsText" at="1,1" span="6" rows="12" bind="codePaths" />
       </Tab>
       <Tab title="@wasTab">
-        <Markdown name="oldReferencesText" at="1,1" span="6" rows="18" bind="oldReferences" />
+        <Markdown name="oldReferencesText" at="1,1" span="6" rows="12" bind="oldReferences" />
       </Tab>
     </Tabs>
-    <Button name="saveReviewButton" at="5,21" span="2" caption="@saveReviewCaption" icon="save" default="true" onclick="saveReviewClicked" />
+    <Button name="saveReviewButton" at="5,14" span="2" caption="@saveReviewCaption" icon="save" default="true" onclick="saveReviewClicked" />
   </Slideout>
 </Window>

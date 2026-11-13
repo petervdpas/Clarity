@@ -27,8 +27,9 @@ public sealed record CliParam(string Name, CliKind Kind)
 /// <summary>A command: the words typed, as <c>["customer", "add"]</c>.</summary>
 public sealed record CliCommand(IReadOnlyList<string> Line, string? Help, IReadOnlyList<CliParam> Arguments, IReadOnlyList<CliParam> Options);
 
-/// <summary>A program and its commands, in the order they are declared.</summary>
-public sealed record CliProgram(string Name, string? Help, IReadOnlyList<CliCommand> Commands);
+/// <summary>A program and its commands, in the order they are declared; <paramref name="Agents"/>: agents may call
+/// some of them, and the help lists <c>mcp</c>.</summary>
+public sealed record CliProgram(string Name, string? Help, IReadOnlyList<CliCommand> Commands, bool Agents = false);
 
 /// <summary>Clarity's words in the language shown: the translation of a key, or its English.</summary>
 public sealed class CliWords(Func<string, string?>? translated = null)
@@ -63,7 +64,7 @@ public sealed class CliWords(Func<string, string?>? translated = null)
     {
         var text = translated?.Invoke(key);
         if (string.IsNullOrEmpty(text))
-            text = English.FirstOrDefault(w => w.Key == key).English ?? key;
+            text = English.Concat(Agents.Words).FirstOrDefault(w => w.Key == key).English ?? key;
         foreach (var (name, value) in slots)
             text = text.Replace("{" + name + "}", value);
         return text;
@@ -210,6 +211,8 @@ public static class Cli
             text.Append(help).Append("\n\n");
         text.Append(GroupUsage(program, path, words)).Append("\n\n");
         var commands = program.Commands.Where(c => c.Line.Count > path.Count && BeginsWith(c.Line, path)).Select(c => (string.Join(' ', c.Line), c.Help ?? "")).ToList();
+        if (path.Count == 0 && program.Agents)
+            commands.Add(("mcp", words.Say("agentMcp")));
         text.Append(Section(words.Say("cliCommands"), commands)).Append('\n');
         text.Append(Section(words.Say("cliOptions"), [("--help", words.Say("cliHelpOption"))]));
         return text.ToString();
@@ -505,6 +508,26 @@ public static class Cli
         return available.FirstOrDefault(a => a == tag) ?? available.FirstOrDefault(a => Primary(a) == Primary(tag));
     }
 
+    /// <summary>A question's form as JSON, as conformance/command-line.json writes it.</summary>
+    public static string Form(CliAsked asked)
+    {
+        var form = asked switch
+        {
+            CliAsked.Confirm c => new System.Text.Json.Nodes.JsonObject { ["kind"] = "confirm", ["yes"] = c.Yes, ["no"] = c.No },
+            CliAsked.Choice c => new System.Text.Json.Nodes.JsonObject { ["kind"] = "choice", ["choices"] = new System.Text.Json.Nodes.JsonArray([.. c.Choices.Select(x => (System.Text.Json.Nodes.JsonNode?)x)]) },
+            CliAsked.Value v => new System.Text.Json.Nodes.JsonObject
+            {
+                ["kind"] = "value",
+                ["type"] = v.Param.Kind.ToString().ToLowerInvariant(),
+                ["values"] = new System.Text.Json.Nodes.JsonArray([.. v.Param.Values.Select(x => (System.Text.Json.Nodes.JsonNode?)x)]),
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(asked)),
+        };
+        if (asked is CliAsked.Value { Param.Default: { } fallback })
+            form["default"] = fallback;
+        return form.ToJsonString();
+    }
+
     /// <summary>Runs a command-line program: reads the command line, writes help or what is wrong
     /// with it, or runs the command it names with its values, and gives the exit code its run ends with (DESIGN 5.20).</summary>
     public static int RunProgram(CliProgram program, string[] args, Func<CliSession, int, IReadOnlyList<string?>, int> run)
@@ -571,16 +594,30 @@ public static class CliLanguage
     public static string Show(Text text) => text.Show();
 }
 
+/// <summary>A question nobody answered while an agent ran the command: the command stops here
+/// with this text, as a terminal program ends.</summary>
+public sealed class CliUnanswered(string text) : Exception(text);
+
 /// <summary>What a running command prints, says and asks through: standard output, standard error
-/// and the terminal, in the language shown.</summary>
-public sealed class CliSession(ICliTerminal terminal)
+/// and the terminal, in the language shown; or, for an agent (<see cref="Agents"/>), what it prints
+/// kept in <paramref name="printed"/> and its questions put to <paramref name="agent"/>, which gives
+/// the answer as the terminal gives it, or null.</summary>
+public sealed class CliSession(ICliTerminal terminal, Func<string, string, string?>? agent = null, System.Text.StringBuilder? printed = null)
 {
+    void Out(string text)
+    {
+        if (printed is not null)
+            printed.Append(text);
+        else
+            Console.Out.Write(text);
+    }
+
     /// <summary><c>print value</c>: one line on standard output.</summary>
-    public void Print(Text text) => Console.Out.WriteLine(CliLanguage.Show(text));
+    public void Print(Text text) => Out(CliLanguage.Show(text) + "\n");
 
     /// <summary><c>print list columns a, b</c>: the records as a table on standard output.</summary>
     public void PrintTable(IReadOnlyList<Text> headings, IReadOnlyList<bool> right, IReadOnlyList<IReadOnlyList<string>> rows) =>
-        Console.Out.Write(Cli.Table([.. headings.Select(CliLanguage.Show)], right, rows));
+        Out(Cli.Table([.. headings.Select(CliLanguage.Show)], right, rows));
 
     /// <summary><c>message</c>: one line on standard error.</summary>
     public void Message(Text text) => Console.Error.WriteLine(CliLanguage.Show(text));
@@ -590,6 +627,11 @@ public sealed class CliSession(ICliTerminal terminal)
 
     string Answer(Text question, CliAsked asked)
     {
+        if (agent is not null)
+        {
+            var shown = CliLanguage.Show(question);
+            return agent(shown, Cli.Form(asked)) ?? throw new CliUnanswered(CliLanguage.Words.Say("cliNoTerminal", ("question", shown)));
+        }
         var (answer, exit) = Cli.Ask(CliLanguage.Show(question), asked, terminal, CliLanguage.Words);
         if (answer is null)
         {

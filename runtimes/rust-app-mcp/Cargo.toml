@@ -1,0 +1,19 @@
+[package]
+name = "clarity-app-mcp"
+description = "Clarity.AppMcp: the MCP service of the programs Clarity generates, offering an app's commands to AI agents with the person's grant, alike on every stack"
+# Released on its own (tag runtimes/rust-app-mcp/vX.Y.Z).
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "mcp", "agents", "json-rpc"]
+categories = ["api-bindings"]
+include = ["src/**", "README.md", "LICENSE"]
+
+# The protocol is lines of JSON over standard input and output; no async
+# runtime, so every program can carry it.
+[dependencies]
+getrandom = "0.3"
+serde_json = "1"

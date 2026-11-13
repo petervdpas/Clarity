@@ -7,6 +7,7 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,7 +45,54 @@ type ProgramOptions struct {
 	Watches bool
 	// Engines are the engines beside the screen; nil for none.
 	Engines Engines
+	// Agents are the commands agents may call while the app runs
+	// (docs/ledger/app-mcp.md); nil for an app without them.
+	Agents *Agents
 }
+
+// Agents is what a program whose commands agents may call answers the
+// library: what it offers, and a command line run for an agent, its
+// questions asked through AgentAsk.
+type Agents struct {
+	Tools, App, Program, Version string
+	Call                         func(line []string, ask func(question, form string) (string, bool)) (text string, refused bool)
+}
+
+// errAgentRefused takes back what a refused agent's call changed.
+var errAgentRefused = errors.New("refused")
+
+// agentCall runs a command line for an agent as one database step: all of
+// its changes, or none when it is refused; the step is what Undo takes back
+// (0 when it changed nothing).
+func (p *Program) agentCall(line []string) (text string, isRefused bool, step int64) {
+	db := p.service.options.Db
+	if db == nil {
+		text, isRefused = p.options.Agents.Call(line, AgentAsk)
+		return text, isRefused, 0
+	}
+	before := db.LastStep()
+	err := db.Step(func() error {
+		text, isRefused = p.options.Agents.Call(line, AgentAsk)
+		if isRefused {
+			return errAgentRefused
+		}
+		return nil
+	})
+	if isRefused {
+		return text, true, 0
+	}
+	if err != nil {
+		return err.Error(), true, 0
+	}
+	if db.LastStep() != before {
+		step = db.LastStep()
+	}
+	return text, false, step
+}
+
+// AgentAsk asks the agent whose command runs on this thread (Clarity.UI's
+// clarity_agent_ask); package ui sets it. False when there is no answer.
+var AgentAsk = func(question, form string) (string, bool) { return "", false }
 
 // watch is a long call's watch: how far it is, and its Stop.
 type watch struct {
@@ -157,6 +205,35 @@ func (p *Program) answerIn(ctx context.Context, command string, args []byte, thr
 			return nil
 		}
 		return value(json.RawMessage(p.options.Facts))
+	case "agents":
+		if p.options.Agents == nil {
+			return nil
+		}
+		a := p.options.Agents
+		return value(map[string]string{"tools": a.Tools, "app": a.App, "program": a.Program, "version": a.Version})
+	case "agent_call":
+		if p.options.Agents == nil {
+			return nil
+		}
+		var given struct {
+			Line []string `json:"line"`
+		}
+		_ = json.Unmarshal(args, &given)
+		text, isRefused, step := p.agentCall(given.Line)
+		return value(map[string]any{"text": text, "refused": isRefused, "step": step})
+	case "agent_undo":
+		var given struct {
+			Step int64 `json:"step"`
+		}
+		_ = json.Unmarshal(args, &given)
+		db := p.service.options.Db
+		if db == nil {
+			return nil
+		}
+		if _, err := db.ReplaySteps([]int64{given.Step}, true); err != nil {
+			return wired(failed(err))
+		}
+		return value(nil)
 	case "engine_open", "engine_hears", "engine_frame", "engine_close":
 		// Served while people sign in, an engine runs only for a call with a session.
 		if !p.service.signedInOrOpen(ctx) {

@@ -25,6 +25,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 resvg = "0.49"
 
 [dev-dependencies]
+# The running app `<program> mcp` forwards to, in the command-line build tests.
+clarity-app-mcp = { path = "../../runtimes/rust-app-mcp" }
 clarity-formats = { path = "../../runtimes/rust-formats" }
 bzip2 = "0.6"
 clarity-runtime = { path = "../../runtimes/rust", features = ["postgres", "mysql", "mssql"] }

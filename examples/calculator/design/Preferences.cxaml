@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Dialog class="calculator.Preferences" title="@preferencesTitle" width="320" height="200" columns="4">
+<Dialog class="calculator.Preferences" title="@preferencesTitle" width="320" height="236" columns="4">
   <Form name="settingsForm" at="1,1" span="4" rows="3" bind="settings" labels="2">
     <Dropdown name="languageBox" at="3,1" span="2" bind="settings.language" />
     <Dropdown name="themeBox" at="3,2" span="2" bind="settings.theme" />

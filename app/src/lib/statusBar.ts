@@ -22,6 +22,7 @@ const KIND_NAMES: Record<Selected["kind"], string> = {
   readme: "README",
   mapping: "Mapping",
   signin: "Sign-in",
+  agents: "Agents",
 };
 
 /** What is open, like `Window Main`. */

@@ -113,6 +113,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::carries_auth(project) {
         files.push(text("auth.go", super::AUTH_GO.to_string()));
     }
+    // Commands for agents (docs/ledger/app-mcp.md): `mcp` serves them through Clarity.AppMcp.
+    if crate::agent_tools::offers_agents(project) {
+        files.extend(super::agents_files().map(|(path, body)| text(path, body)));
+        files.push(text("tools.json", crate::agent_tools::tool_list_file(project, settings)));
+    }
     let mut direct = vec![RUNTIME_MODULE];
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
@@ -132,31 +137,22 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
-fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)], servers: &[&Server]) -> String {
+/// What a Go program runs its commands with, as code: their description
+/// (`listed`, for `cliProgram`), the data each has (the settings) and how
+/// it starts and keeps them, and the dispatch by command number. The
+/// command-line program and the desktop's commands for agents both use them.
+pub(crate) struct CommandParts {
+    pub listed: String,
+    pub data: &'static str,
+    pub start: String,
+    pub keep: String,
+    pub dispatch: String,
+}
+
+pub(crate) fn command_parts(project: &Project) -> CommandParts {
     let commands = crate::commands::commands(project);
-    let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new())];
-    imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
-    // Secret settings (DESIGN 5.27): read and kept through the system's protected store.
     let secret_names = crate::secret_names(project);
     let secrets_list = format!("[]string{{{}}}", secret_names.iter().map(|n| string(n)).collect::<Vec<_>>().join(", "));
-    if !secret_names.is_empty() {
-        imports.push((format!("{RUNTIME_MODULE}/secrets"), String::new()));
-    }
-    imports.sort();
-    let imports: String = imports.iter().map(|(path, name)| format!("\t{name}\"{path}\"\n")).collect();
-    let sources = databases.iter().map(|(name, sql, at)| format!("{{Name: {}, Dialect: {}, At: {}}}", string(name), super::dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
-    let stores = crate::fixed_stores(settings).iter().map(|s| format!("{}: {}", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
-    // A store whose folder is a folder setting follows the person's settings.
-    let program_name = crate::settings_program(settings);
-    let folder_stores: String = crate::folder_stores(project, settings)
-        .iter()
-        .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
-        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("\tif err := db.AddFile(clarity.FileSource{{Name: {}, Format: {}, Path: {}, Options: {}, Table: {}, Key: {}, Fields: {}, Readonly: {}}}, formatsReadTable, formatsWriteTable); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
-        .chain(std::iter::once(super::add_signin(project, settings)))
-        .collect();
-
-    let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
-    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let listed: String = commands.iter().map(command).collect();
     let kept = project.files.iter().find_map(|f| f.entities.iter().find(|e| e.settings));
     let (data, start, keep) = match kept {
@@ -183,6 +179,57 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
         }
         None => ("// CommandData is what every command has as data of its own.\ntype CommandData struct{}\n", "\tdata := &CommandData{}\n".to_string(), String::new()),
     };
+    let mut dispatch = String::new();
+    for (i, c) in commands.iter().enumerate() {
+        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
+        let args: String = values.iter().map(|v| format!(", {v}")).collect();
+        dispatch.push_str(&format!("\t\tcase {i}:\n\t\t\treturn {}(db, cli, data{args})\n", logic::command_function(c.decl)));
+    }
+    CommandParts { listed, data, start, keep, dispatch }
+}
+
+/// The desktop program's commands for AI agents (docs/ledger/app-mcp.md),
+/// a file of its own (`commands.go`): what the app offers Clarity.UI, a
+/// command line run on its databases as the command-line program runs it,
+/// and `<program> mcp` without a window.
+pub(crate) fn agents_file(project: &Project, settings: &Settings) -> String {
+    let CommandParts { listed, data, start, keep, dispatch } = command_parts(project);
+    let secrets = if crate::secret_names(project).is_empty() { String::new() } else { format!("\t\"{RUNTIME_MODULE}/secrets\"\n") };
+    let app = string(&clarity_project::title(settings));
+    let version = string(settings.version.as_deref().unwrap_or(""));
+    format!(
+        "{}\npackage main\n\nimport (\n\t_ \"embed\"\n\n\t\"{RUNTIME_MODULE}/clarity\"\n{secrets}\t\"{RUNTIME_MODULE}/shell\"\n)\n\n// agentTools are the commands agents may call, as the MCP service lists them.\n//\n//go:embed tools.json\nvar agentTools string\n\n// program is the name the person's settings are kept under.\nconst program = {program}\n\n{data}\n// cliProgram is the commands, as the command line reads them.\nfunc cliProgram() clarity.CliProgram {{\n\treturn clarity.CliProgram{{\n\t\tName: {name},\n\t\tHelp: {help},\n\t\tCommands: []clarity.CliCommand{{\n{listed}\t\t}},\n\t\tAgents: true,\n\t}}\n}}\n\n// runCommand runs command with values on the app's databases, as the command line does.\nfunc runCommand(db *clarity.Db, cli *clarity.CliSession, command int, values []*string) (int, error) {{\n{start}\tcode, err := func() (int, error) {{\n\t\tswitch command {{\n{dispatch}\t\t}}\n\t\treturn 2, nil\n\t}}()\n{keep}\treturn code, err\n}}\n\n// agentsOf is what the app offers agents while it runs, on db.\nfunc agentsOf(db *clarity.Db) *shell.Agents {{\n\treturn &shell.Agents{{Tools: agentTools, App: {app}, Program: program, Version: {version}, Call: func(line []string, ask func(question, form string) (string, bool)) (string, bool) {{\n\t\treturn clarity.RunAgentLine(cliProgram(), line, ask, func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n\t\t\treturn runCommand(db, cli, command, values)\n\t\t}})\n\t}}}}\n}}\n\n// serveMcp is `<program> mcp`: the commands for agents without a window,\n// forwarded to the running app when one answers, else served as the closed app.\nfunc serveMcp(db *clarity.Db) int {{\n\tserve := func(tools, options string, run func(clarity.AgentCall) (string, bool)) error {{\n\t\treturn agentsServe(tools, options, func(c agentCall) (string, bool) {{ return run(c) }})\n\t}}\n\treturn clarity.ServeAgents(cliProgram(), clarity.Agents{{Tools: agentTools, App: {app}, Program: program, Version: {version}}}, serve, agentsForward, func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n\t\treturn runCommand(db, cli, command, values)\n\t}})\n}}\n",
+        super::HEADER,
+        program = string(&crate::settings_program(settings)),
+        name = string(&crate::commands::program_name(settings)),
+        help = said(&crate::commands::program_help(project)),
+    )
+}
+
+fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)], servers: &[&Server]) -> String {
+    let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new())];
+    imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
+    // Secret settings (DESIGN 5.27): read and kept through the system's protected store.
+    let secret_names = crate::secret_names(project);
+    if !secret_names.is_empty() {
+        imports.push((format!("{RUNTIME_MODULE}/secrets"), String::new()));
+    }
+    imports.sort();
+    let imports: String = imports.iter().map(|(path, name)| format!("\t{name}\"{path}\"\n")).collect();
+    let sources = databases.iter().map(|(name, sql, at)| format!("{{Name: {}, Dialect: {}, At: {}}}", string(name), super::dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
+    let stores = crate::fixed_stores(settings).iter().map(|s| format!("{}: {}", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("\tif err := db.AddFile(clarity.FileSource{{Name: {}, Format: {}, Path: {}, Options: {}, Table: {}, Key: {}, Fields: {}, Readonly: {}}}, formatsReadTable, formatsWriteTable); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
+        .chain(std::iter::once(super::add_signin(project, settings)))
+        .collect();
+
+    let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
+    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
+    let CommandParts { listed, data, start, keep, dispatch } = command_parts(project);
     // People sign in on the command line (docs/APP-CAPABILITIES-PLAN.md step 4):
     // --user and --token are taken out first, and a command signs in before it runs.
     let signs_in = crate::signin::signin_plan(project).is_some_and(|p| p.targets.iter().any(|t| t == "cli"));
@@ -194,14 +241,19 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
     } else {
         ("", "")
     };
-    let mut dispatch = String::new();
-    for (i, c) in commands.iter().enumerate() {
-        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
-        let args: String = values.iter().map(|v| format!(", {v}")).collect();
-        dispatch.push_str(&format!("\t\tcase {i}:\n\t\t\treturn {}(db, cli, data{args})\n", logic::command_function(c.decl)));
-    }
+    // Commands for agents: `mcp` serves them, and the help lists it (docs/ledger/app-mcp.md).
+    let agents_field = if crate::agent_tools::offers_agents(project) { "\t\tAgents: true,\n" } else { "" };
+    let (tools_var, run_program, serve_agents) = if crate::agent_tools::offers_agents(project) {
+        (
+            "// tools are the commands agents may call, as the MCP service lists them.\n//\n//go:embed tools.json\nvar tools string\n\n".to_string(),
+            format!("clarity.RunCliProgramForAgents(cliProgram(), clarity.Agents{{Tools: tools, App: {}, Program: program, Version: {}}}, serveAgents, agentsForward, ", string(&clarity_project::title(settings)), string(settings.version.as_deref().unwrap_or(""))),
+            "// serveAgents serves the commands for agents through Clarity.AppMcp (agents_library.go).\nfunc serveAgents(tools, options string, run func(clarity.AgentCall) (string, bool)) error {\n\treturn agentsServe(tools, options, func(c agentCall) (string, bool) { return run(c) })\n}\n\n".to_string(),
+        )
+    } else {
+        (String::new(), "clarity.RunCliProgram(cliProgram(), ".to_string(), String::new())
+    };
     format!(
-        "{}\npackage main\n\nimport (\n\t_ \"embed\"\n\t\"fmt\"\n\t\"os\"\n\n{imports})\n\n// texts are the texts the program shows, in every language the project has.\n//\n//go:embed texts.json\nvar texts []byte\n\n// program is the desktop program's name, which names the folder the\n// person's settings are kept in: both programs share them.\nconst program = {program}\n\n// databases is the database of each data source: its name, its kind and where it is.\nvar databases = []clarity.Source{{{sources}}}\n\n// stores is the folder of each file store.\nvar stores = map[string]string{{{stores}}}\n\n{data}\n// cliProgram is the program and its commands, as the command line reads them.\nfunc cliProgram() clarity.CliProgram {{\n\treturn clarity.CliProgram{{\n\t\tName: {name},\n\t\tHelp: {help},\n\t\tCommands: []clarity.CliCommand{{\n{listed}\t\t}},\n\t}}\n}}\n\n// openDatabases opens every database and applies the migration steps it has not had yet.\nfunc openDatabases() (*clarity.Db, error) {{\n\tdb, err := clarity.Connect(databases...)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tfor _, s := range Sources {{\n\t\tif _, err := db.MigrateSource(s.Source, s.Steps); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n\tfor name, at := range stores {{\n\t\tif err := db.AddStore(name, at); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n{folder_stores}\treturn db, nil\n}}\n\nfunc main() {{\n\tclarity.LoadTranslations(texts)\n\tlocale := \"\"\n\tfor _, name := range []string{{\"LC_ALL\", \"LC_MESSAGES\", \"LANG\"}} {{\n\t\tif locale = os.Getenv(name); locale != \"\" {{\n\t\t\tbreak\n\t\t}}\n\t}}\n\tclarity.SetLanguage(clarity.CliPickLanguage(locale, []string{{{languages}}}, {base}))\n{start}\tdb, err := openDatabases()\n\tif err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n{flags}\tcode := clarity.RunCliProgram(cliProgram(), func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n{signs}\t\tswitch command {{\n{dispatch}\t\t}}\n\t\treturn 2, nil\n\t}})\n{keep}\tdb.Close()\n\tos.Exit(code)\n}}\n",
+        "{}\npackage main\n\nimport (\n\t_ \"embed\"\n\t\"fmt\"\n\t\"os\"\n\n{imports})\n\n// texts are the texts the program shows, in every language the project has.\n//\n//go:embed texts.json\nvar texts []byte\n\n{tools_var}// program is the desktop program's name, which names the folder the\n// person's settings are kept in: both programs share them.\nconst program = {program}\n\n// databases is the database of each data source: its name, its kind and where it is.\nvar databases = []clarity.Source{{{sources}}}\n\n// stores is the folder of each file store.\nvar stores = map[string]string{{{stores}}}\n\n{data}\n// cliProgram is the program and its commands, as the command line reads them.\nfunc cliProgram() clarity.CliProgram {{\n\treturn clarity.CliProgram{{\n\t\tName: {name},\n\t\tHelp: {help},\n\t\tCommands: []clarity.CliCommand{{\n{listed}\t\t}},\n{agents_field}\t}}\n}}\n\n{serve_agents}// openDatabases opens every database and applies the migration steps it has not had yet.\nfunc openDatabases() (*clarity.Db, error) {{\n\tdb, err := clarity.Connect(databases...)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tfor _, s := range Sources {{\n\t\tif _, err := db.MigrateSource(s.Source, s.Steps); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n\tfor name, at := range stores {{\n\t\tif err := db.AddStore(name, at); err != nil {{\n\t\t\tdb.Close()\n\t\t\treturn nil, err\n\t\t}}\n\t}}\n{folder_stores}\treturn db, nil\n}}\n\nfunc main() {{\n\tclarity.LoadTranslations(texts)\n\tlocale := \"\"\n\tfor _, name := range []string{{\"LC_ALL\", \"LC_MESSAGES\", \"LANG\"}} {{\n\t\tif locale = os.Getenv(name); locale != \"\" {{\n\t\t\tbreak\n\t\t}}\n\t}}\n\tclarity.SetLanguage(clarity.CliPickLanguage(locale, []string{{{languages}}}, {base}))\n{start}\tdb, err := openDatabases()\n\tif err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n{flags}\tcode := {run_program}func(cli *clarity.CliSession, command int, values []*string) (int, error) {{\n{signs}\t\tswitch command {{\n{dispatch}\t\t}}\n\t\treturn 2, nil\n\t}})\n{keep}\tdb.Close()\n\tos.Exit(code)\n}}\n",
         super::HEADER,
         program = string(&crate::settings_program(settings)),
         name = string(&crate::commands::program_name(settings)),

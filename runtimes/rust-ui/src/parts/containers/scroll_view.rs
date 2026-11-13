@@ -16,7 +16,6 @@ use crate::painter::Painter;
 /// How thick a bar is, from the edge of the place.
 pub const BAR_THICKNESS: f64 = 8.0;
 
-const LEAST_THUMB: f64 = 24.0;
 
 /// How wide and high content is for a place of a width and height.
 pub type Measure = Box<dyn Fn(&dyn Element, f64, f64, &mut Cx) -> (f64, f64)>;
@@ -229,14 +228,17 @@ impl ScrollBar {
         if self.vertical { self.scrolled.y.get() } else { self.scrolled.x.get() }
     }
 
+    /// Its thumb, measured as every bar's is.
+    fn thumb(&self) -> crate::geometry::Thumb {
+        crate::geometry::Thumb { track: self.track(), content: self.content(), scroll: self.scroll(), max: self.max() }
+    }
+
     fn thumb_length(&self) -> f64 {
-        let track = self.track();
-        if self.content() <= 0.0 { track } else { track.min(LEAST_THUMB.max(track * track / self.content())) }
+        self.thumb().length()
     }
 
     fn thumb_at(&self) -> f64 {
-        let max = self.max();
-        if max <= 0.0 { 0.0 } else { (self.track() - self.thumb_length()) * self.scroll() / max }
+        self.thumb().at()
     }
 
     fn scroll_to(&self, to: f64, cx: &mut Cx) {
@@ -258,25 +260,22 @@ impl Element for ScrollBar {
 
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
         let along = if self.vertical { at.y } else { at.x };
-        let thumb = self.thumb_at();
-        if along >= thumb && along < thumb + self.thumb_length() {
-            self.grab = Some(along - thumb);
-            return;
-        }
         // A press beside the thumb moves a place's length that way.
         let place = self.scrolled.place.get();
         let page = if self.vertical { place.height } else { place.width };
-        let to = self.scroll() + if along < thumb { -page } else { page };
-        self.grab = None;
-        self.scroll_to(to, cx);
+        match self.thumb().pressed(along, page) {
+            Ok(grab) => self.grab = Some(grab),
+            Err(to) => {
+                self.grab = None;
+                self.scroll_to(to, cx);
+            }
+        }
     }
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         let Some(grab) = self.grab.filter(|_| self.node.pressed) else { return };
         let along = if self.vertical { at.y } else { at.x };
-        let travel = self.track() - self.thumb_length();
-        let to = if travel <= 0.0 { 0.0 } else { (along - grab) / travel * self.max() };
-        self.scroll_to(to, cx);
+        self.scroll_to(self.thumb().dragged(along, grab), cx);
     }
 
     fn on_pointer_released(&mut self, _at: PointerInput, _cx: &mut Cx) {

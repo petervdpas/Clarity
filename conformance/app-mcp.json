@@ -1,0 +1,1984 @@
+{
+  "about": "An app's MCP service (docs/ledger/app-mcp.md) through Clarity.AppMcp, the shared core: each stack serves `tools` (the tool list clarity-gen writes) with the case's `options` and a host that answers as `host` says, and the person grants as `grants` says, one answer for each grant asked, in order. The stack feeds the `send` messages in order and gets every `expect` message in order, compared as JSON; `asked` are the grants asked of the person, each with its tool and kind. A host runs a tool by `print` (the call's text) or `refuse` (a tool error with its text); with `ask` it first asks the agent `message` with the answer's `schema`, then prints `print` when the answer is true, refuses with `kept` on any other answer, a decline or a cancel, and with `unanswered` when the agent's client cannot answer questions. `commandLines` gives the command line a call becomes, which the program reads with its own parser and runs as if typed: the command's words, each option given as `--name=value` (a number as JSON writes it, a bool option that is true as `--name` alone, false or null left out), then `--` and the arguments in their order. `questions` gives what a command's `ask` (its `form`, as command-line.json writes it) asks the agent (`schema`), and, for the agent's `reply`, the answer the command gets as the terminal would give it, or null when there is none (the program then refuses with its no-terminal message): a yes or no is a boolean, a declined or cancelled one is a no; a value is of its kind, with its default, and a declined one takes its default; a choice is one of its texts, answered by its number from 1. `words` are Clarity's own words of a refusal (translations AGENT_KEYS) in English, which a program gives the service as its texts in the language shown: `agentRefused` when the person refused, `agentClosed` while the app is closed; `agentMcp` is what the program's help says of `mcp`; `{app}` is the app's title.",
+  "words": {
+    "agentRefused": "The person using {app} refused this.",
+    "agentClosed": "{app} is not open; open it to allow this.",
+    "agentMcp": "Serves the commands for AI agents over MCP"
+  },
+  "tools": {
+    "name": "shop",
+    "instructions": "# Shop for agents\n\n## What the app is for\n\nKeeps customers.\n\n## The app's data\n\n- Customer: name (text), kind (Kind: Person, Business)\n",
+    "whileClosed": {
+      "read": false,
+      "change": false
+    },
+    "atMost": 3,
+    "tools": [
+      {
+        "name": "customer-add",
+        "description": "Adds a customer",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "Person",
+                "Business"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "vip": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "changes": {
+          "data": true,
+          "files": false,
+          "settings": false,
+          "net": false
+        },
+        "allow": false,
+        "line": [
+          "customer",
+          "add"
+        ],
+        "arguments": [
+          "name",
+          "kind"
+        ]
+      },
+      {
+        "name": "customer-count",
+        "description": "Counts the customers",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 2000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "changes": {
+          "data": false,
+          "files": false,
+          "settings": false,
+          "net": false
+        },
+        "allow": false,
+        "line": [
+          "customer",
+          "count"
+        ],
+        "arguments": []
+      },
+      {
+        "name": "customer-remove",
+        "description": "Removes a customer",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "changes": {
+          "data": true,
+          "files": false,
+          "settings": false,
+          "net": false
+        },
+        "allow": false,
+        "line": [
+          "customer",
+          "remove"
+        ],
+        "arguments": [
+          "name"
+        ]
+      },
+      {
+        "name": "report-send",
+        "description": "Sends the report",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "changes": {
+          "data": false,
+          "files": false,
+          "settings": false,
+          "net": true
+        },
+        "allow": true,
+        "line": [
+          "report",
+          "send"
+        ],
+        "arguments": []
+      }
+    ]
+  },
+  "host": {
+    "customer-add": {
+      "print": "Added a customer"
+    },
+    "customer-count": {
+      "print": "2 customers"
+    },
+    "customer-remove": {
+      "ask": {
+        "message": "Remove Ada?",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "print": "Removed Ada",
+      "kept": "Kept Ada",
+      "unanswered": "Cannot ask"
+    },
+    "report-send": {
+      "refuse": "Only a manager may send the report"
+    }
+  },
+  "cases": [
+    {
+      "name": "initialize gives the app's name, version and instructions in the version the client speaks",
+      "options": {
+        "version": "1.2.0"
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {
+                "name": "agent",
+                "version": "1"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {
+                "tools": {
+                  "listChanged": false
+                }
+              },
+              "serverInfo": {
+                "name": "shop",
+                "version": "1.2.0"
+              },
+              "instructions": "# Shop for agents\n\n## What the app is for\n\nKeeps customers.\n\n## The app's data\n\n- Customer: name (text), kind (Kind: Person, Business)\n"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "ping"
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {}
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "a client speaking a version the app does not know gets the newest the app speaks",
+      "options": {
+        "version": "1.2.0"
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "a",
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "1999-01-01",
+              "capabilities": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": "a",
+            "result": {
+              "protocolVersion": "2025-11-25",
+              "capabilities": {
+                "tools": {
+                  "listChanged": false
+                }
+              },
+              "serverInfo": {
+                "name": "shop",
+                "version": "1.2.0"
+              },
+              "instructions": "# Shop for agents\n\n## What the app is for\n\nKeeps customers.\n\n## The app's data\n\n- Customer: name (text), kind (Kind: Person, Business)\n"
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "the tools are listed with whether they only read and whether they reach outside",
+      "options": {},
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list"
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "tools": [
+                {
+                  "name": "customer-add",
+                  "description": "Adds a customer",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "Person",
+                          "Business"
+                        ]
+                      },
+                      "limit": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 5000,
+                        "default": 1000
+                      },
+                      "vip": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "annotations": {
+                    "readOnlyHint": false,
+                    "openWorldHint": false
+                  }
+                },
+                {
+                  "name": "customer-count",
+                  "description": "Counts the customers",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 2000
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "annotations": {
+                    "readOnlyHint": true,
+                    "openWorldHint": false
+                  }
+                },
+                {
+                  "name": "customer-remove",
+                  "description": "Removes a customer",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "annotations": {
+                    "readOnlyHint": false,
+                    "openWorldHint": false
+                  }
+                },
+                {
+                  "name": "report-send",
+                  "description": "Sends the report",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "annotations": {
+                    "readOnlyHint": false,
+                    "openWorldHint": true
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "the first read of a connection asks the person; allowed for the session, later reads go through",
+      "options": {},
+      "grants": [
+        "session"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {
+                "since": 2020
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-count",
+          "kind": "read"
+        }
+      ]
+    },
+    {
+      "name": "a read allowed once asks again next time, and a refused read is a tool error",
+      "options": {
+        "texts": {
+          "refused": "The person refused this."
+        }
+      },
+      "grants": [
+        "once",
+        "refuse"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count"
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The person refused this."
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-count",
+          "kind": "read"
+        },
+        {
+          "tool": "customer-count",
+          "kind": "read"
+        }
+      ]
+    },
+    {
+      "name": "a change allowed once asks again at the next call",
+      "options": {},
+      "grants": [
+        "once",
+        "once"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Added a customer"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Bob",
+                "kind": "Business",
+                "limit": 200.5,
+                "vip": true
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Added a customer"
+                }
+              ],
+              "isError": false
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-add",
+          "kind": "change"
+        },
+        {
+          "tool": "customer-add",
+          "kind": "change"
+        }
+      ]
+    },
+    {
+      "name": "a change allowed for the session covers that tool only, and reads still ask once",
+      "options": {},
+      "grants": [
+        "session",
+        "once",
+        "session"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Added a customer"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Bob",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Added a customer"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-remove",
+              "arguments": {
+                "name": "Ada"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Cannot ask"
+                }
+              ],
+              "isError": true
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-add",
+          "kind": "change"
+        },
+        {
+          "tool": "customer-remove",
+          "kind": "change"
+        },
+        {
+          "tool": "customer-count",
+          "kind": "read"
+        }
+      ]
+    },
+    {
+      "name": "a refused change runs nothing and tells the agent in the app's words",
+      "options": {
+        "texts": {
+          "refused": "Ada's person said no."
+        }
+      },
+      "grants": [
+        "refuse"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ada's person said no."
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-add",
+          "kind": "change"
+        }
+      ]
+    },
+    {
+      "name": "a command's own refusal is a tool error with its text",
+      "options": {},
+      "grants": [
+        "once"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "report-send",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Only a manager may send the report"
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "report-send",
+          "kind": "change"
+        }
+      ]
+    },
+    {
+      "name": "a command asks the agent through the client's elicitation and goes on with the answer",
+      "options": {},
+      "grants": [
+        "session"
+      ],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {
+                "elicitation": {}
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {
+                "tools": {
+                  "listChanged": false
+                }
+              },
+              "serverInfo": {
+                "name": "shop",
+                "version": ""
+              },
+              "instructions": "# Shop for agents\n\n## What the app is for\n\nKeeps customers.\n\n## The app's data\n\n- Customer: name (text), kind (Kind: Person, Business)\n"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-remove",
+              "arguments": {
+                "name": "Ada"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": "ask-1",
+            "method": "elicitation/create",
+            "params": {
+              "message": "Remove Ada?",
+              "requestedSchema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "ping"
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "result": {}
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "ask-1",
+            "result": {
+              "action": "accept",
+              "content": {
+                "answer": true
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Removed Ada"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-remove",
+              "arguments": {
+                "name": "Ada"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": "ask-2",
+            "method": "elicitation/create",
+            "params": {
+              "message": "Remove Ada?",
+              "requestedSchema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "ask-2",
+            "result": {
+              "action": "decline"
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Kept Ada"
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": [
+        {
+          "tool": "customer-remove",
+          "kind": "change"
+        }
+      ]
+    },
+    {
+      "name": "while the app is closed a change is refused without asking, unless the person's setting allows it",
+      "options": {
+        "open": false,
+        "texts": {
+          "closed": "Shop is not open; open it to allow this."
+        }
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Shop is not open; open it to allow this."
+                }
+              ],
+              "isError": true
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Shop is not open; open it to allow this."
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "while the app is closed the person's settings may allow reads and changes, and nobody is asked",
+      "options": {
+        "open": false,
+        "closedReads": true,
+        "closedChanges": true
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Added a customer"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "a call the tool's inputs do not fit is refused before the person is asked",
+      "options": {},
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-delete",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+              "code": -32602,
+              "message": "there is no tool customer-delete"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {
+              "code": -32602,
+              "message": "customer-add needs the argument kind"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": null
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "error": {
+              "code": -32602,
+              "message": "customer-add needs the argument kind"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person",
+                "email": "a@b"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "error": {
+              "code": -32602,
+              "message": "customer-add has no argument email"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": 7,
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "error": {
+              "code": -32602,
+              "message": "the argument name of customer-add is a text"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Robot"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "error": {
+              "code": -32602,
+              "message": "the argument kind of customer-add is one of Person, Business"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person",
+                "limit": 9000
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "error": {
+              "code": -32602,
+              "message": "the argument limit of customer-add is at most 5000"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {
+                "since": 1999
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "error": {
+              "code": -32602,
+              "message": "the argument since of customer-count is at least 2000"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {
+                "since": 2020.5
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "error": {
+              "code": -32602,
+              "message": "the argument since of customer-count is a whole number"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person",
+                "vip": "yes"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "error": {
+              "code": -32602,
+              "message": "the argument vip of customer-add is true or false"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person",
+                "limit": "lots"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "error": {
+              "code": -32602,
+              "message": "the argument limit of customer-add is a number"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "error": {
+              "code": -32602,
+              "message": "a tool call names its tool"
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "a message the service cannot read, a method it does not have and a notification get their answers",
+      "options": {},
+      "grants": [],
+      "exchange": [
+        {
+          "send": "{not json"
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": null,
+            "error": {
+              "code": -32700,
+              "message": "the message is no JSON"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "resources/list"
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+              "code": -32601,
+              "message": "there is no method resources/list"
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": {
+              "requestId": 1
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {}
+          }
+        },
+        {
+          "send": [
+            1,
+            2
+          ]
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": null,
+            "error": {
+              "code": -32600,
+              "message": "a message is one JSON object"
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "while the app is closed, what the project allows holds until the person sets it (the tool list's whileClosed)",
+      "whileClosed": {
+        "read": true,
+        "change": false
+      },
+      "options": {
+        "open": false,
+        "texts": {
+          "closed": "Shop is not open; open it to allow this."
+        }
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2 customers"
+                }
+              ],
+              "isError": false
+            }
+          }
+        },
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-add",
+              "arguments": {
+                "name": "Ada",
+                "kind": "Person"
+              }
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Shop is not open; open it to allow this."
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": []
+    },
+    {
+      "name": "while the app is closed, the person's setting goes before what the project allows",
+      "whileClosed": {
+        "read": true,
+        "change": true
+      },
+      "options": {
+        "open": false,
+        "closedReads": false,
+        "closedChanges": false,
+        "texts": {
+          "closed": "Shop is not open; open it to allow this."
+        }
+      },
+      "grants": [],
+      "exchange": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+              "name": "customer-count",
+              "arguments": {}
+            }
+          }
+        },
+        {
+          "expect": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Shop is not open; open it to allow this."
+                }
+              ],
+              "isError": true
+            }
+          }
+        }
+      ],
+      "asked": []
+    }
+  ],
+  "commandLines": [
+    {
+      "what": "arguments after the options, in their order",
+      "tool": "customer-add",
+      "arguments": {
+        "kind": "Person",
+        "name": "Ada"
+      },
+      "line": [
+        "customer",
+        "add",
+        "--",
+        "Ada",
+        "Person"
+      ]
+    },
+    {
+      "what": "options as name=value, a true flag alone, a false one left out",
+      "tool": "customer-add",
+      "arguments": {
+        "name": "-Ada",
+        "kind": "Business",
+        "limit": 200.5,
+        "vip": true
+      },
+      "line": [
+        "customer",
+        "add",
+        "--limit=200.5",
+        "--vip",
+        "--",
+        "-Ada",
+        "Business"
+      ]
+    },
+    {
+      "what": "a false flag and a null value are left out",
+      "tool": "customer-add",
+      "arguments": {
+        "name": "Ada",
+        "kind": "Person",
+        "vip": false,
+        "limit": null
+      },
+      "line": [
+        "customer",
+        "add",
+        "--",
+        "Ada",
+        "Person"
+      ]
+    },
+    {
+      "what": "a whole number as written",
+      "tool": "customer-count",
+      "arguments": {
+        "since": 2020
+      },
+      "line": [
+        "customer",
+        "count",
+        "--since=2020",
+        "--"
+      ]
+    },
+    {
+      "what": "no arguments",
+      "tool": "report-send",
+      "arguments": {},
+      "line": [
+        "report",
+        "send",
+        "--"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "what": "a yes or no",
+      "form": {
+        "kind": "confirm",
+        "yes": "Remove",
+        "no": "Keep"
+      },
+      "schema": {
+        "type": "boolean"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": true
+        }
+      },
+      "answer": "true"
+    },
+    {
+      "what": "a no",
+      "form": {
+        "kind": "confirm",
+        "yes": "Remove",
+        "no": "Keep"
+      },
+      "schema": {
+        "type": "boolean"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": false
+        }
+      },
+      "answer": "false"
+    },
+    {
+      "what": "a declined yes or no is a no",
+      "form": {
+        "kind": "confirm",
+        "yes": "Remove",
+        "no": "Keep"
+      },
+      "schema": {
+        "type": "boolean"
+      },
+      "reply": {
+        "action": "decline"
+      },
+      "answer": "false"
+    },
+    {
+      "what": "a whole number with its default",
+      "form": {
+        "kind": "value",
+        "type": "integer",
+        "default": "3"
+      },
+      "schema": {
+        "type": "integer",
+        "default": 3
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": 5
+        }
+      },
+      "answer": "5"
+    },
+    {
+      "what": "a declined value takes its default",
+      "form": {
+        "kind": "value",
+        "type": "integer",
+        "default": "3"
+      },
+      "schema": {
+        "type": "integer",
+        "default": 3
+      },
+      "reply": {
+        "action": "decline"
+      },
+      "answer": "3"
+    },
+    {
+      "what": "a declined value without a default has no answer",
+      "form": {
+        "kind": "value",
+        "type": "text"
+      },
+      "schema": {
+        "type": "string"
+      },
+      "reply": {
+        "action": "cancel"
+      },
+      "answer": null
+    },
+    {
+      "what": "money as a number",
+      "form": {
+        "kind": "value",
+        "type": "money"
+      },
+      "schema": {
+        "type": "number"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": 12.5
+        }
+      },
+      "answer": "12.5"
+    },
+    {
+      "what": "a date",
+      "form": {
+        "kind": "value",
+        "type": "date"
+      },
+      "schema": {
+        "type": "string",
+        "format": "date"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "2026-11-12"
+        }
+      },
+      "answer": "2026-11-12"
+    },
+    {
+      "what": "a moment",
+      "form": {
+        "kind": "value",
+        "type": "datetime"
+      },
+      "schema": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "2026-11-12T09:30"
+        }
+      },
+      "answer": "2026-11-12T09:30"
+    },
+    {
+      "what": "a duration",
+      "form": {
+        "kind": "value",
+        "type": "duration"
+      },
+      "schema": {
+        "type": "string",
+        "description": "3:45, 1:02:03 or seconds"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "3:45"
+        }
+      },
+      "answer": "3:45"
+    },
+    {
+      "what": "an enum value by its name",
+      "form": {
+        "kind": "value",
+        "type": "enum",
+        "values": [
+          "Person",
+          "Business"
+        ]
+      },
+      "schema": {
+        "type": "string",
+        "enum": [
+          "Person",
+          "Business"
+        ]
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "Business"
+        }
+      },
+      "answer": "Business"
+    },
+    {
+      "what": "a choice by its text, answered by its number",
+      "form": {
+        "kind": "choice",
+        "choices": [
+          "Ada",
+          "Bob"
+        ]
+      },
+      "schema": {
+        "type": "string",
+        "enum": [
+          "Ada",
+          "Bob"
+        ]
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "Bob"
+        }
+      },
+      "answer": "2"
+    },
+    {
+      "what": "a choice not among them has no answer",
+      "form": {
+        "kind": "choice",
+        "choices": [
+          "Ada",
+          "Bob"
+        ]
+      },
+      "schema": {
+        "type": "string",
+        "enum": [
+          "Ada",
+          "Bob"
+        ]
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "Cy"
+        }
+      },
+      "answer": null
+    },
+    {
+      "what": "an answer of another kind has no answer",
+      "form": {
+        "kind": "value",
+        "type": "integer"
+      },
+      "schema": {
+        "type": "integer"
+      },
+      "reply": {
+        "action": "accept",
+        "content": {
+          "answer": "five"
+        }
+      },
+      "answer": null
+    },
+    {
+      "what": "no answer from a client that cannot ask",
+      "form": {
+        "kind": "value",
+        "type": "integer",
+        "default": "3"
+      },
+      "schema": {
+        "type": "integer",
+        "default": 3
+      },
+      "reply": null,
+      "answer": "3"
+    }
+  ]
+}

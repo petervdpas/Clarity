@@ -638,6 +638,25 @@ mod tests {
         assert!(!wrote.is_error, "{}", wrote.text);
     }
 
+    /// No edit leaves parts reaching past what holds them: a memo too tall for
+    /// the window is cut to the rows the window holds from its content area's top.
+    #[test]
+    fn an_edit_cuts_a_part_to_fit_its_window() {
+        let (root, dir, mut tools) = project("fit");
+        let added = tools.call("add_part", &json!({"page": "MainView", "kind": "memo", "name": "notesBox", "col": 1, "row": 1, "width": 12, "height": 40}));
+        assert!(!added.is_error, "{}", added.text);
+        let text = view(&dir, "MainView");
+        assert!(!text.contains("rows=\"40\""), "{text}");
+        let file = dir.with_extension("clarity");
+        let settings = clarity_project::load(&file).settings.unwrap();
+        let project = clarity_project::load_modules(&dir).unwrap();
+        let scrolls: Vec<String> = clarity_project::target_problems(&settings, &project, "").into_iter().map(|d| d.message).filter(|m| m.contains("scrolls") || m.contains("holds")).collect();
+        assert!(scrolls.is_empty(), "{scrolls:?}\n{text}");
+        // The cut is part of the edit: one Undo takes it back with it.
+        assert!(tools.written.iter().any(|w| w.file.ends_with("design/MainView.cxaml")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn a_part_is_added_changed_renamed_moved_and_removed_by_name() {
         let (root, dir, mut tools) = project("parts");

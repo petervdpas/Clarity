@@ -1178,6 +1178,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-app-mcp"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "serde_json",
+]
+
+[[package]]
+name = "clarity-app-mcp-ffi"
+version = "0.1.0"
+dependencies = [
+ "clarity-app-mcp",
+ "serde_json",
+]
+
+[[package]]
 name = "clarity-audio"
 version = "0.2.0"
 dependencies = [
@@ -1272,6 +1288,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bzip2",
+ "clarity-app-mcp",
  "clarity-formats",
  "clarity-project",
  "clarity-runtime",
@@ -1368,11 +1385,12 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.58.0"
+version = "0.59.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "clarity-app-mcp",
  "clarity-auth",
  "clarity-formats",
  "clarity-image",
@@ -1421,12 +1439,13 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
  "arboard",
  "base64 0.22.1",
+ "clarity-app-mcp",
  "clarity-audio",
  "clarity-auth",
  "clarity-graph",
@@ -1454,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui-ffi"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-audio-ffi",

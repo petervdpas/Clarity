@@ -18,6 +18,8 @@ use crate::window::view::CONTENT_PADDING;
 
 /// How long an info message stays (clarity_spec::layout MESSAGE_MS).
 pub const INFO_DURATION: Duration = Duration::from_millis(5000);
+/// How long a note stays that the person closes themselves (an agent's change, with Undo).
+pub const KEPT_DURATION: Duration = Duration::from_secs(60 * 60 * 24 * 365);
 
 /// A text in lines that fit `width`, broken between words; a word wider than the line keeps a line of its own.
 pub fn wrap(text: &str, width: f64, fonts: &Fonts, size: f64) -> Vec<String> {
@@ -37,13 +39,22 @@ pub fn wrap(text: &str, width: f64, fonts: &Fonts, size: f64) -> Vec<String> {
     lines
 }
 
-/// The info messages, as notes at the top right of the window, each with a small x that closes it.
+/// What a note offers besides closing: its word (Undo) and what it does.
+#[derive(Clone)]
+pub struct NoteAction {
+    pub word: String,
+    pub act: std::rc::Rc<dyn Fn(&mut Cx)>,
+}
+
+/// The info messages, as notes at the top right of the window, each with a
+/// small x that closes it, and a note's own action (an agent's change has Undo).
 #[derive(Default)]
 pub struct NoteList {
     node: Node,
-    /// Each note with the time it goes.
-    notes: Vec<(Message, Instant)>,
-    placed: Vec<(Rect, Rect)>,
+    /// Each note with the time it goes, and its action.
+    notes: Vec<(Message, Instant, Option<NoteAction>)>,
+    /// Each note's place, its x's, and its action's.
+    placed: Vec<(Rect, Rect, Option<Rect>)>,
 }
 
 const NOTE_WIDTH: f64 = 420.0;
@@ -52,24 +63,49 @@ const LINE: f64 = 20.0;
 impl NoteList {
     /// The notes shown now, oldest first.
     pub fn notes(&self) -> Vec<Message> {
-        self.notes.iter().map(|(m, _)| m.clone()).collect()
+        self.notes.iter().map(|(m, _, _)| m.clone()).collect()
+    }
+
+    /// The words of the notes' actions, the notes' order.
+    pub fn actions(&self) -> Vec<Option<String>> {
+        self.notes.iter().map(|(_, _, a)| a.as_ref().map(|a| a.word.clone())).collect()
     }
 
     /// Shows an info message until `until`.
     pub fn add(&mut self, message: Message, until: Instant, cx: &mut Cx) {
-        self.notes.push((message, until));
+        self.add_with(message, until, None, cx);
+    }
+
+    /// Shows an info message until `until`, with its action.
+    pub fn add_with(&mut self, message: Message, until: Instant, action: Option<NoteAction>, cx: &mut Cx) {
+        self.notes.push((message, until, action));
         cx.wake(self.node.id(), until);
+        cx.invalidate();
+    }
+
+    /// Runs the action of the note `index`, which then goes.
+    pub fn act(&mut self, index: usize, cx: &mut Cx) {
+        if index >= self.notes.len() {
+            return;
+        }
+        let (_, _, action) = self.notes.remove(index);
+        if index < self.placed.len() {
+            self.placed.remove(index);
+        }
+        if let Some(action) = action {
+            (action.act)(cx);
+        }
         cx.invalidate();
     }
 
     /// The notes whose time is up go.
     pub fn expire(&mut self, now: Instant, cx: &mut Cx) {
         let before = self.notes.len();
-        self.notes.retain(|(_, until)| *until > now);
+        self.notes.retain(|(_, until, _)| *until > now);
         if self.notes.len() != before {
             cx.invalidate();
         }
-        if let Some(next) = self.notes.iter().map(|(_, u)| *u).min() {
+        if let Some(next) = self.notes.iter().map(|(_, u, _)| *u).min() {
             cx.wake(self.node.id(), next);
         }
     }
@@ -88,10 +124,12 @@ impl Element for NoteList {
         let x = window.right() - CONTENT_PADDING - width;
         let mut y = window.y + CONTENT_PADDING;
         let size = cx.look().size("text");
-        for (message, _) in &self.notes {
+        for (message, _, action) in &self.notes {
             let lines = wrap(&Self::text_of(message), width - 48.0, cx.fonts(), size).len() as f64;
-            let note = Rect::new(x, y, width, lines * LINE + 20.0);
-            self.placed.push((note, Rect::new(note.right() - 30.0, note.y + 6.0, 24.0, 24.0)));
+            let room = if action.is_some() { LINE } else { 0.0 };
+            let note = Rect::new(x, y, width, lines * LINE + 20.0 + room);
+            let act = action.as_ref().map(|_| Rect::new(note.x + 14.0, note.bottom() - 8.0 - LINE, 96.0, LINE));
+            self.placed.push((note, Rect::new(note.right() - 30.0, note.y + 6.0, 24.0, 24.0), act));
             y = note.bottom() + 8.0;
         }
         self.node.bounds = if self.placed.is_empty() {
@@ -104,7 +142,7 @@ impl Element for NoteList {
     fn draw(&self, p: &Painter) {
         let look = p.look;
         let size = look.size("text");
-        for ((message, _), (note, close)) in self.notes.iter().zip(&self.placed) {
+        for ((message, _, action), (note, close, act)) in self.notes.iter().zip(&self.placed) {
             let radius = look.radius("panel");
             p.fill(*note, look.color("raised"), radius);
             p.stroke(*note, look.color("border"), look.border(), radius);
@@ -114,25 +152,32 @@ impl Element for NoteList {
                 p.text(line, Rect::new(note.x + 14.0, note.y + 10.0 + i as f64 * LINE, note.width - 48.0, LINE), look.color("text"), size, "text", false, TextAlign::Left);
             }
             p.text("x", *close, look.color("muted"), size, "text", false, TextAlign::Center);
+            if let (Some(action), Some(act)) = (action, act) {
+                p.text(&action.word, *act, look.color("accent"), size, "text", true, TextAlign::Left);
+            }
         }
     }
 
     fn hit(&self, x: f64, y: f64) -> bool {
-        self.placed.iter().any(|(note, _)| note.contains(x, y))
+        self.placed.iter().any(|(note, _, _)| note.contains(x, y))
     }
 
     /// A note's x says what it does.
     fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
-        self.placed.iter().any(|(_, close)| close.contains(x, y)).then(|| locale::translate("dismiss", "Dismiss"))
+        self.placed.iter().any(|(_, close, _)| close.contains(x, y)).then(|| locale::translate("dismiss", "Dismiss"))
     }
 
     /// A note's x shows the hand: a press there closes the note.
     fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
-        self.placed.iter().any(|(_, close)| close.contains(x, y)).then_some(Cursor::Hand)
+        self.placed.iter().any(|(_, close, act)| close.contains(x, y) || act.is_some_and(|a| a.contains(x, y))).then_some(Cursor::Hand)
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
-        if let Some(i) = self.placed.iter().position(|(_, close)| close.contains(at.screen_x, at.screen_y)) {
+        if let Some(i) = self.placed.iter().position(|(_, _, act)| act.is_some_and(|a| a.contains(at.screen_x, at.screen_y))) {
+            self.act(i, cx);
+            return;
+        }
+        if let Some(i) = self.placed.iter().position(|(_, close, _)| close.contains(at.screen_x, at.screen_y)) {
             self.notes.remove(i);
             self.placed.remove(i);
             cx.invalidate();

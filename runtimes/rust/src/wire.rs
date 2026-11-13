@@ -64,6 +64,10 @@ pub fn drawn(drawn: &Drawn) -> Value {
 
 /// Answers `command` with `args` (a JSON object) by `program`. A command
 /// that panics answers its message as the error, and the program goes on.
+/// How a program across the wire asks the agent its command runs for
+/// (Clarity.UI's `clarity_agent_ask`); set once by the host that has it.
+pub static AGENT_ASK: std::sync::OnceLock<fn(&str, &str) -> Option<String>> = std::sync::OnceLock::new();
+
 pub fn answer<P: Program + ?Sized>(program: &P, command: &str, args: Value) -> Value {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answered(program, command, &args))) {
         Ok(value) => value,
@@ -195,6 +199,14 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
         "splash_status" => json!({ "value": app.splash_status() }),
         "watch_progress" => json!({ "value": app.watch_progress(id(&args)).map(|(done, all)| json!([done, all])) }),
         "facts" => json!({ "value": app.facts_json() }),
+        // The commands for AI agents while the app runs (docs/ledger/app-mcp.md).
+        "agents" => json!({ "value": app.agents() }),
+        "agent_undo" => given((|| app.agent_undo(arg(&args, "step")?))()),
+        "agent_call" => given((|| {
+            let line: Vec<String> = arg(&args, "line")?;
+            let mut ask = |question: &str, form: &str| AGENT_ASK.get().and_then(|ask| ask(question, form));
+            Ok(app.agent_call(&line, &mut ask))
+        })()),
         "engine_open" => match app.engine_open(&arg::<String>(&args, "name").unwrap_or_default()) {
             None => json!({ "value": null }),
             Some(Ok(id)) => json!({ "value": id }),

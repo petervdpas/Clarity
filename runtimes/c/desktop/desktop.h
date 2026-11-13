@@ -15,6 +15,7 @@
 // the library is read as CLARITY_OK or not.
 #undef CLARITY_INVALID
 #undef CLARITY_NOT_FOUND
+#include "clarity/cli.h"
 #include "service/carried.h"
 #include "service/service.h"
 #include "service/watches.h"
@@ -39,6 +40,13 @@ typedef struct {
     /// engine_hears, engine_frame, engine_close; DESIGN 5.12) as {"value"} or
     /// {"error"}, NULL for none (clarity_screen_answer); NULL when the program has none.
     cJSON* (*screen_engines)(const char* command, const cJSON* args);
+    /// The commands AI agents may call while the app runs (docs/ledger/app-mcp.md):
+    /// what the app offers, as JSON {"tools","app","program","version"}; NULL for none.
+    const char* agents;
+    /// Those commands as the command line reads them (made again for each call), and how one runs with `agent_context`.
+    const ClarityCliProgram* (*agent_program)(void);
+    ClarityCliRun agent_run;
+    void* agent_context;
 } ClarityDesktopOptions;
 
 /// The program as the library asks it.

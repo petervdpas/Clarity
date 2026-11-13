@@ -232,6 +232,7 @@ fn show_starting(screen: Screen, mut options: ShowOptions, starting: Option<Star
     *OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()) = Some(event_loop.create_proxy());
     host.untold = untold_moves(&event_loop);
     host.add(screen, options.title.clone(), (options.width, options.height), None, false);
+    host.listen_for_agents(event_loop.create_proxy());
     if starting.is_some() {
         host.wins[0].splash = true;
         host.starting = starting;
@@ -330,6 +331,8 @@ enum Wake {
     Dark(bool),
     /// Woken from another thread (`wake`): every window draws anew.
     Outside,
+    /// An AI agent's grant to ask the person, or its call to run (crate::agents).
+    Agent(crate::agents::AgentWork),
     /// The system's screen reader asks for the tree, or for an action (DESIGN 7.9, A1).
     Access(accesskit_winit::Event),
 }
@@ -580,6 +583,8 @@ struct Host {
     fail_safe: FailSafe,
     /// What failed and is to be said in the window the person works in.
     failures: Rc<RefCell<Vec<String>>>,
+    /// The app listening for AI agents while it runs (docs/ledger/app-mcp.md); its running.json goes with it.
+    agents: Option<clarity_app_mcp::relay::Listening>,
 }
 
 impl Host {
@@ -612,6 +617,82 @@ impl Host {
             starting: None,
             fail_safe,
             failures,
+            agents: None,
+        }
+    }
+
+    /// Listens for AI agents when the program's app offers them commands: their
+    /// grants and calls come back to this loop as work (`Wake::Agent`).
+    fn listen_for_agents(&mut self, proxy: EventLoopProxy<Wake>) {
+        let Some(program) = self.program() else { return };
+        let proxy = Mutex::new(proxy);
+        let post: crate::agents::Post = Arc::new(move |work| {
+            if let Ok(proxy) = proxy.lock() {
+                let _ = proxy.send_event(Wake::Agent(work));
+            }
+        });
+        self.agents = crate::agents::listen(&program, post);
+    }
+
+    /// The program the windows run, from the first window that runs one.
+    fn program(&self) -> Option<Arc<dyn Program>> {
+        self.wins.iter().find_map(|w| w.screen.find::<WindowStack>().map(|stack| stack.running().program.clone()))
+    }
+
+    /// An AI agent's work on this thread: a grant asked in Clarity's dialog over
+    /// the window the person works in, or a call run, after which every window
+    /// reads its values again.
+    fn agent_work(&mut self, work: crate::agents::AgentWork) {
+        match work {
+            crate::agents::AgentWork::Grant { asked, app, reply } => {
+                let active = self.active.and_then(|k| self.index_by_key(k));
+                let at = active.filter(|i| self.wins[*i].screen.root().as_any().is::<WindowStack>()).or_else(|| self.wins.iter().position(|w| w.screen.root().as_any().is::<WindowStack>()));
+                let Some(i) = at else {
+                    let _ = reply.send(clarity_app_mcp::Decision::Refuse);
+                    return;
+                };
+                let (title, lines) = (asked.title(&app), asked.lines());
+                let answer: Box<dyn FnOnce(crate::dialogs::GrantChoice)> = Box::new(move |choice| {
+                    let _ = reply.send(crate::agents::decision(choice));
+                });
+                self.wins[i].screen.act_root::<WindowStack, _>(|stack, cx| stack.ask_grant(title, lines, answer, cx));
+                if let Some(shown) = &self.wins[i].shown {
+                    shown.window.focus_window();
+                    shown.window.request_redraw();
+                }
+            }
+            crate::agents::AgentWork::TurnedAway(note) => {
+                for win in self.wins.iter_mut() {
+                    win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_said(note.clone(), cx));
+                    win.screen.invalidate();
+                    if let Some(shown) = &win.shown {
+                        shown.window.request_redraw();
+                    }
+                }
+            }
+            crate::agents::AgentWork::Changed => {
+                for win in self.wins.iter_mut() {
+                    win.screen.invalidate();
+                    if let Some(shown) = &win.shown {
+                        shown.window.request_redraw();
+                    }
+                }
+            }
+            crate::agents::AgentWork::Call { line, said, change } => {
+                let Some(program) = self.program() else { return };
+                let ran = crate::agents::run_call(program.as_ref(), &line, &said);
+                // A change shows in the open windows at once: each reads its data again, and says what the agent did.
+                let note = change.filter(|_| !ran.refused).map(|(agent, tool)| crate::agents::change_note(&agent, &tool, &ran));
+                for win in self.wins.iter_mut() {
+                    if let Some(note) = &note {
+                        win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_changed(note.clone(), ran.step, cx));
+                    }
+                    win.screen.invalidate();
+                    if let Some(shown) = &win.shown {
+                        shown.window.request_redraw();
+                    }
+                }
+            }
         }
     }
 
@@ -1326,6 +1407,10 @@ impl ApplicationHandler<Wake> for Host {
     /// Work off a screen's thread is done: what it gave goes to its element.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Wake) {
         let event = match event {
+            Wake::Agent(work) => {
+                self.safely(|host| host.agent_work(work));
+                return;
+            }
             Wake::Access(asked) => {
                 self.safely(|host| host.on_reader(asked));
                 return;

@@ -33,6 +33,7 @@ mod signin;
 mod signin_part;
 mod signin_view;
 mod slideouts;
+mod window_room;
 mod splash;
 mod frame_keyboard;
 mod frame_state;

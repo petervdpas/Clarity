@@ -74,7 +74,7 @@ fn command(c: &CommandSpec, signs_in: bool) -> String {
 }
 
 /// A value of the command line as the type code holds it.
-fn typed(p: &ParamSpec, at: usize) -> String {
+fn typed(p: &ParamSpec, at: usize, space: &str) -> String {
     let value = format!("values[{at}]");
     match &p.ty {
         TypeInfo::Integer | TypeInfo::Duration => format!("clarity::cli::integer({value})"),
@@ -82,7 +82,8 @@ fn typed(p: &ParamSpec, at: usize) -> String {
         TypeInfo::Date => format!("clarity::cli::date({value})"),
         TypeInfo::DateTime => format!("clarity::cli::date_time({value})"),
         TypeInfo::Bool => format!("clarity::cli::boolean({value})"),
-        TypeInfo::Enum(name) => format!("{}(clarity::cli::text({value}))", model::from_name(name)),
+        // Its namespace: main() is outside it.
+        TypeInfo::Enum(name) => format!("{space}::{}(clarity::cli::text({value}))", model::from_name(name)),
         _ => format!("clarity::cli::text({value})"),
     }
 }
@@ -127,7 +128,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, settings, &space) + &super::auth_cmake_lines(project, &space);
+    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, settings, &space) + &super::auth_cmake_lines(project, &space) + &crate::c::agents_cmake_lines(project, &space);
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the service and the desktop: no window.
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
@@ -135,7 +136,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     let auth_files = super::auth_files(project).chain(super::library_folder_files(project, settings, false));
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files) {
+    let agents_files = super::AGENTS_FILES.iter().filter(|_| crate::agent_tools::offers_agents(project));
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files).chain(auth_files).chain(agents_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_cpp) = model::emit(project);
@@ -202,34 +204,24 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
-fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(String, Sql, String)]) -> String {
-    // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
-    let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
-        (String::new(), String::new())
-    } else {
-        ("#include \"secrets/secrets.hpp\"\n\n".to_string(), "    clarity::secrets_use();\n".to_string())
-    };
+/// What a C++ program runs its commands with, as code: their description
+/// (`listed`, for `program()`), the settings entity, the function that reads
+/// the kept settings, how a command's settings start and are kept, and the
+/// dispatch by command number. The command-line program and the desktop's
+/// commands for agents both use them.
+pub(crate) struct CommandParts<'p> {
+    pub listed: String,
+    pub kept: Option<&'p clarity_spec::model::Entity>,
+    pub kept_fn: String,
+    pub start: String,
+    pub keep: String,
+    pub dispatch: String,
+}
+
+pub(crate) fn command_parts<'p>(project: &'p Project, space: &str) -> CommandParts<'p> {
     let commands = crate::commands::commands(project);
-    let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
-    let stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
-    // A store whose folder is a folder setting follows the person's settings.
-    let program_name = crate::settings_program(settings);
-    let folder_stores: String = crate::folder_stores(project, settings)
-        .iter()
-        .map(|(name, setting, default)| format!("        db.add_store_setting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
-        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        db.add_file(clarity::FileSource{{{}, {}, {}, {}, {}, {}, {}, {}}});\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
-        .collect();
-    let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
-    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
-    // When people sign in on the command line, a command signs in before it runs.
     let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
     let listed: String = commands.iter().map(|c| command(c, signs_in)).collect();
-    let signin = if signs_in {
-        "            // The person signs in first (--token, --user with the password typed, or the computer's account).\n            clarity::cli::Console terminal;\n            clarity::cli_signin(db, clarity::cli_signin_of(std::vector<std::string>(argv + 1, argv + argc)), terminal, clarity::Text::keyed(\"cliPassword\", \"Password\").show() + \": \");\n"
-    } else {
-        ""
-    };
-    let add_signin = if super::signin_source(project, settings).is_some() { format!("        db.add_signin({space}::signin_source);\n") } else { String::new() };
     let kept = project.files.iter().flat_map(|f| &f.entities).find(|e| e.settings);
     let (kept_fn, start, keep, settings_arg) = match kept {
         Some(entity) => {
@@ -251,17 +243,90 @@ fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(S
     };
     let mut dispatch = String::new();
     for (i, c) in commands.iter().enumerate() {
-        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at)).collect();
+        let values: Vec<String> = c.arguments.iter().chain(&c.options).enumerate().map(|(at, p)| typed(p, at, space)).collect();
         let args: String = values.iter().map(|v| format!(", {v}")).collect();
         let _ = writeln!(dispatch, "                case {i}:\n                    return {space}::{}(db, cli{}{args});", logic::command_function(c.decl), if settings_arg.is_empty() { "" } else { ", settings" });
     }
+    let _ = settings_arg;
+    CommandParts { listed, kept, kept_fn, start, keep, dispatch }
+}
+
+/// The desktop program's commands for AI agents (docs/ledger/app-mcp.md):
+/// `src/commands.hpp` and `src/commands.cpp`, what the app offers Clarity.UI,
+/// a command line run on its databases as the command line runs it, and
+/// `<program> mcp` without a window.
+pub(crate) fn agents_desktop(project: &Project, settings: &Settings, space: &str) -> (String, String) {
+    let CommandParts { listed, kept_fn, start, keep, dispatch, .. } = command_parts(project, space);
+    let header = namespaced(space, "#pragma once\n\n#include <functional>\n#include <optional>\n#include <string>\n#include <utility>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n", "/// What the app offers AI agents (docs/ledger/app-mcp.md).\nnlohmann::json agents_offered();\n\n/// Runs the command line `line` for an agent on `db`, its questions going to `ask`.\nstd::pair<std::string, bool> agent_call(clarity::Db& db, const std::vector<std::string>& line, const std::function<std::optional<std::string>(const std::string&, const std::string&)>& ask);\n\n/// `<program> mcp`: the commands without a window; its exit code.\nint agents_mcp(clarity::Db& db, int argc, char** argv);\n");
+    let body = format!(
+        "/// The name the person's settings are kept under.\nconst std::string PROGRAM = {program};\n\n/// The commands agents may call, as the MCP service lists them.\nconst std::string& tools() {{\n    static const std::string text = [] {{\n{tools}    }}();\n    return text;\n}}\n\n{kept_fn}/// The commands, as the command line reads them.\nclarity::cli::Program program() {{\n    clarity::cli::Program made{{\n        {name},\n        {help},\n        {{\n{listed}        }},\n    }};\n    made.agents = true;\n    return made;\n}}\n\n/// Runs command `command` with `values` on `db`, as the command line does.\nint run_command(clarity::Db& db, clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{\n{start}        const int code = [&]() -> int {{\n            switch (command) {{\n{dispatch}            }}\n            return 2;\n        }}();\n{keep}        return code;\n}}\n\nnlohmann::json agents_offered() {{\n    return {{{{\"tools\", tools()}}, {{\"app\", {app}}}, {{\"program\", PROGRAM}}, {{\"version\", {version}}}}};\n}}\n\nstd::pair<std::string, bool> agent_call(clarity::Db& db, const std::vector<std::string>& line, const std::function<std::optional<std::string>(const std::string&, const std::string&)>& ask) {{\n    return clarity::cli::run_line(program(), line, ask, [&db](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{ return run_command(db, cli, command, values); }});\n}}\n\nint agents_mcp(clarity::Db& db, int argc, char** argv) {{\n    return clarity::agents::run_program(program(), clarity::agents::Agents{{tools(), {app}, PROGRAM, {version}}}, argc, argv, [&db](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{ return run_command(db, cli, command, values); }});\n}}\n",
+        program = string(&crate::settings_program(settings)),
+        tools = indent_lines(&long_text(&crate::agent_tools::tool_list_file(project, settings)), 1),
+        name = string(&crate::commands::program_name(settings)),
+        help = said(&crate::commands::program_help(project)),
+        app = string(&clarity_project::title(settings)),
+        version = string(settings.version.as_deref().unwrap_or("")),
+    );
+    let mut source = namespaced(space, "#include \"commands.hpp\"\n\n#include \"agents/agents.hpp\"\n#include \"app.hpp\"\n#include \"clarity/settings.hpp\"\n", &body);
+    let secrets = crate::secret_names(project);
+    if !secrets.is_empty() {
+        let list = format!("nlohmann::json::parse({})", string(&format!("[{}]", secrets.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))));
+        source = source.replace("clarity::read_settings(PROGRAM)", &format!("clarity::read_settings_with(PROGRAM, {list})")).replace(&format!("clarity::keep_settings({space}::PROGRAM, after)"), &format!("clarity::keep_settings_with({space}::PROGRAM, after, {list})"));
+    }
+    (header, source)
+}
+
+fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(String, Sql, String)]) -> String {
+    // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
+    let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
+        (String::new(), String::new())
+    } else {
+        ("#include \"secrets/secrets.hpp\"\n\n".to_string(), "    clarity::secrets_use();\n".to_string())
+    };
+    let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
+    let stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("        db.add_store_setting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        db.add_file(clarity::FileSource{{{}, {}, {}, {}, {}, {}, {}, {}}});\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
+        .collect();
+    let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
+    let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
+    // When people sign in on the command line, a command signs in before it runs.
+    let signs_in = crate::signin::signin_plan(project).is_some_and(|plan| plan.targets.iter().any(|t| t == "cli"));
+    let signin = if signs_in {
+        "            // The person signs in first (--token, --user with the password typed, or the computer's account).\n            clarity::cli::Console terminal;\n            clarity::cli_signin(db, clarity::cli_signin_of(std::vector<std::string>(argv + 1, argv + argc)), terminal, clarity::Text::keyed(\"cliPassword\", \"Password\").show() + \": \");\n"
+    } else {
+        ""
+    };
+    let add_signin = if super::signin_source(project, settings).is_some() { format!("        db.add_signin({space}::signin_source);\n") } else { String::new() };
+    let CommandParts { listed, kept, kept_fn, start, keep, dispatch } = command_parts(project, space);
     let settings_include = if kept.is_some() { "#include \"clarity/settings.hpp\"\n" } else { "" };
+    // Commands for agents: `mcp` serves them through Clarity.AppMcp (docs/ledger/app-mcp.md).
+    let (agents_include, tools_fn, run_program) = if crate::agent_tools::offers_agents(project) {
+        (
+            "#include \"agents/agents.hpp\"\n",
+            format!(
+                "/// The commands agents may call, as the MCP service lists them.\nconst std::string& tools() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n\n",
+                indent_lines(&long_text(&crate::agent_tools::tool_list_file(project, settings)), 1)
+            ),
+            format!(
+                "clarity::agents::run_program({space}::program(), clarity::agents::Agents{{{space}::tools(), {}, {space}::PROGRAM, {}}}, argc, argv, ",
+                string(&clarity_project::title(settings)),
+                string(settings.version.as_deref().unwrap_or(""))
+            ),
+        )
+    } else {
+        ("", String::new(), format!("clarity::cli::run({space}::program(), argc, argv, "))
+    };
     format!(
         "{HEADER}
 #include <cstdlib>
 #include <iostream>
 
-#include \"app.hpp\"
+{agents_include}#include \"app.hpp\"
 #include \"clarity/text.hpp\"
 {settings_include}#include \"schema.hpp\"
 
@@ -284,13 +349,14 @@ const std::string& texts() {{
     return text;
 }}
 
-{kept_fn}/// The program and its commands, as the command line reads them.
+{kept_fn}{tools_fn}/// The program and its commands, as the command line reads them.
 clarity::cli::Program program() {{
     return clarity::cli::Program{{
         {name},
         {help},
         {{
 {listed}        }},
+        {agents},
     }};
 }}
 
@@ -307,7 +373,7 @@ clarity::cli::Program program() {{
 {start}        clarity::Db db({space}::databases);
         for (const auto& s : {space}::sources()) db.migrate_source(s.source, s.steps);
         for (const auto& [name, at] : {space}::stores) db.add_store(name, at);
-{folder_stores}{add_signin}        const int code = clarity::cli::run({space}::program(), argc, argv, [&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
+{folder_stores}{add_signin}        const int code = {run_program}[&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
 {signin}            switch (command) {{
 {dispatch}            }}
             return 2;
@@ -325,6 +391,7 @@ clarity::cli::Program program() {{
         texts = indent_lines(&long_text(&crate::commands::texts_json(project)), 1),
         name = string(&crate::commands::program_name(settings)),
         help = said(&crate::commands::program_help(project)),
+        agents = crate::agent_tools::offers_agents(project),
         languages = languages.join(", "),
         base = string(&base),
         signin_source = super::signin_source(project, settings).map(|s| format!("{}\n", s.trim_start())).unwrap_or_default(),

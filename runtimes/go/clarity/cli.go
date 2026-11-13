@@ -70,6 +70,8 @@ type CliProgram struct {
 	Help *string `json:"help"`
 	// In the order they are declared.
 	Commands []CliCommand `json:"commands"`
+	// Whether agents may call some of them: the help lists `mcp`.
+	Agents bool `json:"agents"`
 }
 
 // CliSay gives Clarity's word of key in the language shown, with its slots
@@ -82,7 +84,7 @@ func CliWordsIn(translated func(key string) string) CliSay {
 		text := translated(key)
 		if text == "" {
 			text = key
-			for _, w := range CliWords {
+			for _, w := range append(CliWords, AgentWords...) {
 				if w.Key == key {
 					text = w.English
 				}
@@ -478,6 +480,9 @@ func CliGroupHelp(program CliProgram, path []string, say CliSay) string {
 			commands = append(commands, [2]string{strings.Join(c.Line, " "), help})
 		}
 	}
+	if len(path) == 0 && program.Agents {
+		commands = append(commands, [2]string{"mcp", say("agentMcp")})
+	}
 	lines = append(lines, cliSection(say("cliCommands"), commands)...)
 	lines = append(lines, "")
 	lines = append(lines, cliSection(say("cliOptions"), [][2]string{{"--help", say("cliHelpOption")}})...)
@@ -800,6 +805,19 @@ func cliTranslated(key string) string {
 // standard output, standard error and the terminal, in the language shown.
 type CliSession struct {
 	Terminal CliTerminal
+	// For an agent (agents.go): its questions go here, and what is printed
+	// is kept in printed as the call's answer.
+	agent   AgentCall
+	printed *strings.Builder
+}
+
+// out writes text to standard output, or keeps it for an agent.
+func (s *CliSession) out(text string) {
+	if s.printed != nil {
+		s.printed.WriteString(text)
+		return
+	}
+	fmt.Print(text)
 }
 
 // NewCliSession asks on the terminal the program runs in.
@@ -808,7 +826,7 @@ func NewCliSession() *CliSession { return &CliSession{Terminal: NewCliConsole()}
 func (s *CliSession) say() CliSay { return CliWordsIn(cliTranslated) }
 
 // Print is `print value`: one line on standard output.
-func (s *CliSession) Print(text Text) { fmt.Println(text.Show()) }
+func (s *CliSession) Print(text Text) { s.out(text.Show() + "\n") }
 
 // PrintTable is `print list columns a, b`: the records as a table on standard output.
 func (s *CliSession) PrintTable(headings []Text, right []bool, rows [][]string) {
@@ -816,7 +834,7 @@ func (s *CliSession) PrintTable(headings []Text, right []bool, rows [][]string) 
 	for i, h := range headings {
 		shown[i] = h.Show()
 	}
-	fmt.Print(CliTable(shown, right, rows))
+	s.out(CliTable(shown, right, rows))
 }
 
 // Message is `message`: one line on standard error.
@@ -835,6 +853,15 @@ func CliYesNo(value bool) string {
 }
 
 func (s *CliSession) answer(question Text, asked CliAsked) string {
+	if s.agent != nil {
+		shown := question.Show()
+		answer, ok := s.agent.Ask(shown, AgentForm(asked))
+		if !ok {
+			// Nobody answered: the command stops here, as a terminal program ends.
+			panic(cliUnanswered{s.say()("cliNoTerminal", [2]string{"question", shown})})
+		}
+		return answer
+	}
 	answer, code := CliAsk(question.Show(), asked, s.Terminal, s.say())
 	if code != 0 {
 		// Nobody to answer, or no answer: the program ends here.

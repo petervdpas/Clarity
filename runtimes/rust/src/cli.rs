@@ -36,6 +36,15 @@ pub const WORDS: [(&str, &str); 20] = [
     ("cliChooseNumber", "Type a number from 1 to {count}"),
 ];
 
+/// Clarity's words of a program whose commands agents may call
+/// (docs/ledger/app-mcp.md), in English: its help's line for `mcp`, and what
+/// its MCP service says of a refused call (conformance/app-mcp.json).
+pub const AGENT_WORDS: [(&str, &str); 3] = [
+    ("agentRefused", "The person using {app} refused this."),
+    ("agentClosed", "{app} is not open; open it to allow this."),
+    ("agentMcp", "Serves the commands for AI agents over MCP"),
+];
+
 /// What an argument or option holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,6 +100,9 @@ pub struct Program {
     pub help: Option<String>,
     /// In the order they are declared.
     pub commands: Vec<Command>,
+    /// Whether agents may call some of them: the help lists `mcp`.
+    #[serde(default)]
+    pub agents: bool,
 }
 
 /// Clarity's words in the language shown: the translation of a key, or
@@ -106,7 +118,7 @@ impl<'a> Words<'a> {
 
     /// The word of `key` with its slots filled.
     pub fn say(&self, key: &str, slots: &[(&str, &str)]) -> String {
-        let english = || WORDS.iter().find(|(k, _)| *k == key).map_or(key, |(_, v)| *v).to_string();
+        let english = || WORDS.iter().chain(&AGENT_WORDS).find(|(k, _)| *k == key).map_or(key, |(_, v)| *v).to_string();
         let mut text = (self.translated)(key).filter(|v| !v.is_empty()).unwrap_or_else(english);
         for (name, value) in slots {
             text = text.replace(&format!("{{{name}}}"), value);
@@ -376,6 +388,7 @@ pub fn group_help(program: &Program, path: &[&str], words: &Words) -> String {
         .iter()
         .filter(|c| c.line.iter().map(String::as_str).take(path.len()).eq(path.iter().copied()) && c.line.len() > path.len())
         .map(|c| (c.line.join(" "), c.help.clone().unwrap_or_default()))
+        .chain((path.is_empty() && program.agents).then(|| ("mcp".to_string(), words.say("agentMcp", &[]))))
         .collect();
     lines.extend(section(&words.say("cliCommands", &[]), &commands));
     lines.push(String::new());
@@ -663,32 +676,61 @@ fn translated(key: &str) -> Option<String> {
     crate::i18n::value(key)
 }
 
+/// Answers a command's question in place of the terminal (an agent over
+/// MCP): the answer as the terminal gives it, or none.
+pub type Answering<'a> = &'a mut dyn FnMut(&str, &Asked) -> Option<String>;
+
+/// A question nobody answered while an agent ran the command: the command
+/// stops here with this text, as a terminal program ends.
+pub struct Unanswered(pub String);
+
 /// What a running command prints, says and asks through: standard output,
-/// standard error and the terminal, in the language shown.
-pub struct Session {
+/// standard error and the terminal, in the language shown; or, for an
+/// agent, what it prints kept as the call's answer and its questions put
+/// to the agent.
+pub struct Session<'a> {
     terminal: Box<dyn Terminal>,
+    agent: Option<Answering<'a>>,
+    printed: Option<String>,
 }
 
-impl Default for Session {
+impl Default for Session<'_> {
     fn default() -> Self {
-        Session { terminal: Box::new(Console) }
+        Session { terminal: Box::new(Console), agent: None, printed: None }
     }
 }
 
-impl Session {
-    fn words() -> Words<'static> {
+impl<'a> Session<'a> {
+    /// A session for an agent: what is printed is kept, questions go to `agent`.
+    pub fn for_agent(agent: Answering<'a>) -> Self {
+        Session { terminal: Box::new(Console), agent: Some(agent), printed: Some(String::new()) }
+    }
+
+    /// What was printed, for an agent's session.
+    pub fn printed(&self) -> &str {
+        self.printed.as_deref().unwrap_or("")
+    }
+
+    fn out(&mut self, text: &str) {
+        match &mut self.printed {
+            Some(kept) => kept.push_str(text),
+            None => print!("{text}"),
+        }
+    }
+
+    pub(crate) fn words() -> Words<'static> {
         Words::new(&translated)
     }
 
     /// `print value`: one line on standard output.
     pub fn print(&mut self, text: crate::ui::Text) {
-        println!("{}", text.show());
+        self.out(&format!("{}\n", text.show()));
     }
 
     /// `print list columns a, b`: the records as a table on standard output.
     pub fn print_table(&mut self, headings: Vec<crate::ui::Text>, right: Vec<bool>, rows: Vec<Vec<String>>) {
         let headings: Vec<String> = headings.iter().map(|h| h.show()).collect();
-        print!("{}", table(&headings, &right, &rows));
+        self.out(&table(&headings, &right, &rows));
     }
 
     /// `message`: one line on standard error.
@@ -703,6 +745,13 @@ impl Session {
     }
 
     fn answer(&mut self, question: crate::ui::Text, asked: Asked) -> String {
+        if let Some(agent) = self.agent.as_mut() {
+            let question = question.show();
+            return match agent(&question, &asked) {
+                Some(answer) => answer,
+                None => std::panic::panic_any(Unanswered(Self::words().say("cliNoTerminal", &[("question", &question)]))),
+            };
+        }
         match ask(&question.show(), &asked, self.terminal.as_mut(), &Self::words()) {
             Ok(answer) => answer,
             // Nobody to answer, or no answer: the program ends here.
@@ -731,6 +780,78 @@ impl Session {
     pub fn choose(&mut self, question: crate::ui::Text, choices: Vec<String>) -> usize {
         let answer = self.answer(question, Asked::Choice { choices });
         answer.parse::<usize>().map_or(0, |n| n.saturating_sub(1))
+    }
+}
+
+/// A question's form, as conformance/command-line.json writes it.
+pub fn form(asked: &Asked) -> serde_json::Value {
+    use serde_json::json;
+    match asked {
+        Asked::Confirm { yes, no } => json!({ "kind": "confirm", "yes": yes, "no": no }),
+        Asked::Choice { choices } => json!({ "kind": "choice", "choices": choices }),
+        Asked::Value { param } => {
+            let kind = match param.kind {
+                Kind::Text => "text",
+                Kind::Integer => "integer",
+                Kind::Decimal => "decimal",
+                Kind::Money => "money",
+                Kind::Date => "date",
+                Kind::Datetime => "datetime",
+                Kind::Duration => "duration",
+                Kind::Enum => "enum",
+                Kind::Bool => "bool",
+            };
+            let mut form = json!({ "kind": "value", "type": kind, "values": param.values });
+            if let Some(default) = &param.default {
+                form["default"] = json!(default);
+            }
+            form
+        }
+    }
+}
+
+/// A question nobody answered stops its command; it is no fault to report:
+/// the panic hook there was before says everything else, as it did.
+fn quiet_unanswered() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let shown = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if info.payload().downcast_ref::<Unanswered>().is_none() {
+                shown(info);
+            }
+        }));
+    });
+}
+
+/// Runs the command line `line` for an AI agent (docs/ledger/app-mcp.md), as
+/// typed: what the command printed, and whether the call is refused (a wrong
+/// line, a refusal, an exit code, a question nobody answered). A question
+/// goes to `ask` with its form as JSON, which gives the answer as the
+/// terminal gives it, or none. `run` runs the command `parse` finds.
+pub fn run_line(program: &Program, line: &[String], ask: &mut dyn FnMut(&str, &str) -> Option<String>, run: impl FnOnce(&mut Session<'_>, usize, Vec<Option<String>>) -> crate::Result<i32>) -> crate::program::AgentRan {
+    use crate::program::AgentRan;
+    let refused = |text: String| AgentRan { text, refused: true, step: 0 };
+    let (command, values) = match parse(program, line, &Session::words()) {
+        Parsed::Help(help) => return AgentRan { text: help.trim_end().to_string(), refused: false, step: 0 },
+        Parsed::Wrong { said, .. } => return refused(said.trim_end().to_string()),
+        Parsed::Run { command, values } => (command, values),
+    };
+    let mut answering = |question: &str, asked: &Asked| ask(question, &form(asked).to_string());
+    let mut session = Session::for_agent(&mut answering);
+    quiet_unanswered();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&mut session, command, values)));
+    let printed = session.printed().trim_end().to_string();
+    match outcome {
+        Ok(Ok(0)) => AgentRan { text: printed, refused: false, step: 0 },
+        Ok(Ok(code)) if printed.is_empty() => refused(format!("exit {code}")),
+        Ok(Ok(_)) => refused(printed),
+        Ok(Err(crate::Error::Refused(text))) => refused(text.show()),
+        Ok(Err(err)) => refused(err.to_string()),
+        Err(fault) => match fault.downcast::<Unanswered>() {
+            Ok(unanswered) => refused(unanswered.0),
+            Err(fault) => std::panic::resume_unwind(fault),
+        },
     }
 }
 

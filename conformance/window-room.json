@@ -1,0 +1,21 @@
+{
+  "about": "How many rows of the grid a window holds at its height (docs/ledger/app-mcp.md, 2026-11-13): its height less its padding above and below and the frame's bars (each of the window's own, else the app's), divided into rows with the gaps between them. A menu bar, a toolbar, a ribbon (its tabs, and its body unless it is folded or has no tab), and a footer (its status line, or a row and a little when it holds parts). Clarity.UI draws the bars at these heights; the checker refuses a window whose parts reach a row it does not hold, and a slide-out taller than that.",
+  "padding": 12,
+  "gap": 8,
+  "bars": {
+    "menu": 30,
+    "toolbar": 38,
+    "ribbonTabs": 30,
+    "ribbonBody": 92,
+    "status": 28,
+    "footerPartsBeyondRow": 8
+  },
+  "cases": [
+    { "name": "no bars", "height": 756, "rowHeight": 36, "bars": [], "rows": 16 },
+    { "name": "a toolbar, as the maintenance app's main window", "height": 756, "rowHeight": 36, "bars": ["toolbar"], "rows": 15 },
+    { "name": "a menu bar and a toolbar", "height": 760, "rowHeight": 36, "bars": ["menu", "toolbar"], "rows": 15 },
+    { "name": "an open ribbon and a status line, at a lower row height", "height": 600, "rowHeight": 30, "bars": ["ribbon", "status"], "rows": 11 },
+    { "name": "a folded ribbon", "height": 510, "rowHeight": 36, "bars": ["ribbonFolded"], "rows": 10 },
+    { "name": "a footer with parts, filled to the last pixel", "height": 500, "rowHeight": 36, "bars": ["footerParts"], "rows": 10 }
+  ]
+}

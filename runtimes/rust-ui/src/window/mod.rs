@@ -187,6 +187,13 @@ struct Dialog {
     asked: Option<Asked>,
 }
 
+/// A grant an AI agent asks for: the dialog's title and lines, and where the choice goes.
+struct Granting {
+    title: String,
+    lines: Vec<String>,
+    answer: Box<dyn FnOnce(crate::dialogs::GrantChoice)>,
+}
+
 /// The question shown now: its overlay, what the person answers, and the window that asked.
 struct Asking {
     overlay: ElementId,
@@ -224,6 +231,11 @@ pub struct WindowStack {
     /// The questions waiting their turn, and the one shown.
     asks: Vec<(Ask, Rc<ProgramHost>)>,
     asking: Option<Asking>,
+    /// What AI agents ask the person to allow (docs/ledger/app-mcp.md), one at a time.
+    grants: Vec<Granting>,
+    granting: Option<(ElementId, crate::dialogs::grant::Granted, Granting)>,
+    /// What the Undo of an agent's change answered, until the window takes it.
+    agent_undone: Rc<RefCell<Option<Answer<()>>>>,
     keys_overlay: Option<ElementId>,
     /// The long call running: the window it runs for, and its bar.
     long: Option<(Rc<ProgramHost>, ElementId)>,
@@ -293,6 +305,9 @@ impl WindowStack {
             saying: None,
             asks: Vec::new(),
             asking: None,
+            grants: Vec::new(),
+            granting: None,
+            agent_undone: Rc::default(),
             keys_overlay: None,
             long: None,
             early: Vec::new(),
@@ -922,6 +937,79 @@ impl WindowStack {
         self.asking = Some(Asking { overlay, answered, ask: asked, host });
     }
 
+    /// Asks the person to allow an AI agent's call, in Clarity's own dialog over
+    /// the window, after the questions before it; `answer` gets the choice (a
+    /// refusal when the dialog closed without one).
+    pub fn ask_grant(&mut self, title: String, lines: Vec<String>, answer: Box<dyn FnOnce(crate::dialogs::GrantChoice)>, cx: &mut Cx) {
+        self.grants.push(Granting { title, lines, answer });
+        self.grant_next(cx);
+        cx.invalidate();
+    }
+
+    fn grant_next(&mut self, cx: &mut Cx) {
+        if self.granting.is_some() || self.grants.is_empty() {
+            return;
+        }
+        let next = self.grants.remove(0);
+        let dialog = crate::dialogs::GrantDialog::new(next.title.clone(), next.lines.clone());
+        let (first, granted) = (dialog.first(), dialog.granted());
+        let overlay = cx.open(Overlay { opener: Some(self.node.id()), ..Overlay::dialog(Box::new(dialog)) });
+        cx.focus(Some(first));
+        self.granting = Some((overlay, granted, next));
+    }
+
+    /// An AI agent changed the app's data (docs/ledger/app-mcp.md): the window on
+    /// top reads it again, as when it is on top again (its `on return`), and a
+    /// note says what the agent did.
+    /// `step` is the database step of the change, which the note's Undo takes back; 0 for none.
+    pub fn agent_changed(&mut self, note: String, step: u64, cx: &mut Cx) {
+        self.reread(cx);
+        let action = (step > 0).then(|| {
+            let (program, undone) = (self.running.program.clone(), self.agent_undone.clone());
+            messages::NoteAction { word: crate::locale::translate("agentUndo", "Undo"), act: Rc::new(move |_cx: &mut Cx| *undone.borrow_mut() = Some(program.agent_undo(step))) }
+        });
+        // It stays until the person closes it: they may be away while the agent works.
+        let until = cx.now() + messages::KEPT_DURATION;
+        self.notes_mut().add_with(Message { level: Level::Info, text: Text::plain(note) }, until, action, cx);
+        cx.invalidate();
+    }
+
+    /// A note about agents that stays until the person closes it (an agent turned away).
+    pub fn agent_said(&mut self, note: String, cx: &mut Cx) {
+        let until = cx.now() + messages::KEPT_DURATION;
+        self.notes_mut().add(Message { level: Level::Info, text: Text::plain(note) }, until, cx);
+        cx.invalidate();
+    }
+
+    /// The window on top reads its data again, as when it is on top again (its `on return`).
+    fn reread(&mut self, cx: &mut Cx) {
+        if let Some(host) = self.current().cloned() {
+            host.returned();
+            let effects = host.take_effects();
+            if !effects.is_empty() {
+                self.take(Some(host), effects, cx);
+            }
+        }
+    }
+
+    /// The Undo of an agent's change answered: the window reads its data again and says so, or says why not.
+    fn take_agent_undone(&mut self, cx: &mut Cx) {
+        let Some(answered) = self.agent_undone.borrow_mut().take() else { return };
+        match answered {
+            Ok(()) => {
+                self.reread(cx);
+                let until = cx.now() + messages::INFO_DURATION;
+                let said = crate::locale::translate("agentUndone", "The agent's change is undone.");
+                self.notes_mut().add(Message { level: Level::Info, text: Text::plain(said) }, until, cx);
+            }
+            Err(why) => {
+                self.said.push(Message { level: Level::Error, text: why });
+                self.say_next(cx);
+            }
+        }
+        cx.invalidate();
+    }
+
     /// Clarity's keys window, where the project lets people set their keys: in a desktop window of its own where the host gives them, else over the window.
     fn show_keys(&mut self, cx: &mut Cx) {
         if !self.running.facts.keys_editable() {
@@ -1036,6 +1124,7 @@ impl Element for WindowStack {
         if self.ended {
             return;
         }
+        self.take_agent_undone(cx);
         // The language changed: the program hears it, and every window is made again.
         let language = crate::choices::language();
         if language != self.language {
@@ -1100,6 +1189,13 @@ impl Element for WindowStack {
                 asking.host.answer(&asking.ask.handler, values);
             }
             self.ask_next(cx);
+            cx.invalidate();
+        }
+        if self.granting.as_ref().is_some_and(|(open, _, _)| *open == overlay) {
+            if let Some((_, granted, granting)) = self.granting.take() {
+                (granting.answer)(granted.get().unwrap_or(crate::dialogs::GrantChoice::Refuse));
+            }
+            self.grant_next(cx);
             cx.invalidate();
         }
         if self.keys_overlay == Some(overlay) {

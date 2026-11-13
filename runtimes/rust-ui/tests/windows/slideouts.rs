@@ -570,3 +570,49 @@ fn beside_a_part_in_a_folded_section_it_is_not_there() {
 fn handle_shown(screen: &Screen) -> bool {
     screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<SlideoutHandle>()).is_some_and(|h| h.is_shown())
 }
+
+/// A slide-out lies over the window from its edge: its rows take no room in
+/// the window's content, so a tall one gives the window nothing to scroll
+/// (a window that scrolled for it moved its parts up and left a blank band).
+#[test]
+fn a_tall_slide_out_gives_the_window_nothing_to_scroll() {
+    let tall = r#"
+    <Button name="detailsButton" at="1,1" span="2" caption="Details" />
+    <Slideout name="details" at="1,1" caption="Order" slideWidth="400" span="6" rows="60">
+        <Textbox name="noteBox" at="1,1" span="6" />
+    </Slideout>"#;
+    let (mut screen, _host) = window(tall, None);
+    draw(&mut screen);
+    assert_eq!(view(&screen).max_scroll_y, 0.0, "the window does not scroll for its slide-out");
+}
+
+/// The maintenance app's main window: a toolbar, a sidebar at the left and
+/// a slide-out at the right beside a content whose view is one memo. At 756
+/// pixels, 15 rows fit under the toolbar (16 were 2 pixels too many: the
+/// window scrolled and cut off the memo's bottom edge); the content grows to fill it.
+#[test]
+fn the_maintenance_window_fits_its_rows_and_its_memo_ends_inside() {
+    let main = |rows: u32| format!(r#"
+    <Toolbar name="mainToolbar">
+        <Item kind="button" caption="Projects" name="projectsButton" />
+    </Toolbar>
+    <Sidebar side="left" name="ledgerSidebar" width="420" min="280" max="800" resizable="true" columns="6">
+        <List name="projectList" at="1,1" span="6" rows="3" />
+    </Sidebar>
+    <Content name="main" at="1,1" span="12" rows="{rows}">
+        <Tab columns="12"><Memo name="entryText" at="1,1" span="12" rows="{rows}" markdown="true" /></Tab>
+    </Content>
+    <Slideout name="reviewPanel" at="1,1" span="6" rows="{rows}" caption="Review" side="right" slideWidth="480">
+        <Label name="note" at="1,1" span="6" caption="Note" />
+    </Slideout>"#);
+    let measured = |rows: u32| {
+        let (mut screen, _host) = window(&main(rows), None);
+        clarity_ui::testing::Shot::of(&mut screen, 1280, 756, 1.0);
+        let memo = screen.element(clarity_ui::testing::part_named(&screen, "entryText")).map(|m| m.node().bounds).expect("the memo");
+        (view(&screen).max_scroll_y, memo)
+    };
+    assert!(measured(16).0 > 0.0, "16 rows are more than 756 pixels hold under a toolbar");
+    let (scroll, memo) = measured(15);
+    assert_eq!(scroll, 0.0, "15 rows fit");
+    assert!(memo.bottom() <= 756.0 - 12.0 + 0.5, "the memo ends at {} above the window's padding", memo.bottom());
+}

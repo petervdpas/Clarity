@@ -135,6 +135,29 @@ pub struct StepPress {
     pub finish: Option<String>,
 }
 
+/// What an app offers agents while it runs (`Program::agents`).
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub struct AgentsOffered {
+    /// The tool list, as clarity-gen writes it.
+    pub tools: String,
+    /// The app's title, as refusals say it.
+    pub app: String,
+    /// The name its settings are kept under: running.json goes beside them.
+    pub program: String,
+    pub version: String,
+}
+
+/// What a command an agent called did (`Program::agent_call`).
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub struct AgentRan {
+    pub text: String,
+    pub refused: bool,
+    /// The database step the call's changes are, which `agent_undo` takes
+    /// back; 0 when it changed nothing (or was refused, and its changes went).
+    #[serde(default)]
+    pub step: u64,
+}
+
 /// Everything the screen of a generated application asks of it. Each call
 /// that answers a [`Reply`] gives the window's state as the program leaves
 /// it: what each table, tree and chart shows filled in, and its edits on the
@@ -311,6 +334,29 @@ pub trait Program: Send + Sync + 'static {
     /// Ends instance `id`: the canvas left its screen. Closing one that is gone does nothing.
     fn engine_close(&self, id: u64) {
         let _ = id;
+    }
+
+    /// The commands agents may call while the app runs (docs/ledger/app-mcp.md):
+    /// its tool list, title, the name its settings are kept under and its
+    /// version; none for an app without commands for agents.
+    fn agents(&self) -> Option<AgentsOffered> {
+        None
+    }
+
+    /// Runs a command for an agent as the command line `line` (Clarity.AppMcp's
+    /// `cli::command_line`), on the screen's thread: what it printed, and
+    /// whether the call is refused. A question it asks goes to `ask` with its
+    /// form, which gives the answer as the terminal gives it, or none.
+    fn agent_call(&self, line: &[String], ask: &mut dyn FnMut(&str, &str) -> Option<String>) -> AgentRan {
+        let _ = (line, ask);
+        AgentRan { text: String::new(), refused: true, step: 0 }
+    }
+
+    /// Takes back the database step `step` of an agent's call (the person's
+    /// Undo on the note it left).
+    fn agent_undo(&self, step: u64) -> Answer<()> {
+        let _ = step;
+        Err(crate::ui::Text::plain("this app keeps no change of an agent's"))
     }
 }
 

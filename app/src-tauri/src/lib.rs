@@ -113,25 +113,13 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     ) && event.paths.iter().any(|p| {
-        let folder = p.parent();
-        let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
-        let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
-        let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
-        let apis = dir.join(clarity_spec::APIS_DIR);
         p == file
             || *p == dir.join(clarity_spec::README_FILE)
-            || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
+            || (is_spec_file(p) && p.parent() == Some(dir))
             // A window's or view's own file, in its module's folder.
             || (clarity_spec::cxaml::is_page_file(&p.to_string_lossy()) && clarity_spec::cxaml::project_dir_of(p) == Some(dir))
-            // A web API's description and the module Clarity writes from it (DESIGN 5.23).
-            || *p == apis
-            || folder == Some(&apis)
-            || *p == resources
-            || folder == Some(&resources)
-            || *p == engines
-            || folder == Some(&engines)
-            || *p == diagrams
-            || folder == Some(&diagrams)
+            // Anything in a folder of the project, and the folder itself.
+            || clarity_spec::PROJECT_FOLDERS.iter().any(|f| p.starts_with(dir.join(f)))
     })
 }
 
@@ -148,22 +136,19 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    // The migration steps, the resources, the engines and the diagrams too, once the project has them.
-    let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
-    let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
-    let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
-    let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
-    let apis = dir.join(clarity_spec::APIS_DIR);
-    let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    for extra in [&steps, &resources, &engines, &diagrams, &apis] {
-        if extra.is_dir() {
-            folders.push(extra);
-        }
-    }
-    for folder in folders {
+    for folder in [dir, file.parent().unwrap_or(dir)] {
         watcher
             .watch(folder, RecursiveMode::NonRecursive)
             .map_err(|err| format!("cannot watch {}: {err}", folder.display()))?;
+    }
+    // Every folder of the project it has (clarity_spec::PROJECT_FOLDERS), with what lies in its folders.
+    for name in clarity_spec::PROJECT_FOLDERS {
+        let folder = dir.join(name);
+        if folder.is_dir() {
+            watcher
+                .watch(&folder, RecursiveMode::Recursive)
+                .map_err(|err| format!("cannot watch {}: {err}", folder.display()))?;
+        }
     }
 
     let (file, dir) = (file.to_path_buf(), dir.to_path_buf());
@@ -986,6 +971,8 @@ pub fn run() {
             resources::replace_resource_file,
             resources::save_markdown,
             resources::save_readme,
+            resources::guidance_sections,
+            resources::save_guidance_section,
             diagrams::diagram_kinds,
             diagrams::check_diagram,
             diagrams::read_erd,
@@ -1117,6 +1104,22 @@ mod tests {
         assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/engines/pricing.wasm"));
         assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/engines/pricing.wasm"));
         assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/engines"));
+    }
+
+    /// Every folder of a project Clarity reads counts, at any depth: the
+    /// translations, the windows' own files, the guidance for agents (a
+    /// translation added after a window once went unseen until the project opened again).
+    #[test]
+    fn reacts_to_changes_in_every_folder_of_the_project() {
+        for path in ["/p/shop/translations/en.clarity", "/p/shop/design/Main.cxaml", "/p/shop/design/orders/Card.cxaml", "/p/shop/agent/guidance.md", "/p/shop/migrations/main/0002.clarity", "/p/shop/diagrams/model.mermaid", "/p/shop/apis/stock.json"] {
+            assert!(changes(EventKind::Modify(ModifyKind::Any), path), "{path}");
+        }
+        for folder in clarity_spec::PROJECT_FOLDERS {
+            assert!(changes(EventKind::Create(CreateKind::Folder), &format!("/p/shop/{folder}")), "{folder}");
+        }
+        // What the project writes is not the project.
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/shop/out/desktop/src/main.rs"));
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/shop/data/shop.db"));
     }
 
     #[test]

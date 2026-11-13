@@ -81,6 +81,21 @@ signin: Signin | null,
  */
 engines_interpreted: boolean, 
 /**
+ * Whether AI agents may read while the app is closed, until the person
+ * sets it in the app (docs/ledger/app-mcp.md): `agents while closed read`.
+ */
+agents_read_closed: boolean, 
+/**
+ * Whether AI agents may change the app's data while it is closed:
+ * `agents while closed change`.
+ */
+agents_change_closed: boolean, 
+/**
+ * How many AI agents the running app serves at once: `agents at most 2`;
+ * none for AGENTS_AT_MOST.
+ */
+agents_at_most: number | null, 
+/**
  * The port a web application listens on (DESIGN 7.3): `port 8080`;
  * none for DEFAULT_PORT.
  */

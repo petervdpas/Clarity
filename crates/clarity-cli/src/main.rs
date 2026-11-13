@@ -118,7 +118,7 @@ enum Command {
         #[arg(long)]
         turn: Option<PathBuf>,
     },
-    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
+    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth, Clarity.AppMcp) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
     Libraries,
 }
 

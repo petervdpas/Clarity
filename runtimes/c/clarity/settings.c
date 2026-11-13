@@ -74,11 +74,25 @@ cJSON* clarity_read_settings(const char* program) {
     return cJSON_CreateObject();
 }
 
+cJSON* clarity_settings_merged(const cJSON* on_file, const cJSON* kept) {
+    cJSON* out = on_file && cJSON_IsObject(on_file) ? cJSON_Duplicate(on_file, true) : cJSON_CreateObject();
+    const cJSON* item;
+    cJSON_ArrayForEach(item, kept) {
+        cJSON_DeleteItemFromObjectCaseSensitive(out, item->string);
+        cJSON_AddItemToObject(out, item->string, cJSON_Duplicate(item, true));
+    }
+    return out;
+}
+
 bool clarity_keep_settings(const char* program, const cJSON* values) {
     const char* file = clarity_settings_file(program);
     if (!file) return clarity_fail(CLARITY_INVALID, "this system names no folder for application settings");
     if (!clarity_make_folders(clarity_parent(file))) return false;
-    char* text = cJSON_Print(values);
+    cJSON* on_file = clarity_read_settings(program);
+    cJSON* merged = clarity_settings_merged(on_file, values);
+    cJSON_Delete(on_file);
+    char* text = cJSON_Print(merged);
+    cJSON_Delete(merged);
     if (!text) return clarity_fail(CLARITY_INVALID, "the settings cannot be written");
     const char* written = clarity_format("%s.new", file);
     bool ok = clarity_write_file(written, (ClarityBytes){(const uint8_t*)text, strlen(text)});

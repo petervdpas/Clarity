@@ -14,7 +14,9 @@ const SOURCES: &[(&str, &[&str])] = &[
     ("runtimes/rust-ui/src", &["rs"]),
     ("runtimes/go/clarity", &["go"]),
     ("runtimes/c/clarity", &["c", "h"]),
+    ("runtimes/c/agents", &["c", "h"]),
     ("runtimes/cpp/clarity", &["cpp", "hpp", "h"]),
+    ("runtimes/cpp/agents", &["cpp", "hpp", "h"]),
     ("runtimes/csharp", &["cs"]),
 ];
 

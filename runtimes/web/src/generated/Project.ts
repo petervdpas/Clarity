@@ -73,4 +73,9 @@ diagrams: Array<DiagramFile>,
  * on it next), from its folder; None when it has none or the folder was
  * not read.
  */
-readme: string | null, };
+readme: string | null, 
+/**
+ * The guidance for AI agents (`agent/guidance.md`, see `guidance`), from
+ * its folder; None when it has none or the folder was not read.
+ */
+guidance: string | null, };

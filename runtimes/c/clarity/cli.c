@@ -12,6 +12,7 @@
 #define clarity_isatty isatty
 #endif
 
+#include "cjson/cJSON.h"
 #include "clarity/decimal.h"
 #include "clarity/values.h"
 
@@ -39,6 +40,13 @@ const ClarityCliWord CLARITY_CLI_WORDS[] = {
 };
 const size_t CLARITY_CLI_WORD_COUNT = sizeof CLARITY_CLI_WORDS / sizeof CLARITY_CLI_WORDS[0];
 
+const ClarityCliWord CLARITY_AGENT_WORDS[] = {
+    {"agentRefused", "The person using {app} refused this."},
+    {"agentClosed", "{app} is not open; open it to allow this."},
+    {"agentMcp", "Serves the commands for AI agents over MCP"},
+};
+const size_t CLARITY_AGENT_WORD_COUNT = sizeof CLARITY_AGENT_WORDS / sizeof CLARITY_AGENT_WORDS[0];
+
 /// `text` with every `{name}` replaced by `value`.
 static const char* replaced(const char* text, const char* name, const char* value) {
     const char* slot = clarity_format("{%s}", name);
@@ -61,6 +69,9 @@ const char* clarity_cli_say(ClarityCliWords words, const char* key, size_t count
         text = key;
         for (size_t i = 0; i < CLARITY_CLI_WORD_COUNT; ++i) {
             if (strcmp(CLARITY_CLI_WORDS[i].key, key) == 0) text = CLARITY_CLI_WORDS[i].english;
+        }
+        for (size_t i = 0; i < CLARITY_AGENT_WORD_COUNT; ++i) {
+            if (strcmp(CLARITY_AGENT_WORDS[i].key, key) == 0) text = CLARITY_AGENT_WORDS[i].english;
         }
     }
     for (size_t i = 0; i < count; ++i) text = replaced(text, names[i], values[i]);
@@ -244,8 +255,8 @@ const char* clarity_cli_group_help(const ClarityCliProgram* program, size_t word
     ClarityBuffer out = {0};
     if (words == 0 && program->help) clarity_buffer_addf(&out, "%s\n\n", program->help);
     clarity_buffer_addf(&out, "%s\n\n", group_usage(program, words, path, say));
-    const char** left = CLARITY_NEW(const char*, program->command_count);
-    const char** right = CLARITY_NEW(const char*, program->command_count);
+    const char** left = CLARITY_NEW(const char*, program->command_count + 1);
+    const char** right = CLARITY_NEW(const char*, program->command_count + 1);
     size_t count = 0;
     for (size_t i = 0; i < program->command_count; ++i) {
         const ClarityCliCommand* c = &program->commands[i];
@@ -253,6 +264,10 @@ const char* clarity_cli_group_help(const ClarityCliProgram* program, size_t word
             left[count] = joined(c->words, c->line, " ");
             right[count++] = c->help ? c->help : "";
         }
+    }
+    if (words == 0 && program->agents) {
+        left[count] = "mcp";
+        right[count++] = say0(say, "agentMcp");
     }
     section(&out, say0(say, "cliCommands"), count, left, right);
     clarity_buffer_add_char(&out, '\n');
@@ -650,14 +665,51 @@ ClarityCliWords clarity_cli_words(void) {
     return (ClarityCliWords){translated, NULL};
 }
 
+ClarityCliAgent* clarity_cli_agent = NULL;
+
+static const char* const KIND_WORDS[] = {"text", "integer", "decimal", "money", "date", "datetime", "duration", "enum", "bool"};
+
+const char* clarity_cli_form(const ClarityCliAsked* asked) {
+    cJSON* form = cJSON_CreateObject();
+    if (asked->kind == CLARITY_CLI_CONFIRM) {
+        cJSON_AddStringToObject(form, "kind", "confirm");
+        cJSON_AddStringToObject(form, "yes", asked->yes);
+        cJSON_AddStringToObject(form, "no", asked->no);
+    } else if (asked->kind == CLARITY_CLI_CHOICE) {
+        cJSON_AddStringToObject(form, "kind", "choice");
+        cJSON* choices = cJSON_AddArrayToObject(form, "choices");
+        for (size_t i = 0; i < asked->choice_count; ++i) cJSON_AddItemToArray(choices, cJSON_CreateString(asked->choices[i]));
+    } else {
+        cJSON_AddStringToObject(form, "kind", "value");
+        cJSON_AddStringToObject(form, "type", KIND_WORDS[asked->param.kind]);
+        cJSON* values = cJSON_AddArrayToObject(form, "values");
+        for (size_t i = 0; i < asked->param.value_count; ++i) cJSON_AddItemToArray(values, cJSON_CreateString(asked->param.values[i]));
+        if (asked->param.fallback) cJSON_AddStringToObject(form, "default", asked->param.fallback);
+    }
+    char* printed = cJSON_PrintUnformatted(form);
+    const char* out = clarity_format("%s", printed);
+    cJSON_free(printed);
+    cJSON_Delete(form);
+    return out;
+}
+
+/// Standard output, or what an agent keeps.
+static void out(const char* text) {
+    if (clarity_cli_agent) {
+        clarity_buffer_add(&clarity_cli_agent->printed, text);
+    } else {
+        fputs(text, stdout);
+    }
+}
+
 void clarity_cli_print(const ClarityText* text) {
-    puts(clarity_text_show(text));
+    out(clarity_format("%s\n", clarity_text_show(text)));
 }
 
 void clarity_cli_print_table(size_t columns, const ClarityText* const* headings, const bool* right, size_t rows, const char* const* cells) {
     const char** shown = CLARITY_NEW(const char*, columns + 1);
     for (size_t i = 0; i < columns; ++i) shown[i] = clarity_text_show(headings[i]);
-    fputs(clarity_cli_table(columns, shown, right, rows, cells), stdout);
+    out(clarity_cli_table(columns, shown, right, rows, cells));
 }
 
 void clarity_cli_message(const ClarityText* text) {
@@ -670,6 +722,17 @@ const char* clarity_cli_yes_no(bool value) {
 }
 
 static const char* answer(const ClarityText* question, const ClarityCliAsked* asked) {
+    if (clarity_cli_agent) {
+        const char* shown = clarity_text_show(question);
+        const char* given = clarity_cli_agent->ask(clarity_cli_agent->context, shown, clarity_cli_form(asked));
+        if (!given) {
+            const char* names[] = {"question"};
+            const char* values[] = {shown};
+            clarity_cli_agent->unanswered = clarity_cli_say(clarity_cli_words(), "cliNoTerminal", 1, names, values);
+            longjmp(clarity_cli_agent->stop, 1);
+        }
+        return given;
+    }
     const char* given = NULL;
     int code = clarity_cli_ask(clarity_text_show(question), asked, clarity_cli_console(), clarity_cli_words(), &given);
     // Nobody to answer, or no answer: the program ends here.
@@ -749,4 +812,47 @@ ClarityDateTime clarity_cli_date_time(const char* text) {
 
 const char* clarity_cli_decimal_text(ClarityDecimal value) {
     return normalized(value);
+}
+
+/// `text` without the line ends and spaces at its end, in the scratch arena.
+static const char* line_trimmed(const char* text) {
+    size_t length = strlen(text);
+    while (length > 0 && (text[length - 1] == '\n' || text[length - 1] == ' ')) --length;
+    return clarity_copy_n(text, length);
+}
+
+bool clarity_cli_run_line(const ClarityCliProgram* program, size_t count, const char* const* line, const char* (*ask)(void* context, const char* question, const char* form), void* ask_context, ClarityCliRun run, void* context, const char** text) {
+    ClarityCliParsed parsed = clarity_cli_parse(program, count, line, clarity_cli_words());
+    if (parsed.outcome == CLARITY_CLI_WRONG) {
+        *text = line_trimmed(parsed.said);
+        return true;
+    }
+    if (parsed.outcome == CLARITY_CLI_HELP) {
+        *text = line_trimmed(parsed.help);
+        return false;
+    }
+    // Static: a question nobody answers jumps back here, and calls never nest.
+    static ClarityCliAgent agent;
+    agent = (ClarityCliAgent){.ask = ask, .context = ask_context};
+    clarity_cli_agent = &agent;
+    if (setjmp(agent.stop) != 0) {
+        clarity_cli_agent = NULL;
+        *text = agent.unanswered;
+        return true;
+    }
+    int code = 0;
+    bool worked = run(context, parsed.command, parsed.values, &code);
+    clarity_cli_agent = NULL;
+    const char* printed = line_trimmed(clarity_buffer_text(&agent.printed));
+    if (!worked) {
+        const ClarityError* error = clarity_error();
+        *text = error->kind == CLARITY_REFUSED && error->text ? clarity_text_show(error->text) : error->message;
+        return true;
+    }
+    if (code != 0) {
+        *text = *printed ? printed : clarity_format("exit %d", code);
+        return true;
+    }
+    *text = printed;
+    return false;
 }

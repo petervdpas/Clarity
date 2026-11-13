@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The entry picked: its title, its status and its text as Markdown. -->
+<!-- The entry picked: its Markdown, to write and to preview; Save entry
+     writes it back into its file in the ledger. -->
 <View class="maintenance.MainView">
   <Data name="entryBody" type="text" />
-  <Markdown name="entryText" at="1,1" span="12" rows="16" bind="entryBody" />
+  <Memo name="entryText" at="1,1" span="12" rows="15" bind="entryBody" markdown="true" />
 </View>

@@ -104,9 +104,26 @@ func ReadSettings(program string) map[string]any {
 	return kept
 }
 
-// KeepSettings keeps values as the settings of program, written whole and
-// then put in place, so a crash leaves the old file or the new one.
+// MergedSettings is what keeping kept over the file's values onFile
+// writes: each kept value in place of the file's, the keys the program does
+// not keep (the person's agent switches) as they were
+// (conformance/settings.json, `merge`).
+func MergedSettings(onFile, kept map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range onFile {
+		out[key] = value
+	}
+	for key, value := range kept {
+		out[key] = value
+	}
+	return out
+}
+
+// KeepSettings keeps values as the settings of program, merged into the
+// file's (MergedSettings), written whole and then put in place, so a crash
+// leaves the old file or the new one.
 func KeepSettings(program string, values map[string]any) error {
+	values = MergedSettings(ReadSettings(program), values)
 	file, ok := SettingsFile(program)
 	if !ok {
 		return fmt.Errorf("this system names no folder for application settings")

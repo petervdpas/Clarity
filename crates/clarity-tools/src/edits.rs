@@ -85,6 +85,10 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
     let mut replaced: Vec<(&Path, &str)> = changed.iter().map(|(path, _, o)| (path.as_path(), o.text.as_str())).collect();
     replaced.extend(new_pages.iter().map(|(path, text)| (path.as_path(), text.as_str())));
     replaced.extend(languages.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
+    // No edit leaves parts reaching past what holds them: they are cut to fit, in the same write and Undo.
+    let fits = fitted(dir, &replaced)?;
+    replaced.retain(|(path, _)| !fits.iter().any(|(fit, _, _)| fit.as_path() == *path));
+    replaced.extend(fits.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
     // The checker decides what is valid: an edit that adds an error anywhere in the project (an overlap, a wrong binding) is refused.
     let after = clarity_project::load_modules_with_files(dir, &replaced).map_err(read_err)?;
     if let Some(error) = clarity_spec::new_error(&before, &after) {
@@ -96,6 +100,7 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
         }
     }
     let mut changes = Vec::new();
+    let fit_of = |path: &Path| fits.iter().find(|(fit, _, _)| fit.as_path() == path).map(|(_, _, after)| after.clone());
     for (path, before_text, outcome) in &changed {
         // A design file written as nothing is removed: its window, view or app is gone.
         if outcome.text.is_empty() && is_page_file(path) {
@@ -103,10 +108,17 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
             changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: None });
             continue;
         }
-        write_atomically(path, &outcome.text)?;
-        changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: Some(outcome.text.clone()) });
+        let text = fit_of(path).unwrap_or_else(|| outcome.text.clone());
+        write_atomically(path, &text)?;
+        changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: Some(text) });
+    }
+    // Files only the fitting changed.
+    for (path, before_text, after_text) in fits.iter().filter(|(path, _, _)| !changed.iter().any(|(p, _, _)| p == path) && !new_pages.iter().any(|(p, _)| p == path)) {
+        write_atomically(path, after_text)?;
+        changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: Some(after_text.clone()) });
     }
     for (path, text) in new_pages {
+        let text = fit_of(&path).unwrap_or(text);
         if let Some(folder) = path.parent() {
             std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
         }
@@ -121,6 +133,53 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
         changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
     }
     Ok(Applied { changes, focus })
+}
+
+/// The design files a project with `replaced` needs written again so nothing
+/// reaches past what holds it (`clarity_spec::fit`): each with its text before
+/// and after. A window's parts end by the last row its height holds under its
+/// bars, a slide-out is no taller, a view's parts end by the rows the window
+/// holds from its content area's top.
+fn fitted(dir: &Path, replaced: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String, String)>, String> {
+    use clarity_spec::layout;
+    use clarity_spec::model::PageKind;
+    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
+    let project = clarity_project::load_modules_with_files(dir, replaced).map_err(read_err)?;
+    let settings = clarity_project::load(&dir.with_extension(clarity_spec::SPEC_EXTENSION)).settings;
+    let row = settings.as_ref().map_or(layout::ROW_HEIGHT, clarity_project::row_height);
+    let app = project.files.iter().flat_map(|f| &f.apps).next().map(|a| a.frame.clone());
+    let text_of = |path: &Path| replaced.iter().find(|(p, _)| *p == path).map(|(_, t)| t.to_string()).or_else(|| std::fs::read_to_string(path).ok());
+    let files = clarity_spec::cxaml::page_files(dir, &[], replaced).map_err(read_err)?;
+    let mut out = Vec::new();
+    let mut views: Vec<(String, u32)> = Vec::new();
+    // The windows first: what they hold decides what their views have.
+    for path in &files {
+        let Some(text) = text_of(path) else { continue };
+        let Ok(clarity_spec::design_edit::Designed::Page(mut page)) = clarity_spec::cxaml::read_designed(&text, &path.to_string_lossy()) else { continue };
+        if !matches!(page.kind, PageKind::Window | PageKind::Dialog) {
+            continue;
+        }
+        let height = page.size.as_ref().map_or(layout::WINDOW_HEIGHT, |s| s.height);
+        // A dialog shows its own bars only, never the app's frame.
+        let bars = layout::frame_bars(if page.kind == PageKind::Dialog { None } else { app.as_ref() }, &page.frame);
+        let holds = layout::rows_held(height, row, &bars);
+        let changed = clarity_spec::fit::fit_window(&mut page, holds);
+        views.extend(clarity_spec::fit::shown_views(&page, holds));
+        if changed {
+            let after = clarity_spec::cxaml::written_again(&text, &clarity_spec::design_edit::Designed::Page(page));
+            out.push((path.clone(), text, after));
+        }
+    }
+    for path in &files {
+        let Some(text) = text_of(path) else { continue };
+        let Ok(clarity_spec::design_edit::Designed::Page(mut page)) = clarity_spec::cxaml::read_designed(&text, &path.to_string_lossy()) else { continue };
+        let Some(rows) = views.iter().filter(|(name, _)| *name == page.name.name).map(|(_, rows)| *rows).min() else { continue };
+        if page.kind == PageKind::View && clarity_spec::fit::fit_view(&mut page, rows) {
+            let after = clarity_spec::cxaml::written_again(&text, &clarity_spec::design_edit::Designed::Page(page));
+            out.push((path.clone(), text, after));
+        }
+    }
+    Ok(out)
 }
 
 /// The error an edit would add, with the file and line it would be at, so

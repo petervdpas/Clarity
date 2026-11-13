@@ -217,6 +217,13 @@ typedef struct ClarityProgramCallbacks {
 
 typedef struct ClarityProgram ClarityProgram;
 
+/* While the program runs a command for an AI agent (its callback answering
+ * `agent_call`, docs/ledger/app-mcp.md): asks the agent `question` of the kind
+ * `form` (JSON, as conformance/command-line.json writes it). The answer, as the
+ * terminal gives it, goes to *out (free it with clarity_string_free); *out is
+ * NULL when the agent gives none. */
+CLARITY_API ClarityStatus clarity_agent_ask(const char *question, size_t question_len, const char *form, size_t form_len, char **out);
+
 CLARITY_API ClarityStatus clarity_program_new(const ClarityProgramCallbacks *callbacks, ClarityProgram **out);
 /* Lets go of the caller's hold; release runs when the library's last hold goes too. */
 CLARITY_API void clarity_program_free(ClarityProgram *program);

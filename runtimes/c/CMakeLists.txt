@@ -20,7 +20,7 @@ if(NOT DEFINED CLARITY_UI AND "$ENV{CLARITY_UI}" STREQUAL "")
   file(MAKE_DIRECTORY ${CLARITY_UI_REPOSITORY})
   # Each library's header, as a Clarity.UI folder holds them all in include/.
   file(MAKE_DIRECTORY ${CLARITY_UI_REPOSITORY}/include)
-  foreach(header rust-ui-ffi/include/clarity_ui.h rust-audio-ffi/include/clarity_audio.h rust-video-ffi/include/clarity_video.h rust-image-ffi/include/clarity_image.h rust-formats-ffi/include/clarity_formats.h rust-auth-ffi/include/clarity_auth.h)
+  foreach(header rust-ui-ffi/include/clarity_ui.h rust-audio-ffi/include/clarity_audio.h rust-video-ffi/include/clarity_video.h rust-image-ffi/include/clarity_image.h rust-formats-ffi/include/clarity_formats.h rust-auth-ffi/include/clarity_auth.h rust-app-mcp-ffi/include/clarity_app_mcp.h)
     get_filename_component(name ${header} NAME)
     file(CREATE_LINK ${CMAKE_CURRENT_SOURCE_DIR}/../${header} ${CLARITY_UI_REPOSITORY}/include/${name} SYMBOLIC)
   endforeach()
@@ -45,6 +45,8 @@ clarity_beside(clarity_tests)
 clarity_use_formats(clarity_tests)
 # Signing people in runs on Clarity.Auth (signin_test.c).
 clarity_use_auth(clarity_tests)
+# A program's commands for agents run on Clarity.AppMcp (agents_test.c).
+clarity_use_agents(clarity_tests)
 add_test(NAME clarity_tests COMMAND clarity_tests)
 # Fetching Clarity.UI's library from its release (clarity_ui.cmake), from a release made in the test.
 add_test(NAME clarity_ui_fetch COMMAND ${CMAKE_COMMAND} -DWORK=${CMAKE_CURRENT_BINARY_DIR}/clarity_ui_fetch -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/clarity_ui_fetch.cmake)

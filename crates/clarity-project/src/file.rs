@@ -190,6 +190,8 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut in_signin = false;
     let mut strategy_indent: Option<usize> = None;
     let mut engines_interpreted = None;
+    let mut agents_closed: Option<(bool, bool)> = None;
+    let mut agents_at_most: Option<u32> = None;
     let mut port = None;
     let mut row_height = None;
     let mut themes: Option<Vec<String>> = None;
@@ -354,6 +356,34 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: write 'keys editable' to let the people using the application set the keys"));
                 }
                 keys_editable = Some(true);
+            }
+            "agents" if a.first().and_then(|t| word(t)) == Some("at") => {
+                once(agents_at_most.is_some())?;
+                let number = match a.as_slice() {
+                    [_, m, n] if word(m) == Some("most") && n.kind == TokenKind::Number => n.text.parse::<u32>().ok().filter(|n| (1..=100).contains(n)),
+                    _ => None,
+                };
+                agents_at_most = Some(number.ok_or_else(|| format!("line {line}: write 'agents at most' and a whole number from 1 to 100: how many AI agents the running app serves at once ({} without the line)", crate::AGENTS_AT_MOST))?);
+            }
+            "agents" => {
+                once(agents_closed.is_some())?;
+                let words: Vec<&str> = a.iter().filter_map(|t| word(t)).collect();
+                let problem = || format!("line {line}: write 'agents while closed' and 'read', 'change' or both: what AI agents may do while the app is closed, until the person sets it");
+                let (read, change) = match words.as_slice() {
+                    ["while", "closed", rest @ ..] if words.len() == a.len() && !rest.is_empty() => {
+                        let mut out = (false, false);
+                        for w in rest {
+                            match *w {
+                                "read" if !out.0 => out.0 = true,
+                                "change" if !out.1 => out.1 = true,
+                                _ => return Err(problem()),
+                            }
+                        }
+                        out
+                    }
+                    _ => return Err(problem()),
+                };
+                agents_closed = Some((read, change));
             }
             "engines" => {
                 once(engines_interpreted.is_some())?;
@@ -591,6 +621,9 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         keys_editable: keys_editable.unwrap_or(false),
         signin,
         engines_interpreted: engines_interpreted.unwrap_or(false),
+        agents_read_closed: agents_closed.is_some_and(|c| c.0),
+        agents_change_closed: agents_closed.is_some_and(|c| c.1),
+        agents_at_most,
         port,
         row_height,
     })
@@ -628,6 +661,8 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
         option if clarity_formats::catalog().iter().any(|f| f.options.iter().any(|o| o.name == option)) => format!("{option} {}", current_source.unwrap_or("")),
         // The two kinds of output line: where it is, and what it keeps.
         "output" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("keeps") => "output keeps".to_string(),
+        // The two agents lines: what they may do while the app is closed, and how many at once.
+        "agents" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("at") => "agents at".to_string(),
         other => other.to_string(),
     }
 }
@@ -719,6 +754,13 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if settings.engines_interpreted {
         lines.push(("engines".into(), 1, "engines interpreted".to_string()));
+    }
+    if settings.agents_read_closed || settings.agents_change_closed {
+        let what: Vec<&str> = [(settings.agents_read_closed, "read"), (settings.agents_change_closed, "change")].into_iter().filter(|(on, _)| *on).map(|(_, w)| w).collect();
+        lines.push(("agents".into(), 1, format!("agents while closed {}", what.join(" "))));
+    }
+    if let Some(most) = settings.agents_at_most {
+        lines.push(("agents at".into(), 1, format!("agents at most {most}")));
     }
     if let Some(port) = settings.port {
         lines.push(("port".into(), 1, format!("port {port}")));

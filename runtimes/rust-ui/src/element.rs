@@ -372,6 +372,12 @@ pub trait Element: Any {
         None
     }
 
+    /// Whether its rows count in its grid's content: false for what lies
+    /// over the window instead (a slide-out), so it never makes the window scroll.
+    fn takes_room(&self) -> bool {
+        true
+    }
+
     /// Its grid laid out (in `grid`), it lies against `part`, inside the `window`.
     fn lay_beside(&mut self, _part: Rect, _grid: Rect, _window: Rect, _cx: &mut Cx) {}
 
@@ -948,8 +954,12 @@ impl GridPanel {
 
     /// Places its children in `area` without drawing: how high its content is.
     pub fn content_for(&self, width: f64, height: f64) -> f64 {
-        let asked: Vec<GridItem> = self.asked();
-        grid::place(&asked, self.columns, width, height, self.gap).content
+        grid::place(&self.asked_room(), self.columns, width, height, self.gap).content
+    }
+
+    /// The places of the children that take room (`Element::takes_room`): what its content is measured by.
+    fn asked_room(&self) -> Vec<GridItem> {
+        self.asked().into_iter().zip(self.node.children()).filter(|(_, c)| c.takes_room()).map(|(p, _)| p).collect()
     }
 
     fn asked(&self) -> Vec<GridItem> {
@@ -994,7 +1004,8 @@ impl Element for GridPanel {
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.node.bounds = area;
         let placed = grid::place(&self.asked(), self.columns, area.width, area.height, self.gap);
-        self.content = placed.content;
+        // What lies over the window (a slide-out) is placed, but its rows are not content.
+        self.content = if self.node.children().iter().all(|c| c.takes_room()) { placed.content } else { grid::place(&self.asked_room(), self.columns, area.width, area.height, self.gap).content };
         self.rows = placed.rows;
         let strips = cx.strips.clone();
         for (child, place) in self.node.children_mut().iter_mut().zip(placed.boxes) {

@@ -60,6 +60,38 @@ impl<A: Asks> WireProgram<A> {
     }
 }
 
+thread_local! {
+    /// The agent's asker while a program runs a command for it on this thread (`agent_call`).
+    static AGENT_ASK: std::cell::Cell<Option<*mut (dyn FnMut(&str, &str) -> Option<String> + 'static)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Runs `run` with `ask` as the agent's asker on this thread: a program
+/// across the wire asks the agent with `ask_agent` (the C interface's
+/// `clarity_agent_ask`) while `run` runs.
+pub fn asking_agent<R>(ask: &mut dyn FnMut(&str, &str) -> Option<String>, run: impl FnOnce() -> R) -> R {
+    // SAFETY: the pointer is only used while `run` runs, while `ask` lives.
+    let erased: *mut (dyn FnMut(&str, &str) -> Option<String> + '_) = ask;
+    let erased: *mut (dyn FnMut(&str, &str) -> Option<String> + 'static) = unsafe { std::mem::transmute(erased) };
+    let before = AGENT_ASK.with(|a| a.replace(Some(erased)));
+    struct Restore(Option<*mut (dyn FnMut(&str, &str) -> Option<String> + 'static)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            AGENT_ASK.with(|a| a.set(self.0));
+        }
+    }
+    let _restore = Restore(before);
+    run()
+}
+
+/// Asks the agent whose command runs on this thread `question` of the kind
+/// `form` (JSON): the answer as the terminal gives it; none when it gives
+/// none, or no command of an agent runs here.
+pub fn ask_agent(question: &str, form: &str) -> Option<String> {
+    let ask = AGENT_ASK.with(|a| a.get())?;
+    // SAFETY: set by `asking_agent` for as long as its `ask` lives on this thread.
+    unsafe { (*ask)(question, form) }
+}
+
 /// Reads what the program answered to `command`.
 pub fn read<T: DeserializeOwned>(command: &str, answered: Option<Value>) -> Answer<T> {
     let Some(mut answered) = answered else {
@@ -97,6 +129,19 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
 
     fn start_app(&self) -> Answer<Reply> {
         self.answer("start_app", Map::new())
+    }
+
+    fn agents(&self) -> Option<clarity_runtime::program::AgentsOffered> {
+        serde_json::from_value(self.maybe("agents", Map::new())?).ok()
+    }
+
+    fn agent_call(&self, line: &[String], ask: &mut dyn FnMut(&str, &str) -> Option<String>) -> clarity_runtime::program::AgentRan {
+        let answered = asking_agent(ask, || self.answer::<clarity_runtime::program::AgentRan>("agent_call", args(json!({ "line": line }))));
+        answered.unwrap_or_else(|why| clarity_runtime::program::AgentRan { text: why.show(), refused: true, step: 0 })
+    }
+
+    fn agent_undo(&self, step: u64) -> Answer<()> {
+        self.answer::<Value>("agent_undo", args(json!({ "step": step }))).map(|_| ())
     }
 
     fn open_window(&self, window: &str, with: Map<String, Value>) -> Answer<Reply> {

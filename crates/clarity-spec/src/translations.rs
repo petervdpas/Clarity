@@ -326,6 +326,44 @@ pub const SECRET_RULE_KEYS: [(&str, &str); 1] = [("secretTooShort", "This needs 
 /// A project whose people sign in on the command line has it.
 pub const SIGNIN_CLI_KEYS: [(&str, &str); 1] = [("cliPassword", "Password")];
 
+/// Clarity's words of an app with commands for agents (docs/ledger/app-mcp.md):
+/// what its MCP service tells an agent when a call is refused (the person
+/// refused it, or the app is closed and the person's settings do not allow
+/// it), and its help's line for `mcp`. An app with commands for agents has them.
+pub const AGENT_KEYS: [(&str, &str); 3] = [
+    ("agentRefused", "The person using {app} refused this."),
+    ("agentClosed", "{app} is not open; open it to allow this."),
+    ("agentMcp", "Serves the commands for AI agents over MCP"),
+];
+
+/// Clarity.UI's words of the dialog where the person allows or refuses an AI
+/// agent's call while the app runs (docs/ledger/app-mcp.md). An app with
+/// commands for agents has them.
+pub const AGENT_GRANT_KEYS: [(&str, &str); 14] = [
+    ("agentAsksChange", "{agent} wants to change {app}"),
+    ("agentAsksRead", "{agent} wants to read {app}"),
+    ("agentSomeone", "An agent"),
+    ("agentAllowOnce", "Allow once"),
+    ("agentAllowSession", "Allow for this session"),
+    ("agentRefuse", "Refuse"),
+    ("agentDid", "{agent}: {what}"),
+    ("agentRan", "{agent} ran {tool}"),
+    ("agentUndo", "Undo"),
+    ("agentUndone", "The agent's change is undone."),
+    ("agentsFull", "{app} serves {count} AI agents at once, and that many are connected; try again when one is done."),
+    ("agentsFullOne", "{app} serves 1 AI agent at once, and that many are connected; try again when one is done."),
+    ("agentTurnedAway", "{agent} was turned away: {app} serves {count} AI agents at once."),
+    ("agentTurnedAwayOne", "{agent} was turned away: {app} serves 1 AI agent at once."),
+];
+
+/// The labels of Clarity's own settings `agentReadsWhileClosed` and
+/// `agentChangesWhileClosed`, with which the person allows AI agents while the
+/// app is closed (docs/ledger/app-mcp.md). An app whose settings name them has them.
+pub const AGENT_SETTING_KEYS: [(&str, &str); 2] = [
+    ("agentReadsWhileClosedSetting", "AI agents may read while the app is closed"),
+    ("agentChangesWhileClosedSetting", "AI agents may change while the app is closed"),
+];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -370,6 +408,9 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SIGNIN_REMEMBER_KEYS)
         .chain(&SECRET_RULE_KEYS)
         .chain(&SIGNIN_CLI_KEYS)
+        .chain(&AGENT_KEYS)
+        .chain(&AGENT_GRANT_KEYS)
+        .chain(&AGENT_SETTING_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -791,6 +832,8 @@ fn shown(project: &Project) -> Shown {
     let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language) || (signin_part && project.signin.as_ref().is_some_and(|s| s.language_picker));
     let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
     let commands = project.files.iter().any(|f| !f.commands.is_empty());
+    let agents = project.files.iter().any(|f| f.commands.iter().any(|c| c.agent));
+    let agent_settings = project.entities().any(|e| e.settings && e.fields.iter().any(|f| matches!(f.name.name.as_str(), "agentReadsWhileClosed" | "agentChangesWhileClosed") && f.ty == FieldType::Bool && f.modifiers.label.is_some()));
     let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
     let keys_window = crate::frame::clicks_to(project, "keys");
     let screen_engines = project.files.iter().flat_map(|f| &f.engines).any(|e| e.beside);
@@ -850,6 +893,9 @@ fn shown(project: &Project) -> Shown {
         .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
+        .chain(if agents { AGENT_KEYS.as_slice() } else { &[] })
+        .chain(if agents { AGENT_GRANT_KEYS.as_slice() } else { &[] })
+        .chain(if agent_settings { AGENT_SETTING_KEYS.as_slice() } else { &[] })
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
         .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
         .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] })

@@ -53,6 +53,18 @@ fn reads_command_lines() {
 }
 
 #[test]
+fn a_program_with_commands_for_agents_lists_mcp_in_its_help() {
+    let cases = cases();
+    let mut program: Program = serde_json::from_value(cases["program"].clone()).unwrap();
+    program.agents = true;
+    let words = Words::new(&english);
+    for case in cases["agents"].as_array().unwrap() {
+        let args: Vec<String> = case["args"].as_array().unwrap().iter().map(|a| a.as_str().unwrap().to_string()).collect();
+        assert_eq!(cli::parse(&program, &args, &words), Parsed::Help(case["help"].as_str().unwrap().to_string()), "{}", case["what"]);
+    }
+}
+
+#[test]
 fn prints_tables() {
     for case in cases()["table"].as_array().unwrap() {
         let texts = |v: &Value| v.as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string()).collect::<Vec<_>>();

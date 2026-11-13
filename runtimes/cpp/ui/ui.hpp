@@ -35,6 +35,11 @@ void check(ClarityStatus status);
 /// A string the library gave, taken over and freed; empty for NULL.
 std::string take(char* text);
 
+/// Asks the AI agent whose command the program runs now (inside `agent_call`,
+/// docs/ledger/app-mcp.md) `question` of the kind `form`: the answer as the
+/// terminal gives it, or nothing.
+std::optional<std::string> agent_ask(const std::string& question, const std::string& form);
+
 /// The library's version, and whether its interface is the header's.
 std::string version();
 bool fits();

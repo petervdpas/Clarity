@@ -146,6 +146,28 @@ pub fn save_readme(text: String, state: State<WatchState>, history: State<Histor
     load(&dir)
 }
 
+/// The app's guidance for AI agents (`agent/guidance.md`), as the Agents part shows it: every section.
+#[tauri::command]
+pub fn guidance_sections(state: State<WatchState>) -> Result<Vec<clarity_spec::guidance::SectionShown>, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let text = std::fs::read_to_string(dir.join(clarity_spec::guidance::FILE)).ok();
+    Ok(clarity_spec::guidance::shown(text.as_deref()))
+}
+
+/// Writes one section of the guidance, starting the file from its template when there is none.
+#[tauri::command]
+pub fn save_guidance_section(key: String, text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (project, dir) = open_project_of(&state)?;
+    let file = dir.join(clarity_spec::guidance::FILE);
+    let before = std::fs::read_to_string(&file).ok();
+    let app = project.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
+    let after = clarity_spec::guidance::saved(before.as_deref(), app, &key, &text)?;
+    if before.as_deref() != Some(after.as_str()) {
+        write(vec![FileChange { file, before, after: Some(after) }], &history)?;
+    }
+    load(&dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

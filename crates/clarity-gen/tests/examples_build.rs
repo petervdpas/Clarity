@@ -72,7 +72,7 @@ fn the_mp3player_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the maintenance example (rust desktop); run with --ignored, one at a time"]
+#[ignore = "builds the maintenance example (rust desktop cli); run with --ignored, one at a time"]
 fn the_maintenance_example_builds_without_warnings() {
     builds_without_warnings("maintenance");
 }

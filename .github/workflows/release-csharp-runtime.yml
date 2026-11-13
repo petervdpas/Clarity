@@ -105,13 +105,13 @@ jobs:
 
       - name: Build the library
         shell: bash
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi --target ${{ matrix.target }}
 
       - name: Collect the libraries
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out/ui out/audio out/video out/image out/formats out/auth
+          mkdir -p out/ui out/audio out/video out/image out/formats out/auth out/appmcp
           file="${{ matrix.file }}"
           cp "target/${{ matrix.target }}/release/$file" out/ui/
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_audio}" out/audio/
@@ -119,6 +119,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_image}" out/image/
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_formats}" out/formats/
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_auth}" out/auth/
+          cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_app_mcp}" out/appmcp/
           python3 .github/scripts/fetch_openh264.py ${{ matrix.rid }} out/video
           ls -lR out
 
@@ -130,7 +131,7 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
-  # The ten packages, built and tested once, pushed to nuget.org.
+  # The fourteen packages, built and tested once, pushed to nuget.org.
   # ───────────────────────────────────────────────────────────────
   pack:
     name: Pack and publish
@@ -169,13 +170,13 @@ jobs:
         run: |
           set -euo pipefail
           for rid in linux-x64 linux-arm64 win-x64 win-arm64 osx-x64 osx-arm64; do
-            for part in Ui Audio Video Image Formats Auth; do
+            for part in Ui Audio Video Image Formats Auth AppMcp; do
               dest="runtimes/csharp/Clarity.$part/runtimes/$rid/native"
               mkdir -p "$dest"
               cp native/native-$rid/${part,,}/* "$dest/"
             done
           done
-          find runtimes/csharp/Clarity.Ui/runtimes runtimes/csharp/Clarity.Audio/runtimes runtimes/csharp/Clarity.Video/runtimes runtimes/csharp/Clarity.Image/runtimes runtimes/csharp/Clarity.Formats/runtimes runtimes/csharp/Clarity.Auth/runtimes -type f | sort
+          find runtimes/csharp/Clarity.Ui/runtimes runtimes/csharp/Clarity.Audio/runtimes runtimes/csharp/Clarity.Video/runtimes runtimes/csharp/Clarity.Image/runtimes runtimes/csharp/Clarity.Formats/runtimes runtimes/csharp/Clarity.Auth/runtimes runtimes/csharp/Clarity.AppMcp/runtimes -type f | sort
 
       # Building in Release makes every package (GeneratePackageOnBuild) in
       # its project's bin/Release.
@@ -194,7 +195,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#runtimes/csharp/v}"
-          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Server Clarity.Audio Clarity.Video Clarity.Image Clarity.Formats Clarity.Auth; do
+          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Server Clarity.Audio Clarity.Video Clarity.Image Clarity.Formats Clarity.Auth Clarity.AppMcp; do
             nupkg="runtimes/csharp/$p/bin/Release/$p.$version.nupkg"
             test -f "$nupkg" || { echo "::error::$nupkg was not made"; exit 1; }
             mkdir -p packages
@@ -219,6 +220,8 @@ jobs:
             unzip -l "$formats" "${entry/clarity_ui/clarity_formats}" > /dev/null || { echo "::error::Clarity.Formats lacks ${entry/clarity_ui/clarity_formats}"; exit 1; }
             auth="packages/Clarity.Auth.$version.nupkg"
             unzip -l "$auth" "${entry/clarity_ui/clarity_auth}" > /dev/null || { echo "::error::Clarity.Auth lacks ${entry/clarity_ui/clarity_auth}"; exit 1; }
+            appmcp="packages/Clarity.AppMcp.$version.nupkg"
+            unzip -l "$appmcp" "${entry/clarity_ui/clarity_app_mcp}" > /dev/null || { echo "::error::Clarity.AppMcp lacks ${entry/clarity_ui/clarity_app_mcp}"; exit 1; }
           done
           unzip -l "packages/Clarity.Video.$version.nupkg" | grep -q openh264 || { echo "::error::Clarity.Video carries no openh264"; exit 1; }
           # The server draws nothing: no native library, and no package that brings one.

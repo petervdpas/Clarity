@@ -53,9 +53,12 @@ fn the_header_declares_what_the_library_exports() {
 /// folder above the test's `deps` folder. Cargo does not build a cdylib for
 /// tests, so the build comes first.
 fn library() -> Option<PathBuf> {
-    let deps = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    // The test program sits under the profile's folder: in target/debug/deps, or
+    // in target/debug/build/<crate>/<hash>/out with newer Cargo. The library is
+    // in the first folder above it that holds it.
     let name = if cfg!(target_os = "macos") { "libclarity_ui.dylib" } else { "libclarity_ui.so" };
-    [deps.parent()?.join(name), deps.join(name)].into_iter().find(|p| p.exists())
+    let exe = std::env::current_exe().ok()?;
+    exe.ancestors().skip(1).map(|folder| folder.join(name)).find(|p| p.exists())
 }
 
 #[test]

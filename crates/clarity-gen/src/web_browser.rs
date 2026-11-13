@@ -163,7 +163,7 @@ pub fn with_library(programs: &mut [crate::Program], folder: &Path) -> Result<()
 pub fn local_folder(repository: Option<&Path>) -> Result<std::path::PathBuf, String> {
     use crate::clarity_ui::{browser_library, Library};
     match browser_library() {
-        Library::Named(folder) | Library::Bundled(folder) | Library::Fetched(folder) => Ok(folder),
+        Library::Chosen(folder) | Library::Named(folder) | Library::Bundled(folder) | Library::Fetched(folder) => Ok(folder),
         _ => repository.and_then(crate::clarity_ui::repository_browser).ok_or_else(|| NOT_HERE.to_string()),
     }
 }

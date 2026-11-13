@@ -1030,11 +1030,12 @@ action widest(boxes: list<Box>) -> integer
     assert!(code.contains("width(db, b)?"), "a record the loop only reads goes as it is: {code}");
 }
 
-/// A loop over a list of the window that runs a handler of the window goes
-/// through the list as it was when the loop began: the handler takes the
-/// whole window.
+/// A loop over a list of the window that runs a handler of the window holds
+/// its item by its place in the list, as the other stacks hold the list's
+/// own item: the handler takes the whole window, and the loop ends when the
+/// handler left its item out of the list.
 #[test]
-fn a_loop_that_runs_a_handler_goes_through_a_copy_of_the_window_s_list() {
+fn a_loop_that_runs_a_handler_holds_its_item_by_its_place() {
     let source = "module tally
 
 entity Tile
@@ -1057,7 +1058,7 @@ code Tally
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
-    assert!(code.contains("for t in w.tiles.clone().iter() {"), "{code}");
+    assert!(code.contains("'at_t: while at_t < w.tiles.len() {\n            tally__add(db, w, ui, w.tiles[at_t].x)?;\n            if at_t >= w.tiles.len() {\n                break 'at_t;"), "{code}");
 }
 
 /// A web page's tab shows the application's icon, a picture among its resources.

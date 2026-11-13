@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "clarity": {
+      "type": "stdio",
+      "command": "./mcp.sh",
+      "args": []
+    }
+  }
+}

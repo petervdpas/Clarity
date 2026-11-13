@@ -17,6 +17,8 @@
   import NewAppDialog from "./lib/NewAppDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import ClarityWindow from "./lib/ClarityWindow.svelte";
+  import { browserFilesNotice } from "./lib/browserFiles";
+  import { browserFiles } from "./lib/browserFilesStore.svelte";
   import { chosenOf } from "./lib/clarityWindow";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
@@ -1266,14 +1268,14 @@
 
   // An error nothing caught shows in the error bar, and so does a panic in the backend.
   onMount(() => catchUncaught((text) => (actionError = text)));
-  // Run from its repository, Clarity says when Clarity.UI's browser files are behind its source:
-  // the design and preview draw with them, and would not show what changed.
+  // Run from its repository, Clarity says when Clarity.UI's browser files are missing or behind its
+  // source and offers to build them again: the design and preview draw with them. Each canvas asks
+  // again when it cannot draw, and says so in its place (ClarityWindow.svelte).
   onMount(() => {
     void (async () => {
-      const stale = await invoke<string | null>("browser_files_stale").catch(() => null);
-      if (stale && (await dialogs.confirm({ text: stale, title: "Clarity.UI's browser files", action: "Rebuild" }))) {
-        await invoke("rebuild_browser_files").catch((e) => (actionError = String(e)));
-      }
+      const notice = browserFilesNotice(await browserFiles.check());
+      if (notice) await browserFiles.offer(notice);
+      if (browserFiles.failure) actionError = browserFiles.failure;
     })();
   });
   onMount(() => {

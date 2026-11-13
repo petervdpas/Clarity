@@ -2,13 +2,14 @@
   // Clarity's own settings, kept for the person rather than in a project: a
   // view in the main window with its sections in a sidebar, Display (the
   // theme), Keys (Clarity's shortcut keys), Folders (where projects and apps go), Environment (where each
-  // stack's build tools are), Agent (what it may run), Logging (a log of what it does) and System (the
+  // stack's build tools are), Libraries (the folders of Clarity's libraries and packages builds use), Agent (what it may run), Logging (a log of what it does) and System (the
   // computer's load, loaded only when it is opened). A choice shows at once.
 
   import { RUNS_CHOICES } from "./agent";
   import EnvironmentSettings from "./EnvironmentSettings.svelte";
   import FoldersSettings from "./FoldersSettings.svelte";
   import KeysSettings from "./KeysSettings.svelte";
+  import LibrariesSettings from "./LibrariesSettings.svelte";
   import LoggingSettings from "./LoggingSettings.svelte";
   import OutsideAgentsSettings from "./OutsideAgentsSettings.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
@@ -26,6 +27,7 @@
     { key: "keys", name: "Keys", note: "Clarity's shortcut keys, as you want them" },
     { key: "folders", name: "Folders", note: "Where projects and their apps go" },
     { key: "environment", name: "Environment", note: "Where each stack's build tools are" },
+    { key: "libraries", name: "Libraries", note: "Which of Clarity's libraries builds use" },
     { key: "agent", name: "Agent", note: "What agents may run, and what outside agents did" },
     { key: "logging", name: "Logging", note: "A log of what Clarity does" },
     { key: "system", name: "System", note: "How busy the computer is" },
@@ -96,6 +98,8 @@
       {/await}
     {:else if section === "environment"}
       <EnvironmentSettings />
+    {:else if section === "libraries"}
+      <LibrariesSettings />
     {:else}
       <fieldset>
         <legend>Running and building</legend>

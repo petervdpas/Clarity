@@ -11,6 +11,7 @@ mod diagrams;
 mod resources;
 mod engines;
 mod environment;
+mod libraries;
 mod folders;
 mod system;
 mod parts;
@@ -613,12 +614,21 @@ fn repository() -> Option<PathBuf> {
     cfg!(debug_assertions).then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))
 }
 
-/// Why the design and preview may not show what changed in Clarity.UI: in a
-/// Clarity run from its repository, browser files older than Clarity.UI's
-/// source. None in an installed Clarity, which carries its own.
+/// How the browser files the design and preview draw with stand, and whether
+/// this Clarity runs from its repository (and so can build them again).
+#[derive(Serialize)]
+struct BrowserFilesState {
+    state: clarity_gen::clarity_ui::BrowserFiles,
+    repository: bool,
+}
+
+/// How Clarity.UI's browser files stand: fine, missing or (in a Clarity run
+/// from its repository) older than Clarity.UI's source. Asked when the IDE
+/// starts and whenever a canvas cannot load them.
 #[tauri::command]
-fn browser_files_stale() -> Option<String> {
-    repository().and_then(|repo| clarity_gen::clarity_ui::stale_browser(&repo))
+fn browser_files() -> BrowserFilesState {
+    let repo = repository();
+    BrowserFilesState { state: clarity_gen::clarity_ui::browser_files(repo.as_deref()), repository: repo.is_some() }
 }
 
 /// Builds Clarity.UI's browser files again from the repository's source, in the Output panel.
@@ -852,10 +862,18 @@ pub fn run() {
             if let Some(folder) = carried.or_else(repository) {
                 clarity_gen::clarity_ui::set_bundled(folder);
             }
+            // The folders chosen in Clarity settings > Libraries, which every build and the preview use first.
+            clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
             // Its browser files for web programs (round B): carried by the installer; in a debug build, the repository's.
-            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir));
-            let repository = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_browser(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))).flatten();
-            if let Some(folder) = carried.or_else(repository) {
+            // Named whether or not they are there now: each use checks the folder again, so files deleted
+            // or built again while the IDE runs count (browser_files).
+            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser"));
+            let complete = carried.as_deref().is_some_and(clarity_gen::clarity_ui::browser_complete);
+            let folder = match repository() {
+                Some(repo) if !complete => Some(clarity_gen::clarity_ui::repository_browser_folder(&repo)),
+                _ => carried,
+            };
+            if let Some(folder) = folder {
                 clarity_gen::clarity_ui::set_bundled_browser(folder);
             }
             // The preview and the design canvas draw with the same browser files (DESIGN 8.1).
@@ -905,7 +923,7 @@ pub fn run() {
             logging::open_log_folder,
             logging::log_line,
             preview_server_address,
-            browser_files_stale,
+            browser_files,
             rebuild_browser_files,
             splash::splash_done,
             splash::splash_status,
@@ -948,6 +966,9 @@ pub fn run() {
             parts::build_part,
             environment::environment_view,
             environment::choose_tool,
+            libraries::libraries_view,
+            libraries::choose_library,
+            libraries::reset_libraries,
             folders::folders_view,
             folders::set_folder,
             folders::new_project_file,

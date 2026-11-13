@@ -3,7 +3,8 @@
 // The IDE's backend serves its browser files, the project's windows
 // (files.json) and a program answering with sample data
 // (clarity_gen::preview); this module finds that server and loads the
-// library's page script from it, once.
+// library's page script from it, once (again after its files were built
+// again, resetPageScript).
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -84,6 +85,13 @@ export function pageScript(base: string): Promise<NonNullable<Window["ClarityUiP
   });
   script.catch(() => (script = null));
   return script;
+}
+
+/** Forgets the page script, so the next canvas loads it again from the server: after its files were built again. */
+export function resetPageScript() {
+  script = null;
+  delete window.ClarityUiPage;
+  for (const element of document.querySelectorAll('script[src$="clarity-ui-page.js"]')) element.remove();
 }
 
 /** The address of files.json for what is shown, new for each change (`revision`), so nothing in between keeps an old one. */

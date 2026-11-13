@@ -55,20 +55,21 @@ pub fn local_patch(named: &std::path::Path) -> Result<String, String> {
     let wrong = || format!("{RUNTIME_VARIABLE} names {}, which holds no clarity-runtime crate; name the Rust runtime's folder in Clarity's repository, <Clarity>/runtimes/rust", named.display());
     // One variable serves every language: the Rust runtime itself, a runtime beside it (runtimes/csharp), the runtimes folder or the repository.
     let holds = |folder: &std::path::Path| std::fs::read_to_string(folder.join("Cargo.toml")).is_ok_and(|m| m.contains("\nname = \"clarity-runtime\""));
-    let candidates = [named.to_path_buf(), named.join("../rust"), named.join("rust"), named.join("runtimes/rust")];
-    let runtime = candidates.iter().find(|c| holds(c)).ok_or_else(wrong)?;
+    let runtime = crate::tools::environment::runtime_in(named, "rust", &holds).ok_or_else(wrong)?;
     let runtime = runtime.canonicalize().map_err(|_| wrong())?;
     let path = runtime.display().to_string().replace('\\', "/");
     Ok(format!(
-        "# Written by Clarity because {RUNTIME_VARIABLE} named the Rust runtime in Clarity's\n# repository when it generated this project: the program builds on the crate\n# there instead of the published one. Remove this folder to build on crates.io.\n\n[patch.crates-io]\nclarity-runtime = {{ path = \"{path}\" }}\n"
+        "# Written by Clarity because {RUNTIME_VARIABLE} (or Clarity settings > Libraries) named the\n# Rust runtime in Clarity's repository when it generated this project: the program\n# builds on the crate there instead of the published one. Clarity removes this file\n# when neither names it any more; remove it yourself to build on crates.io now.\n\n[patch.crates-io]\nclarity-runtime = {{ path = \"{path}\" }}\n"
     ))
 }
 
-/// The patch file when the environment's CLARITY_RUNTIME names the runtime
-/// (`local_patch`); none when it is unset or empty.
+/// The patch file when a folder is chosen for the Rust crates in Clarity
+/// settings > Libraries, else when the environment's CLARITY_RUNTIME names
+/// the runtime (`local_patch`); none when neither does.
 pub(crate) fn local_patch_file() -> Result<Option<OutFile>, Vec<String>> {
-    match std::env::var(RUNTIME_VARIABLE).ok().filter(|v| !v.is_empty()) {
-        Some(folder) => local_patch(std::path::Path::new(&folder)).map(|t| Some(text(".cargo/config.toml", t))).map_err(|e| vec![e]),
+    let chosen = crate::tools::environment::library_in_use(crate::tools::environment::Choosable::RustCrates);
+    match chosen.or_else(|| std::env::var_os(RUNTIME_VARIABLE).filter(|v| !v.is_empty()).map(std::path::PathBuf::from)) {
+        Some(folder) => local_patch(&folder).map(|t| Some(text(".cargo/config.toml", t))).map_err(|e| vec![e]),
         None => Ok(None),
     }
 }

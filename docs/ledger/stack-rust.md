@@ -39,6 +39,7 @@ Progress: 95%
 ## Decisions
 - 2026-11-02: Tauri desktop dropped; a desktop is Clarity.UI drawing natively. User: "to me desktop is nothing web, get it?"
 - 2026-11-08: Rust desktops link Clarity.UI's ready-made library; since v0.30.0 every one does and the `ui` line is ignored (file.rs:366)
+- 2026-11-13: a `for` item is the list's own on every stack (Go, C, C++, C# and Rust). On Rust a loop whose body runs a handler or uses its list holds the item by its place (`w.entries[at_e]`), so the body and the handler change one item, and ends when the item is no longer in the list; a list a function changes is its own copy (`rust/logic.rs`, `borrows_beside`, `shortens`, `assigns`; tests/loop_items_build.rs, rust.rs). Found building examples/maintenance, which still carries its workarounds
 - Crates publish from tags `runtimes/rust/v*` through GitHub Actions; see [release-ci](release-ci.md)
 
 ## Was

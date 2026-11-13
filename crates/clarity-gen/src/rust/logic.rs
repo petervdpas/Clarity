@@ -36,6 +36,8 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             writing: false,
             refs: vec![HashSet::new()],
             locals: vec![HashMap::new()],
+            elements: Vec::new(),
+            guards: Vec::new(),
             errors: Vec::new(),
         };
         let code = emitter.function();
@@ -128,12 +130,18 @@ struct Emitter<'a> {
     /// The locals (parameters, `for` variables and `let`s) with their
     /// types, per block: `reload` of one reads its record again.
     locals: Vec<HashMap<String, TypeInfo>>,
+    /// The items of loops held by their place in the list (`w.entries[at_e]`):
+    /// the depth of `locals` the item is declared at, its name and its place.
+    elements: Vec<(usize, String, String)>,
+    /// What each loop holding its item by place goes through and its index,
+    /// and whether a statement ended its pass (so the loop carries its label).
+    guards: Vec<(String, String, bool)>,
     errors: Vec<String>,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>) -> Self {
-        Emitter { project, types, decl, window: None, command: false, writing: false, refs: vec![HashSet::new()], locals: vec![HashMap::new()], errors: Vec::new() }
+        Emitter { project, types, decl, window: None, command: false, writing: false, refs: vec![HashSet::new()], locals: vec![HashMap::new()], elements: Vec::new(), guards: Vec::new(), errors: Vec::new() }
     }
 
     fn is_ref(&self, name: &str) -> bool {
@@ -175,6 +183,9 @@ impl<'a> Emitter<'a> {
             // A function reads the record it is given; one it reads again (`reload`) is its own copy.
             if matches!(info, TypeInfo::Record(_)) && !action && changes(&decl.body, &param.name.name) {
                 copies.push_str(&format!("    let mut {name} = {name}.clone();\n"));
+            // A list it is given is its own copy too once it changes the list or its items.
+            } else if matches!(info, TypeInfo::List(_)) && (changes(&decl.body, &param.name.name) || assigns(&decl.body, &param.name.name)) {
+                copies.push_str(&format!("    let mut {name} = {name}.to_vec();\n"));
             } else if matches!(info, TypeInfo::Record(_) | TypeInfo::List(_)) {
                 self.refs[0].insert(param.name.name.clone());
             }
@@ -218,11 +229,34 @@ impl<'a> Emitter<'a> {
         out
     }
 
+    /// The place of a loop's item held by its place in the list, unless a
+    /// local of the same name declared inside the loop hides it.
+    fn element(&self, name: &str) -> Option<String> {
+        let (depth, _, place) = self.elements.iter().rev().find(|(_, n, _)| n == name)?;
+        let hidden = self.locals.iter().skip(depth + 1).any(|scope| scope.contains_key(name));
+        (!hidden).then(|| place.clone())
+    }
+
     fn block(&mut self, body: &[Stmt], depth: usize, out: &mut String) {
         self.refs.push(HashSet::new());
         self.locals.push(HashMap::new());
+        let pad = "    ".repeat(depth);
         for stmt in body {
-            self.stmt(stmt, depth, out);
+            let mut code = String::new();
+            self.stmt(stmt, depth, &mut code);
+            out.push_str(&code);
+            // A statement that may leave the item a loop holds out of its list (a handler
+            // ran, the list was set) ends the loop when it did, as no item is left there.
+            // An `if` or a loop is ended inside, after its own statements.
+            if matches!(stmt.kind, StmtKind::If { .. } | StmtKind::For { .. }) {
+                continue;
+            }
+            for (source, at, used) in self.guards.iter_mut() {
+                if shortens(&code, source) {
+                    *used = true;
+                    out.push_str(&format!("{pad}if {at} >= {source}.len() {{\n{pad}    break '{at};\n{pad}}}\n"));
+                }
+            }
         }
         self.locals.pop();
         self.refs.pop();
@@ -400,27 +434,45 @@ impl<'a> Emitter<'a> {
                 // A body that changes, saves or deletes its record works on the
                 // record in the list, as on the other stacks.
                 let changed = changes_in(self.project, body, &var.name, &mut Vec::new());
-                let each = if changed { "iter_mut" } else { "iter" };
-                // A body that runs a handler of the window hands it the whole window, so a
-                // list of the window it only reads is gone through as it was when the loop began.
-                let mut runs_handler = false;
-                clarity_spec::code::each_expr_in(body, &mut |e| {
-                    if matches!(e.kind, ExprKind::Call { .. }) && self.types.name_of(e) == Some(&NameKind::Handler) {
-                        runs_handler = true;
-                    }
-                });
-                let source = if runs_handler && !changed && source.starts_with("w.") { format!("{source}.clone()") } else { source };
-                out.push_str(&format!("{pad}for {} in {source}.{each}() {{\n", ident(&var.name)));
-                self.refs.push(HashSet::from([var.name.clone()]));
+                let name = ident(&var.name);
                 let item = match self.types.type_of(list) {
                     TypeInfo::List(entity) => TypeInfo::Record(entity),
                     _ => TypeInfo::Unknown,
                 };
-                self.locals.push(HashMap::from([(var.name.clone(), item)]));
-                self.block(body, depth + 1, out);
+                let errors = self.errors.len();
+                let used: Vec<bool> = self.guards.iter().map(|g| g.2).collect();
+                let mut inner = String::new();
+                self.refs.push(HashSet::from([var.name.clone()]));
+                self.locals.push(HashMap::from([(var.name.clone(), item.clone())]));
+                self.block(body, depth + 1, &mut inner);
                 self.locals.pop();
                 self.refs.pop();
-                out.push_str(&format!("{pad}}}\n"));
+                // A body that needs the list's owner while it holds the list (a handler of the
+                // window gets the whole window, the list itself is read or set) cannot borrow it.
+                if !borrows_beside(&inner, &source) {
+                    let each = if changed { "iter_mut" } else { "iter" };
+                    out.push_str(&format!("{pad}for {name} in {source}.{each}() {{\n{inner}{pad}}}\n"));
+                } else {
+                    // The item is held by its place in the list, as the other stacks hold the
+                    // list's own item: what the body and a handler it runs change is one item.
+                    self.errors.truncate(errors);
+                    for (guard, was) in self.guards.iter_mut().zip(used) {
+                        guard.2 = was;
+                    }
+                    let at = format!("at_{}", var.name);
+                    let mut inner = String::new();
+                    self.locals.push(HashMap::from([(var.name.clone(), item)]));
+                    self.elements.push((self.locals.len() - 1, var.name.clone(), format!("{source}[{at}]")));
+                    self.guards.push((source.clone(), at.clone(), false));
+                    self.block(body, depth + 2, &mut inner);
+                    let (_, _, ended) = self.guards.pop().unwrap_or_default();
+                    self.elements.pop();
+                    self.locals.pop();
+                    let more = format!("{pad}    ");
+                    let label = if ended { format!("'{at}: ") } else { String::new() };
+                    out.push_str(&format!("{pad}{{\n{more}let mut {at} = 0;\n{more}{label}while {at} < {source}.len() {{\n{inner}"));
+                    out.push_str(&format!("{more}    {at} += 1;\n{more}}}\n{pad}}}\n"));
+                }
             }
             StmtKind::Return { value: Some(value) } => {
                 let to = self.returns().unwrap_or(TypeInfo::Unknown);
@@ -550,14 +602,23 @@ impl<'a> Emitter<'a> {
             StmtKind::CloseWith { value } => out.push_str(&format!("{pad}ui.close_with(to_value(&{})?);\n", self.value(value))),
             // A record variable is read again as it is stored now, with its version.
             StmtKind::Reload { data } if self.local(&data.name).is_some() => {
-                let place = if self.is_ref(&data.name) { ident(&data.name) } else { format!("&mut {}", ident(&data.name)) };
+                let element = self.element(&data.name);
+                let place = match &element {
+                    Some(place) => format!("&mut {place}"),
+                    None if self.is_ref(&data.name) => ident(&data.name),
+                    None => format!("&mut {}", ident(&data.name)),
+                };
                 out.push_str(&format!("{pad}db.reload({place})?;\n"));
                 // Read again, it is checked as any record read is.
                 if let Some(TypeInfo::Record(entity)) = self.local(&data.name).cloned()
                     && self.project.entity(&entity).is_some_and(|e| e.readable.is_some())
                 {
                     let var = ident(&data.name);
-                    let held = if self.is_ref(&data.name) { format!("*{var}") } else { var };
+                    let held = match element {
+                        Some(place) => place,
+                        None if self.is_ref(&data.name) => format!("*{var}"),
+                        None => var,
+                    };
                     out.push_str(&format!("{pad}{held} = {entity}::readable(db, {held}.clone())?;\n"));
                 }
             }
@@ -586,6 +647,7 @@ impl<'a> Emitter<'a> {
     fn held(&self, expr: &Expr) -> Option<(String, bool)> {
         let ExprKind::Name { name } = &expr.kind else { return None };
         match self.types.name_of(expr) {
+            Some(NameKind::Local) if self.element(name).is_some() => self.element(name).map(|place| (place, false)),
             Some(NameKind::Local) => Some((ident(name), self.is_ref(name))),
             Some(NameKind::Data) => Some((format!("w.{}", ident(name)), false)),
             _ => None,
@@ -813,6 +875,12 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a place: what can be assigned or borrowed.
     fn place(&mut self, expr: &Expr) -> String {
+        if let ExprKind::Name { name } = &expr.kind
+            && self.types.name_of(expr) == Some(&NameKind::Local)
+            && let Some(place) = self.element(name)
+        {
+            return place;
+        }
         match &expr.kind {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) if self.is_ref(name) && matches!(self.types.type_of(expr), TypeInfo::Record(_)) => {
@@ -916,6 +984,7 @@ impl<'a> Emitter<'a> {
     /// The object of a member access: a record, borrowed or loaded.
     fn object(&mut self, expr: &Expr) -> String {
         match &expr.kind {
+            ExprKind::Name { name } if self.element(name).is_some() => self.place(expr),
             ExprKind::Name { name } if self.is_ref(name) => ident(name),
             _ => self.place(expr),
         }
@@ -983,6 +1052,8 @@ impl<'a> Emitter<'a> {
                     .collect();
                 if values.is_empty() { "Vec::new()".to_string() } else { format!("vec![{}]", values.join(", ")) }
             }
+            // A list borrowed as a parameter is copied into a list of its own.
+            ExprKind::Name { name } if self.is_ref(name) && matches!(ty, TypeInfo::List(_)) => format!("{}.to_vec()", self.place(expr)),
             ExprKind::Name { .. } | ExprKind::Member { .. } | ExprKind::Index { .. } => {
                 let place = self.place(expr);
                 let loaded = place.ends_with(")?");
@@ -1930,6 +2001,8 @@ impl {struct_name} {{
                 writing: false,
                 refs: vec![HashSet::new()],
                 locals: vec![handler.params.iter().map(|p| (p.name.name.clone(), type_ref_info(project, &p.ty))).collect()],
+                elements: Vec::new(),
+                guards: Vec::new(),
                 errors: Vec::new(),
             };
             let mut body = String::new();
@@ -2174,6 +2247,58 @@ fn changes_in(project: &Project, body: &[Stmt], var: &str, seen: &mut Vec<(Strin
     })
 }
 
+/// Whether `body` gives the name `var` a new value (`rows = ...`).
+fn assigns(body: &[Stmt], var: &str) -> bool {
+    let mut found = false;
+    clarity_spec::code::check::each_stmt(body, &mut |stmt| {
+        if let StmtKind::Assign { target, .. } = &stmt.kind
+            && matches!(&target.kind, ExprKind::Name { name } if name == var)
+        {
+            found = true;
+        }
+    });
+    found
+}
+
+/// Whether the Rust of a loop's body uses the list `source` it goes
+/// through (`w.entries`, `rows`) or the whole of what holds it (`w` given
+/// to a handler), which it cannot while the loop borrows the list. A field
+/// beside the list (`w.piece`) is borrowed apart from it.
+fn borrows_beside(inner: &str, source: &str) -> bool {
+    if source.starts_with('(') {
+        return false;
+    }
+    let root = source.split('.').next().unwrap_or(source);
+    let bytes = inner.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let found = |name: &str, whole: bool| {
+        inner.match_indices(name).any(|(at, _)| {
+            let end = at + name.len();
+            let before = at == 0 || !(word(bytes[at - 1]) || bytes[at - 1] == b'.');
+            let after = end >= bytes.len() || !(word(bytes[end]) || (whole && bytes[end] == b'.'));
+            before && after
+        })
+    };
+    found(source, false) || (root != source && found(root, true))
+}
+
+/// Whether the Rust of a statement in a loop over `source` may leave items
+/// out of it: it hands on the whole of what holds the list (`w` given to a
+/// handler) or gives the list a new value (`w.entries = ...`).
+fn shortens(code: &str, source: &str) -> bool {
+    let root = source.split('.').next().unwrap_or(source);
+    let bytes = code.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let before = |at: usize| at == 0 || !(word(bytes[at - 1]) || bytes[at - 1] == b'.');
+    let set = format!("{source} = ");
+    let handed = root != source
+        && code.match_indices(root).any(|(at, _)| {
+            let end = at + root.len();
+            before(at) && (end >= bytes.len() || !(word(bytes[end]) || bytes[end] == b'.'))
+        });
+    handed || code.match_indices(&set).any(|(at, _)| before(at))
+}
+
 fn changes(body: &[Stmt], var: &str) -> bool {
     fn root(expr: &Expr) -> Option<&str> {
         match &expr.kind {
@@ -2189,8 +2314,9 @@ fn changes(body: &[Stmt], var: &str) -> bool {
         StmtKind::If { branches, otherwise } => {
             branches.iter().any(|b| changes(&b.body, var)) || otherwise.as_deref().is_some_and(|o| changes(o, var))
         }
-        // An inner loop of its own name hides this one.
-        StmtKind::For { var: inner, body, .. } => inner.name != var && changes(body, var),
+        // An inner loop of its own name hides this one; a loop that changes its items
+        // changes what it goes through.
+        StmtKind::For { var: inner, list, body } => (inner.name != var && changes(body, var)) || (root(list) == Some(var) && changes(body, &inner.name)),
         _ => false,
     })
 }

@@ -256,7 +256,9 @@ pub fn unpack(archive: &[u8], version: &str, rid: &str, into: &Path) -> Result<(
 /// Where a build takes Clarity.UI's library from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Library {
-    /// The folder the person named with CLARITY_UI, which always wins.
+    /// The folder the person chose in Clarity settings > Libraries, which wins.
+    Chosen(PathBuf),
+    /// The folder the person named with CLARITY_UI, which wins over all but a choice.
     Named(PathBuf),
     /// The folder the installed Clarity carries.
     Bundled(PathBuf),
@@ -281,6 +283,12 @@ pub fn library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&
 /// cache folder and the library `version`: as `library_in` decides.
 pub fn browser_library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, version: &str) -> Library {
     found_in(named, bundled, cache, Some(BROWSER), version, &browser_complete)
+}
+
+/// The folder `chosen` in Clarity settings > Libraries, when there is one;
+/// else what Clarity `found`.
+pub fn chosen_or(chosen: Option<PathBuf>, found: Library) -> Library {
+    chosen.map_or(found, Library::Chosen)
 }
 
 fn found_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, rid: Option<&str>, version: &str, ready: &dyn Fn(&Path) -> bool) -> Library {
@@ -326,7 +334,8 @@ pub fn library() -> Library {
     let os = std::env::consts::OS;
     let named = std::env::var_os("CLARITY_UI");
     let cache = cache_dir_in(os, |name| std::env::var(name).ok());
-    library_in(named.as_deref(), BUNDLED.get().map(PathBuf::as_path), cache.as_deref(), rid(os, std::env::consts::ARCH).as_deref(), version(), os)
+    let found = library_in(named.as_deref(), BUNDLED.get().map(PathBuf::as_path), cache.as_deref(), rid(os, std::env::consts::ARCH).as_deref(), version(), os);
+    chosen_or(crate::tools::environment::library_in_use(crate::tools::environment::Choosable::ClarityUi), found)
 }
 
 /// The browser files the installed Clarity carries, which the IDE names when it starts.
@@ -341,7 +350,8 @@ pub fn set_bundled_browser(folder: PathBuf) {
 pub fn browser_library() -> Library {
     let named = std::env::var_os("CLARITY_UI_BROWSER");
     let cache = cache_dir_in(std::env::consts::OS, |name| std::env::var(name).ok());
-    browser_library_in(named.as_deref(), BUNDLED_BROWSER.get().map(PathBuf::as_path), cache.as_deref(), version())
+    let found = browser_library_in(named.as_deref(), BUNDLED_BROWSER.get().map(PathBuf::as_path), cache.as_deref(), version());
+    chosen_or(crate::tools::environment::library_in_use(crate::tools::environment::Choosable::ClarityUiBrowser), found)
 }
 
 /// The browser files Clarity's repository built (runtimes/rust-ui-browser/build.sh
@@ -379,6 +389,40 @@ pub fn stale_browser(repo: &Path) -> Option<String> {
     (newest > built_at).then(|| {
         "Clarity.UI's browser files are older than its source, so the design and preview do not show what changed since. Rebuild them (runtimes/rust-ui-browser/build.sh)?".to_string()
     })
+}
+
+/// Where Clarity's repository builds its browser files, built or not.
+pub fn repository_browser_folder(repo: &Path) -> PathBuf {
+    repo.join("target").join("clarity-ui-browser")
+}
+
+/// How the browser files the IDE's design and preview draw with stand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrowserFiles {
+    /// All there, and as new as the source.
+    Fine,
+    /// Not there, or not all of them: nothing draws.
+    Missing,
+    /// The repository's build, older than Clarity.UI's source: what changed since does not show.
+    Stale,
+}
+
+/// How the browser files in `folder` (the one the preview serves from, none
+/// when none was found) stand, for a Clarity run from its repository `repo`
+/// or an installed one (`repo` none, which has no source to be behind).
+pub fn browser_files_in(folder: Option<&Path>, repo: Option<&Path>) -> BrowserFiles {
+    let Some(folder) = folder.filter(|f| browser_complete(f)) else { return BrowserFiles::Missing };
+    match repo {
+        Some(repo) if folder == repository_browser_folder(repo) && stale_browser(repo).is_some() => BrowserFiles::Stale,
+        _ => BrowserFiles::Fine,
+    }
+}
+
+/// How the browser files the preview serves stand on this machine, found
+/// again at each call (a folder deleted or built since counts).
+pub fn browser_files(repo: Option<&Path>) -> BrowserFiles {
+    browser_files_in(crate::web_browser::local_folder(repo).ok().as_deref(), repo)
 }
 
 /// The folder Clarity's repository makes of the library it built (a
@@ -478,7 +522,7 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
 /// against SHA256SUMS and unpacked. `say` tells what happens, a line at a time.
 pub fn provide(library: Library, base: &str, get: &dyn Fn(&str) -> Result<Vec<u8>, String>, say: &dyn Fn(String)) -> Result<PathBuf, String> {
     match library {
-        Library::Named(folder) | Library::Bundled(folder) | Library::Fetched(folder) => Ok(folder),
+        Library::Chosen(folder) | Library::Named(folder) | Library::Bundled(folder) | Library::Fetched(folder) => Ok(folder),
         Library::Unavailable => Err(UNAVAILABLE.to_string()),
         Library::ToFetch { folder, version, rid } => {
             let name = archive_name(&version, &rid);

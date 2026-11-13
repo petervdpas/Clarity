@@ -51,11 +51,14 @@ fn names(program: &str) -> &'static [&'static str] {
     }
 }
 
-/// The tools the person chose, by program.
+/// The tools the person chose, by program, and the folders chosen for
+/// Clarity's libraries and packages (Clarity settings > Libraries), by key.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Environment {
     #[serde(default)]
     tools: BTreeMap<String, PathBuf>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    libraries: BTreeMap<String, PathBuf>,
 }
 
 impl Environment {
@@ -87,6 +90,111 @@ impl Environment {
     pub fn chosen(&self, program: &str) -> Option<&Path> {
         self.tools.get(program).map(PathBuf::as_path)
     }
+
+    /// Chooses `folder` for `which`, or forgets the choice: builds then take Clarity's own.
+    pub fn choose_library(&mut self, which: Choosable, folder: Option<PathBuf>) {
+        match folder {
+            Some(folder) => self.libraries.insert(which.key().to_string(), folder),
+            None => self.libraries.remove(which.key()),
+        };
+    }
+
+    /// The folder chosen for `which`, if any.
+    pub fn library(&self, which: Choosable) -> Option<&Path> {
+        self.libraries.get(which.key()).map(PathBuf::as_path)
+    }
+
+    /// The factory reset: every library choice forgotten, so builds take
+    /// the libraries that belong to the running Clarity. The tools stay.
+    pub fn reset_libraries(&mut self) {
+        self.libraries.clear();
+    }
+}
+
+/// What a build uses of Clarity whose folder the person may choose, in
+/// place of the one that belongs to the running Clarity (Clarity settings >
+/// Libraries). The Go module and the C and C++ runtime have no choice: the
+/// generator cannot point a program at a folder of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choosable {
+    /// Clarity.UI's library, which Go, C, C++ and Rust desktop programs link.
+    ClarityUi,
+    /// Clarity.UI's browser files: web programs, and the IDE's design and preview.
+    ClarityUiBrowser,
+    /// The Rust crates (clarity-runtime and those it takes): `<Clarity>/runtimes/rust`.
+    RustCrates,
+    /// The NuGet packages, as the runtime's own projects: `<Clarity>/runtimes/csharp`.
+    NugetPackages,
+}
+
+impl Choosable {
+    pub const ALL: [Choosable; 4] = [Choosable::ClarityUi, Choosable::ClarityUiBrowser, Choosable::RustCrates, Choosable::NugetPackages];
+
+    /// The key the choice is kept under, and the IDE names it by.
+    pub fn key(self) -> &'static str {
+        match self {
+            Choosable::ClarityUi => "clarityUi",
+            Choosable::ClarityUiBrowser => "clarityUiBrowser",
+            Choosable::RustCrates => "rustCrates",
+            Choosable::NugetPackages => "nugetPackages",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Choosable> {
+        Choosable::ALL.into_iter().find(|c| c.key() == key)
+    }
+
+    /// The folder to keep for `picked` on system `os`: `picked` itself when
+    /// it holds what this is, else the one Clarity's repository holds it in
+    /// when `picked` is (a folder of) the repository. Why not, naming
+    /// `picked` and what it lacks.
+    pub fn folder_in(self, picked: &Path, os: &str) -> Result<PathBuf, String> {
+        let shown = picked.display();
+        let found = match self {
+            Choosable::ClarityUi => {
+                let candidates = [picked.to_path_buf(), picked.join("target").join("clarity-ui")];
+                candidates.into_iter().find(|c| crate::clarity_ui::complete(c, os)).ok_or_else(|| {
+                    format!("{shown} does not hold Clarity.UI's library: it needs include/clarity_ui.h and lib/{}", crate::clarity_ui::library_file(os))
+                })
+            }
+            Choosable::ClarityUiBrowser => {
+                let candidates = [picked.to_path_buf(), picked.join("target").join("clarity-ui-browser")];
+                candidates.into_iter().find(|c| crate::clarity_ui::browser_complete(c)).ok_or_else(|| {
+                    format!("{shown} does not hold Clarity.UI's browser files: it needs {}", crate::clarity_ui::BROWSER_FILES.join(", "))
+                })
+            }
+            Choosable::RustCrates => runtime_in(picked, "rust", &|f| std::fs::read_to_string(f.join("Cargo.toml")).is_ok_and(|m| m.contains("\nname = \"clarity-runtime\"")))
+                .ok_or_else(|| format!("{shown} does not hold Clarity's Rust crates: choose <Clarity>/runtimes/rust, which holds clarity-runtime")),
+            Choosable::NugetPackages => runtime_in(picked, "csharp", &|f| f.join("Clarity.Ui").join("Clarity.Ui.csproj").is_file())
+                .ok_or_else(|| format!("{shown} does not hold the projects of Clarity's NuGet packages: choose <Clarity>/runtimes/csharp, which holds Clarity.Ui")),
+        }?;
+        Ok(found.canonicalize().map(|f| PathBuf::from(clarity_project::slashed(&f))).unwrap_or(found))
+    }
+}
+
+/// The runtime folder `name` (`rust`, `csharp`) for `named`: the folder
+/// itself, a runtime beside it, the runtimes folder or the repository; the
+/// first that `holds` the runtime.
+pub fn runtime_in(named: &Path, name: &str, holds: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
+    let candidates = [named.to_path_buf(), named.join("..").join(name), named.join(name), named.join("runtimes").join(name)];
+    candidates.into_iter().find(|c| holds(c))
+}
+
+/// The library choices this process builds with, which the IDE (and the
+/// `clarity` command) hand over from environment.json with `use_libraries`.
+/// Kept apart from the file, so a test sees only what it hands over.
+static IN_USE: std::sync::RwLock<BTreeMap<String, PathBuf>> = std::sync::RwLock::new(BTreeMap::new());
+
+/// Builds from now on use the library choices of `env`; none after a reset.
+pub fn use_libraries(env: &Environment) {
+    if let Ok(mut in_use) = IN_USE.write() {
+        *in_use = env.libraries.clone();
+    }
+}
+
+/// The folder builds use for `which` as chosen, if one is.
+pub fn library_in_use(which: Choosable) -> Option<PathBuf> {
+    IN_USE.read().ok().and_then(|in_use| in_use.get(which.key()).cloned())
 }
 
 /// Where this computer's environment is kept: `environment.json` in Clarity's own folder.

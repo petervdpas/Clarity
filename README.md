@@ -122,6 +122,8 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
+An agent working in this repository uses this checkout's Clarity: `.mcp.json` names `./mcp.sh`, which builds the `clarity` command when it is behind its source and serves `clarity mcp` from it. Claude Code offers it when started here; an installed Clarity added for every folder (`--scope user`) stays in use elsewhere.
+
 A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 
 How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](manual/start.overview.md).

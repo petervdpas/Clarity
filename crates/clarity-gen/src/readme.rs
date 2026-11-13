@@ -77,7 +77,7 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     }
     if backend == Backend::Rust {
         out.push_str(&format!(
-            "\nClarity's runtime comes as the crate clarity-runtime ({}), with a feature for each database the project uses, which the first build fetches from crates.io. To build on the runtime in Clarity's repository instead, while working on it, set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust` when Clarity generates the project: it writes `.cargo/config.toml` in this folder, which says\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n\nThe file can also be written by hand. Clarity keeps .cargo when it writes the project again; remove it to build on the published crate.\n",
+            "\nClarity's runtime comes as the crate clarity-runtime ({}), with a feature for each database the project uses, which the first build fetches from crates.io. To build on the runtime in Clarity's repository instead, while working on it, set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust` when Clarity generates the project: it writes `.cargo/config.toml` in this folder, which says\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n\nThe folder can also be chosen in Clarity settings > Libraries (Rust crates), or the file written by hand. Clarity removes the file it wrote once nothing names the runtime any more, and keeps one written by hand; remove that to build on the published crate.\n",
             crate::rust::runtime_version()
         ));
     }

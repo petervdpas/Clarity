@@ -6,6 +6,8 @@
   // change of the project (`project`, a new value for each) or of what is
   // shown draws again on the same canvas, without loading the library again.
   import { onMount, untrack } from "svelte";
+  import { browserFilesNotice, type BrowserFilesNotice } from "./browserFiles";
+  import { browserFiles } from "./browserFilesStore.svelte";
   import { filesAddress, pageScript, previewAddress, startOptions, type Chosen, type ClarityUi, type Layout, type Shown, type Showing } from "./clarityWindow";
 
   let {
@@ -32,6 +34,8 @@
   let base = "";
   let revision = 0;
   let problem = $state<string | null>(null);
+  /** What Clarity says instead of drawing when the browser files are missing or behind. */
+  let notice = $state<BrowserFilesNotice | null>(null);
   let ready = $state(false);
 
   /** Reads where the parts are, for the designer. */
@@ -44,35 +48,68 @@
     }
   }
 
+  let stopped = false;
+  let watching: ResizeObserver | null = null;
+
+  /** Loads the library's page script and starts the drawing on the canvas. */
+  async function begin() {
+    try {
+      base = await previewAddress();
+      const page = await pageScript(base);
+      if (stopped || !canvas) return;
+      ui = page.start(canvas, untrack(() => startOptions(base, shown, design, revision, showing, chosen)));
+      // A test of the IDE drives the drawing as a driven program (DESIGN 1.6) through its canvas.
+      (canvas as HTMLCanvasElement & { clarityUi?: ClarityUi }).clarityUi = ui;
+      await ui.started;
+      if (stopped) return;
+      ready = true;
+      canvas.dataset.drawn = "";
+      await laid();
+      // A new size moves the parts: the designer reads them again.
+      watching = new ResizeObserver(() => void laid());
+      watching.observe(canvas);
+    } catch (err) {
+      problem = String(err instanceof Error ? err.message : err);
+      await askFiles();
+    }
+  }
+
+  /** Stops the drawing, if one runs. */
+  function end() {
+    watching?.disconnect();
+    watching = null;
+    ui?.stop();
+    ui = null;
+    ready = false;
+  }
+
+  /** The drawing could not start or draw: when the browser files are why, Clarity says so in its place. */
+  async function askFiles() {
+    const said = browserFilesNotice(await browserFiles.check());
+    if (!stopped) notice = said;
+  }
+
   onMount(() => {
-    let stopped = false;
-    let watching: ResizeObserver | null = null;
-    (async () => {
-      try {
-        base = await previewAddress();
-        const page = await pageScript(base);
-        if (stopped || !canvas) return;
-        ui = page.start(canvas, untrack(() => startOptions(base, shown, design, revision, showing, chosen)));
-        // A test of the IDE drives the drawing as a driven program (DESIGN 1.6) through its canvas.
-        (canvas as HTMLCanvasElement & { clarityUi?: ClarityUi }).clarityUi = ui;
-        await ui.started;
-        if (stopped) return;
-        ready = true;
-        canvas.dataset.drawn = "";
-        await laid();
-        // A new size moves the parts: the designer reads them again.
-        watching = new ResizeObserver(() => void laid());
-        watching.observe(canvas);
-      } catch (err) {
-        problem = String(err instanceof Error ? err.message : err);
-      }
-    })();
+    void begin();
     return () => {
       stopped = true;
-      watching?.disconnect();
-      ui?.stop();
-      ui = null;
+      end();
     };
+  });
+
+  // The browser files were built again: the canvas loads them again, by itself.
+  let generation = browserFiles.generation;
+  $effect(() => {
+    const now = browserFiles.generation;
+    if (now === generation) return;
+    generation = now;
+    untrack(() => {
+      end();
+      problem = null;
+      notice = null;
+      if (canvas) delete canvas.dataset.drawn;
+      void begin();
+    });
   });
 
   // The project or what is shown changed: the same canvas draws it again.
@@ -93,13 +130,25 @@
     revision += 1;
     const why = await ui.reload(filesAddress(base, now.shown, design, revision, now.showing), now.chosen);
     problem = why;
+    if (why) await askFiles();
+    else notice = null;
     await laid();
   }
 </script>
 
 <div class="drawn">
   <canvas bind:this={canvas} class:design></canvas>
-  {#if problem}
+  {#if notice}
+    <div class="notice" role="alert">
+      <p>{notice.text}</p>
+      {#if browserFiles.failure}
+        <p class="failure">{browserFiles.failure}</p>
+      {/if}
+      {#if notice.rebuild}
+        <button type="button" disabled={browserFiles.rebuilding} onclick={() => void browserFiles.offer(notice!)}>{browserFiles.rebuilding ? "Rebuilding..." : "Rebuild"}</button>
+      {/if}
+    </div>
+  {:else if problem}
     <p class="problem" role="alert">{problem}</p>
   {/if}
 </div>
@@ -116,6 +165,30 @@
     display: block;
     width: 100%;
     height: 100%;
+  }
+
+  .notice {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    background: var(--bg);
+    text-align: center;
+  }
+
+  .notice p {
+    margin: 0;
+    max-width: 480px;
+    font-size: 13px;
+  }
+
+  .notice .failure {
+    color: var(--error);
+    font-size: 12px;
   }
 
   .problem {

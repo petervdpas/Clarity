@@ -158,3 +158,49 @@ fn adds_one_of_clarity_s_own_settings() {
     assert!(fresh.contains("settings\n    agentChangesWhileClosed\n"), "{fresh}");
     assert_eq!(error(module, Edit::AddOwnSetting { word: "pageSize".into() }), "'pageSize' is none of Clarity's own settings: language, theme, agentReadsWhileClosed, agentChangesWhileClosed");
 }
+
+/// The settings block is edited as an entity's fields are, by hand in the
+/// IDE: a setting is added, rewritten and removed, and so is one of
+/// Clarity's own bare words.
+#[test]
+fn the_settings_block_is_edited_as_fields() {
+    let module = "module shop\n\nsettings\n    language\n    pageSize: integer, default 50\n";
+    let block = at(module, "settings");
+    let text = edit(module, Edit::AddField { entity: block, spec: spec("exportFolder", "folder") });
+    assert!(text.contains("    pageSize: integer, default 50\n    exportFolder: folder\n"), "{text}");
+    let mut modifiers = Modifiers::default();
+    modifiers.min = Some(Literal::Number("10".into()));
+    let text = edit(&text, Edit::UpdateField { item: at(&text, "pageSize"), spec: FieldSpec { name: "pageSize".into(), type_text: "integer".into(), modifiers } });
+    assert!(text.contains("    pageSize: integer, min 10\n"), "{text}");
+    let text = edit(&text, Edit::Remove { item: at(&text, "language") });
+    assert!(!text.contains("language"), "{text}");
+    // A setting added by hand goes into the block, or starts it.
+    let text = edit(&text, Edit::AddSetting { spec: spec("showToolbar", "bool") });
+    assert!(text.ends_with("    exportFolder: folder\n    showToolbar: bool\n"), "{text}");
+    assert!(error(&text, Edit::AddSetting { spec: spec("showToolbar", "bool") }).contains("already"));
+    let fresh = edit("module shop\n", Edit::AddSetting { spec: spec("pageSize", "integer") });
+    assert!(fresh.contains("settings\n    pageSize: integer\n"), "{fresh}");
+}
+
+/// Every type the IDE offers a setting is one a setting takes, and every
+/// other simple type is refused, so the type list and the check agree.
+#[test]
+fn the_setting_types_are_the_ones_a_setting_takes() {
+    use clarity_spec::dictionary::{SETTING_TYPES, SIMPLE_TYPES};
+    let errors = |ty: &str| {
+        let source = format!("module shop\n\nentity Customer\n    name: text\n\nenum Level\n    Low\n\nsettings\n    one: {ty}\n");
+        let project = clarity_spec::keyed::load_keyed([("shop.clarity", source.as_str())], &[], "en");
+        project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error && d.message.contains("a setting is a plain value")).count()
+    };
+    for ty in SETTING_TYPES {
+        let written = match *ty {
+            "ref" => "ref Customer",
+            "enum" => "Level",
+            other => other,
+        };
+        assert_eq!(errors(written), 0, "{ty}");
+    }
+    for ty in SIMPLE_TYPES.iter().filter(|t| !SETTING_TYPES.contains(t) && !["language", "theme"].contains(t)) {
+        assert_eq!(errors(ty), 1, "{ty}");
+    }
+}

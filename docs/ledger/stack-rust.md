@@ -2,6 +2,8 @@
 
 Status: built. `stack rust ...`: a Cargo program on the crate `clarity-runtime`, drawn by Clarity.UI's ready-made library.
 
+Progress: 95%
+
 ## Code
 - Spec: `crates/clarity-project/src/file.rs:401-473` (stack line); `ui library` / `ui crate` read and dropped (file.rs:366-368)
 - Generators: `crates/clarity-gen/src/rust/` (logic.rs 2219 lines, mod.rs 1540, parts.rs 690, model.rs 436, cli.rs 319, names.rs 122)

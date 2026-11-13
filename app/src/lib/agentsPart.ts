@@ -15,6 +15,13 @@ export function agentCommands(files: readonly { commands: readonly Command[] }[]
   };
 }
 
+type Placed = Command & { span: { start: number } };
+
+/** Every command as a row of the Agents part: as typed, whether it is for agents, and its file and place, for the edit that ticks it. */
+export function commandRows(files: readonly { path: string; commands: readonly Placed[] }[]): { line: string; agent: boolean; path: string; item: number }[] {
+  return files.flatMap((f) => f.commands.map((c) => ({ line: commandLine(c.group?.name ?? null, c.name.name), agent: c.agent, path: f.path, item: c.span.start })));
+}
+
 /** Whether the app offers agents anything yet: a command for agents, or its guidance. */
 export function offersAgents(files: readonly { commands: readonly Command[] }[], guidance: string | null): boolean {
   return guidance !== null || files.some((f) => f.commands.some((c) => c.agent));

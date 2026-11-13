@@ -2,6 +2,8 @@
 
 Status: partial. Owned SQL sources follow the dictionary through numbered steps written in Clarity, replayed to give the schema and applied by every runtime at start.
 
+Progress: 60%
+
 ## Code
 - Spec: `crates/clarity-spec/src/migrate.rs` (`Op` :160-191, `parse` :363, `schema` :545, `pending` :594, `proposed_renames` :714); `field_rename.rs`, `rename.rs`
 - Generators: steps to SQL per dialect `crates/clarity-gen/src/schema.rs` (baseline SQLite only :426), `ddl.rs`; the generator refuses to write while changes are pending

@@ -20,7 +20,8 @@
     /** A view is asked for: it starts blank as a view. */
     view?: boolean;
     error: string | null;
-    onsubmit: (file: SpecFile, name: string, template: PageTemplate) => void;
+    /** The window's start: a template, or `dialog` for a blank dialog (a window of its own that opens over another). */
+    onsubmit: (file: SpecFile, name: string, template: PageTemplate | "dialog") => void;
     oncancel: () => void;
   } = $props();
 
@@ -46,6 +47,10 @@
     const target = preview.project.files.find((f) => f.path === path);
     if (!target || !name.trim()) return;
     const [kind, entity] = start.split(":");
+    if (kind === "dialog") {
+      onsubmit(target, name.trim(), "dialog");
+      return;
+    }
     const template: PageTemplate =
       kind === "form"
         ? { kind: "form", entity }
@@ -81,6 +86,7 @@
       <span>Start from</span>
       <select bind:value={start}>
         <option value="blank">Blank window</option>
+        <option value="dialog">Blank dialog (opens over another window)</option>
         <option value="view">Blank view (shown in a content)</option>
         <option value="splash">Splash screen (shows while the app starts)</option>
         <option value="toolbox">Toolbox (the tools a canvas shows, designed as a view)</option>

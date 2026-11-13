@@ -40,6 +40,10 @@ pub enum WidgetKind {
     Progress,
     /// A busy indicator, which code shows and hides with `visible`.
     Busy,
+    /// A status bar's panel, for a footer: its caption with an icon, a small
+    /// gauge of a number it binds, a check mark while code sets it checked,
+    /// and a warning while code sets an error on it.
+    StatusItem,
     /// A button that stays pressed: a bool, as a checkbox.
     Toggle,
     /// Buttons and toggles joined in one row.
@@ -1232,6 +1236,23 @@ const ENTRIES: &[Entry] = &[
         clickable: false,
         events: &[],
         properties: &[],
+    },
+    // A status bar's panel: its caption, an icon, a gauge of a number it binds
+    // (0 to its max, 100 without one), checked and an error set by code.
+    Entry {
+        kind: WidgetKind::StatusItem,
+        keyword: "statusItem",
+        name: "Status item",
+        category: Category::Data,
+        size: (3, 1),
+        caption: Some("Status"),
+        bind: BindTarget::Field,
+        field_types: &["integer", "decimal"],
+        input: false,
+        container: None,
+        clickable: true,
+        events: &[Event::Click],
+        properties: &[WidgetProperty::Icon, WidgetProperty::Max],
     },
     Entry {
         kind: WidgetKind::Display,

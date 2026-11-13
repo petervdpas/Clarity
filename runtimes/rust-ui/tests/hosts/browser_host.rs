@@ -462,9 +462,15 @@ fn the_designers_layer_finds_each_part_and_grid_by_its_design_item() {
     assert_eq!(foot["columns"], json!(12));
     place(&layout, "parts", "91");
     place(&layout, "parts", "96");
-    // In the designer rows keep their height (docs/LANGUAGE.md): a list is as high as its rows, on the window and in a sidebar alike.
-    assert_eq!(place(&layout, "parts", "45")[3], 2.0 * 36.0 + 8.0, "{layout}");
-    assert_eq!(place(&layout, "parts", "92")[3], 3.0 * 36.0 + 2.0 * 8.0, "{layout}");
+    // In the designer a list grows as it does when the program runs, on the window and in a sidebar alike, and it
+    // stands on the rows as they are laid out: its height is theirs, so the layer's cells follow the drawing.
+    let spanned = |grid: &str, from: usize, to: usize| {
+        let rows = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!(grid)).unwrap()["rows"].as_array().unwrap().clone();
+        rows[from..=to].iter().map(|r| r.as_f64().unwrap()).sum::<f64>() + (to - from) as f64 * 8.0
+    };
+    assert!(place(&layout, "parts", "45")[3] > 2.0 * 36.0 + 8.0, "the list grows in the designer: {layout}");
+    assert_eq!(place(&layout, "parts", "45")[3], spanned("10", 5, 6), "{layout}");
+    assert_eq!(place(&layout, "parts", "92")[3], spanned("90", 1, 3), "{layout}");
 }
 
 #[test]

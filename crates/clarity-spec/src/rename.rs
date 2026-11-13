@@ -1,6 +1,6 @@
-//! Renaming an entity or an enum across the project: its declaration and
-//! every reference to it, found through the parsed model rather than by
-//! searching text.
+//! Renaming an entity, an enum, a window or a view across the project: its
+//! declaration and every reference to it, found through the parsed model
+//! rather than by searching text (a window or view in `page_rename`).
 
 use serde::Deserialize;
 use ts_rs::TS;
@@ -11,6 +11,7 @@ use crate::span::Span;
 use crate::widgets::is_identifier;
 
 pub use crate::field_rename::rename_field;
+pub use crate::page_rename::rename_page;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +19,8 @@ pub use crate::field_rename::rename_field;
 pub enum RenameKind {
     Entity,
     Enum,
+    /// A window or view (any page): its file, class and every reference.
+    Page,
 }
 
 /// A file whose text changes, by its path in the project.
@@ -25,6 +28,9 @@ pub enum RenameKind {
 pub struct Renamed {
     pub path: String,
     pub text: String,
+    /// The path the file had before, when the rename moves it (a window's
+    /// `.cxaml` takes its new name); the old file goes.
+    pub moved_from: Option<String>,
 }
 
 /// Renames `old` to `new` in every file that can see its declaration.
@@ -39,6 +45,7 @@ pub fn rename(
     let what = match kind {
         RenameKind::Entity => "entity",
         RenameKind::Enum => "enum",
+        RenameKind::Page => return rename_page(project, source, old, new),
     };
     if !is_identifier(new) {
         return Err(format!("'{new}' is not a valid {what} name"));
@@ -49,6 +56,7 @@ pub fn rename(
     let declared = |f: &SpecFile| match kind {
         RenameKind::Entity => f.entities.iter().any(|e| e.name.name == old),
         RenameKind::Enum => f.enums.iter().any(|e| e.name.name == old),
+        RenameKind::Page => false,
     };
     let owners: Vec<&SpecFile> = project.files.iter().filter(|f| declared(f)).collect();
     let owner = match owners.as_slice() {
@@ -84,7 +92,7 @@ pub fn rename(
         if crate::cxaml::is_page_file(&file.path) {
             let mut designed = crate::cxaml::read_designed(&text, &file.path)?;
             if renamed_in_data(&mut designed, old, new) {
-                changed.push(Renamed { path: original_path.clone(), text: crate::cxaml::written_again(&text, &designed) });
+                changed.push(Renamed { path: original_path.clone(), text: crate::cxaml::written_again(&text, &designed), moved_from: None });
             }
             continue;
         }
@@ -127,6 +135,7 @@ pub fn rename(
         changed.push(Renamed {
             path: original_path.clone(),
             text,
+            moved_from: None,
         });
     }
     Ok(changed)
@@ -169,6 +178,7 @@ fn references<'f>(file: &'f SpecFile, kind: RenameKind, name: &str) -> Vec<&'f I
     match kind {
         RenameKind::Entity => out.extend(file.entities.iter().map(|e| &e.name)),
         RenameKind::Enum => out.extend(file.enums.iter().map(|e| &e.name)),
+        RenameKind::Page => {}
     }
     for field in file.entities.iter().flat_map(|e| &e.fields) {
         match (&field.ty, kind) {

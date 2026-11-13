@@ -177,6 +177,11 @@
     {:else if kind === "progress"}
       <rect x="4" y="10" width="40" height="8" rx="4" />
       <rect x="4" y="10" width="24" height="8" rx="4" class="fill" />
+    {:else if kind === "statusItem"}
+      <path d="M5 14 l3 3 l6 -7" />
+      <text x="17" y="17.5" class="ink small">Done</text>
+      <rect x="34" y="11" width="10" height="5" rx="2" />
+      <rect x="34" y="11" width="6" height="5" rx="2" class="fill" />
     {:else if kind === "busy"}
       <path d="M24 6 A8 8 0 1 1 16 14" />
     {:else if kind === "icon"}

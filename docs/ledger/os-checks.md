@@ -2,6 +2,8 @@
 
 Status: partial. What is built but has never run on Windows or macOS (UNTRIED), and what those systems still lack (NOT BUILT). Development and CI run on Linux.
 
+Progress: 70%
+
 ## Code
 - Clarity.UI per-system code: `runtimes/rust-ui/src/desktop/files/mod.rs` (folder and file pickers: COM on Windows, osascript on macOS), `runtimes/rust-ui/src/shortcuts.rs:134-137` (key matching, no Cmd mapping), AccessKit adapters ([clarity-ui](clarity-ui.md))
 - Generation: `crates/clarity-gen/src/windows_resources.rs` (icon and VERSIONINFO), `crates/clarity-gen/src/tools.rs:402` (library check on Linux only)

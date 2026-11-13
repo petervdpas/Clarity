@@ -709,9 +709,9 @@ pub struct TreeSelect {
 #[ts(export)]
 pub struct WidgetPage {
     pub title: Option<String>,
-    /// `pane span 4`: the columns a splitter's first pane starts with, so
-    /// its grid has them; the second pane has the rest. Without it each pane
-    /// has the splitter's columns and they start alike.
+    /// `span="4"`: the columns a splitter's first pane starts with, so its
+    /// grid has them; one above the other (`rows="4"`) the rows it starts
+    /// with. The second pane has the rest. Without it the panes start alike.
     pub columns: Option<u32>,
     /// `section "Class" view ClassEditor`: a tab, step or section showing a
     /// view (DESIGN 5.33), whose parts are then its own.

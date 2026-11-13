@@ -473,7 +473,8 @@ fn record(history: &HistoryState, files: Vec<FileChange>) -> Result<(), String> 
     Ok(())
 }
 
-/// Renames an entity or enum and every reference to it, in all files.
+/// Renames an entity, an enum, a window or a view and every reference to
+/// it, in all files; a window's or view's file takes the new name.
 #[tauri::command]
 fn rename(
     kind: RenameKind,
@@ -483,41 +484,91 @@ fn rename(
     history: State<HistoryState>,
 ) -> Result<Preview, String> {
     let dir = open_dir_of(&state)?;
-    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    let before = clarity_project::load_modules(&dir).map_err(read_err)?;
-    let source = |path: &str| std::fs::read_to_string(path).ok();
+    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
+    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
     let renamed = clarity_spec::rename::rename(&before, source, kind, &name, new_name.trim())?;
+    write_renamed(&dir, &before, renamed, &history)
+}
+
+/// Renames field `name` of entity or record `entity` and every place that
+/// names it, in all files: the entity editor's name cell asks for it.
+#[tauri::command]
+fn rename_field(entity: String, name: String, new_name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let dir = open_dir_of(&state)?;
+    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
+    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
+    let renamed = clarity_spec::rename::rename_field(&before, source, &entity, &name, new_name.trim())?;
+    write_renamed(&dir, &before, renamed, &history)
+}
+
+/// Writes a rename's files once the whole project checks with them in
+/// place, as one change for Undo. A path is the project's (relative to
+/// `dir`, such as `translations/en.clarity`) or absolute.
+fn write_renamed(dir: &Path, before: &clarity_spec::Project, renamed: Vec<clarity_spec::rename::Renamed>, history: &HistoryState) -> Result<Preview, String> {
+    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
     if renamed.is_empty() {
-        return load(&dir);
+        return load(dir);
     }
+    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
     // Check the whole project with every renamed file in place.
     let mut sources = Vec::new();
     let mut paths = clarity_spec::spec_files(&dir).map_err(read_err)?;
     paths.extend(clarity_spec::cxaml::page_files(&dir, &paths.clone(), &[]).map_err(read_err)?);
     for path in paths {
         let shown = path.display().to_string();
-        let text = match renamed.iter().find(|r| r.path == shown) {
+        // A moved file (a renamed window's) is read under its new path only.
+        if renamed.iter().any(|r| r.moved_from.as_deref().is_some_and(|was| at(was) == path)) {
+            continue;
+        }
+        let text = match renamed.iter().find(|r| at(&r.path) == path) {
             Some(r) => r.text.clone(),
             None => std::fs::read_to_string(&path).map_err(read_err)?,
         };
         sources.push((shown, text));
     }
+    for r in renamed.iter().filter(|r| r.moved_from.is_some()) {
+        sources.push((at(&r.path).display().to_string(), r.text.clone()));
+    }
     let after = clarity_spec::load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())));
-    if let Some(error) = clarity_spec::new_error(&before, &after) {
+    if let Some(error) = clarity_spec::new_error(before, &after) {
         return Err(error.message.clone());
     }
     let mut changes = Vec::new();
     for r in renamed {
-        let file = PathBuf::from(&r.path);
-        let old = std::fs::read_to_string(&file).map_err(read_err)?;
+        let file = at(&r.path);
+        if r.moved_from.is_some() && file.exists() {
+            return Err(format!("{} is there already", file.display()));
+        }
+        let old = if r.moved_from.is_some() { None } else { Some(std::fs::read_to_string(&file).map_err(read_err)?) };
         write_atomically(&file, &r.text)?;
         changes.push(FileChange {
             file,
-            before: Some(old),
+            before: old,
             after: Some(r.text),
         });
+        // A window's file takes its new name: the old one goes, kept for Undo.
+        if let Some(was) = r.moved_from {
+            let was = at(&was);
+            let old = std::fs::read_to_string(&was).map_err(read_err)?;
+            std::fs::remove_file(&was).map_err(read_err)?;
+            changes.push(FileChange { file: was, before: Some(old), after: None });
+        }
     }
-    record(&history, changes)?;
+    record(history, changes)?;
+    load(dir)
+}
+
+/// Makes a new module by hand: its file `name.clarity` beside the others,
+/// with its `module` line, as one change for Undo.
+#[tauri::command]
+fn add_module(name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let dir = open_dir_of(&state)?;
+    let (file, text) = clarity_project::new_module_file(&dir, name.trim())?;
+    let change = FileChange { file, before: None, after: Some(text) };
+    change.make()?;
+    record(&history, vec![change])?;
     load(&dir)
 }
 
@@ -910,6 +961,8 @@ pub fn run() {
             engines::add_engine_stubs,
             engines::build_engine,
             rename,
+            rename_field,
+            add_module,
             migrations::pending_migration,
             migrations::create_migration,
             backups::list_backups,

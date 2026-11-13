@@ -2,6 +2,8 @@
 
 Status: built. One Rust library that draws every window of every generated program (parts, layout, look, input) on the desktop and in the browser, used by all five stacks.
 
+Progress: 90%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (catalog, 70 kinds), `layout.rs` (window 1100 x 760, row 36, gap 8), `cxaml.rs` (markup read and written)
 - Generators: `crates/clarity-gen/src/web_windows.rs` (window markup a program carries), `web_browser.rs` (`browser/` folder, `files.json`), `clarity_ui.rs` (where the library comes from: `CLARITY_UI`, the installed copy, else the `runtimes/rust-ui-ffi/v<ver>` release checked against SHA256SUMS), `preview.rs` (the IDE's preview server)

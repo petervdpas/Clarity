@@ -25,6 +25,7 @@
       <Item caption="@saveACopy" name="saveCopyItem" onclick="newClicked" />
     </Menu>
   </Button>
+  <StatusItem name="copiesItem" at="7,4" span="3" caption="@copies" bind="album.copies" icon="disc" max="10" onclick="copiesClicked" />
   <Accordion name="notesAccordion" at="1,5" span="6" rows="4" onchange="favouriteChanged">
     <Section title="@title">
       <Text name="titleText" at="1,1" span="6" bind="album.title" />

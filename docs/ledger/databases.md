@@ -2,6 +2,8 @@
 
 Status: partial. SQL data sources (SQLite, PostgreSQL, MySQL, SQL Server), owned or external, one database per source, where the file opens, and what a program does when a database does not open.
 
+Progress: 65%
+
 ## Code
 - Project file: `datasource name kind "where"` with external, readonly, beside (`crates/clarity-project/src/file.rs:474-540`); `SourceKind` (`crates/clarity-project/src/lib.rs:66-75`); `keychain:` refused (lib.rs:607); import and take ownership (lib.rs:1399, `file_import.rs`)
 - Spec: `source erp` per module (`crates/clarity-spec/src/parser.rs:332`, `check.rs:2636`); external mapping `table`, `key`, `column`

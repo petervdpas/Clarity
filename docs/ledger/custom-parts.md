@@ -2,6 +2,8 @@
 
 Status: built. `part X` (a part an outside library draws) and `library X` (functions from a package), both written in the project's own stack language and declared in Clarity.
 
+Progress: 90%
+
 ## Code
 - Spec: `part` in `crates/clarity-spec/src/code/parse.rs:882`, `library` at :1015; `crates/clarity-spec/src/native.rs` (part and library files)
 - Generators: `crates/clarity-gen/src/parts.rs`, `part_code.rs` (reads each part's code before generating), `libraries.rs`, `{rust,go,c,cpp,csharp}/parts.rs`; language check `lib.rs:871`; a custom part in a web-only program is refused (`lib.rs:1628`)

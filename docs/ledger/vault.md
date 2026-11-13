@@ -2,6 +2,8 @@
 
 Status: built. The IDE's own encrypted store of secrets and its connections (agent API keys, refresh tokens); generated apps do not use it.
 
+Progress: 90%
+
 ## Code
 - Core: `crates/clarity-vault/src/` (vault.rs: `vault.json` with id, Argon2id work factors and salt, and a canary that proves the master password; `DEFAULT_PARAMS` 64 MiB, 3 iterations, parallelism 4 (:46); secrets.rs: one AES-256-GCM record per secret in `secrets/`, holding category, key and value, bound to the vault and its slot; connections.rs: named fields, plain or a pointer to a secret by category and key, in `connections.json`)
 - IDE backend: `app/src-tauri/src/vault.rs` (folder `~/.clarity` or CLARITY_HOME (:22-26); create, unlock, lock, secrets, categories with renames, change password, destroy, connections, `resolve`; locks itself after 15 minutes unused, `AUTO_LOCK` :20)

@@ -46,6 +46,12 @@ A **view** is a piece of a window, designed on its own as a window is: its parts
 
 The view's parts, data and handlers join the window's, so the window's code sets what it shows. A slide-out shows a view the same way, with a content inside it. A view's parts end by the rows the window holds from the top of the content area that shows it; an edit cuts them to fit. Views have their own section in the project tree; **+ New view** there starts a blank one.
 
+A view tells its window what happened (`tell saved(name)` in its code). With nothing picked on the view, its **Tells** list declares each one, `saved(name: text)`, with **Add** and a cross to take one away. In the window, pick the content's view line: **Tells of** the view lists them, and **Wire** gives each a handler of the window that takes the tell's values.
+
+## Renaming a window or view
+
+Right-click a window or view in the project tree and pick **Rename**. Its file takes the new name (`design/Customer.cxaml`, `class="shop.Customer"`), and so does every place that names it: its `code` block, buttons and menu items that open it, content view lines, the app's main window and splash, and `open` and `ask` in code. Undo takes it all back. An agent renames one with the `rename` tool (`kind` window or view).
+
 ## New windows and dialogs
 
 To add one, click **New window** on the Project or Design tab. Give it a name and choose what it starts from: a blank window, Form for an entity (a label and an input per field, with Save and Close buttons) or Browse for an entity (a filter, a table, and New and Open buttons, with the code that filters and refreshes). The result is an ordinary window in its own file. New window always makes a window; to make a dialog, change the root element `<Window` to `<Dialog` (and the closing tag) in its file. A dialog that answers a question says what it gives, `<Dialog class="loans.PickFriend" gives="Friend">`, and its handler closes it with one: `close with grid.selected`; `ask PickFriend then lend(album)` opens it from another window, and the answer runs `lend` there (see [Code behind](code.handlers.md)).
@@ -91,7 +97,7 @@ Every part sits on a snap grid of 12 columns, or the number the root's `columns`
 
 In the designer, drag a part to move it and drag its corner handle to resize it. The **Grid** button on the Design tab shows or hides the grid cells. The checker reports parts that start outside the grid, run past its last column, or overlap another part.
 
-Rows have a fixed height in the designer. In the running application the columns share the window's width, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: a button beside a list stays a button's height, at the top of its rows. To put a form beside a list, with a divider to set the list's width, place both in a splitter (see [Parts](design.parts.md)).
+The designer shows the window as it runs, and its grid follows: the columns share the window's width, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height, so their cells on the canvas are taller. Everything else keeps its height, also in a row that grows: a button beside a list stays a button's height, at the top of its rows. To put a form beside a list, with a divider to set the list's width, place both in a splitter (see [Parts](design.parts.md)).
 
 When nothing in a grid grows, its parts stay at the top and the spare height sits below them. Tick **Stick to bottom** under Layout in the properties (`bottom="true"`) to move a part down to the bottom instead, together with every part on its row and below: `<Button name="save" at="3,11" span="2" caption="@saveCaption" bottom="true" />`. Where a row grows, it changes nothing.
 

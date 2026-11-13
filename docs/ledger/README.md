@@ -6,6 +6,7 @@ One small entry per piece of Clarity. Read this index, then only the entries the
 
 - Every entry has the same headings, in this order: Status, Code, Tests, Open, Conflicts, Decisions, Was. At most 80 lines (modularity and docs may run longer).
 - Status is one of: **built**, **partial**, **not built**, **needs decision**. Open items say NOT BUILT, PARTIAL or UNTRIED (built but never run where it was promised).
+- Under the Status paragraph, one line `Progress: N%` (a multiple of 5): how much of the entry is implemented, judged from its Code against its Open items. Work that changes what is built updates it in the same piece of work; apps read it as written.
 - Code wins: an entry says what the code does. When code and entry disagree, fix the entry, or put the difference under Conflicts until it is settled.
 - Work on a piece updates its entry in the same piece of work: a built item leaves Open, a settled conflict leaves Conflicts, a new decision goes under Decisions with the date and the user's words verbatim.
 - A new piece gets a new entry and a line in this index; a fact lives in one entry, others link to it.
@@ -106,6 +107,7 @@ Plain ASCII, no em-dashes, short lines.
 | [ide-data](ide-data.md) | partial | a data browser |
 | [diagrams](diagrams.md) | partial | state, sequence, activity, architecture |
 | [vault](vault.md) | built | untried keys on Windows |
+| [by-hand](by-hand.md) | built | the add-field form's type box |
 
 ### AI
 

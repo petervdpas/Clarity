@@ -2,6 +2,8 @@
 
 Status: not built. Packages of views, parts drawn in Clarity, themes, modules, devices and native parts, published to an open index and added from the palette, as C++ Builder's component packages.
 
+Progress: 0%
+
 ## Code
 - Spec: none (`package` files and `use package` are not parsed)
 - Generators: none

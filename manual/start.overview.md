@@ -38,7 +38,7 @@ This also means design and code sit side by side as text. A window is its `.cxam
 
 The ribbon at the top has four tabs:
 
-- **Project**: New, Open, Reload and Settings for the project, New window and App, and Check, which reads every file again and checks the whole project. The sidebar shows the project's name, file, app folder, stack and data, and the project tree (App, Windows, Data, Web APIs, Diagrams, Themes, Languages, Resources, Modules).
+- **Project**: New, Open, Reload and Settings for the project, New window and App, and Check, which reads every file again and checks the whole project. The sidebar shows the project's name, file, app folder, stack and data, and the project tree (App, Settings, Windows, Data, Web APIs, Diagrams, Themes, Languages, Resources, Modules). **+ New module** under Modules asks for a name and writes the module's file, `name.clarity`, beside the others.
 - **Design**: the designer. Pick a window or the app in the tree and it opens on the canvas, with Elements, Parts, Window and Settings tabs in the sidebar and the inspector on the right: the properties, code and text of what is picked. Entities, enums, themes and modules open in their own editors.
 - **Preview**: shows a window as it will look, with sample data, and follows buttons that open other windows. Generate, Build, Run and Stop are here, in that order; see [Run and Build](project.run-build.md).
 - **Vault**: secrets and connections that Clarity uses while you work, such as the key of an AI connection. See [The vault](vault.md).

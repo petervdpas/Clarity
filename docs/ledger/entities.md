@@ -2,6 +2,8 @@
 
 Status: partial. Entities and enums: the data dictionary of stored fields, their types and modifiers, and data events written next to the entity.
 
+Progress: 65%
+
 ## Code
 - Spec: `crates/clarity-spec/src/parser.rs` (`entity` :492-620, field types :718-777, modifiers :779 and :809-821, `enum` :426, `record` :462); model `model.rs` (`FieldType`, modifiers :468); checks `check.rs:2427-2612`; data events `code/mod.rs:43-124`; `dictionary.rs`, `field_rename.rs`
 - Generators: columns and DDL `crates/clarity-gen/src/ddl.rs` (`column_type` :147); required fields `crates/clarity-gen/src/lib.rs:268-272`; records per stack in `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/model.rs`

@@ -125,6 +125,11 @@ code Albums
 
     handler setCopies(copies: integer)
         album.copies = copies
+        copiesItem.checked = copies > 0
+        if copies > 10
+            copiesItem.error = @tooManyCopies
+        else
+            copiesItem.error = ""
 
     handler formatClicked
         ask @whichFormat for Format then setFormat

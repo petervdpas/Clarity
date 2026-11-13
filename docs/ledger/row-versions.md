@@ -2,6 +2,8 @@
 
 Status: partial. A save never overwrites someone else's change: each record carries a version, a stale save or delete is refused with `savedSince`; undo of saves uses the same version, one transaction per handler.
 
+Progress: 70%
+
 ## Code
 - Spec: `crates/clarity-spec/src/versions.rs` (which entities carry a version, the checks); entity lines `version "Col"`, `version none`, `savedSince @key` (`parser.rs:508-596`); `save x anyway` (`code/parse.rs:649-651`), `reload x`; migration op `AddVersion` (`migrate.rs`); Clarity's words `savedSince`, `undoTooOld` (`translations.rs:218-219`)
 - Generators: version per stored entity in each stack's `model.rs`; tests `crates/clarity-gen/tests/versions_{rust,go,c,cpp,csharp}.rs`

@@ -2,6 +2,8 @@
 
 Status: partial. The IDE's own agent: a chat panel that designs the open project with the shared tools, on Anthropic or Microsoft Foundry models.
 
+Progress: 60%
+
 ## Code
 - Spec: none
 - Generators: none

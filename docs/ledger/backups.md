@@ -2,6 +2,8 @@
 
 Status: partial. Copies of a project's owned SQLite databases, taken by hand (IDE, command line, agent) and by every runtime before a migration, listed, pruned and restored.
 
+Progress: 60%
+
 ## Code
 - Core: `crates/clarity-db/src/backup.rs` (`take` :64, `list` :115, `prune_automatic` :130, `restore` :148, `delete` :178; `VACUUM INTO`, names `<db>-<UTC stamp>-<why>.db` in `backups/` beside the database, 10 automatic kept)
 - Project: `crates/clarity-project/src/lib.rs:1078` (`database_to_back_up`: owned SQLite only; external and server sources say why)

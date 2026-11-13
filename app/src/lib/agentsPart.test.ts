@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentCommands, agentSettings, offersAgents } from "./agentsPart.ts";
+import { agentCommands, agentSettings, commandRows, offersAgents } from "./agentsPart.ts";
 
 function command(group: string | null, name: string, agent: boolean) {
   return { group: group ? { name: group } : null, name: { name }, agent };
@@ -27,4 +27,17 @@ test("the part says which switches the app's settings offer, and in which file",
   ];
   assert.deepEqual(agentSettings(files), { reads: false, changes: true, file: "b.clarity" });
   assert.deepEqual(agentSettings([{ path: "only.clarity", entities: [] }]), { reads: false, changes: false, file: "only.clarity" });
+});
+
+test("every command is a row with its file and place, ticked when it is for agents", () => {
+  const at = (c: ReturnType<typeof command>, start: number) => ({ ...c, span: { start } });
+  const files = [
+    { path: "shop.clarity", commands: [at(command("project", "add", true), 10), at(command(null, "backup", false), 40)] },
+    { path: "review.clarity", commands: [at(command("review", "setAll", false), 7)] },
+  ];
+  assert.deepEqual(commandRows(files), [
+    { line: "project add", agent: true, path: "shop.clarity", item: 10 },
+    { line: "backup", agent: false, path: "shop.clarity", item: 40 },
+    { line: "review set-all", agent: false, path: "review.clarity", item: 7 },
+  ]);
 });

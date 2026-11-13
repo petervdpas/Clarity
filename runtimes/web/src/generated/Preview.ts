@@ -5,6 +5,7 @@ import type { KeyLayer } from "./KeyLayer";
 import type { Project } from "./Project";
 import type { RegionInfo } from "./RegionInfo";
 import type { ScreenEngine } from "./ScreenEngine";
+import type { ThemeCatalog } from "./ThemeCatalog";
 import type { ThemeDecl } from "./ThemeDecl";
 import type { WidgetInfo } from "./WidgetInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -34,6 +35,10 @@ formats: { [key in string]: Array<FormatInfo> },
  * Clarity's own theme, which every theme starts from.
  */
 baseTheme: ThemeDecl, 
+/**
+ * What a theme can set, which the IDE's theme form offers.
+ */
+themeCatalog: ThemeCatalog, 
 /**
  * The icons the project shows, by name, each an SVG path in a 24 by 24 box.
  */

@@ -2,6 +2,8 @@
 
 Status: partial. The `video` part plays on Clarity.Video beside Clarity.UI on every stack; camera, recording, frame buffer and export are not built.
 
+Progress: 30%
+
 ## Code
 - Spec: `crates/clarity-spec/src/video.rs`; `video` kind in `widgets.rs:1332` (binds nothing); `crates/clarity-spec/src/resources.rs` (`plays_videos`, `carries_audio`; video resources `.mp4`); project line `codec x from "path"` (`crates/clarity-project/src/file.rs:550`)
 - Generators: each stack's mod.rs adds Clarity.Video (`parts::VIDEO_KIND`); codec libraries `crates/clarity-gen/src/lib.rs:1308` (`codec_libraries`), :1398 (`with_codecs`, carried in `codecs/`); openh264 placement `crates/clarity-gen/src/clarity_ui.rs:142-195`

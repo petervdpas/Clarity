@@ -2,6 +2,8 @@
 
 Status: not built. Building an app with no internet: a warmed cache (Prepare for offline) or a vendored project, tested with the network off.
 
+Progress: 5%
+
 ## Code
 - Spec: none
 - Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); the Clarity.UI library and browser files can come from the installed copy or `CLARITY_UI` (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))

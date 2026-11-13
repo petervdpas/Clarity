@@ -2,6 +2,8 @@
 
 Status: partial. ERD and class diagrams designed on Clarity's own canvas in the IDE and saved as `.mermaid` files; other kinds are not designed.
 
+Progress: 50%
+
 ## Code
 - Spec: `crates/clarity-spec/src/diagrams/` (mod.rs: kinds and their Mermaid headers :45-78; erd.rs, erd_model.rs, class.rs, class_model.rs, fields.rs, compare.rs (differences and proposals), views.rs (written from the project), files.rs). Models are read and written whole (`erd_model.rs:80, 184`)
 - IDE: `app/src/lib/DiagramView.svelte` (Design and Text tabs, problems :338), `DiagramCanvas.svelte`, `diagramCanvas.ts`, `erdDesign.ts`, `classDesign.ts`, `ErdProperties.svelte`, `ClassProperties.svelte`, `FieldList.svelte`, `NewDiagramDialog.svelte` (offers ERD and class only, :28); Tauri `app/src-tauri/src/diagrams.rs`; mermaid.js 11.17.2 (`app/package.json:31`) draws the kinds Clarity does not design, read-only

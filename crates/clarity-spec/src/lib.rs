@@ -6,6 +6,7 @@ pub mod colors;
 pub mod cxaml;
 pub mod design_edit;
 pub mod design_keys;
+pub mod decl_lines;
 pub mod dates;
 pub mod code;
 pub mod diagnostic;
@@ -35,6 +36,7 @@ pub mod native;
 pub mod parser;
 pub mod rename;
 mod field_rename;
+mod page_rename;
 pub mod sample;
 pub mod shortcuts;
 pub mod signin;
@@ -921,6 +923,10 @@ pub struct Preview {
     #[serde(rename = "baseTheme")]
     #[ts(rename = "baseTheme")]
     pub base_theme: model::ThemeDecl,
+    /// What a theme can set, which the IDE's theme form offers.
+    #[serde(rename = "themeCatalog")]
+    #[ts(rename = "themeCatalog")]
+    pub theme_catalog: themes::ThemeCatalog,
     /// The icons the project shows, by name, each an SVG path in a 24 by 24 box.
     pub icons: BTreeMap<String, String>,
     /// The commands a person gives keys in the keys window, where the
@@ -969,6 +975,7 @@ impl Preview {
             app_events: widgets::APP_EVENTS.to_vec(),
             formats: formats::catalog(),
             base_theme: themes::built_in(),
+            theme_catalog: themes::catalog(),
         }
     }
 }

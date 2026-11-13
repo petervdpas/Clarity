@@ -187,6 +187,13 @@ fn find_inner(widgets: &mut [Widget], at: u32) -> Option<(WidgetKind, &mut Widge
     None
 }
 
+/// The page (tab, step, section, pane or content line) that starts at `at`,
+/// with the kind of container it belongs to, wherever that container is: the
+/// window's grid, a sidebar or the footer.
+fn page_anywhere(designed: &mut Designed, at: u32) -> Option<(WidgetKind, &mut WidgetPage)> {
+    designed.all_widgets().into_iter().find_map(|list| find_inner(list, at))
+}
+
 /// The parts of the container that starts at `at`: the page, a panel, a tab or pane, a sidebar, the footer.
 fn container_of(designed: &mut Designed, at: u32) -> Option<&mut Vec<Widget>> {
     if designed.start() == at {
@@ -284,6 +291,36 @@ fn command_lists(designed: &mut Designed) -> Vec<&mut Vec<Command>> {
             }
         }
     }
+    for sidebar in &mut frame.sidebars {
+        of_widgets(&mut sidebar.widgets, &mut out);
+    }
+    if let Some(footer) = &mut frame.footer {
+        of_widgets(&mut footer.widgets, &mut out);
+    }
+    if let Some(widgets) = widgets {
+        of_widgets(widgets, &mut out);
+    }
+    out
+}
+
+/// Every part's context menu, in the frame's regions and the page.
+fn part_menus(designed: &mut Designed) -> Vec<&mut Menu> {
+    fn of_widgets<'a>(widgets: &'a mut [Widget], out: &mut Vec<&'a mut Menu>) {
+        for w in widgets {
+            if let Some(menu) = &mut w.menu {
+                out.push(menu);
+            }
+            of_widgets(&mut w.children, out);
+            for page in &mut w.pages {
+                of_widgets(&mut page.children, out);
+            }
+        }
+    }
+    let (widgets, frame) = match designed {
+        Designed::Page(page) => (Some(&mut page.widgets), &mut page.frame),
+        Designed::App(app) => (None, &mut app.frame),
+    };
+    let mut out = Vec::new();
     for sidebar in &mut frame.sidebars {
         of_widgets(&mut sidebar.widgets, &mut out);
     }
@@ -447,16 +484,14 @@ impl Editor<'_> {
             Edit::Remove { item } => self.remove(designed, *item),
             Edit::SetTitle { target, title } => self.set_title(designed, *target, title),
             Edit::SetPaneSpan { target, columns } => {
-                let widgets = designed.page("panes")?;
-                match find_inner(&mut widgets.widgets, *target) {
+                match page_anywhere(designed, *target) {
                     Some((WidgetKind::Splitter, pane)) => pane.columns = *columns,
                     _ => return fail("there is no pane there"),
                 }
                 Ok(Some(*target))
             }
             Edit::SetPageView { target, view } => {
-                let page = designed.page("views")?;
-                let Some((kind, line)) = find_inner(&mut page.widgets, *target) else { return fail("there is no view line of content there") };
+                let Some((kind, line)) = page_anywhere(designed, *target) else { return fail("there is no view line of content there") };
                 if kind != WidgetKind::Content {
                     return fail("a view shows only in content; put a content in it");
                 }
@@ -499,8 +534,7 @@ impl Editor<'_> {
                 Ok(Some(*at))
             }
             Edit::SetViewTell { target, tell, handler } => {
-                let page = designed.page("views")?;
-                let Some((_, line)) = find_inner(&mut page.widgets, *target) else { return fail("there is no view line there") };
+                let Some((_, line)) = page_anywhere(designed, *target) else { return fail("there is no view line there") };
                 if line.view.is_none() {
                     return fail("only a line that shows a view hears its tells");
                 }
@@ -524,8 +558,7 @@ impl Editor<'_> {
                 Ok(Some(*target))
             }
             Edit::SetPageColor { target, color } => {
-                let page = designed.page("sections")?;
-                let Some((kind, section)) = find_inner(&mut page.widgets, *target) else { return fail("there is no section there") };
+                let Some((kind, section)) = page_anywhere(designed, *target) else { return fail("there is no section there") };
                 if kind != WidgetKind::Accordion {
                     return fail("only an accordion's section has a color");
                 }
@@ -1213,8 +1246,15 @@ impl Editor<'_> {
             frame.ribbon.iter_mut().flat_map(|r| r.tabs.iter_mut()).find(|t| t.span.start == parent).expect("the tab found above").groups.push(group);
             return Ok(Some(at));
         }
-        // A submenu item of a menu item, in the frame's menu or a part's.
+        // An item or separator at the root of a part's context menu.
         let Some(kind) = kind_of(item, false) else { return fail("that cannot go there") };
+        if let Some(menu) = part_menus(designed).into_iter().find(|m| m.span.start == parent) {
+            let command = self.command(command_props(kind, caption)?);
+            let at = command.span.start;
+            menu.items.push(command);
+            return Ok(Some(at));
+        }
+        // A submenu item of a menu item, in the frame's menu or a part's.
         let props = command_props(kind, caption)?;
         let span = self.fresh();
         for list in command_lists(designed) {

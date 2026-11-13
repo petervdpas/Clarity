@@ -2,6 +2,8 @@
 
 Status: partial. A `graph` part that shows records as nodes joined by edges, from two lists code fills or from the data model (records of several entities, references as edges), drawn by Clarity.UI on every stack.
 
+Progress: 45%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (`Graph`; events click, select, open on nodes :1171), `model.rs` (`GraphLayout`, `NodeShape`, `EdgeLine`; `graphModel` worked out when the project loads, never written into the source), `check.rs`, `code/check.rs`, `cxaml.rs`
 - Generators: through window markup; a graph loses its picked row when its rows are replaced, as a table does (`rows_shown`, `crates/clarity-gen/src/lib.rs:617`)

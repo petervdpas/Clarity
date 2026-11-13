@@ -23,7 +23,7 @@ A command for agents needs its `help`: it is how an agent picks the command. Cla
 
 Once a command says `agent`, the project tree shows **Agents** beside the app, the README and Sign-in (before that, **+ Agents**). It holds:
 
-- **Commands for agents**: the commands an agent may call, as it calls them.
+- **Commands for agents**: every command of the app, as an agent calls it, with a checkbox: ticking one writes its `agent` line, unticking takes it away.
 - **While the app is closed**: what agents may do when nobody is there to allow it, until the person sets it in the app. **Agents may read** and **Agents may change** write the line `agents while closed read change` in the project file. Both are off without it.
 - **At once**: how many agents the running app serves at the same time, 3 unless you change it (`agents at most 2` in the project file). One more is refused with the reason, and the app's window says it was turned away.
 - **Guidance**: `agent/guidance.md`, which an agent gets when it connects, in four sections: what the app is for, the app's words, how work flows, and rules the app does not check. Each box says what belongs in it. Name the app's commands, entities and fields in backticks; the checker warns of a name the app does not have.

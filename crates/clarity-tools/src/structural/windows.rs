@@ -146,7 +146,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "change_tab",
-            "Changes a tab, step, section or pane of a part: its title, the view it shows, a section's color, a splitter's first pane's columns. Give only what changes.",
+            "Changes a tab, step, section or pane of a part: its title, the view it shows, a section's color, a splitter's first pane's size (columns side by side, rows stacked). Give only what changes.",
             schema(
                 json!({
                     "page": page_prop(),
@@ -155,7 +155,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "title": { "type": "string" },
                     "view": { "type": "string", "description": "The view it shows; empty for parts of its own" },
                     "color": { "type": "string", "description": "An accordion section's header color; empty for the theme's" },
-                    "paneColumns": { "type": "integer", "minimum": 0, "description": "A splitter's first pane: the columns it starts with; 0 for panes alike" }
+                    "paneColumns": { "type": "integer", "minimum": 0, "description": "A splitter's first pane: the columns it starts with side by side, the rows stacked; 0 for panes alike" }
                 }),
                 &["page", "part", "tab"],
             ),

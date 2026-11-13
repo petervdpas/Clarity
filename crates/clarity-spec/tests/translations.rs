@@ -179,8 +179,9 @@ fn the_languages_table_has_a_column_per_language_the_default_first() {
     let card = table.rows.iter().find(|r| r.key == "cardTitle").unwrap();
     assert_eq!(card.places, ["window Card"]);
     assert_eq!(card.values, [Some("Customer card".to_string()), Some("Kundenkarte".to_string()), Some("Klantkaart".to_string())]);
-    // What each language leaves empty.
-    assert_eq!(table.missing, [0, 0, 1]);
+    // What each language leaves to translate: empty, or still the default's text
+    // (de is a copy of en but for cardTitle; nl leaves saveCaption empty and says "OK" as en does).
+    assert_eq!(table.missing, [0, 20, 2]);
 }
 
 /// A key a markdown or an image shows points each language at a file of
@@ -202,8 +203,8 @@ fn the_languages_table_knows_the_keys_that_point_at_resources() {
     assert_eq!(row("gameRules").resources, [Some("rules-en.md".to_string()), Some("rules-nl.md".to_string())]);
     assert_eq!(row("gameRules").values, [None, None]);
     assert_eq!(row("cardTitle").resources, [None, None]);
-    // A key that points at a file has its value; one left empty is missing.
-    assert_eq!(table.missing, [0, 2]);
+    // A key that points at a file has its value; one left empty, or the same as the default's ("OK"), is missing.
+    assert_eq!(table.missing, [0, 3]);
 }
 
 /// A text without letters, such as a calculator's `7` or `+`, reads the same
@@ -239,8 +240,10 @@ fn every_example_is_complete_in_every_language() {
         assert!(problems.is_empty(), "{name}: {problems:#?}");
         let table = translations::table(&project);
         assert!(table.languages.len() >= 2, "{name} has a language besides its default");
-        for (language, missing) in table.languages.iter().zip(&table.missing) {
-            assert_eq!(*missing, 0, "{name}: {language} leaves keys empty");
+        // Empty, that is: a text the same as the default's may be the language's own ("OK").
+        for (i, language) in table.languages.iter().enumerate() {
+            let empty: Vec<&str> = table.rows.iter().filter(|r| r.values[i].is_none() && r.resources[i].is_none()).map(|r| r.key.as_str()).collect();
+            assert!(empty.is_empty(), "{name}: {language} leaves keys empty: {empty:?}");
         }
     }
 }
@@ -266,4 +269,25 @@ fn sidebars_windows_and_engines_bring_their_own_words() {
         assert!(!keys(window).iter().any(|k| k == key), "{key}");
     }
     assert!(translations::own_words().any(|(k, _)| *k == "sidebarGiveBack"));
+}
+
+/// A text still the same as the default's is left to translate, as the
+/// agents' missing_translations counts it: the table and the tool share one
+/// rule, so the IDE counts what the tool lists.
+#[test]
+fn a_text_the_same_as_the_default_is_left_to_translate() {
+    let nl = NL.replace("\"Klantkaart\"", "\"Customer card\"");
+    let project = project_with(&[("translations/en.clarity", EN), ("translations/nl.clarity", &nl)]);
+    let table = translations::table(&project);
+    let card = table.rows.iter().find(|r| r.key == "cardTitle").unwrap();
+    assert_eq!(card.missing, [false, true]);
+    let save = table.rows.iter().find(|r| r.key == "saveCaption").unwrap();
+    assert_eq!(save.missing, [false, true], "empty is missing too");
+    let left = translations::left_to_translate(&project);
+    let nl_left: Vec<&str> = left["nl"].iter().map(|(key, _)| key.as_str()).collect();
+    for row in table.rows.iter().filter(|r| r.missing[1]) {
+        assert!(nl_left.contains(&row.key.as_str()) || row.values[0].is_none(), "{}", row.key);
+    }
+    assert!(nl_left.contains(&"cardTitle") && nl_left.contains(&"saveCaption"), "{nl_left:?}");
+    assert_eq!(table.missing[1], table.rows.iter().filter(|r| r.missing[1]).count());
 }

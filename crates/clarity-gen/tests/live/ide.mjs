@@ -38,23 +38,24 @@ try {
   await b.settle(500);
   const drawn = (step) => b.eval(`document.querySelector(${JSON.stringify(shown)}).clarityUi.step(${JSON.stringify(step)})`);
   const read = await drawn({ do: "read" });
-  result.preview = { window: read.window, rows: (read.data?.tasks ?? []).length };
+  result.preview = { window: read.window, parts: Object.keys(read.shown ?? {}) };
   await b.screenshot(join(folder, "preview.png"));
-  // A click on the drawn Add button, at its place on the page.
-  const add = await b.eval(`(() => { const c = document.querySelector(${JSON.stringify(shown)}); const r = c.getBoundingClientRect(); const s = r.width / c.clientWidth; return { x: r.left, y: r.top, s }; })()`);
-  const [x, y, w, h] = read.shown.addButton;
-  const at = { x: add.x + (x + w / 2) * add.s, y: add.y + (y + h / 2) * add.s };
+  // A click on the drawn Users button, at its place on the page: the preview opens the window it names.
+  const canvasBox = await b.eval(`(() => { const c = document.querySelector(${JSON.stringify(shown)}); const r = c.getBoundingClientRect(); const s = r.width / c.clientWidth; return { x: r.left, y: r.top, s }; })()`);
+  const button = read.shown?.usersButton;
+  if (!button) throw new Error(`no usersButton in the preview: ${JSON.stringify(Object.keys(read.shown ?? {}))}`);
+  const [x, y, w, h] = button;
+  const at = { x: canvasBox.x + (x + w / 2) * canvasBox.s, y: canvasBox.y + (y + h / 2) * canvasBox.s };
   await b.mouse("mouseMoved", at);
   await b.mouse("mousePressed", at, 1);
   await b.mouse("mouseReleased", at, 0);
-  // What the window says after the click: the program's answer.
   let after = null;
   for (let i = 0; i < 50; i++) {
     after = await drawn({ do: "read" });
-    if (after.said.length > 0 || after.notes.length > 0) break;
+    if (after.window !== read.window) break;
     await b.settle(100);
   }
-  result.preview.said = [...after.said, ...after.notes];
+  result.preview.opened = after.window;
   await b.screenshot(join(folder, "preview-clicked.png"));
 
   // The designer: the Design tab, the window Main.
@@ -69,30 +70,36 @@ try {
   await clickWhere(`[...document.querySelectorAll(".ribbon-tabs [role=tab]")].find((t) => t.textContent.trim() === "Design")`, "the Design tab");
   await clickWhere(`document.querySelector('button.row[title^="Main in module"]')`, "the window Main");
   const canvas = ".client canvas[data-drawn]";
-  await b.until(`document.querySelector(${JSON.stringify(canvas)}) && document.querySelectorAll("[data-design-layer] [data-widget]").length >= 6`, "the design canvas and its layer", 60000);
+  await b.until(`document.querySelector(${JSON.stringify(canvas)}) && document.querySelectorAll("[data-design-layer] [data-widget]").length >= 3`, "the design canvas and its layer", 60000);
   await b.settle(500);
   result.design = { parts: await b.eval(`document.querySelectorAll("[data-design-layer] [data-widget]").length`) };
   await b.screenshot(join(folder, "design.png"));
-  // A click on the drawn Delete button picks it.
-  await b.click(`[data-design-layer] [data-part="deleteButton"]`);
-  result.design.picked = await b.eval(`!!document.querySelector('[data-design-layer] .part.selected[data-part="deleteButton"]')`);
+  // A view's parts are designed on the view (Main shows them in its content, drawn): open MainView.
+  await clickWhere(`[...document.querySelectorAll(".side-tabs [role=tab]")].find((t) => t.textContent.trim() === "Elements")`, "the Elements side tab");
+  await clickWhere(`document.querySelector('button.row[title^="MainView in module"]')`, "the view MainView");
+  await b.until(`document.querySelector('[data-design-layer] [data-part="usersButton"]')`, "the view's parts on the layer", 30000);
+  await b.settle(500);
+  // A click on the drawn Users button picks it.
+  await b.click(`[data-design-layer] [data-part="usersButton"]`);
+  result.design.picked = await b.eval(`!!document.querySelector('[data-design-layer] .part.selected[data-part="usersButton"]')`);
   await b.screenshot(join(folder, "design-picked.png"));
-  // A drag four columns to the left moves it in the window's file.
-  const from = await b.at(`[data-design-layer] [data-part="deleteButton"]`);
+  // A drag four columns to the right moves it in its view's file.
+  const from = await b.at(`[data-design-layer] [data-part="usersButton"]`);
   const pitch = await b.eval(`(() => { const g = document.querySelector("[data-design-layer] [data-grid]"); const r = g.getBoundingClientRect(); const s = r.width / g.offsetWidth; return (r.width + 8 * s) / Number(g.dataset.columns); })()`);
-  await b.drag(from, { x: from.x - 4 * pitch, y: from.y }, 12);
-  const file = join(folder, "project", "todo", "todo.clarity");
+  await b.drag(from, { x: from.x + 4 * pitch, y: from.y }, 12);
+  const file = join(folder, "project", "todo", "design", "MainView.cxaml");
+  const movedTo = /name="usersButton" at="5,12"/;
   const end = Date.now() + 15000;
-  while (!/deleteButton at 7,11/.test(readFileSync(file, "utf8")) && Date.now() < end) await b.settle(200);
-  result.design.moved = /deleteButton at 7,11/.test(readFileSync(file, "utf8"));
+  while (!movedTo.test(readFileSync(file, "utf8")) && Date.now() < end) await b.settle(200);
+  result.design.moved = movedTo.test(readFileSync(file, "utf8"));
   // The drawing follows: the box of the button moves with the button Clarity.UI draws again.
-  await b.until(`(() => { const e = document.querySelector('[data-design-layer] [data-part="deleteButton"]'); return e && e.getBoundingClientRect().left + 2 < ${from.x} - ${pitch} ; })()`, "the layer following the drawing", 15000).catch((why) => (result.design.follows = String(why)));
+  await b.until(`(() => { const e = document.querySelector('[data-design-layer] [data-part="usersButton"]'); return e && e.getBoundingClientRect().left - 2 > ${from.x} + ${pitch} ; })()`, "the layer following the drawing", 15000).catch((why) => (result.design.follows = String(why)));
   result.design.follows ??= true;
   await b.settle(300);
   await b.screenshot(join(folder, "design-moved.png"));
 
   // A table's column, sized by its header's edge on the canvas.
-  const tableLine = () => readFileSync(file, "utf8").split("\n").find((l) => l.includes("table name grid")) ?? "";
+  const tableLine = () => readFileSync(file, "utf8").split("\n").find((l) => l.includes('<Table name="grid"')) ?? "";
   const before = tableLine();
   const edge = await b.at(`[data-design-layer] [data-column="title"]`);
   await b.drag(edge, { x: edge.x + 60, y: edge.y }, 6);

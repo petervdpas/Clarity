@@ -1,11 +1,12 @@
 <script lang="ts">
-  // One theme: its text in Clarity, written in place, and a sample drawn with
-  // it. Clarity's own theme is shown read only; it is the base every other
-  // theme changes.
+  // One theme: its values as a form (Properties) and its text in Clarity
+  // (Text), both written in place, and a sample drawn with it. Clarity's own
+  // theme is shown read only; it is the base every other theme changes.
 
   import { invoke } from "@tauri-apps/api/core";
   import RenameField from "./RenameField.svelte";
   import SourceEditor from "./SourceEditor.svelte";
+  import ThemeForm from "./ThemeForm.svelte";
   import ThemeSample from "./ThemeSample.svelte";
   import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
   import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
@@ -39,6 +40,9 @@
   const name = $derived(theme.name.name);
   const offered = $derived(preview.project.themes.includes(name));
   const first = $derived(preview.project.themes[0] === name);
+
+  /** The form or the text. */
+  let tab = $state<"properties" | "text">("properties");
 
   /** Clarity's own theme as written. */
   let baseText = $state<string | null>(null);
@@ -74,7 +78,21 @@
     {/if}
   </p>
 
-  {#if file}
+  <nav class="tabs">
+    <button class:current={tab === "properties"} onclick={() => (tab = "properties")}>Properties</button>
+    <button class:current={tab === "text"} onclick={() => (tab = "text")}>Text</button>
+  </nav>
+
+  {#if tab === "properties"}
+    {@const item = theme.span.start}
+    <ThemeForm
+      {theme}
+      base={preview.baseTheme}
+      catalog={preview.themeCatalog}
+      readonly={!file}
+      onset={({ key, line }) => onapply({ op: "setDeclLine", item, key, line })}
+    />
+  {:else if file}
     {@const item = theme.span.start}
     <div class="editor">
       <SourceEditor
@@ -130,6 +148,27 @@
     color: var(--accent);
     font-size: 12px;
     cursor: pointer;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tabs button {
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .tabs button.current {
+    border-bottom-color: var(--accent);
+    color: var(--text);
   }
 
   .editor {

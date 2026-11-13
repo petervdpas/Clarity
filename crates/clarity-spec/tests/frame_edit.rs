@@ -96,6 +96,24 @@ fn adds_menu_items_and_submenus() {
     assert!(error(&app, wrong).contains("cannot go there"));
 }
 
+/// A part's context menu takes more items and separators at its root, as
+/// the frame's menu does.
+#[test]
+fn adds_items_to_a_part_s_context_menu() {
+    let source = PAGE.replace(
+        "    label \"Name\" name label1 at 1,1 span 2\n",
+        "    label \"Name\" name label1 at 1,1 span 2\n        menu\n            item \"Copy\" name copyItem\n",
+    );
+    let page = design(&source, "Card");
+    let menu = at(&page, "<Menu");
+    let text = edit(&page, Edit::AddFrameItem { parent: menu, item: FrameItem::Item, caption: Some("Paste".into()) });
+    assert!(text.contains("      <Item caption=\"Copy\" name=\"copyItem\" />\n      <Item caption=\"Paste\" name=\"pasteItem\" />\n    </Menu>\n"), "{text}");
+    let text = edit(&text, Edit::AddFrameItem { parent: at(&text, "<Menu"), item: FrameItem::Separator, caption: None });
+    assert!(text.contains("<Item caption=\"Paste\" name=\"pasteItem\" />\n      <Item kind=\"separator\" />\n    </Menu>\n"), "{text}");
+    let wrong = Edit::AddFrameItem { parent: menu, item: FrameItem::Button, caption: None };
+    assert!(error(&page, wrong).contains("cannot go there"));
+}
+
 #[test]
 fn rewrites_a_command() {
     let app = design(APP, "Shop");

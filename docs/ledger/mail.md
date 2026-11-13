@@ -2,6 +2,8 @@
 
 Status: not built. Mail servers as data sources of one Internet family: `smtp` to send (`send mail`), `imap` to read (`mails m in inbox`), written once in a shared Rust library.
 
+Progress: 0%
+
 ## Code
 - none. Designed in APP-CAPABILITIES-PLAN.md step 3. Planned places: `runtimes/rust-mail` (crate `clarity-mail`), `runtimes/rust-mail-ffi` (`clarity_mail.h`, `libclarity_mail`), C# NuGet `Clarity.Mail`, release tag `runtimes/rust-mail/v*`, the native library beside Clarity.UI's; Rust crates `lettre`, `imap`, `mail-parser`, `rustls`.
 - What it builds on: `rest` sources with `auth` ([web-apis](web-apis.md)), secret settings ([settings-secrets](settings-secrets.md)), `files f in store` ([files-pictures](files-pictures.md)), formats for attachments ([formats](formats.md)).

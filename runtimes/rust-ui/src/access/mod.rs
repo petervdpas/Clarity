@@ -538,6 +538,13 @@ impl Builder {
             }
             "badge" => AccessNode::new(id, Role::Label, any.downcast_ref::<small::BadgePart>().map(|t| t.text()).unwrap_or_default(), b),
             "help" => AccessNode::new(id, Role::Label, any.downcast_ref::<small::HelpPart>().map(|t| t.text()).unwrap_or_default(), b),
+            // A status item says its caption; its value is its warning, else how full its gauge is.
+            "statusItem" => {
+                let item = any.downcast_ref::<small::StatusItemPart>();
+                let mut n = AccessNode::new(id, Role::Label, item.map(|t| t.says()).unwrap_or_default(), b);
+                n.value = item.and_then(|t| t.warning().or_else(|| t.full().map(|f| format!("{}%", (f * 100.0).round()))));
+                n
+            }
             "busy" => AccessNode::new(id, Role::ProgressBar, any.downcast_ref::<small::BusyPart>().map(|t| t.text()).unwrap_or_default(), b),
             "progress" => {
                 let mut n = AccessNode::new(id, Role::ProgressBar, name_of(caption), b);

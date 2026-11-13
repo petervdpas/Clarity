@@ -2,6 +2,8 @@
 
 Status: built. The `sound` part (resources, tones, melodies, songs from files) on Clarity.Audio beside Clarity.UI, every stack, desktop and browser.
 
+Progress: 90%
+
 ## Code
 - Spec: `crates/clarity-spec/src/sound.rs` (calls, melodies :73); `crates/clarity-spec/src/resources.rs` (`plays_songs`; sounds wav, mp3, flac, ogg)
 - Generators: each stack's mod.rs adds Clarity.Audio when `resources::plays_songs`; reads kept as custom-part values (`crates/clarity-gen/src/parts.rs`); `crates/clarity-gen/src/clarity_ui.rs` (`audio_file`)

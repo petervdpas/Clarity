@@ -37,7 +37,7 @@ pub(crate) fn block_end(source: &str, start: usize) -> usize {
 }
 
 /// The byte range of the declaration whose first line starts at `item`.
-fn decl_range(source: &str, item: u32) -> EditResult<(usize, usize)> {
+pub(crate) fn decl_range(source: &str, item: u32) -> EditResult<(usize, usize)> {
     let start = item as usize;
     let at_line_start = start == 0 || source[..start].ends_with('\n');
     let word = source.get(start..).and_then(|rest| rest.split(|c: char| !c.is_ascii_alphanumeric()).next());
@@ -99,6 +99,45 @@ pub fn set_part_grows(source: &str, item: u32, grows: bool) -> EditResult<String
     }
     let mut written = kept.concat();
     if !decl.ends_with('\n') {
+        written.pop();
+    }
+    Ok(format!("{}{written}{}", &source[..start], &source[end..]))
+}
+
+/// Adds or takes away the `agent` line of the command declared at `item`:
+/// it goes after the command's `help`, `option` and `allow` lines, before
+/// its statements, indented as its other lines.
+pub fn set_command_agent(source: &str, item: u32, agent: bool) -> EditResult<String> {
+    let start = item as usize;
+    let at_line_start = start == 0 || source[..start].ends_with('\n');
+    if !at_line_start || !source.get(start..).is_some_and(|rest| rest.starts_with("command ")) {
+        return fail("there is no command at this place; the file may have changed");
+    }
+    let end = block_end(source, start);
+    let decl = &source[start..end];
+    let lines: Vec<&str> = decl.split_inclusive('\n').collect();
+    let indent_of = |l: &str| l.len() - l.trim_start().len();
+    let Some(body) = lines.iter().skip(1).find(|l| !l.trim().is_empty()) else {
+        return fail("a command has statements; write them first");
+    };
+    let (indent, prefix) = (indent_of(body), &body[..indent_of(body)]);
+    let first_word = |l: &str| l.trim_start().split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("").to_string();
+    let is_agent = |l: &str| indent_of(l) == indent && l.trim() == "agent";
+    if agent == lines.iter().skip(1).any(|l| is_agent(l)) {
+        return Ok(source.to_string());
+    }
+    let mut kept: Vec<String> = lines.iter().filter(|l| !is_agent(l)).map(|l| l.to_string()).collect();
+    if agent {
+        let clauses = kept.iter().skip(1).take_while(|l| indent_of(l) == indent && matches!(first_word(l).as_str(), "help" | "option" | "allow")).count();
+        if let Some(last) = kept.last_mut()
+            && !last.ends_with('\n')
+        {
+            last.push('\n');
+        }
+        kept.insert(1 + clauses, format!("{prefix}agent\n"));
+    }
+    let mut written = kept.concat();
+    if !decl.ends_with('\n') && written.ends_with('\n') {
         written.pop();
     }
     Ok(format!("{}{written}{}", &source[..start], &source[end..]))

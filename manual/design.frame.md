@@ -44,7 +44,7 @@ code Shop
 - `onunconnected` runs instead of the main window when the databases did not open, such as a server that is down. `handler notConnected(reason: text)` gets why; what it opens shows first, and closing it after changing a setting connects again. Without it, a database that connects with a [secret setting](../docs/LANGUAGE.md#secret-settings) shows the window where that setting is entered.
 - `<Data name="session" type="Session" />` gives the parts in the sidebars and footer data of their own.
 
-To design it, click **App** on the Project tab, or App at the top of the project tree. A new project already has one, `design/<App>.cxaml`; **New app** makes one when there is none. The canvas then shows only the frame, and The window in the properties has the title, the Main window and the start event.
+To design it, click **App** on the Project tab, or App at the top of the project tree. A new project already has one, `design/<App>.cxaml`; **New app** makes one when there is none, asking its name and the module it goes in. The canvas then shows only the frame, and The window in the properties has the title, the Main window and the start event.
 
 ## Regions
 
@@ -56,7 +56,7 @@ In the Parts tab, the Frame group holds the regions. Drag one onto an edge of th
 - The menu and the toolbar are parts with a camelCase name, as `mainMenu` and `mainToolbar`, which a new one gets. Code hides one with `mainToolbar.visible = false` and turns it off with `mainMenu.enabled = false`.
 - `<Ribbon>`: `<Tab title="@key">` elements with `<Group title="@key">` elements of buttons and separators; a button can be `large="true"`.
 - `<Sidebar side="left">` or `side="right"`: parts on a grid of its own, docked to that edge; see [Sidebars](#sidebars).
-- `<Footer>`: an optional `status="@key"` and parts on a one-row grid of 12 columns.
+- `<Footer>`: an optional `status="@key"` and parts on a one-row grid of 12 columns. A status item is the footer's own part: a caption with an icon, a small gauge, a check mark and a warning, which code sets (see [the Parts palette](design.parts.md#data)).
 
 Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. The menu, the toolbar and the ribbon have their Name; a sidebar its own options (see [Sidebars](#sidebars)); a footer its Status text.
 
@@ -119,6 +119,8 @@ Menu items and toolbar and ribbon buttons are commands. Each has a Name, a Capti
 - `opens="CustomerBrowse"` ("Or on click, open") opens a window, with `newWindow="true"` in a desktop window of its own, or one of the built-in targets: `opens="close"`.
 
 An item with a submenu opens the submenu and has no click of its own.
+
+A part's context menu (a `<Menu>` inside the part) is edited the same way: pick it and use **Add item** and **Add separator**; an agent's `add_command` reaches it by the part's name.
 
 ## Built-in click targets
 

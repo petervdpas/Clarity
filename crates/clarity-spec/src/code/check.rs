@@ -927,7 +927,7 @@ impl Part<'_> {
         match self {
             Part::Widget(props) => matches!(
                 props.kind,
-                WidgetKind::Label | WidgetKind::Help | WidgetKind::Heading | WidgetKind::Button
+                WidgetKind::Label | WidgetKind::Help | WidgetKind::Heading | WidgetKind::Button | WidgetKind::StatusItem
             ),
             Part::Command(_) => true,
             Part::Sidebar(_) | Part::Ribbon(_) | Part::Plain(_) => false,
@@ -3700,7 +3700,8 @@ impl<'a> BodyChecker<'_, 'a> {
                         }
                     }
                     Place::Part(Part::Widget(props), name)
-                        if props.bind.is_some() && ((m == "text" && has_text(props)) || (m == "checked" && has_checked(props))) =>
+                        // A status item binds the number of its gauge: its check mark is its own.
+                        if props.bind.is_some() && ((m == "text" && has_text(props)) || (m == "checked" && has_checked(props) && props.kind != WidgetKind::StatusItem)) =>
                     {
                         let bind = props.bind.as_deref().unwrap_or_default();
                         self.error(
@@ -3768,7 +3769,8 @@ impl<'a> BodyChecker<'_, 'a> {
         match property {
             "visible" | "enabled" => value(Ty::Bool),
             "caption" if part.has_caption() => value(Ty::Text),
-            "error" if part.is_input() => value(Ty::Text),
+            // An input's message; on a status item, the warning it shows.
+            "error" if part.is_input() || matches!(part, Part::Widget(p) if p.kind == WidgetKind::StatusItem) => value(Ty::Text),
             "readonly" if part.is_input() => value(Ty::Bool),
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
@@ -5111,7 +5113,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
 
 /// Checkboxes and switches, which hold whether they are on when they are not bound.
 fn has_checked(props: &WidgetProps) -> bool {
-    matches!(props.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle)
+    matches!(props.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle | WidgetKind::StatusItem)
 }
 
 /// Text inputs that hold their own text when they are not bound.

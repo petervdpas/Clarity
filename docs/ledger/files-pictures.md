@@ -2,6 +2,8 @@
 
 Status: built. File stores, pictures in records (`image`), files in records (`file`), files in code (`files f in store`, read, write), `zip`, and folder settings that place a store.
 
+Progress: 90%
+
 ## Code
 - Project file: `filestore name "folder" | "env:NAME" | "setting:name"` (`crates/clarity-project/src/file.rs:541`)
 - Spec: types `image`, `file`, modifier `store` (`crates/clarity-spec/src/parser.rs:718-821`, `check.rs:2462`; a folder setting `check.rs:597-603`); `files f in store where ...`, `read text|bytes of f`, `write t to store "path"`, `zip(paths, texts)` (`code/check.rs:2133`), effects `files.read`, `files.write`

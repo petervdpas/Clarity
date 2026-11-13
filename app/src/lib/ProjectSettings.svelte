@@ -297,6 +297,53 @@
             contents, so it only writes into an empty folder or one it made.
           </p>
           {#if project.app_folder}<p class="form-help">Builds write to <span class="mono">{project.app_folder}</span>.</p>{/if}
+          <label class="form-label" for="output-keeps">Output keeps</label>
+          <div class="form-inline wrap">
+            {#each settings.keeps as folder (folder)}
+              <span class="chip mono">{folder} <button class="chip-x" title="Stop keeping {folder}" onclick={() => save({ keeps: settings.keeps.filter((k) => k !== folder) })}>&times;</button></span>
+            {/each}
+            <input
+              id="output-keeps"
+              class="mono"
+              placeholder="vendor"
+              spellcheck="false"
+              onchange={(e) => {
+                const folder = e.currentTarget.value.trim();
+                if (folder && !settings.keeps.includes(folder)) save({ keeps: [...settings.keeps, folder] });
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
+          <p class="form-help">Folders in the app folder that are the project's own (<code>output keeps</code>): Clarity leaves them where they are and does not read them as somebody else's files. Type a folder's name and press Enter.</p>
+          <span class="form-label">Codecs</span>
+          <div class="codecs">
+            {#each settings.codecs as codec, i (i)}
+              <div class="form-inline">
+                <input class="mono codec-name" value={codec.name} aria-label="Codec name" spellcheck="false" onchange={(e) => save({ codecs: settings.codecs.map((c, j) => (j === i ? { ...c, name: e.currentTarget.value.trim() } : c)) })} />
+                <span>from</span>
+                <input class="mono" value={codec.from} aria-label="Codec library" spellcheck="false" onchange={(e) => save({ codecs: settings.codecs.map((c, j) => (j === i ? { ...c, from: e.currentTarget.value.trim() } : c)) })} />
+                <button class="danger" title="Remove codec {codec.name}" onclick={() => save({ codecs: settings.codecs.filter((_, j) => j !== i) })}>&times;</button>
+              </div>
+            {/each}
+            <form
+              class="form-inline"
+              onsubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const name = (form.elements.namedItem("codecName") as HTMLInputElement).value.trim();
+                const from = (form.elements.namedItem("codecFrom") as HTMLInputElement).value.trim();
+                if (!name || !from) return;
+                save({ codecs: [...settings.codecs, { name, from }] });
+                form.reset();
+              }}
+            >
+              <input class="mono codec-name" name="codecName" placeholder="vp9" aria-label="New codec's name" spellcheck="false" />
+              <span>from</span>
+              <input class="mono" name="codecFrom" placeholder="codecs/libvp9" aria-label="New codec's library" spellcheck="false" />
+              <button type="submit">Add codec</button>
+            </form>
+          </div>
+          <p class="form-help">Codec libraries the project adds to its videos (<code>codec name from "path"</code>): the path beside the project without the system's extension, so <span class="mono">codecs/libvp9</span> reads libvp9.so on Linux, .dylib on macOS and .dll on Windows.</p>
         </div>
       </section>
 
@@ -610,6 +657,40 @@
 </div>
 
 <style>
+  .form-inline.wrap {
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .chip-x {
+    padding: 0 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+
+  .codecs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .codecs input.codec-name {
+    flex: 0 0 7rem;
+  }
+
+  .codecs .danger {
+    color: var(--error);
+  }
+
   .confirm {
     border: 1px solid var(--warning, #d9a400);
     border-radius: var(--radius);

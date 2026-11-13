@@ -2,6 +2,8 @@
 
 Status: built. `stack cpp ...`: a C++20 CMake project with the C++ runtime copied in, drawn by Clarity.UI's library.
 
+Progress: 90%
+
 ## Code
 - Generators: `crates/clarity-gen/src/cpp/` (logic.rs 1777 lines, mod.rs 981, model.rs 435, cli.rs 332, parts.rs 304, names.rs 137). Output: `src/records.hpp/.cpp`, `src/modules/<module>.cpp`, `src/app.hpp`, `ui/` (windows, app frames, themes, resources), `CMakePresets.json` (`cpp/mod.rs:1-11`)
 - Runtimes: C++ `runtimes/cpp`, no version of its own, copied into each program as `clarity-runtime/`:

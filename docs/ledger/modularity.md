@@ -2,6 +2,8 @@
 
 Status: partial. The guide for moving each piece into one module per layer before it is built on; step 1 (sign-in) is in progress.
 
+Progress: 10%
+
 ## Code
 - Started (step 1): `crates/clarity-spec/src/check/signin.rs`, `crates/clarity-spec/src/templates/signin.rs`, `runtimes/rust-ui/src/window/host/signin.rs`, `runtimes/rust-ui/src/window/signin.rs`, `runtimes/rust-auth/src/attempt.rs` (ops `signinBegin`, `signinDecide`, `lib.rs:202, 209`), `runtimes/go/internal/authlib/authlib.go`, `app/src/lib/SigninView.svelte` + `signinView.ts` (all untracked or uncommitted)
 - Largest files still holding many pieces: `crates/clarity-spec/src/check.rs` (2,810), `parser.rs` (2,811), `widgets.rs` (2,526); `crates/clarity-gen/src/rust/mod.rs` (1,540); Clarity.UI `parts/data/table.rs` (2,287), `parts/data/canvas.rs` (1,956), `canvas/modes.rs` (1,077), `desktop/mod.rs` (1,428), `window/mod.rs` (1,251), `screen.rs` (1,228), `parts/text_editor.rs` (1,198); IDE `PageProperties.svelte` (1,784), `PageDesigner.svelte` (981)

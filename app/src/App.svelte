@@ -14,6 +14,7 @@
   import { loadPicturesWith } from "@clarity/ui/screen/pictures.svelte.ts";
   import { topicForTab } from "./lib/manual";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
+  import NewAppDialog from "./lib/NewAppDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import ClarityWindow from "./lib/ClarityWindow.svelte";
   import { chosenOf } from "./lib/clarityWindow";
@@ -47,11 +48,13 @@
   import ModuleView from "./lib/ModuleView.svelte";
   import ThemeView from "./lib/ThemeView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
+  import NewCustomDialog from "./lib/NewCustomDialog.svelte";
   import NewProjectDialog from "./lib/NewProjectDialog.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import ApiView from "./lib/ApiView.svelte";
   import SigninView from "./lib/SigninView.svelte";
   import AgentsView from "./lib/AgentsView.svelte";
+  import SettingsBlockEditor from "./lib/SettingsBlockEditor.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
   import MappingPage from "./lib/MappingPage.svelte";
@@ -156,6 +159,9 @@
   /** Whether the new page asked for is a view (from the tree's Views), else a window. */
   let newIsView = $state(false);
   let newWindowError = $state<string | null>(null);
+  /** The module a new app goes into while its name is asked for. */
+  let newAppIn = $state<SpecFile | null>(null);
+  let newAppError = $state<string | null>(null);
   /** The project file, which the Project tab shows and edits. */
   let projectFile = $state<ProjectFile | null>(null);
   /** The folder and the choices, while the New project dialog is open. */
@@ -476,6 +482,8 @@
       case "readme":
       case "signin":
       case "agents":
+      // The app's settings stay open before the block exists: a first setting starts it.
+      case "settingsBlock":
         return true;
     }
   }
@@ -562,7 +570,7 @@
   }
 
   /** Renames an entity or enum and every reference to it, in all files. */
-  async function renameData(kind: RenameKind, name: string, newName: string) {
+  async function renameData(kind: Exclude<RenameKind, "page">, name: string, newName: string) {
     actionError = null;
     try {
       applyPreview(await invoke<Preview>("rename", { kind, name, newName }));
@@ -596,6 +604,31 @@
       return localStorage.getItem(ENGINE_LANGUAGE_KEY) ?? undefined;
     } catch {
       return undefined;
+    }
+  }
+
+  /** A new custom part or library, and the module it goes into, while its dialog is open. */
+  let newCustom = $state<{ what: "part" | "library"; file: SpecFile } | null>(null);
+  let newCustomError = $state<string | null>(null);
+
+  function startNewCustom(what: "part" | "library") {
+    const target = files.find((f) => (what === "part" ? f.parts.length : f.libraries.length) > 0) ?? file ?? files[0];
+    if (target) {
+      newCustomError = null;
+      newCustom = { what, file: target };
+    }
+  }
+
+  /** Declares the custom part or library the dialog wrote and opens it. */
+  async function addCustom(target: SpecFile, name: string, text: string) {
+    if (!newCustom) return;
+    const what = newCustom.what;
+    try {
+      applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
+      newCustom = null;
+      select({ kind: what, name });
+    } catch (err) {
+      newCustomError = String(err);
     }
   }
 
@@ -843,6 +876,24 @@
     renamingDiagram = true;
   }
 
+  /** Renames a window or view, asked for from the tree: its file, class and every place that names it. */
+  async function renamePage(name: string) {
+    const page = files.flatMap((f) => f.pages).find((p) => p.name.name === name);
+    const noun = page?.kind === "view" ? "view" : "window";
+    const newName = (
+      await dialogs.prompt({ title: `Rename ${noun}`, text: `The new name of ${name}, everywhere it is named. A name with a capital, like CustomerCard.`, value: name, action: "Rename" })
+    )?.trim();
+    if (!newName || newName === name) return;
+    actionError = null;
+    try {
+      const shown = stack.some((o) => o.kind === "window" && o.name === name);
+      applyPreview(await invoke<Preview>("rename", { kind: "page", name, newName }));
+      if (shown) stack = [{ kind: "window", name: newName }];
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
   /** Deletes a mapping after asking; while a data source or code uses it, says where instead. */
   async function deleteMapping(name: string) {
     actionError = null;
@@ -1026,9 +1077,10 @@
     pageDesigner.selected = null;
   }
 
-  async function addWindow(target: SpecFile, name: string, template: PageTemplate) {
+  async function addWindow(target: SpecFile, name: string, template: PageTemplate | "dialog") {
     try {
-      const result = await applyEdit(target, { op: "addWindow", name, template });
+      // A blank dialog is a page of its own kind; every other start is a template.
+      const result = await applyEdit(target, template === "dialog" ? { op: "addPage", name, kind: "dialog" } : { op: "addWindow", name, template });
       applyPreview(result.preview);
       newWindowIn = null;
       newWindowError = null;
@@ -1049,14 +1101,24 @@
     }
   }
 
-  async function addApp(target: SpecFile) {
+  /** Asks for a new app's name and module (NewAppDialog). */
+  function startNewApp() {
+    const target = preview?.project.files.find((f) => !f.path.endsWith(".cxaml"));
+    if (target) {
+      newAppError = null;
+      newAppIn = target;
+    }
+  }
+
+  async function addApp(target: SpecFile, name: string) {
     try {
-      const name = target.module?.name ?? "App";
-      const result = await applyEdit(target, { op: "addApp", name: name.charAt(0).toUpperCase() + name.slice(1) });
+      const result = await applyEdit(target, { op: "addApp", name });
       applyPreview(result.preview);
+      newAppIn = null;
+      newAppError = null;
       selectApp();
     } catch (err) {
-      actionError = String(err);
+      newAppError = String(err);
     }
   }
 
@@ -1336,14 +1398,17 @@
         onnewtheme={full ? startNewTheme : null}
         onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
         onnewengine={full ? startNewEngine : null}
+        onnewpart={full ? () => startNewCustom("part") : null}
+        onnewlibrary={full ? () => startNewCustom("library") : null}
         onnewlanguage={full ? startNewLanguage : null}
         onnewresource={full ? startNewResource : null}
         onnewdiagram={full ? startNewDiagram : null}
         onnewwindow={full ? () => startNewWindow() : null}
         onnewview={full ? () => startNewWindow(true) : null}
-        onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
+        onnewapp={full && preview.project.files[0] ? startNewApp : null}
         apis={projectFile?.settings?.datasources.filter((s) => s.kind === "rest") ?? []}
         onnewapi={full && projectFile?.settings ? startNewApi : null}
+        onapplied={full ? applyPreview : null}
       />
     </PartGuard>
   {/if}
@@ -1376,7 +1441,7 @@
           <div class="group">
             <div class="buttons">
               <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
-              <RibbonButton icon="app" label={app ? "App" : "New app"} disabled={!preview} onclick={() => (app ? selectApp() : preview && addApp(preview.project.files[0]))} />
+              <RibbonButton icon="app" label={app ? "App" : "New app"} disabled={!preview} onclick={() => (app ? selectApp() : startNewApp())} />
             </div>
             <div class="group-name">Windows</div>
           </div>
@@ -1645,6 +1710,8 @@
             <MappingPage {preview} name={current.name} formats={projectFile.catalog.formats} onapplied={applyPreview} ondelete={deleteMapping} />
           {:else if current?.kind === "signin" && projectFile}
             <SigninView project={projectFile} {preview} onsave={saveSettings} />
+          {:else if current?.kind === "settingsBlock"}
+            <SettingsBlockEditor {preview} onapplied={applyPreview} />
           {:else if current?.kind === "agents" && projectFile}
             <AgentsView project={projectFile} {preview} onsave={saveSettings} onapplied={applyPreview} />
           {:else if current?.kind === "api" && projectFile}
@@ -1851,6 +1918,20 @@
   </PartGuard>
 {/if}
 
+{#if newCustom && preview}
+  <PartGuard name="NewCustomDialog">
+    <NewCustomDialog
+      {preview}
+      what={newCustom.what}
+      file={newCustom.file}
+      backend={projectFile?.settings?.stack.backend ?? null}
+      error={newCustomError}
+      onsubmit={addCustom}
+      oncancel={() => (newCustom = null)}
+    />
+  </PartGuard>
+{/if}
+
 {#if newEngine && preview}
   <PartGuard name="NameDialog">
     <NameDialog
@@ -1883,6 +1964,7 @@
       items={[
         { label: "Open", run: () => openItem(item) },
         ...(item.kind === "diagram" ? [{ label: "Rename", run: () => renameDiagram(item.name) }] : []),
+        ...(item.kind === "window" ? [{ label: "Rename", run: () => renamePage(item.name) }] : []),
         { label: `Delete ${item.kind}`, danger: true, run: () => deleteItem(item) },
       ]}
       onclose={() => (treeMenu = null)}
@@ -1959,6 +2041,12 @@
       onsubmit={(chosen, file) => createProject(file, chosen)}
       oncancel={() => (newProjectIn = null)}
     />
+  </PartGuard>
+{/if}
+
+{#if newAppIn && preview}
+  <PartGuard name="NewAppDialog">
+    <NewAppDialog {preview} file={newAppIn} error={newAppError} onsubmit={addApp} oncancel={() => (newAppIn = null)} />
   </PartGuard>
 {/if}
 

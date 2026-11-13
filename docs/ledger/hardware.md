@@ -2,6 +2,8 @@
 
 Status: not built. Apps that talk to hardware (an Arduino, an ESP32, home devices): a `device` declaration with tells and hears over pluggable transports, on every stack and system.
 
+Progress: 0%
+
 ## Code
 - Spec: none
 - Generators: none

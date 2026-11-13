@@ -2,6 +2,8 @@
 
 Status: partial. The written docs people and agents read, and where they disagree with the code. A conflict here is fixed in the doc unless marked "needs decision".
 
+Progress: 80%
+
 ## Code
 - `docs/LANGUAGE.md` (3,225 lines): the language reference. Served by the agents' `reference` tool (`crates/clarity-tools/src/manual.rs:83`, `lib.rs:30`); its code blocks are tested.
 - `manual/*.md` (41 pages, about 3,800 lines; moved from `docs/manual/`, not yet committed): one topic per page, English only. Opened by F1 in the IDE (`app/src-tauri/src/manual.rs`, `app/src/lib/manual.ts`) and by the `manual` tool (`crates/clarity-tools/src/manual.rs:11`, `include_str!` per page); index `manual/README.md`.

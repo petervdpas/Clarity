@@ -10,6 +10,22 @@ use crate::model::{FieldType, Literal, Modifiers};
 use crate::parser::parse;
 use crate::widgets::is_identifier;
 
+/// The field types that take nothing more (`text` and `decimal` take a
+/// length, a precision and a scale), as the tools and the IDE offer them.
+pub const SIMPLE_TYPES: &[&str] = &[
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "secret", "folder", "file", "language", "theme", "id",
+];
+
+/// The field types that name what they hold: `ref Customer`, an enum by its
+/// name, a record by its name, `list<Order>`.
+pub const NAMED_TYPES: &[&str] = &["ref", "enum", "record", "list"];
+
+/// The types a setting of the settings block takes: a plain value or a
+/// reference (`language` and `theme` are Clarity's own bare words).
+pub const SETTING_TYPES: &[&str] = &[
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "email", "url", "color", "secret", "folder", "ref", "enum",
+];
+
 /// A field as the designer sends it.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn, resizedBy, resizedTo, rowStep } from "./designLayer.ts";
+import { cellsOf, commandsOf, dividerOf, grown, heldBy, layerOf, nudged, paneSizeAt, placeIn, resizedBy, resizedTo, rowStep, slideEdgeOf, slideSizeAt, type LayerGrid, type LayerPart } from "./designLayer.ts";
 import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
@@ -217,4 +217,57 @@ test("a resize moves a row per row of the design, however high the grid is drawn
   assert.equal(rowStep(36, 8, 540, 2), 44, "a sidebar's grid drawn 540 high with two rows still moves 44 a row");
   assert.equal(rowStep(10, 0, 560, 56), 10, "a page's exact cells");
   assert.equal(rowStep(0, 8, 300, 3), 100, "without a row height, the grid's height shared by its rows");
+});
+
+// A splitter's divider, dragged by hand in the designer, sets the size its first pane starts with.
+const splitterPart: LayerPart = {
+  item: "s",
+  name: "split",
+  kind: "splitter",
+  box: { x: 0, y: 100, width: 400, height: 600 },
+  own: true,
+  pages: [
+    { item: "p1", title: null, box: null },
+    { item: "p2", title: null, box: null },
+  ],
+  columns: [],
+};
+const paneGrid = (item: string, box: LayerGrid["box"]): LayerGrid => ({ item, columns: 6, gap: 8, box, rows: [], inside: [] });
+
+test("a stacked splitter's divider lies across it, between its two panes' grids", () => {
+  const grids = [paneGrid("p1", { x: 8, y: 108, width: 384, height: 280 }), paneGrid("p2", { x: 8, y: 404, width: 384, height: 288 })];
+  assert.deepEqual(dividerOf(splitterPart, grids, true), { x: 0, y: 393, width: 400, height: 6 });
+  const side = [paneGrid("p1", { x: 8, y: 108, width: 180, height: 584 }), paneGrid("p2", { x: 204, y: 108, width: 188, height: 584 })];
+  assert.deepEqual(dividerOf(splitterPart, side, false), { x: 193, y: 100, width: 6, height: 600 });
+  assert.equal(dividerOf(splitterPart, [grids[0]], true), null, "no divider until both panes are laid out");
+});
+
+test("let go, the divider gives the first pane its share of the splitter's rows or columns, 1 to one less", () => {
+  // A quarter down a splitter of 16 rows is 4 rows.
+  assert.equal(paneSizeAt(splitterPart, 250, 16, true), 4);
+  // Side by side, a third across 12 columns is 4.
+  assert.equal(paneSizeAt(splitterPart, 133, 12, false), 4);
+  assert.equal(paneSizeAt(splitterPart, 90, 16, true), 1, "never less than 1");
+  assert.equal(paneSizeAt(splitterPart, 699, 16, true), 15, "never all of it");
+});
+
+// A slide-out at the right of a window 1000 wide, 420 wide.
+const slidePart: LayerPart = { item: "s", name: "panel", kind: "slideout", box: { x: 580, y: 40, width: 420, height: 600 }, own: true, pages: [], columns: [] };
+
+test("a slide-out's inner edge lies on the side away from the edge it comes in from", () => {
+  assert.deepEqual(slideEdgeOf(slidePart, null), { x: 577, y: 40, width: 6, height: 600 }, "at the right without a side");
+  assert.deepEqual(slideEdgeOf({ ...slidePart, box: { x: 0, y: 40, width: 300, height: 600 } }, "left"), { x: 297, y: 40, width: 6, height: 600 });
+  assert.deepEqual(slideEdgeOf({ ...slidePart, box: { x: 0, y: 0, width: 1000, height: 300 } }, "top"), { x: 0, y: 297, width: 1000, height: 6 });
+  assert.deepEqual(slideEdgeOf({ ...slidePart, box: { x: 0, y: 400, width: 1000, height: 300 } }, "bottom"), { x: 0, y: 397, width: 1000, height: 6 });
+});
+
+test("let go, the inner edge gives the slide-out its size from its outer edge, within min and max", () => {
+  // Dragged 100 to the left, a slide-out at the right is 100 wider.
+  assert.equal(slideSizeAt(slidePart, null, 480, null, null), 520);
+  assert.equal(slideSizeAt(slidePart, null, 480, null, 500), 500, "never past max");
+  assert.equal(slideSizeAt(slidePart, null, 900, 200, null), 200, "never under min");
+  assert.equal(slideSizeAt(slidePart, null, 990, null, null), 100, "never under the narrowest a sidebar is");
+  assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 40, width: 300, height: 600 } }, "left", 350.4, null, null), 350);
+  assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 400, width: 1000, height: 300 } }, "bottom", 350, null, null), 350);
+  assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 0, width: 1000, height: 300 } }, "top", 250, null, null), 250);
 });

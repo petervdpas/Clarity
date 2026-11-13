@@ -2709,7 +2709,7 @@ fn parse_widget_props(
             "max" => {
                 applies(WidgetProperty::Max)?;
                 let what = match kind {
-                    WidgetKind::Progress => "the number it is full at, as in max 250",
+                    WidgetKind::Progress | WidgetKind::StatusItem => "the number it is full at, as in max 250",
                     WidgetKind::Slideout => "the widest it is dragged, in pixels, as in max 900",
                     _ => "the highest value, as in max 100",
                 };

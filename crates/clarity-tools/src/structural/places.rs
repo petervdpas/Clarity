@@ -449,7 +449,8 @@ pub fn frame_command<'a>(owner: &FrameOwner<'a>, name: &str) -> Result<&'a clari
 }
 
 /// What holds commands, ribbon tabs or groups in the owner's frame, by name:
-/// the menu, the toolbar, the ribbon, a ribbon tab or group, a menu item.
+/// the menu, the toolbar, the ribbon, a ribbon tab or group, a menu item,
+/// a part's context menu (by the menu's name or the part's).
 pub fn frame_parent(owner: &FrameOwner<'_>, name: &str) -> Result<u32, String> {
     let frame = owner.frame();
     let mut named: Vec<(String, u32)> = Vec::new();
@@ -473,11 +474,27 @@ pub fn frame_parent(owner: &FrameOwner<'_>, name: &str) -> Result<u32, String> {
             named.extend(c.props.name.clone().map(|n| (n, c.span.start)));
         }
     }
+    // A part's context menu, by its own name or by the part's.
+    fn part_menus(list: &[clarity_spec::model::Widget], named: &mut Vec<(String, u32)>) {
+        for w in list {
+            if let Some(menu) = &w.menu {
+                named.extend(menu.name.clone().map(|n| (n, menu.span.start)));
+                named.extend(w.props.name.clone().map(|n| (n, menu.span.start)));
+            }
+            part_menus(&w.children, named);
+            for page in &w.pages {
+                part_menus(&page.children, named);
+            }
+        }
+    }
+    for list in owner.part_lists() {
+        part_menus(list, &mut named);
+    }
     if let Some((_, at)) = named.iter().find(|(n, _)| n == name) {
         return Ok(*at);
     }
     let names: Vec<&str> = named.iter().map(|(n, _)| n.as_str()).collect();
-    Err(unknown_in_model(&format!("menu, toolbar, ribbon, ribbon tab or group, or menu item {name} in {}", owner.name), &format!("ones of {}", owner.name), &names))
+    Err(unknown_in_model(&format!("menu, toolbar, ribbon, ribbon tab or group, menu item, or part with a context menu {name} in {}", owner.name), &format!("ones of {}", owner.name), &names))
 }
 
 /// The menu, toolbar, ribbon tab or ribbon group `name` of the owner's frame.

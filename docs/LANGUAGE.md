@@ -913,7 +913,7 @@ Every part sits on the grid of the window or of the container it is in:
 - `span="n"` is the number of columns it covers. The default comes from the part's kind.
 - `rows="n"` is the number of rows it covers. The default also comes from the part's kind.
 
-Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a memo, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
+The designer shows a window as it runs. The columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a memo, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
 When no row of a grid grows and the grid is higher than its rows, `bottom="true"` on a part sticks it to the bottom: the rows from the first row of a part with `bottom` down move down by the height to spare, keeping their heights. Buttons under a form in a pane that a list beside it makes taller sit at the bottom of the pane: `<Button name="save" at="3,11" span="2" caption="@saveCaption" bottom="true" />`. Where a row grows, `bottom` changes nothing.
 
@@ -979,8 +979,19 @@ In the samples a window shows its parts in a view, as every window does (see [Vi
 | `separator` | nothing: a line, level or `vertical` | `vertical` | none |
 | `progress` | an integer or decimal value, from 0 to `max` (100 without it) | `max 250` | none |
 | `busy` | nothing: a running indicator with its caption, shown and hidden by code with `visible` | none | none |
+| `statusItem` | an integer or decimal value, its gauge from 0 to `max` (100 without it), or nothing; see [Status items](#status-items) | `icon`, `max 100` | `click` |
 | `text` | a field of any type: `bind customer.name` | none | none |
 | `markdown` | a key whose value is a Markdown file per language, `@gameRules`; a file of the resources, `source "license.md"`; or a text, `bind notes` | `source "file"` | none |
+
+#### Status items
+
+A status item is a panel of a status bar, made for the footer and placed anywhere a part goes: `<StatusItem name="progressItem" at="1,1" span="3" caption="@progressCaption" icon="gauge" bind="entryProgress" max="100" onclick="progressClicked" />`. From its left it shows its icon (when it has one), a mark, and its caption, and at its right end a small gauge of the number it binds, as full as a progress bar of the same value and `max` (100 without it); an item that binds nothing has no gauge.
+
+- Code sets what it says, `progressItem.caption = @entryProgress(percent = progress)`, as any caption.
+- `reviewItem.checked = true` shows a check mark in the theme's `success` color; false takes it away. A status item that binds its gauge still has its own check mark.
+- `reviewItem.error = @changedSinceReview` shows a warning in the theme's `warning` color in place of the check mark, its icon turns that color, and the error is its tooltip; `reviewItem.error = ""` clears it.
+- `on click` runs a handler, or opens a window or slide-out as a button's does; its `tooltip` shows while it has no error.
+- A screen reader reads its caption, and as its value its warning, else how full its gauge is (`60%`).
 
 **Input**
 
@@ -1028,7 +1039,7 @@ A color input shows a swatch and the color as `#rrggbb`. The swatch opens a pale
 | `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
 | `accordion` | `section @key` blocks, each with parts or `view X` and an optional `color`; one open at a time | `horizontal` | `change` |
 | `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
-| `splitter` | exactly two `pane` blocks, each with parts; `pane span n` starts the first at n columns | `horizontal` or `vertical` | none |
+| `splitter` | exactly two `pane` blocks, each with parts; `pane span n` starts the first at n columns, and one above the other `rows n` at n rows | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On the web stacks the renderer folds it; on C# it comes with Clarity.UI's parts.
 
@@ -1422,7 +1433,7 @@ splitter at 1,1 span 12 rows 10 vertical
             text at 1,1 span 6 bind customer.name
 ```
 
-`tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks. The person drags the divider between the panes. Side by side, the first pane can start at a width of its own, `pane span 4`: its grid has 4 of the splitter's columns and the second pane the rest, so a list on the left and a form on the right keep the window's column lines. Without it each pane has the splitter's columns and they start alike.
+`tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks. The person drags the divider between the panes. Side by side, the first pane can start at a width of its own, `pane span 4`: its grid has 4 of the splitter's columns and the second pane the rest, so a list on the left and a form on the right keep the window's column lines. One above the other, the first pane starts at a height of its own the same way, `<Pane rows="4">`: 4 of the splitter's rows, the second pane the rest, and each pane keeps all of the splitter's columns. Without either the panes start alike, each with the splitter's columns.
 
 A form with `labels 3` has a label column: each input in it gets a label in the form's first 3 columns of its row, showing its field's label (the `label` of the field, a key such as `customerNameLabel`), so its inputs start at column 4. The label is a part named after its input, `nameBoxLabel` for `nameBox`, which code hides or disables as any part. A checkbox, a switch and a toggle label themselves, with their own caption or, without one, their field's label; a label written `for` an input the form labels is an error.
 

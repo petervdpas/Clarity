@@ -11,6 +11,7 @@
   <Data name="oldReferences" type="text" />
   <Data name="project" type="Project" />
   <Data name="review" type="Review" />
+  <Data name="entryProgress" type="integer" />
   <Toolbar name="mainToolbar">
     <Item kind="button" caption="@projectsButtonCaption" name="projectsButton" icon="folder" opens="Projects" />
     <Item kind="separator" />
@@ -21,13 +22,24 @@
     <Item kind="button" caption="@preferencesButtonCaption" name="preferencesButton" icon="settings" opens="Preferences" />
   </Toolbar>
   <Sidebar side="left" name="ledgerSidebar" width="420" min="280" max="800" resizable="true" columns="6">
-    <List name="projectList" at="1,1" span="6" rows="3" bind="projects" show="name" onselect="projectPicked" />
-    <TreeTable name="entryTree" at="1,4" span="6" rows="12" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:90}" resizable="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
+    <Splitter name="ledgerSplitter" at="1,1" span="6" rows="15" orientation="vertical">
+      <Pane rows="4">
+        <List name="projectList" at="1,1" span="6" rows="2" bind="projects" show="name" onselect="projectPicked" />
+      </Pane>
+      <Pane>
+        <TreeTable name="entryTree" at="1,1" span="6" rows="4" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:90}" resizable="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
+      </Pane>
+    </Splitter>
   </Sidebar>
-  <Content name="main" at="1,1" span="12" rows="15">
+  <Footer status="@mainStatus" columns="12">
+    <StatusItem name="progressItem" at="7,1" span="2" caption="@progressItemCaption" bind="entryProgress" icon="gauge" max="100" />
+    <StatusItem name="reviewItem" at="9,1" span="2" caption="@reviewItemCaption" icon="clipboard-check" onclick="reviewClicked" />
+    <StatusItem name="ledgerItem" at="11,1" span="2" caption="@ledgerItemCaption" icon="database" />
+  </Footer>
+  <Content name="main" at="1,1" span="12" rows="14">
     <View name="MainView" />
   </Content>
-  <Slideout name="reviewPanel" at="1,1" span="6" rows="15" caption="@reviewSlideout" resizable="true" side="right" slideWidth="480" pinnable="true" max="900" min="320">
+  <Slideout name="reviewPanel" at="1,1" span="6" rows="14" caption="@reviewSlideout" resizable="true" side="right" slideWidth="480" pinnable="true" max="900" min="320">
     <Tabs name="reviewTabs" at="1,1" span="6" rows="13">
       <Tab title="@reviewTab">
         <Checkbox name="reviewedBox" at="1,1" span="6" caption="@reviewedLabel" bind="review.reviewed" />

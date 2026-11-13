@@ -2,6 +2,8 @@
 
 Status: partial. The Clarity language: lexer, parser, checker, declarations, statements, expressions, operators, built-in functions, effects and access.
 
+Progress: 75%
+
 ## Code
 - Spec: `crates/clarity-spec/src/lexer.rs`, `parser.rs`, `model.rs`, `check.rs`, `check/`, `names.rs`, `typing.rs`; code in `crates/clarity-spec/src/code/` (`parse.rs`, `mod.rs`, `check.rs`, `print.rs`); loading order in `crates/clarity-spec/src/lib.rs:100-160`
 - Generators: `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/logic.rs`; named values and defaults filled in by `crates/clarity-gen/src/calls.rs`; `consts.rs`

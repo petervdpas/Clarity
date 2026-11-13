@@ -2,6 +2,8 @@
 
 Status: built. The `markdown` part shows Markdown from a resource file (per language through a key, or one `source`) or a bound text; a memo with `markdown` writes it beside a preview.
 
+Progress: 90%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (`Markdown` kind; memo property `Markdown` :485; event `Link` :216 for `clarity:` links), `resources.rs` (Markdown files among the resources, sources and keys checked by kind), `translations.rs` (`key resource "file.md"`, :911)
 - Generators: each resource key becomes a text per language (the Markdown) in the program's files (`crates/clarity-gen/src/web_browser.rs`)

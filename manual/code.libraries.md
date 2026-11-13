@@ -46,4 +46,5 @@ public static partial class Words
 
 - Code calls a function as `Words.spell(42)`, checked like an engine's. Values in and out are text, a number, a date, a duration or bool.
 - A library in another language than the project's is an error.
-- Pick it under Libraries in the project tree: its view lists what code calls, writes the adapter's starter, and edits its folder in tabs, as a custom part's view does. A Rust or Go library builds on its own with **Build**; the others build with the program.
+- **+ New library** under Libraries in the project tree asks for its name, its module and its package, in the kinds of the project's stack, and declares it.
+- Pick it under Libraries in the project tree: its view sets its package and its functions (name, values, result) as a form, one line of the declaration each, writes the adapter's starter, and edits its folder in tabs, as a custom part's view does. A Rust or Go library builds on its own with **Build**; the others build with the program.

@@ -2,6 +2,8 @@
 
 Status: partial. `http` calls from code with a reply that never throws, `rest` data sources with auth and paging, and OpenAPI descriptions turned into a generated module of entities and actions.
 
+Progress: 75%
+
 ## Code
 - Project file: `datasource name rest "url"` with `auth bearer|api-key|basic "env:..|setting:.."`, `paging page|offset|cursor|link ...`, `openapi "file"`, `pick ...`, `pick schema ...` (`crates/clarity-project/src/file.rs:474-540`)
 - OpenAPI: `crates/clarity-project/src/openapi.rs` (OpenAPI 3, Swagger 2), `refresh_apis` (`crates/clarity-project/src/lib.rs:1560`) writes `apis/<source>.clarity`

@@ -14,6 +14,8 @@
   import { resourceKinds } from "./resourceKinds.svelte";
   import { tr } from "@clarity/ui/screen/model.ts";
   import type { Selected } from "./selection";
+  import { invoke } from "@tauri-apps/api/core";
+  import { dialogs } from "./dialogStore.svelte";
 
   let {
     preview,
@@ -29,12 +31,15 @@
     onnewmapping = null,
     onnewtheme = null,
     onnewengine = null,
+    onnewpart = null,
+    onnewlibrary = null,
     onnewlanguage = null,
     onnewresource = null,
     onnewdiagram = null,
     apis = [],
     onnewapi = null,
     onmenu = null,
+    onapplied = null,
   }: {
     preview: Preview;
     /** What is open: a window, the app, an entity, an enum or a module. */
@@ -55,6 +60,10 @@
     onnewtheme?: (() => void) | null;
     /** Starts a new engine; null where the tree only shows. */
     onnewengine?: (() => void) | null;
+    /** Declares a new custom part, in a dialog; none where the project cannot take one. */
+    onnewpart?: (() => void) | null;
+    /** Declares a new library, in a dialog. */
+    onnewlibrary?: (() => void) | null;
     /** Asks for a new language and writes its translation file; null where the tree only shows. */
     onnewlanguage?: (() => void) | null;
     /** Asks for a new resource: its name, its type and maybe a file to copy in; null where the tree only shows. */
@@ -67,7 +76,31 @@
     onnewapi?: (() => void) | null;
     /** A right click on a window, entity, enum, theme, engine or mapping; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
+    /** Takes the project after the tree changed it (a new module); null where the tree only shows. */
+    onapplied?: ((preview: Preview) => void) | null;
   } = $props();
+
+  /** The app's settings block, which every module can hold (one per project). */
+  const settingsBlock = $derived(preview.project.files.flatMap((f) => f.entities.filter((e) => e.settings))[0] ?? null);
+
+  /** Asks for a new module's name in Clarity's own dialog and writes its file; a refused name is asked again, with why. */
+  async function newModule() {
+    if (!onapplied) return;
+    let text = "The new module's name: its file is the name with .clarity, beside the others.";
+    let value = "";
+    for (;;) {
+      const name = await dialogs.prompt({ title: "New module", text, value, placeholder: "billing", action: "Add module" });
+      if (name === null || !name.trim()) return;
+      try {
+        onapplied(await invoke<Preview>("add_module", { name: name.trim() }));
+        onselect({ kind: "module", name: name.trim() });
+        return;
+      } catch (err) {
+        text = String(err);
+        value = name;
+      }
+    }
+  }
 
   /** Hands a right click to `onmenu`, in place of the page's own menu. */
   function menu(e: MouseEvent, item: Selected) {
@@ -167,6 +200,16 @@
     </button>
   {:else if full}
     <button class="row add" class:current={selected?.kind === "agents"} onclick={() => onselect({ kind: "agents", name: "" })} title="Offer the app to AI agents">+ Agents</button>
+  {/if}
+
+  <!-- What each person using the app sets for themselves: the settings block of a module. -->
+  {#if settingsBlock}
+    <button class="row top" class:current={selected?.kind === "settingsBlock"} onclick={() => onselect({ kind: "settingsBlock", name: "" })} title="Settings: what each person using the app sets for themselves">
+      <span class="badge">set</span>
+      Settings
+    </button>
+  {:else if full}
+    <button class="row add" class:current={selected?.kind === "settingsBlock"} onclick={() => onselect({ kind: "settingsBlock", name: "" })} title="Give the app settings each person sets for themselves">+ Settings</button>
   {/if}
 
   <details open>
@@ -384,6 +427,9 @@
       {:else}
         <p class="empty">No custom parts yet: parts an outside library draws, declared with <code>part Name</code> in a module.</p>
       {/each}
+      {#if onnewpart}
+        <button class="row add" onclick={onnewpart}>+ New custom part</button>
+      {/if}
     </details>
 
     <details open={libraries.length > 0}>
@@ -396,6 +442,9 @@
       {:else}
         <p class="empty">No libraries yet: packages of the project's language that code calls, declared with <code>library Name</code>.</p>
       {/each}
+      {#if onnewlibrary}
+        <button class="row add" onclick={onnewlibrary}>+ New library</button>
+      {/if}
     </details>
 
     {#if commands.length > 0}
@@ -421,6 +470,9 @@
           {/if}
         </button>
       {/each}
+      {#if onapplied}
+        <button class="row add" onclick={newModule}>+ New module</button>
+      {/if}
     </details>
   {/if}
 </div>

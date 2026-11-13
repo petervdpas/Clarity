@@ -2,6 +2,8 @@
 
 Status: built. Example projects in `examples/`, each a project file with a folder of its modules and a README, built on the stack it names; every example is also a test.
 
+Progress: 90%
+
 ## Code
 - Examples: `examples/<name>.clarity` and `examples/<name>/` (modules, `design/*.cxaml`, translations, resources, README.md)
 - Rust desktop: dashboard, maintenance (with cli), modelling, network, shop

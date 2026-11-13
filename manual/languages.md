@@ -98,8 +98,8 @@ To see what each language still leaves empty without opening Clarity, run `clari
 The project tree lists the languages under i18n by name: first the default, then each other language. Click one to open it.
 
 - The default language lists every key with where it is used and its text, which you can change; each needs one. A mark per other language says whether it translates the key, and a button per language opens it.
-- Another language lists every key with where it is used, the default's text, and its own to type; it says how many keys it translates. A key left empty shows the default's text.
-- **Find a key or a text** narrows the list to what holds what you type; **Missing only** to the keys still to translate.
+- Another language lists every key with where it is used, the default's text, and its own to type; it says how many keys it translates. A key left empty shows the default's text. A key still the same as the default's text counts as not translated, as the agents' missing_translations lists it; keep it where the language says it the same way (such as "OK").
+- **Find a key or a text** narrows the list to what holds what you type; **Missing only** to the keys still to translate, empty or the same as the default.
 - **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, with every key, and opens it.
 - **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, or the system's.
 

@@ -25,4 +25,16 @@ strategies: Array<StrategyChoice>,
 /**
  * How many AI agents a running app serves at once without `agents at most`.
  */
-agents_at_most: number, };
+agents_at_most: number, 
+/**
+ * The field types that take nothing more, as the tools offer them.
+ */
+field_types: Array<string>, 
+/**
+ * The field types that name what they hold: ref, enum, record, list.
+ */
+named_types: Array<string>, 
+/**
+ * The types a setting of the settings block takes.
+ */
+setting_types: Array<string>, };

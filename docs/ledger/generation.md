@@ -2,6 +2,8 @@
 
 Status: partial. `clarity gen` (or Generate in the IDE) turns a checked project into one program per target in `out/`, in the stack's language, built by the stack's own tools; round tripping is not built.
 
+Progress: 70%
+
 ## Code
 - Spec: `crates/clarity-project/src/file.rs:303` (`version`), :310 (`icon`), :319-336 (`output`, `output keeps`), :401-473 (`stack`); `clarity_spec::translations::with_app_slots` (`{app.version}`)
 - Generators: `crates/clarity-gen/src/lib.rs`: `generate` :860-932 (refuse a project with errors, fill app slots, check stores, web secrets, parts in the browser, custom parts' language, place views, compile engines, the stack's generator, codec libraries, `versioned`, README.md, THIRD_PARTY_NOTICES.md for Lucide icons); `programs` :947 (per target; C# desktop + web gives two); `generate_cli` :990; `write_programs_listed` :1031 (`.clarity-out` marker, refuses a folder holding files it did not make :1038); `write_out` :1088, `remove_stale` :1128; `.clarity-generated` and `fingerprint` :1153-1171; `versioned` :1658; `build_output` :1580 (each stack's build folders kept)

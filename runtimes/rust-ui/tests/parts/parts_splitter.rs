@@ -63,6 +63,14 @@ fn without_a_span_or_one_above_the_other_each_pane_has_all_the_columns() {
 }
 
 #[test]
+fn stacked_a_first_pane_with_rows_starts_at_that_share_of_the_splitter_s_rows() {
+    let screen = window(r#"<Splitter name="split" at="1,1" span="12" rows="8" orientation="vertical"><Pane rows="2"><Label at="1,1" span="12" caption="Top" /></Pane><Pane><Label at="1,1" span="12" caption="Rest" /></Pane></Splitter>"#);
+    let part = splitter(&screen);
+    assert!((part.shares()[0] - 0.25).abs() < 1e-6, "{:?}", part.shares());
+    assert_eq!(vec![12, 12], part.panes().iter().map(|p| p.columns).collect::<Vec<_>>(), "each pane keeps all the columns");
+}
+
+#[test]
 fn dragging_the_divider_shares_the_room_anew() {
     let mut screen = window(SPLITTER);
     let divider = splitter(&screen).dividers()[0].node().bounds;

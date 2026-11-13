@@ -443,15 +443,27 @@ fn ide_backend(file: std::path::PathBuf, preview_address: String) -> String {
             let args = &asked["args"];
             let answer = match asked["cmd"].as_str().unwrap_or_default() {
                 "initial_project" => json!({ "value": file.display().to_string() }),
+                "resource_kinds" => json!({ "value": clarity_spec::resources::kinds() }),
                 "open_project" | "check_project" => json!({ "value": load() }),
                 "project_file" => json!({ "value": clarity_project::load(&file) }),
                 "preview_server_address" => json!({ "value": preview_address }),
                 "history_counts" => json!({ "value": { "undo": 0, "redo": 0 } }),
                 "apply_edit" => {
-                    let path = dir.join(Path::new(args["path"].as_str().unwrap_or_default()).file_name().unwrap_or_default());
+                    // The file as the IDE names it: a module, or a window's file in design/.
+                    let named = Path::new(args["path"].as_str().unwrap_or_default());
+                    let path = if named.is_absolute() { named.to_path_buf() } else { dir.join(named) };
                     let source = std::fs::read_to_string(&path).unwrap_or_default();
                     let edit: Result<clarity_spec::edit::Edit, _> = serde_json::from_value(args["edit"].clone());
-                    match edit.map_err(|e| e.to_string()).and_then(|edit| clarity_spec::edit::apply_in(&load().project, &source, &edit).map_err(|e| e.to_string())) {
+                    let project = load().project;
+                    let designed = path.extension().is_some_and(|e| e == "cxaml");
+                    let applied = edit.map_err(|e| e.to_string()).and_then(|edit| {
+                        if designed {
+                            clarity_spec::cxaml::apply(Some(&project), &source, &edit).map_err(|e| e.to_string())
+                        } else {
+                            clarity_spec::edit::apply_in(&project, &source, &edit).map_err(|e| e.to_string())
+                        }
+                    });
+                    match applied {
                         Ok(outcome) => {
                             std::fs::write(&path, &outcome.text).unwrap();
                             json!({ "value": { "preview": load(), "focus": outcome.focus } })
@@ -519,17 +531,67 @@ fn the_ide_previews_and_designs_on_clarity_ui_in_a_browser() {
     let said = String::from_utf8_lossy(&driven.stdout).to_string();
     let result: Value = serde_json::from_str(said.lines().last().unwrap_or("null")).unwrap_or_else(|_| panic!("{said}\n{}", String::from_utf8_lossy(&driven.stderr)));
     assert!(result["error"].is_null(), "{result:#}");
-    // The preview: drawn by Clarity.UI, and a click on a drawn button answered by the preview's program.
+    // The preview: drawn by Clarity.UI, and a click on a drawn button opens the window it names.
     assert_eq!(result["preview"]["window"], json!("Main"), "{result:#}");
-    assert!(result["preview"]["said"].to_string().contains("addClicked runs in the program itself"), "{result:#}");
-    // The designer: the layer has a box for each part, a click picks one, a drag moves it in the file.
-    assert!(result["design"]["parts"].as_u64().unwrap() >= 6, "{result:#}");
+    assert_eq!(result["preview"]["opened"], json!("Users"), "{result:#}");
+    // The designer: the layer has a box for each part, a click picks one, a drag moves it in its view's file.
+    assert!(result["design"]["parts"].as_u64().unwrap() >= 3, "{result:#}");
     assert_eq!(result["design"]["picked"], json!(true), "{result:#}");
-    let text = std::fs::read_to_string(clarity_project::module_dir(&file).join("todo.clarity")).unwrap();
-    assert!(text.contains("button @deleteButtonCaption name deleteButton at 7,11 span 2"), "the drag moved the button:\n{text}");
+    let text = std::fs::read_to_string(clarity_project::module_dir(&file).join("design/MainView.cxaml")).unwrap();
+    assert!(text.contains(r#"name="usersButton" at="5,12" span="2""#), "the drag moved the button:\n{text}");
+    assert_eq!(result["design"]["follows"], json!(true), "{result:#}");
     // A column's width dragged on the canvas, and a ribbon button picked there.
     assert!(result["design"]["column"].as_str().is_some_and(|line| line.contains("title")), "{result:#}");
     assert_eq!(result["design"]["command"], json!(true), "{result:#}");
+}
+
+/// What you see is what you get: the design canvas and the preview draw a
+/// window with the same library at the same size, so every named part has
+/// the same place on both, the parts that grow included (user, 2026-11-13:
+/// "that isnt wysiwyg... memo in design is not the same height as in
+/// preview!"). Needs Chromium and the browser files, as the test above. Run
+/// with `cargo test -p clarity-gen --test web_windows wysiwyg -- --ignored`.
+#[test]
+#[ignore]
+fn the_design_canvas_lays_out_a_window_as_the_preview_does_wysiwyg() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let shots = std::env::var_os("CLARITY_IDE_SHOTS").map(std::path::PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_TARGET_TMPDIR")).join("ide-wysiwyg"));
+    std::fs::create_dir_all(&shots).unwrap();
+    let file = copy_project(&repo.join("examples/maintenance.clarity"), &shots.join("project"));
+    let library = match std::env::var_os("CLARITY_UI_BROWSER") {
+        Some(folder) => std::path::PathBuf::from(folder),
+        None => repo.join("target/clarity-ui-browser"),
+    };
+    let (loaded_file, loaded_dir) = (file.clone(), clarity_project::module_dir(&file));
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), &preview::secret()).unwrap();
+    let backend = ide_backend(file.clone(), server.address().to_string());
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let app = repo.join("app");
+    let _vite = Started(std::process::Command::new("node").args(["node_modules/vite/bin/vite.js", "--port", &port.to_string(), "--strictPort", "--host", "127.0.0.1"]).current_dir(&app).stdout(std::process::Stdio::null()).spawn().unwrap());
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(std::time::Instant::now() < end, "Vite did not serve");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let driven = std::process::Command::new("node")
+        .arg(repo.join("crates/clarity-gen/tests/live/wysiwyg.mjs"))
+        .args([format!("http://127.0.0.1:{port}/"), backend, shots.display().to_string(), "Main".to_string()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&driven.stdout).to_string();
+    let result: Value = serde_json::from_str(said.lines().last().unwrap_or("null")).unwrap_or_else(|_| panic!("{said}\n{}", String::from_utf8_lossy(&driven.stderr)));
+    assert!(result["error"].is_null(), "{result:#}");
+    let preview_places = result["preview"]["shown"].as_object().unwrap_or_else(|| panic!("{result:#}"));
+    let design_places = result["design"]["shown"].as_object().unwrap_or_else(|| panic!("{result:#}"));
+    let differing: Vec<String> = preview_places
+        .iter()
+        .filter(|(name, place)| design_places.get(*name).is_some_and(|d| d != *place))
+        .map(|(name, place)| format!("{name}: preview {place}, design {}", design_places[name]))
+        .collect();
+    assert!(differing.is_empty(), "parts placed apart on the two canvases:\n{}\nsizes {}", differing.join("\n"), result["sizes"]);
+    for name in ["entryText", "entryTree", "projectList"] {
+        assert!(design_places.contains_key(name) && preview_places.contains_key(name), "{name} on both canvases: {result:#}");
+    }
 }
 
 #[test]

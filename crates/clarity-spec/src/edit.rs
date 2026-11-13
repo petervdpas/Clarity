@@ -162,6 +162,9 @@ pub enum Edit {
     /// Add one of Clarity's own settings (`OWN_SETTINGS`) to the file's
     /// settings block as its bare word, starting the block when there is none.
     AddOwnSetting { word: String },
+    /// Add a setting (`pageSize: integer, default 50`) at the end of the
+    /// file's settings block, starting the block when there is none.
+    AddSetting { spec: FieldSpec },
     /// Give every part of the file's windows and app that has no name the
     /// first free one of its kind, as a new part gets: every part has a name.
     NameParts,
@@ -230,6 +233,14 @@ pub enum Edit {
     /// Whether the custom part declared at `item` grows with its window:
     /// its `grows` line is added or taken away, the rest as written.
     SetPartGrows { item: u32, grows: bool },
+    /// Whether the command declared at `item` is offered to AI agents: its
+    /// `agent` line is added after its help, options and allow, or taken away.
+    SetCommandAgent { item: u32, agent: bool },
+    /// Set the line with `key` of the theme, custom part or library
+    /// declared at `item` to `line`, add it when there is none, or take it
+    /// away (`None`); the keys are `decl_lines`'s (`color accent`,
+    /// `part button hover`, `property speed`, `function spell`).
+    SetDeclLine { item: u32, key: String, line: Option<String> },
 }
 
 /// What `AddFrameItem` adds.
@@ -308,7 +319,7 @@ pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<Edit
 fn is_text_edit(edit: &Edit) -> bool {
     matches!(
         edit,
-        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames
+        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::SetCommandAgent { .. } | Edit::SetDeclLine { .. } | Edit::CamelNames
     )
 }
 
@@ -341,6 +352,14 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
             Edit::SetPartGrows { item, grows } => {
                 focus = Some(*item);
                 crate::source::set_part_grows(&text, *item, *grows)?
+            }
+            Edit::SetDeclLine { item, key, line } => {
+                focus = Some(*item);
+                crate::decl_lines::set_decl_line(&text, *item, key, line.as_deref())?
+            }
+            Edit::SetCommandAgent { item, agent } => {
+                focus = Some(*item);
+                crate::source::set_command_agent(&text, *item, *agent)?
             }
             Edit::CamelNames => crate::names::camel_names(&text),
             Edit::AppendDecl { text: decl } => {
@@ -574,6 +593,9 @@ fn top_kind(node: &LNode) -> Kind {
     } else if starts_with_keyword(&node.tokens, "app", Some(TokenKind::Ident)) {
         Kind::App
     } else if starts_with_keyword(&node.tokens, "entity", Some(TokenKind::Ident)) {
+        Kind::Entity
+    } else if node.tokens.len() == 1 && node.tokens[0].text == "settings" {
+        // The settings block's lines are fields, edited as an entity's.
         Kind::Entity
     } else if starts_with_keyword(&node.tokens, "enum", Some(TokenKind::Ident)) {
         Kind::Enum
@@ -840,8 +862,9 @@ impl Doc {
             Edit::UpdateVariant { item, name, label } => self.update_variant(*item, name, label.as_deref()),
             Edit::SetUses { uses } => self.set_uses(uses),
             Edit::AddOwnSetting { word } => self.add_own_setting(word),
+            Edit::AddSetting { spec } => self.add_setting(spec),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
-            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames => {
+            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::SetCommandAgent { .. } | Edit::SetDeclLine { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
             }
             Edit::AddWindow { .. } | Edit::AddPage { .. } | Edit::AddApp { .. } => fail("a new window, view or app is a file of its own in design/; add it with cxaml::added"),
@@ -1068,8 +1091,20 @@ impl Doc {
         if !crate::parser::OWN_SETTINGS.contains(&word) {
             return fail(format!("'{word}' is none of Clarity's own settings: {}", crate::parser::OWN_SETTINGS.join(", ")));
         }
-        let block = self.nodes.iter().position(|n| n.tokens.len() == 1 && n.tokens[0].text == "settings");
-        let at = match block {
+        let at = self.settings_block();
+        if let Some(there) = self.nodes[at].children.iter().find(|c| c.tokens.len() == 1 && c.tokens[0].text == word) {
+            return Ok(Some(there.id));
+        }
+        let indent = self.nodes[at].child_indent();
+        let node = self.fresh_node(indent, word.to_string());
+        let id = node.id;
+        self.nodes[at].children.push(node);
+        Ok(Some(id))
+    }
+
+    /// The index of the file's settings block, started at the end when there is none.
+    fn settings_block(&mut self) -> usize {
+        match self.nodes.iter().position(|n| n.tokens.len() == 1 && n.tokens[0].text == "settings") {
             Some(at) => at,
             None => {
                 let mut node = self.fresh_node(0, "settings".to_string());
@@ -1077,12 +1112,17 @@ impl Doc {
                 self.nodes.push(node);
                 self.nodes.len() - 1
             }
-        };
-        if let Some(there) = self.nodes[at].children.iter().find(|c| c.tokens.len() == 1 && c.tokens[0].text == word) {
-            return Ok(Some(there.id));
+        }
+    }
+
+    fn add_setting(&mut self, spec: &FieldSpec) -> EditResult<Option<u32>> {
+        let line = validate_field(spec).map_err(EditError)?;
+        let at = self.settings_block();
+        if self.nodes[at].children.iter().any(|c| c.tokens.first().is_some_and(|t| t.text == spec.name)) {
+            return fail(format!("the settings already have '{}'", spec.name));
         }
         let indent = self.nodes[at].child_indent();
-        let node = self.fresh_node(indent, word.to_string());
+        let node = self.fresh_node(indent, line);
         let id = node.id;
         self.nodes[at].children.push(node);
         Ok(Some(id))

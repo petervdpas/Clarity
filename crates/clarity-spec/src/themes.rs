@@ -77,6 +77,37 @@ pub const STATES: [&str; 4] = ["hover", "pressed", "focus", "selected"];
 /// The parts with a `selected` look: the rows to choose, and the tab open.
 pub const SELECTABLE: [&str; 4] = ["list", "card", "card_line", "tab"];
 
+/// What a theme can set, for the IDE's theme form: the spec decides,
+/// the form shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ThemeCatalog {
+    /// The colors every theme has.
+    pub roles: Vec<&'static str>,
+    pub fonts: Vec<&'static str>,
+    pub sizes: Vec<&'static str>,
+    pub radii: Vec<&'static str>,
+    /// The kinds of part with a look, the states they are in, and those
+    /// with a `selected` look.
+    pub part_kinds: Vec<&'static str>,
+    pub states: Vec<&'static str>,
+    pub selectable: Vec<&'static str>,
+}
+
+/// What a theme can set.
+pub fn catalog() -> ThemeCatalog {
+    ThemeCatalog {
+        roles: ROLES.to_vec(),
+        fonts: FONTS.to_vec(),
+        sizes: SIZES.to_vec(),
+        radii: RADII.to_vec(),
+        part_kinds: PART_KINDS.to_vec(),
+        states: STATES.to_vec(),
+        selectable: SELECTABLE.to_vec(),
+    }
+}
+
 /// What a style or a part look sets.
 const LOOK_WORDS: [&str; 6] = ["background", "text", "border", "radius", "weight", "size"];
 /// What only a style sets: how its text shows.

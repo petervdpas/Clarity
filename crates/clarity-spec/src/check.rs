@@ -1288,6 +1288,12 @@ impl<'a> Checker<'a> {
                     self.error(file, "'max' is a number above 0: the number the bar is full at", widget.span);
                 }
             }
+            // A status item's gauge, when it binds a number, is full at its max.
+            WidgetKind::StatusItem => {
+                if p.max.as_deref().is_some_and(|m| m.parse::<f64>().map_or(true, |n| n <= 0.0)) {
+                    self.error(file, "'max' is a number above 0: the number its gauge is full at", widget.span);
+                }
+            }
             _ => {}
         }
     }
@@ -1520,12 +1526,13 @@ impl<'a> Checker<'a> {
                     if container == ContainerKind::Splitter {
                         let side_by_side = p.orientation != Some(crate::model::Orientation::Vertical);
                         for (i, pane) in widget.pages.iter().enumerate() {
+                            // Its start along the split: columns side by side, rows one above the other.
+                            let (length, unit) = if side_by_side { (p.width, "columns") } else { (p.height, "rows") };
                             match pane.columns {
                                 None => {}
-                                Some(_) if !side_by_side => self.error(file, "a pane's span is its width side by side; a vertical splitter's panes start alike", pane.span),
-                                Some(_) if i > 0 => self.error(file, "only the first pane has a span; the second has the rest", pane.span),
-                                Some(n) if !(1..p.width).contains(&n) => {
-                                    self.error(file, format!("the first pane spans 1 to {} of the splitter's {} columns", p.width.saturating_sub(1), p.width), pane.span)
+                                Some(_) if i > 0 => self.error(file, "only the first pane has a size; the second has the rest", pane.span),
+                                Some(n) if !(1..length).contains(&n) => {
+                                    self.error(file, format!("the first pane spans 1 to {} of the splitter's {length} {unit}", length.saturating_sub(1)), pane.span)
                                 }
                                 Some(_) => {}
                             }

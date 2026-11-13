@@ -10,7 +10,7 @@
   import type { ProjectFile } from "@clarity/ui/generated/ProjectFile.ts";
   import type { Settings } from "@clarity/ui/generated/Settings.ts";
   import type { SectionShown } from "@clarity/ui/generated/SectionShown.ts";
-  import { agentCommands, agentSettings } from "./agentsPart.ts";
+  import { agentCommands, agentSettings, commandRows } from "./agentsPart.ts";
   import { applyEdit } from "./applyEdit.ts";
 
   let {
@@ -26,6 +26,20 @@
   } = $props();
 
   const commands = $derived(agentCommands(preview.project.files));
+  /** Every command, ticked when it is offered to agents. */
+  const rows = $derived(commandRows(preview.project.files));
+
+  /** Offers a command to agents, or stops offering it: its `agent` line. */
+  async function setAgent(row: { path: string; item: number }, agent: boolean) {
+    const file = preview.project.files.find((f) => f.path === row.path);
+    if (!file) return;
+    try {
+      error = null;
+      onapplied((await applyEdit(file, { op: "setCommandAgent", item: row.item, agent })).preview);
+    } catch (err) {
+      error = String(err);
+    }
+  }
   /** Which switches the app's own settings offer the person, and where its settings block is. */
   const offered = $derived(agentSettings(preview.project.files));
 
@@ -105,16 +119,23 @@
 
   <section>
     <h2>Commands for agents</h2>
-    {#if commands.offered.length > 0}
+    {#if rows.length > 0}
       <ul class="commands">
-        {#each commands.offered as line (line)}<li><code>{line}</code></li>{/each}
+        {#each rows as row (row.path + row.item)}
+          <li>
+            <label title={row.agent ? "Offered to agents: untick to stop" : "Tick to offer it to agents"}>
+              <input type="checkbox" checked={row.agent} onchange={(e) => setAgent(row, e.currentTarget.checked)} />
+              <code>{row.line}</code>
+            </label>
+          </li>
+        {/each}
       </ul>
     {:else}
-      <p class="muted">No command is offered to agents yet.</p>
+      <p class="muted">The app has no commands yet.</p>
     {/if}
     <p class="muted">
-      A command with the line <code>agent</code> in its body is a tool of the app's MCP service; the app serves it itself, so it needs no command-line program.
-      {#if commands.others > 0}{commands.others === 1 ? "1 other command is" : `${commands.others} other commands are`} not offered.{/if}
+      A ticked command gets the line <code>agent</code> and is a tool of the app's MCP service; the app serves it itself, so it needs no command-line program. A command for agents says what it does in its <code>help</code>.
+      {commands.offered.length === 0 ? "No command is offered to agents yet." : ""}
     </p>
   </section>
 

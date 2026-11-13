@@ -2,6 +2,8 @@
 
 Status: built. `stack go ...`: a Go module on `github.com/petervdpas/Clarity/runtimes/go`, drawn by Clarity.UI through cgo.
 
+Progress: 90%
+
 ## Code
 - Generators: `crates/clarity-gen/src/go/` (logic.rs 2265 lines, mod.rs 1347, parts.rs 478, model.rs 362, cli.rs 212, names.rs 167); `go/runtime.sum` (prefilled go.sum), `go/modules.txt` (the requirements each runtime package group needs, recorded by a go_build test)
 - Runtimes: Go `runtimes/go` (module v0.59.0, `runtimes/go/clarity/version.go`; go 1.25.0; modernc.org/sqlite 1.54, wazero 1.12 in `go.mod`). Packages:

@@ -2,6 +2,8 @@
 
 Status: partial. GitHub workflows run the checks on push and publish by tag: IDE installers, the Clarity.UI libraries, crates, NuGets, the VS Code extension; versions per runtime.
 
+Progress: 80%
+
 ## Code
 - Workflows: `.github/workflows/checks.yml` (push to main, or by hand for one part: Linux; the ffi libraries, browser files, workspace tests, app `npm run check` and tests, Go, C, C++, C# runtime tests, examples each on its stack); `release.yml` (tag `v*`: Windows NSIS and MSI, Linux .deb amd64 and arm64, .rpm Fedora 43 and 44, each install-tested, the `.vsix`; the tag stamps the app version, :8-10); `release-clarity-ui.yml` (tag `runtimes/rust-ui-ffi/v*`: native libraries for linux, win, osx, x64 and arm64, and browser files); `release-csharp-runtime.yml` (tag `runtimes/csharp/v*`: 13 NuGets, trusted publishing); `release-rust-{runtime,ui,audio,video,image,formats,graph,auth,engine}.yml` (tag `runtimes/rust*/v*`: one crate each); `release-vscode.yml` (tag `editors/vscode/v*`)
 - Scripts: `.github/scripts/build-linux.sh`, `install-test.sh`, `stage-clarity-ui.sh`, `stage-clarity-cli.sh`, `fetch_openh264.py`

@@ -7,6 +7,9 @@ import type { ResourceKindInfo } from "@clarity/ui/generated/ResourceKindInfo.ts
 
 export const resourceKinds = $state<{ list: ResourceKindInfo[] }>({ list: [] });
 
-invoke<ResourceKindInfo[]>("resource_kinds")
-  .then((list) => (resourceKinds.list = list))
+invoke<ResourceKindInfo[] | null>("resource_kinds")
+  // A backend that gives no list (an older one, a stand-in in a test) leaves none: every resource is a plain file.
+  .then((list) => {
+    resourceKinds.list = Array.isArray(list) ? list : [];
+  })
   .catch(() => (resourceKinds.list = []));

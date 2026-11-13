@@ -64,7 +64,7 @@ pub fn rename_field(project: &Project, source: impl Fn(&str) -> Option<String>, 
         if crate::cxaml::is_page_file(&file.path) {
             let mut designed = crate::cxaml::read_designed(&text, &file.path)?;
             if rename.in_designed(&mut designed, &mut keys) {
-                changed.push(Renamed { path: file.path.clone(), text: crate::cxaml::written_again(&text, &designed) });
+                changed.push(Renamed { path: file.path.clone(), text: crate::cxaml::written_again(&text, &designed), moved_from: None });
             }
             continue;
         }
@@ -84,7 +84,7 @@ pub fn rename_field(project: &Project, source: impl Fn(&str) -> Option<String>, 
         }
         let mut edits: Vec<(usize, usize, &str, String)> = spans.into_iter().map(|(s, e)| (s, e, old, new.to_string())).collect();
         edits.extend(inserts.into_iter().map(|(at, put)| (at, at, "", put)));
-        changed.push(Renamed { path: file.path.clone(), text: edited(&file.path, text, edits)? });
+        changed.push(Renamed { path: file.path.clone(), text: edited(&file.path, text, edits)?, moved_from: None });
     }
     // A tree level shown by a key fills the key's slots from the record's fields by name.
     if !keys.is_empty() {
@@ -93,7 +93,7 @@ pub fn rename_field(project: &Project, source: impl Fn(&str) -> Option<String>, 
             let Some(text) = source(&path) else { continue };
             let renamed = slots_renamed(&text, &keys, old, new);
             if renamed != text {
-                changed.push(Renamed { path, text: renamed });
+                changed.push(Renamed { path, text: renamed, moved_from: None });
             }
         }
     }

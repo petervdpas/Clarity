@@ -2,6 +2,8 @@
 
 Status: built. `stack <backend> web`: the program keeps the application on a server; the browser runs Clarity.UI (WebAssembly, Skia on WebGL2, in a Web Worker) and sends each command to the server.
 
+Progress: 95%
+
 ## Code
 - Spec: `crates/clarity-project/src/file.rs:401-473` (`stack ... web`), :369 (`port N`; default 8080 at `127.0.0.1:<port>`, `crates/clarity-project/src/lib.rs:285`)
 - Generators: browser files `crates/clarity-gen/src/web_browser.rs` (`browser/index.html`, `browser/clarity/files.json`, resources, the library's four files added by `with_library`); `crates/clarity-gen/src/lib.rs:947` (`programs`), :983 (`windowed_target`: `out/web` when served alone), :1628 (`check_parts_in_browser`), :971 (picture functions refused on Go, C, C++ web-only); C# second program `crates/clarity-gen/src/csharp/web.rs`

@@ -2,6 +2,8 @@
 
 Status: partial. One set of design-and-generate tools for every agent (the IDE's, Codex and Copilot over ACP, any MCP client through `clarity mcp`); the questionnaire is not built.
 
+Progress: 70%
+
 ## Code
 - Spec: structural edits shared with the designer (`clarity_spec::edit`); field renames `crates/clarity-spec/src/field_rename.rs`
 - Tools: `crates/clarity-tools/src/lib.rs` (66 tools, none builds, runs or touches a database; general tools :807-920; `write_file` refuses `.cxaml` and declaration-written files :491-499; `design` reads `docs/DESIGN.md` by `include_str!` :33, `reference` reads `docs/LANGUAGE.md` :30), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`

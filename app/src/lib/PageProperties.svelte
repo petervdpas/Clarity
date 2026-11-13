@@ -4,6 +4,8 @@
   import type { Selected } from "./selection";
   import IconField from "./IconField.svelte";
   import FrameProperties from "./FrameProperties.svelte";
+  import PageTells from "./PageTells.svelte";
+  import ViewLineTells from "./ViewLineTells.svelte";
   import TextField from "./TextField.svelte";
   import type { App } from "@clarity/ui/generated/App.ts";
   import type { Literal } from "@clarity/ui/generated/Literal.ts";
@@ -30,6 +32,8 @@
   import { resourceChoices } from "@clarity/ui/screen/resources.ts";
   import { resourceKinds } from "./resourceKinds.svelte";
   import { besideEngines, canvasEvents, runEngine } from "./engines";
+  import { CANVAS_MODE_TOOLS, DROP_KINDS, TOOL_ACTIONS, dropSources, moved, objectsFor, shownOrder, toggled, toolsToggled, withDrop, withLink } from "./partProperties";
+  import type { CanvasMode } from "@clarity/ui/generated/CanvasMode.ts";
 
   let {
     preview,
@@ -108,6 +112,36 @@
       .filter((w) => w.props.name !== null && w.props.kind !== "popover" && w.props.kind !== "slideout")
       .map((w) => w.props.name as string),
   );
+
+  /** The window's named slide-outs and popovers, which a click can open as it opens a window. */
+  const overlayNames = $derived(
+    allParts(page)
+      .filter((w) => w.props.name !== null && (w.props.kind === "popover" || w.props.kind === "slideout"))
+      .map((w) => w.props.name as string),
+  );
+  /** The window's lists, tables and trees this part can take rows from. */
+  const rowSources = $derived(dropSources(allParts(page).map((w) => ({ name: w.props.name, kind: w.props.kind })), p?.name ?? null));
+
+  /** The integer fields of a list's records, which a canvas in mode objects places them by. */
+  function integerFields(list: string): string[] {
+    const decl = page.data.find((d) => d.name.name === list);
+    const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
+    return (entity?.fields ?? []).filter((f) => f.type.kind === "integer").map((f) => f.name.name);
+  }
+
+  /** A canvas's mode; a new one drops the other mode's tools, and mode objects starts on the first list it can place. */
+  function setMode(value: string) {
+    if (!p) return;
+    const mode = value === "objects" || value === "paint" || value === "vector" ? (value as CanvasMode) : null;
+    const objects = mode === "objects" ? (listOptions.map((l) => objectsFor(l, integerFields(l))).find((o) => o !== null) ?? null) : null;
+    update({ mode, objects, tools: [] });
+  }
+
+  /** A number typed in a range, or null when it is empty or outside it. */
+  function numberIn(typed: string, min: number, max: number): number | null {
+    const n = Math.round(Number(typed));
+    return typed.trim() === "" || !Number.isFinite(n) || n < min || n > max ? null : n;
+  }
 
   /** Fields of the entity behind a collection binding, for table columns and list items. */
   const collectionFields = $derived.by(() => {
@@ -210,10 +244,15 @@
     pageDesigner.showCode(handler);
   }
 
+  /** Ticks a name on or off a list; the list keeps the order as written. */
   function toggle(list: string[], name: string, on: boolean): string[] {
-    const next = on ? [...list, name] : list.filter((n) => n !== name);
-    // Keep the entity's field order.
-    return collectionFields.map((f) => f.name.name).filter((n) => next.includes(n));
+    return toggled(list, name, on);
+  }
+
+  /** Sends `changes` with the part named, and wires `handler` with an empty handler in the code behind. */
+  function updateWired(changes: Partial<WidgetProps>, handler: string | null) {
+    if (!location || !p) return;
+    wire({ op: "updateWidget", item: location.widget.span.start, container: null, props: withProps(p, { ...changes, name: partName }) }, handler);
   }
 
   /** Sets the window's size; an emptied field goes back to the standard size. */
@@ -682,9 +721,11 @@
     {/if}
     {#if info.properties.includes("columns") || (info.properties.includes("show") && (p.kind !== "dropdown" || p.search))}
       {@const key = info.properties.includes("columns") ? "columns" : "show"}
-      <fieldset class="checks">
+      {@const ordered = shownOrder(collectionFields.map((f) => f.name.name), p[key]).map((n) => collectionFields.find((f) => f.name.name === n)!)}
+      <fieldset class="checks" title="Ticked ones show in this order; move them up and down to change it">
         <legend>{key === "columns" ? "Columns" : "Shown fields"}</legend>
-        {#each collectionFields as field (field.name.name)}
+        {#each ordered as field (field.name.name)}
+          {@const at = p[key].indexOf(field.name.name)}
           <label>
             <input
               type="checkbox"
@@ -697,6 +738,7 @@
                         edit: toggle(p.edit, field.name.name, false),
                         switches: toggle(p.switches, field.name.name, false),
                         widths: withoutKey(p.widths, field.name.name),
+                        links: withLink(p.links, field.name.name, null),
                         order: p.order?.field === field.name.name ? null : p.order,
                       }
                     : { [key]: toggle(p[key], field.name.name, e.currentTarget.checked) },
@@ -715,6 +757,12 @@
                 value={p.widths[field.name.name] ?? ""}
                 onchange={(e) => update({ widths: withWidth(p.widths, field.name.name, e.currentTarget.value) })}
               />
+            {/if}
+            {#if at >= 0}
+              <span class="move">
+                <button type="button" class="small" title="Move {field.label} up" aria-label="Move {field.label} up" disabled={at === 0} onclick={(e) => { e.preventDefault(); update({ [key]: moved(p[key], field.name.name, -1) }); }}>&uarr;</button>
+                <button type="button" class="small" title="Move {field.label} down" aria-label="Move {field.label} down" disabled={at === p[key].length - 1} onclick={(e) => { e.preventDefault(); update({ [key]: moved(p[key], field.name.name, 1) }); }}>&darr;</button>
+              </span>
             {/if}
           </label>
         {:else}
@@ -735,7 +783,7 @@
               onchange={(e) =>
                 update(
                   e.currentTarget.checked
-                    ? { edit: toggle(p.edit, field.name.name, true) }
+                    ? { edit: toggle(p.edit, field.name.name, true), links: withLink(p.links, field.name.name, null) }
                     : { edit: toggle(p.edit, field.name.name, false), switches: toggle(p.switches, field.name.name, false) },
                 )}
             />
@@ -754,6 +802,28 @@
           </label>
         {:else}
           <p class="hint">None of the columns can be edited in a cell.</p>
+        {/each}
+      </fieldset>
+    {/if}
+
+    {#if info.properties.includes("link") && p.columns.length > 0}
+      <!-- `link chapter: toChapter`: a click on a cell chooses its row and runs the handler; a link column is not edited. -->
+      <fieldset class="checks" title="A column of links: a click on a cell chooses its row and runs the handler, which finds it as the table's selected">
+        <legend>Link handlers</legend>
+        {#each p.columns.filter((c) => !p.edit.includes(c)) as column (column)}
+          {@const handler = p.links.find((l) => l.column === column)?.handler ?? ""}
+          <div class="event-row">
+            <span class="event-name">{column}</span>
+            <input value={handler} placeholder="handler" aria-label="Link handler of {column}" onchange={(e) => { const h = textOf(e); updateWired({ links: withLink(p.links, column, h) }, h); }} />
+            {#if handler}
+              <span class="event-buttons">
+                <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+                <button class="small" title="Take the link away" onclick={() => update({ links: withLink(p.links, column, null) })}>&times;</button>
+              </span>
+            {:else}
+              <button class="small" title="Make the column links, with a handler named after the part and the column" onclick={() => { const h = eventHandler(partName, `${column} link`); updateWired({ links: withLink(p.links, column, h) }, h); }}>Wire</button>
+            {/if}
+          </div>
         {/each}
       </fieldset>
     {/if}
@@ -848,17 +918,43 @@
       </fieldset>
     {/if}
 
+    {#if info.properties.includes("resizable") && !info.properties.includes("sortable") && p.kind !== "slideout" && p.columns.length > 0}
+      <fieldset class="checks">
+        <legend>Columns</legend>
+        <label title="The person drags the header edges; the widths are remembered for them">
+          <input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> Resizable columns
+        </label>
+      </fieldset>
+    {/if}
+
     {#if info.clickable}
+      {@const overlay = p.onClick !== null && overlayNames.includes(p.onClick)}
       <label class="prop">
         <span>On click, open</span>
-        <select value={p.onClick ?? ""} onchange={(e) => update({ onClick: textOf(e), newWindow: textOf(e) ? p.newWindow : false, openWith: textOf(e) ? p.openWith : [] })}>
+        <select
+          value={p.onClick ?? ""}
+          onchange={(e) => {
+            const target = textOf(e);
+            // A slide-out or popover opens on this window: no window of its own, no data.
+            const opensWindow = target !== null && !overlayNames.includes(target);
+            update({ onClick: target, newWindow: opensWindow ? p.newWindow : false, openWith: opensWindow ? p.openWith : [] });
+          }}
+        >
           <option value="">(nothing)</option>
-          {#each targets as target (target)}
-            <option value={target}>{target}</option>
-          {/each}
+          {#if overlayNames.length > 0}
+            <optgroup label="Windows">
+              {#each targets as target (target)}<option value={target}>{target}</option>{/each}
+            </optgroup>
+            <optgroup label="Slide-outs and popovers">
+              {#each overlayNames as name (name)}<option value={name}>{name}</option>{/each}
+            </optgroup>
+          {:else}
+            {#each targets as target (target)}<option value={target}>{target}</option>{/each}
+          {/if}
+          {#if p.onClick && !targets.includes(p.onClick) && !overlayNames.includes(p.onClick)}<option value={p.onClick}>{p.onClick}</option>{/if}
         </select>
       </label>
-      {#if p.onClick}
+      {#if p.onClick && !overlay}
         <label class="inline" title="Opens in a desktop window of its own. Without it, the window opens in place, on top of this one.">
           <input type="checkbox" checked={p.newWindow} onchange={(e) => update({ newWindow: e.currentTarget.checked })} /> In a new window
         </label>
@@ -974,6 +1070,23 @@
           </select>
         </label>
       {/if}
+    {/if}
+    {#if info.properties.includes("does")}
+      <!-- A tool does a built-in action or runs its click handler, not both. -->
+      <label class="prop" title="What the tool does built in; coded, its click handler runs instead (wire it under Events)">
+        <span>Action</span>
+        <select
+          value={p.does ?? ""}
+          onchange={(e) => {
+            const does = e.currentTarget.value || null;
+            update(does ? { does, handlers: p.handlers.filter((h) => h.event !== "click") } : { does: null });
+          }}
+        >
+          <option value="">(coded: its click handler)</option>
+          {#each TOOL_ACTIONS as action (action)}<option value={action}>{action}</option>{/each}
+          {#if p.does && !TOOL_ACTIONS.includes(p.does)}<option value={p.does}>{p.does} (no such action)</option>{/if}
+        </select>
+      </label>
     {/if}
     {#if info.properties.includes("beside")}
       <label class="prop" title="The part it lies against, at its side of that part, instead of the window's edge; a part of the same container">
@@ -1124,6 +1237,41 @@
       </fieldset>
     {/if}
 
+    {#if DROP_KINDS.includes(p.kind)}
+      <!-- `on drop from fragmentList: linkFragment`: a row dragged from that part onto this one runs the handler. -->
+      <fieldset class="checks" title="A row dragged from one of these parts onto this one is chosen there, the row it lands on here, and the handler runs">
+        <legend>Takes rows from</legend>
+        {#each p.drops as drop (drop.from)}
+          <div class="event-row">
+            <span class="event-name">{drop.from}</span>
+            <input value={drop.handler} placeholder="handler" aria-label="Handler of rows from {drop.from}" onchange={(e) => { const h = textOf(e); updateWired({ drops: withDrop(p.drops, drop.from, h) }, h); }} />
+            <span class="event-buttons">
+              <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(drop.handler)}>Code</button>
+              <button class="small" title="Take no more rows from {drop.from}" onclick={() => update({ drops: withDrop(p.drops, drop.from, null) })}>&times;</button>
+            </span>
+          </div>
+        {/each}
+        {#if rowSources.some((s) => !p.drops.some((d) => d.from === s))}
+          <select
+            value=""
+            aria-label="Take rows from another part"
+            onchange={(e) => {
+              const from = e.currentTarget.value;
+              e.currentTarget.value = "";
+              if (!from) return;
+              const h = eventHandler(partName, `${from} dropped`);
+              updateWired({ drops: withDrop(p.drops, from, h) }, h);
+            }}
+          >
+            <option value="">Add a part to take rows from</option>
+            {#each rowSources.filter((s) => !p.drops.some((d) => d.from === s)) as source (source)}<option value={source}>{source}</option>{/each}
+          </select>
+        {:else if p.drops.length === 0}
+          <p class="hint">Place another named list, table or tree in the window to take rows from.</p>
+        {/if}
+      </fieldset>
+    {/if}
+
     <!-- Its place in the grid: a custom part's grows (DESIGN 5.19), and bottom for any part with a place. -->
     {#if !UNPLACED.includes(p.kind)}
       <fieldset class="checks">
@@ -1235,6 +1383,140 @@
         </select>
       </label>
     {/if}
+    {#if p.kind === "canvas"}
+      <fieldset class="checks">
+        <legend>Canvas</legend>
+        {#if info.properties.includes("units")}
+          <div class="prop size" title="The space it draws in, in its own units, 1 to 10000 each; scaled to fit the part in proportion. Empty: 100 x 100.">
+            <span>Units</span>
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              aria-label="Units across"
+              placeholder="100"
+              value={p.units?.width ?? ""}
+              onchange={(e) => {
+                const width = numberIn(e.currentTarget.value, 1, 10000);
+                update({ units: width === null ? null : { width, height: p.units?.height ?? 100 } });
+              }}
+            />
+            <span>x</span>
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              aria-label="Units down"
+              placeholder="100"
+              value={p.units?.height ?? ""}
+              onchange={(e) => {
+                const height = numberIn(e.currentTarget.value, 1, 10000);
+                update({ units: height === null ? null : { width: p.units?.width ?? 100, height } });
+              }}
+            />
+          </div>
+        {/if}
+        {#if info.properties.includes("zoom")}
+          <label title="The person zooms with Ctrl and the wheel and pans the drawing"><input type="checkbox" checked={p.zoom} onchange={(e) => update({ zoom: e.currentTarget.checked })} /> Zoom and pan</label>
+        {/if}
+        {#if info.properties.includes("grid")}
+          <label class="prop" title="A dot every so many of its units, 1 to 10000; empty for none">
+            <span>Grid</span>
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              placeholder="none"
+              value={p.grid ?? ""}
+              onchange={(e) => {
+                const grid = numberIn(e.currentTarget.value, 1, 10000);
+                // It snaps only to a grid it has.
+                update(grid === null ? { grid: null, snap: false } : { grid });
+              }}
+            />
+          </label>
+        {/if}
+        {#if info.properties.includes("snap")}
+          <label title="What is moved lands on the grid"><input type="checkbox" checked={p.snap} disabled={p.grid === null} onchange={(e) => update({ snap: e.currentTarget.checked })} /> Snap to the grid</label>
+        {/if}
+        {#if info.properties.includes("dots")}
+          <label class="prop" title="How many pixels across the grid's dots are, 1 to 20; empty: 2">
+            <span>Dot size</span>
+            <input
+              type="number"
+              min="1"
+              max="20"
+              placeholder="2"
+              value={p.dotSize ?? ""}
+              onchange={(e) => {
+                const dotSize = numberIn(e.currentTarget.value, 1, 20);
+                update(dotSize === null ? { dotSize: null, dotColor: null } : { dotSize });
+              }}
+            />
+          </label>
+          <label class="prop" title="The dots' color: a theme color by name (muted) or written out (#c0c0c0); empty: the theme's border. Needs a dot size.">
+            <span>Dot color</span>
+            <input class="mono" placeholder="border" spellcheck="false" disabled={p.dotSize === null} value={p.dotColor ?? ""} onchange={(e) => update({ dotColor: textOf(e) })} />
+          </label>
+        {/if}
+        {#if info.properties.includes("background")}
+          <label class="prop" title="What clear() fills it with: a theme color by name (panel) or written out (#f5f0e1); empty: the theme's panel">
+            <span>Background</span>
+            <input class="mono" placeholder="panel" spellcheck="false" value={p.background ?? ""} onchange={(e) => update({ background: textOf(e) })} />
+          </label>
+        {/if}
+        {#if info.properties.includes("mode")}
+          <label class="prop" title="What the person does on it; without a mode its draw handler draws it">
+            <span>Mode</span>
+            <select value={p.mode ?? ""} onchange={(e) => setMode(e.currentTarget.value)}>
+              <option value="">(none: its draw handler draws it)</option>
+              <option value="objects" disabled={!listOptions.some((l) => integerFields(l).length > 0)}>Objects: drags the records of a list</option>
+              <option value="paint">Paint: a picture (binds an image field)</option>
+              <option value="vector">Vector: a drawing (binds a text field)</option>
+            </select>
+          </label>
+          {#if p.mode === "objects" && p.objects}
+            {@const objects = p.objects}
+            {@const ints = integerFields(objects.list)}
+            <label class="prop" title="The list whose records are its objects">
+              <span>Objects</span>
+              <select value={objects.list} onchange={(e) => update({ objects: objectsFor(e.currentTarget.value, integerFields(e.currentTarget.value)) ?? objects })}>
+                {#each listOptions.filter((l) => integerFields(l).length > 0) as list (list)}<option value={list}>{list}</option>{/each}
+              </select>
+            </label>
+            {#each [["x", "Placed across by"], ["y", "Placed down by"]] as [axis, label] (axis)}
+              <label class="prop" title="The integer field of a record that holds where it is">
+                <span>{label}</span>
+                <select value={axis === "x" ? objects.x : objects.y} onchange={(e) => update({ objects: { ...objects, [axis]: e.currentTarget.value } })}>
+                  {#each ints as name (name)}<option value={name}>{name}</option>{/each}
+                </select>
+              </label>
+            {/each}
+          {/if}
+        {/if}
+        {#if info.properties.includes("tools") && p.mode}
+          {@const mode = p.mode}
+          <div class="tools" title="The tools the person may use, in the order its toolbar shows them; all of them when every one is ticked">
+            <span>Tools</span>
+            {#each CANVAS_MODE_TOOLS[mode] as tool (tool)}
+              <label><input type="checkbox" checked={p.tools.length === 0 || p.tools.includes(tool)} onchange={(e) => update({ tools: toolsToggled(p.tools, mode, tool, e.currentTarget.checked) })} /> {tool}</label>
+            {/each}
+          </div>
+        {/if}
+        {#if info.properties.includes("brush") && p.mode !== null && p.mode !== "objects"}
+          <label class="prop" title="How wide it paints or draws, 1 to 100 pixels; empty: 2">
+            <span>Brush</span>
+            <input type="number" min="1" max="100" placeholder="2" value={p.brush ?? ""} onchange={(e) => update({ brush: numberIn(e.currentTarget.value, 1, 100) })} />
+          </label>
+        {/if}
+        {#if info.properties.includes("ink") && p.mode !== null && p.mode !== "objects"}
+          <label class="prop" title="The color it paints or draws with: a theme color by name (accent) or written out (#8a5a2b)">
+            <span>Ink</span>
+            <input class="mono" placeholder="a theme color" spellcheck="false" value={p.ink ?? ""} onchange={(e) => update({ ink: textOf(e) })} />
+          </label>
+        {/if}
+      </fieldset>
+    {/if}
     {#if info.properties.includes("source")}
       <!-- A file of the resources, of the kind the part shows; a key points each language at one instead. -->
       {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : p.kind === "sound" ? "sound" : "picture", resourceKinds.list)}
@@ -1325,6 +1607,7 @@
           {/each}
         </select>
       </label>
+      <ViewLineTells {preview} line={tab} {owner} {onedit} />
       <div class="actions">
         <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>Remove view</button>
       </div>
@@ -1357,21 +1640,25 @@
     {:else}
       {@const splitter = inner.widget.props}
       <div class="kind">Pane</div>
-      {#if inner.index === 0 && splitter.orientation !== "vertical"}
-        <!-- The columns the first pane starts with (`pane span 4`); the second has the rest, and the divider moves them. -->
+      {#if inner.index === 0}
+        <!-- The size the first pane starts with: its columns side by side (`span`), its rows one above the other (`rows`); the second has the rest, and the divider moves them. -->
+        {@const stacked = splitter.orientation === "vertical"}
+        {@const length = stacked ? splitter.height : splitter.width}
         <label class="prop">
-          <span>Width</span>
+          <span>{stacked ? "Height" : "Width"}</span>
           <input
             type="number"
             min="1"
-            max={splitter.width - 1}
+            max={length - 1}
             value={tab.columns ?? ""}
             placeholder="half"
-            title="The columns this pane starts with; the other pane has the rest. Empty: the panes start alike."
+            title={stacked
+              ? "The rows this pane starts with; the other pane has the rest. Empty: the panes start alike."
+              : "The columns this pane starts with; the other pane has the rest. Empty: the panes start alike."}
             onchange={(e) => {
               const typed = (e.currentTarget as HTMLInputElement).value.trim();
               const n = typed === "" ? 0 : numberOf(e);
-              onedit({ op: "setPaneSpan", target: tab.span.start, columns: n >= 1 && n < splitter.width ? n : null });
+              onedit({ op: "setPaneSpan", target: tab.span.start, columns: n >= 1 && n < length ? n : null });
             }}
           />
         </label>
@@ -1444,6 +1731,7 @@
         </label>
       {/if}
     {:else}
+    <PageTells {page} {onedit} />
     <label class="prop">
       <span>Grid columns</span>
       <input type="number" min="1" max="96" value={page.columns} onchange={(e) => onedit({ op: "setGrid", page: page.span.start, columns: numberOf(e), rows: page.cell })} />
@@ -1559,6 +1847,30 @@
   .checks .width {
     width: 6em;
     margin-left: auto;
+  }
+
+  /* Move up and down at the end of a ticked column's row. */
+  .checks .move {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .checks .width + .move {
+    margin-left: 0;
+  }
+
+  /* A canvas's tools: a label above, the checkboxes in two columns. */
+  .checks .tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 8px;
+  }
+
+  .checks .tools > span {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   .checks .order {

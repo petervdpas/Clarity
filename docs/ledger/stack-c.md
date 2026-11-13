@@ -2,6 +2,8 @@
 
 Status: built. `stack c ...`: a CMake project with the C runtime copied in, drawn by Clarity.UI's library.
 
+Progress: 85%
+
 ## Code
 - Generators: `crates/clarity-gen/src/c/` (logic.rs 2625 lines, mod.rs 1279, model.rs 503, cli.rs 402, parts.rs 340, names.rs 207). Output: `src/records.h/.c` (every module's records), `src/modules/<module>.c`, `src/app.h`, `CMakePresets.json` (`cmake --workflow --preset debug`) (`c/mod.rs:1-11`)
 - Runtimes: C `runtimes/c`, no version of its own, copied into each program as `clarity-runtime/`:

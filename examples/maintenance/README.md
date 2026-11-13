@@ -8,9 +8,10 @@ An app to review development ledgers: a project's ledger is a folder with an ind
 - The sidebar at the left lists the projects. Picking one points the file store `ledger` at its ledger folder (the setting `ledgerFolder`), and the app opens it again at the next start (`lastProject`).
 - Below them, the ledger's entries as a tree, grouped as the ledger's index groups them, with each entry's status and whether it is reviewed. Files the index does not list yet come last, under their own group.
 - Picking an entry shows it on the right: its title, its status and its text as Markdown.
+- The footer has three status items at its right. **Progress** says how much of the entry picked is implemented, from its `Progress: 60%` line, with a gauge. **Review** says whether it is reviewed, with a check mark, or a warning when the entry changed after its review; a click opens the review. The third checks the saved reviews against the ledger: a check mark when they match, else a warning that counts the reviews without an entry and those whose entry changed since.
 - **Review** slides out the review of the entry picked: reviewed or not, by whom, on which day, notes (Markdown), the person's own references, and, to read, the entries it links to, its code and tests, and its old references (the entry's Was section).
 - **Save** stores the review in the app's own database (entity `Review`, one per project and entry) and marks the entry in the tree. Nothing is written into the ledger.
-- **Reload** reads the ledger again.
+- **Reload** reads the ledger again and checks the reviews against it.
 
 ## AI agents
 
@@ -30,5 +31,7 @@ Rust, desktop. An example builds only for the stack its project file names.
 - A tree table of records by key and parent (`rowKey`, `parentKey`), filled from code.
 - A markdown part bound to a text of the window, and a memo in Markdown mode.
 - A slide-out at the window's edge, opened from a toolbar button by code (`reviewPanel.visible = true`).
+- Status items in the footer (`statusItem`): a caption set by code, a gauge of a number, a check mark (`checked`) and a warning (`error`).
+- A file's `modified` time compared with the time a review was made (`reviewedAt`, added by migration 0003).
 - A window's own toolbar and sidebar.
 - Commands for AI agents (`agent`) in a desktop program without a command line, the guidance for agents, `maintenance mcp`, and the settings `agentReadsWhileClosed` and `agentChangesWhileClosed` in a Preferences dialog.

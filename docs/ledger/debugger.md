@@ -2,6 +2,8 @@
 
 Status: not built. Stop the real generated program at a line of Clarity, see its names, step and go on, the same on every stack and system, desktop and browser; later, debug the design.
 
+Progress: 0%
+
 ## Code
 - Spec: none
 - Generators: none (planned: a Debug build writes a mark per statement and a table of places)

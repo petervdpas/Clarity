@@ -2,6 +2,8 @@
 
 Status: partial. WebAssembly modules every stack hosts alike: brought along (`engine X from "x.wasm"`) or written in Clarity and compiled at generation; on the backend or beside the screen.
 
+Progress: 65%
+
 ## Code
 - Spec: `crates/clarity-spec/src/engines.rs` (imports, exports, limits :17-26, `SCREEN_INTERFACE`), `code/parse.rs:60`, `code/mod.rs` (`EngineDecl`), hook names in `names.rs` (`HOOKS`)
 - Compiler: `crates/clarity-wasm` (`src/lower.rs`, `emit.rs`, `interpreted.rs`, `merge.rs`, `ir/`, `support/` built to `support.wasm` and `interpreter.wasm`)

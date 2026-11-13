@@ -810,6 +810,12 @@ pub struct Catalog {
     pub strategies: Vec<StrategyChoice>,
     /// How many AI agents a running app serves at once without `agents at most`.
     pub agents_at_most: u32,
+    /// The field types that take nothing more, as the tools offer them.
+    pub field_types: Vec<&'static str>,
+    /// The field types that name what they hold: ref, enum, record, list.
+    pub named_types: Vec<&'static str>,
+    /// The types a setting of the settings block takes.
+    pub setting_types: Vec<&'static str>,
 }
 
 /// A sign-in strategy as Settings offers it under `signin`.
@@ -1001,6 +1007,9 @@ pub fn catalog() -> Catalog {
     Catalog {
         starter: starter("", "").stack,
         agents_at_most: AGENTS_AT_MOST,
+        field_types: clarity_spec::dictionary::SIMPLE_TYPES.to_vec(),
+        named_types: clarity_spec::dictionary::NAMED_TYPES.to_vec(),
+        setting_types: clarity_spec::dictionary::SETTING_TYPES.to_vec(),
         backends: BACKENDS.into_iter().map(backend_info).collect(),
         uis: UIS.into_iter().map(|id| Choice { id, label: ui_label(id) }).collect(),
         targets: vec![
@@ -1520,7 +1529,10 @@ pub fn source_tables(dir: &Path, source: &str, schema: Option<&Path>) -> Result<
 /// in a new file next to the other modules. A file source's tables come
 /// from the file, or typed from its XSD `schema`; importing a table that is
 /// not at the root of the file sets the source's `at` to it when it has none.
-pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String], schema: Option<&Path>) -> Result<ImportDone, String> {
+/// A new module's file in the project's folder `dir` and its first text,
+/// `module name`; refused for a name that is no identifier, a file that is
+/// there already, or a module the project has.
+pub fn new_module_file(dir: &Path, module: &str) -> Result<(PathBuf, String), String> {
     if !is_identifier(module) {
         return Err(format!("'{module}' is not a valid module name"));
     }
@@ -1528,11 +1540,17 @@ pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String], 
     if path.exists() {
         return Err(format!("there is already a module file {}; choose another module name", path.display()));
     }
-    let found = external_source(dir, source)?;
     let project = load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     if project.files.iter().any(|f| f.module.as_ref().is_some_and(|m| m.name == module)) {
         return Err(format!("there is already a module {module}; choose another name"));
     }
+    Ok((path, format!("module {module}\n")))
+}
+
+pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String], schema: Option<&Path>) -> Result<ImportDone, String> {
+    let (path, _) = new_module_file(dir, module)?;
+    let found = external_source(dir, source)?;
+    let project = load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let mut taken: Vec<String> = project.entities().map(|e| e.name.name.clone()).collect();
     let mut project_file = None;
     let imported = match &found.file {

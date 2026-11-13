@@ -43,6 +43,7 @@ pub const KINDS: &[(&str, MakePart)] = &[
     ("slideout", slideout::make),
     ("help", small::make),
     ("badge", small::make),
+    ("statusItem", small::make),
     ("progress", small::make),
     ("busy", small::make),
     ("display", display::make),

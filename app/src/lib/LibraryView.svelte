@@ -1,12 +1,12 @@
 <script lang="ts">
-  // An external library (DESIGN 5.21): its package, the functions code
-  // calls, and its adapter's files, opened and edited here. Its declaration is
+  // An external library (DESIGN 5.21): its package and the functions code
+  // calls, as a form, and its adapter's files, opened and edited here. Its declaration is
   // Clarity, edited as text; the file of the adapter that types its functions
   // is Clarity's, written from the declaration, and shown to read.
 
   import { invoke } from "@clarity/ui/host/backend.ts";
   import FolderEditor from "./FolderEditor.svelte";
-  import { paramsText } from "@clarity/ui/screen/customParts.ts";
+  import LibraryForm from "./LibraryForm.svelte";
   import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
   import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
   import type { Edit } from "@clarity/ui/generated/Edit.ts";
@@ -61,16 +61,7 @@
     buildTitle={buildable ? "Builds it on its own in its folder, the output in the Output panel" : "It is built with the program: use Build in the toolbar"}
     writeLabel="Write its files" writeTitle="Writes the file that types the functions, and a starter adapter where the folder has none">
     {#snippet summary()}
-      <section>
-        <h3>What code calls</h3>
-        <ul class="functions">
-          {#each decl.functions as f (f.name.name)}
-            <li><code>{name}.{f.name.name}({paramsText(f.params)})</code></li>
-          {:else}
-            <li class="muted">No functions yet: add <code>function name(values) -> type</code> lines.</li>
-          {/each}
-        </ul>
-      </section>
+      <LibraryForm {decl} {file} onset={({ key, line }) => onapply({ op: "setDeclLine", item, key, line })} />
     {/snippet}
   </FolderEditor>
 </div>
@@ -92,16 +83,5 @@
   }
   .muted {
     opacity: 0.7;
-  }
-  h3 {
-    font-size: 0.85em;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 8px 0;
-  }
-  .functions {
-    list-style: none;
-    padding: 0;
-    margin: 0;
   }
 </style>

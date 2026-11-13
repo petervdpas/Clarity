@@ -2,6 +2,8 @@
 
 Status: partial. What Clarity is for and the rules every piece of work follows; the code follows them with the gaps under Conflicts.
 
+Progress: 90%
+
 ## Code
 - Spec: none (cross-cutting)
 - Docs: `CLAUDE.md` "Principles"; `README.md`

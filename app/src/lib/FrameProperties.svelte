@@ -185,6 +185,7 @@
   <div class="actions">
     {#if p.kind === "item" && p.onClick === null}
       <button onclick={() => add(c.span.start, "item")}>Add submenu item</button>
+      <button onclick={() => add(c.span.start, "separator")}>Add submenu separator</button>
     {/if}
     <button disabled={element.index === 0} onclick={() => move(c.span.start, -1)}>Move up</button>
     <button disabled={element.index === element.count - 1} onclick={() => move(c.span.start, 1)}>Move down</button>
@@ -287,6 +288,8 @@
     </fieldset>
     <p class="hint">Drag parts onto the sidebar; it has its own snap grid. Code reads and sets <code>{p.name ?? "it"}.collapsed</code> and <code>.maximized</code>.</p>
     <div class="actions">
+      <button disabled={element.index === 0} onclick={() => move(s.span.start, -1)}>Move up</button>
+      <button disabled={element.index === element.count - 1} onclick={() => move(s.span.start, 1)}>Move down</button>
       <button class="danger" onclick={() => remove(s.span.start)}>Remove sidebar</button>
     </div>
   {:else if element.kind === "footer" || element.kind === "status"}

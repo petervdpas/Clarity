@@ -520,6 +520,7 @@ impl<'a> Window<'a> {
                         | WidgetKind::Badge
                         | WidgetKind::Link
                         | WidgetKind::Busy
+                        | WidgetKind::StatusItem
                 )
             {
                 args.push(format!("caption: {}", Texts::kept(c)));

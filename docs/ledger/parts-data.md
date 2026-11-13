@@ -2,6 +2,8 @@
 
 Status: built. Parts that show a list of records: `table` (cell editors, columns, order, pages, adding and removing rows), `list` (rows or cards), `tree` and `treeTable`, each able to reorder rows by hand.
 
+Progress: 90%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (Data group), `trees.rs` (trees of several kinds of records: `level`, `group`, `on select Entity`, lowered to a tree of rows), `check.rs` (columns, `order by`, `reorder by`, `sortable` refused with `reorder by`)
 - Generators: tables, trees and tree levels through window markup and `views::placed`; per-stack edits of tables in logic.rs

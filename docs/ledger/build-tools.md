@@ -2,6 +2,8 @@
 
 Status: partial. Clarity finds each stack's tools, says what to install, lets the person pin a copy, builds with the stack's own tools only, and finds the Clarity.UI library.
 
+Progress: 70%
+
 ## Code
 - Spec: none
 - Generators: `crates/clarity-gen/src/tools.rs` (`Probe`, `check` :351, `requirements` :333, `check_all` :463, `report` :484, `engine_tools` :447 for `wasm32-unknown-unknown`, `SETUP_TOPIC` :271; Windows folders, Visual Studio by folder and `vswhere`, MSYS2, Scoop, Chocolatey, WinGet :115-194; library checks through pkg-config on Linux only :402); `crates/clarity-gen/src/tools/environment.rs` (`TOOLS`, 9 tools people can pin :25; `~/.clarity/environment.json`); `crates/clarity-gen/src/lib.rs:1209` (`toolchain`), :1539 (`cli_toolchain`), :1291 (`go_cgo_env`), :1483-1515 (`needs_library_folder`, `uses_clarity_ui`, `with_clarity_ui`)

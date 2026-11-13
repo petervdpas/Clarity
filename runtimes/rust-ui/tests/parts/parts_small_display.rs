@@ -204,7 +204,7 @@ fn an_svg_picture_is_drawn_and_its_frame_says_only_its_name() {
 #[test]
 fn a_part_made_from_its_spec_alone_draws_without_a_window() {
     // Each kind is made by its group's maker from a spec, as a host makes it.
-    for kind in ["help", "badge", "progress", "busy", "display", "icon", "image"] {
+    for kind in ["help", "badge", "progress", "busy", "statusItem", "display", "icon", "image"] {
         let made = clarity_ui::parts::make(PartSpec::new(kind, serde_json::Map::new()), host());
         assert!(made.as_any().downcast_ref::<clarity_ui::parts::MissingPart>().is_none(), "{kind} is drawn");
     }

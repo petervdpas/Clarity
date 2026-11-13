@@ -2,6 +2,8 @@
 
 Status: partial. Texts by key with named slots, one file per language, resources per language, and values shown in the person's locale (display formats).
 
+Progress: 85%
+
 ## Code
 - Spec: `crates/clarity-spec/src/translations.rs` (files, checks, Clarity's own words in English :35-320), `keyed.rs`, `design_keys.rs`, `resources.rs`, `formats.rs` (named formats)
 - Generators: languages go into each program's model and `files.json`; C# also writes `.resx` (`crates/clarity-gen/src/csharp/texts.rs`)

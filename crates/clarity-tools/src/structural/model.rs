@@ -16,13 +16,8 @@ use crate::ProjectTools;
 use crate::edits::{self, Applied};
 use crate::files::FileChange;
 
-/// The field types that take nothing more.
-const SIMPLE_TYPES: &[&str] = &[
-    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "secret", "folder", "file", "language", "theme", "id",
-];
-
-/// The field types that name what they hold in `of`.
-const NAMED_TYPES: &[&str] = &["ref", "enum", "record", "list"];
+// The field types, shared with the IDE's entity editor.
+use clarity_spec::dictionary::{NAMED_TYPES, SIMPLE_TYPES};
 
 /// The modifiers that are on or off.
 const FLAGS: &[(&str, &str)] = &[

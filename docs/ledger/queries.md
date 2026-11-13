@@ -2,6 +2,8 @@
 
 Status: built. `find v in Entity where ... order by ...` in code, with conditions through references and full-text `matches`, turned into SQL per dialect by every runtime.
 
+Progress: 100%
+
 ## Code
 - Spec: `find` in `crates/clarity-spec/src/code/parse.rs`; checks in `code/check.rs:4620-4800` (refs stay in one source, web-API entities never found, read-only sources never saved: :5114, :5157, :5336); `search` modifier in `parser.rs`
 - Generators: `crates/clarity-gen/src/query.rs` (paths through references, resolved once for all stacks); each stack's `logic.rs`

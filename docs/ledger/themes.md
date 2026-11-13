@@ -2,6 +2,8 @@
 
 Status: built. A theme is a set of named values (colors per light and dark, fonts, sizes, radii, part looks per state, styles) lying over Clarity's own theme; people switch between the themes a project offers.
 
+Progress: 100%
+
 ## Code
 - Spec: `crates/clarity-spec/src/themes.rs` (`ROLES`, 29 color roles :33; `built_in` :92; `resolve` :541 for light or dark; `use_themes` :444; `starter_from` :644 with System, Light, Dark, Cream and green), Clarity's own theme `crates/clarity-spec/themes/clarity.clarity`, `colors.rs` (palette)
 - Project file: `theme A B` (offered, first starts; `crates/clarity-project/src/file.rs:393`)

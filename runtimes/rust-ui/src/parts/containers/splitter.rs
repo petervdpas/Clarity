@@ -1,8 +1,9 @@
 //! A splitter: panes side by side (or one above the other when vertical),
 //! each a grid of its parts, with a divider between them the person drags.
 //! `pane span 4` gives the first of two side by side panes 4 of the part's
-//! columns and the second the rest; otherwise each pane has all the part's
-//! columns and they share the room. A pane whose parts go further down than
+//! columns and the second the rest; one above the other, `rows` on the first
+//! starts it at that share of the part's rows. Otherwise each pane has all
+//! the part's columns and they share the room alike. A pane whose parts go further down than
 //! its room scrolls, so none of them is out of reach in a low window. The
 //! dividers and the part share how much of the room each pane has, so a
 //! drag changes it without reaching the part; the screen places the panes
@@ -71,7 +72,12 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let vertical = spec.text("orientation") == Some("vertical");
     let columns = SplitterPart::pane_columns(&spec.pages, container::columns_of(&spec), vertical);
     let total: i64 = columns.iter().sum();
-    let shares = columns.iter().map(|c| if total == 0 { 0.0 } else { *c as f64 / total as f64 }).collect();
+    let mut shares: Vec<f64> = columns.iter().map(|c| if total == 0 { 0.0 } else { *c as f64 / total as f64 }).collect();
+    // One above the other, a first pane with rows of its own starts at that share of the splitter's rows.
+    let rows = spec.number("height").map(|h| h as i64).unwrap_or(0);
+    if let (true, 2, Some(first)) = (vertical, spec.pages.len(), spec.pages.first().and_then(|p| p.columns).filter(|f| *f >= 1 && *f < rows)) {
+        shares = vec![first as f64 / rows as f64, (rows - first) as f64 / rows as f64];
+    }
     let split = Rc::new(Split {
         host: host.clone(),
         name: spec.name().map(str::to_string),

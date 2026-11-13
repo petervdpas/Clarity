@@ -17,7 +17,7 @@ The agent is a model that knows Clarity and works on the open project through to
 - Check the whole project.
 - Look up the parts a window can hold, with their properties.
 - Put every change of your entities into a migration step at once; see [Migrations](data.migrations.md). While no database has run its latest step, the agent adds to that step, so one task leaves one step.
-- Rename an entity, an enum or a field everywhere the project names it. The step records the rename, so the column keeps its data. A name the agent simply writes over is a removal and an addition, never guessed to be a rename.
+- Rename an entity, an enum, a field, a window or a view everywhere the project names it. The step records the rename, so the column keeps its data. A name the agent simply writes over is a removal and an addition, never guessed to be a rename.
 - Make a new project and open it.
 - Show a window in Preview when it is done.
 - Read the design document, for what Clarity can do and what is planned.

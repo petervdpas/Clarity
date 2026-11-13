@@ -2,6 +2,8 @@
 
 Status: built. `stack <backend> cli`: a command-line program over the same records, actions and settings, with `cli` and `command` declarations, in `out/cli/`, on every stack.
 
+Progress: 95%
+
 ## Code
 - Spec: `crates/clarity-spec/src/code/parse.rs:785-849` (`cli`, `command [group] name(args)`, `option` lines, `help @key`); statements `print`, `print list columns`, `ask` as an expression, `exit n`; `crates/clarity-project/src/file.rs:401-473` (`cli` target)
 - Generators: `crates/clarity-gen/src/lib.rs:990` (`generate_cli`), :1539 (`cli_toolchain`); `crates/clarity-gen/src/commands.rs` (`CommandSpec`, `ParamSpec`); per stack `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/cli.rs`

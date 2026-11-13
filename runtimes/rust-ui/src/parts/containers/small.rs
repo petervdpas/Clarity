@@ -1,14 +1,15 @@
 //! Small parts that show and take nothing: help under an input, a badge in
 //! a pill, a progress bar as full as its value is of its max
 //! (conformance/small-parts.json `progress`), and a busy indicator turning
-//! beside what it is busy with. `make` picks the part by the spec's kind.
+//! beside what it is busy with, and a status item: a status bar's panel.
+//! `make` picks the part by the spec's kind.
 
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
 use serde_json::Value;
-use skia_safe::{Paint, PaintCap, PaintStyle};
+use skia_safe::{Paint, PaintCap, PaintJoin, PaintStyle, Path, PathBuilder};
 
 use crate::element::{Cx, Element};
 use crate::geometry::Rect;
@@ -25,6 +26,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         "badge" => Box::new(BadgePart { base }),
         "progress" => Box::new(ProgressPart { base }),
         "busy" => Box::new(BusyPart { base, clock: Cell::new(None), started: Instant::now() }),
+        "statusItem" => Box::new(StatusItemPart { base }),
         _ => Box::new(HelpPart { base }),
     }
 }
@@ -300,5 +302,176 @@ impl Element for BusyPart {
 impl Part for BusyPart {
     fn base(&self) -> &PartBase {
         &self.base
+    }
+}
+
+// -- Status item -----------------------------------------------------------------
+
+/// How wide a status item's gauge is, in pixels.
+const GAUGE: f64 = 40.0;
+
+/// How big its icon and its mark are, in pixels.
+const MARK: f64 = 14.0;
+
+/// A status bar's panel: its caption, its icon, a gauge of the number it
+/// binds at its right end, a check mark while code sets it checked, and a
+/// warning while code sets an error on it, which is then its tooltip.
+pub struct StatusItemPart {
+    base: PartBase,
+}
+
+/// Where a status item draws its pieces, left to right.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatusPlaces {
+    /// Its icon, when it has one.
+    pub icon: Option<Rect>,
+    /// The check mark or the warning.
+    pub mark: Rect,
+    /// Its caption.
+    pub text: Rect,
+    /// The gauge, when it binds a number.
+    pub gauge: Option<Rect>,
+}
+
+impl StatusItemPart {
+    /// What it says: its caption as code set it, else as written.
+    pub fn says(&self) -> String {
+        self.base.caption().unwrap_or_default()
+    }
+
+    /// How full its gauge is, from 0 to 1, as a progress bar's; none when it binds nothing.
+    pub fn full(&self) -> Option<f64> {
+        let path = self.base.bound()?;
+        Some(ProgressPart::full(self.base.host.read(path).as_ref(), self.base.spec.text("max")))
+    }
+
+    /// Whether code set it checked.
+    pub fn checked(&self) -> bool {
+        self.base.state().and_then(|s| s.checked) == Some(true)
+    }
+
+    /// The error code set on it, which it warns of; none for none or an empty one.
+    pub fn warning(&self) -> Option<String> {
+        let error = self.base.state().and_then(|s| s.error.clone())?;
+        Some(error.show()).filter(|t| !t.is_empty())
+    }
+
+    fn icon_name(&self) -> Option<&str> {
+        self.base.spec.text("icon").filter(|i| !i.is_empty())
+    }
+
+    /// Where its pieces go in its place: from the left its icon, its mark
+    /// and its caption, and the gauge at the right end.
+    pub fn places(&self) -> StatusPlaces {
+        let bounds = self.base.node.bounds;
+        let middle = |height: f64| bounds.y + ((bounds.height - height) / 2.0).round();
+        let mut x = bounds.x + 4.0;
+        let icon = self.icon_name().map(|_| {
+            let place = Rect::new(x, middle(MARK + 2.0), MARK + 2.0, MARK + 2.0);
+            x += MARK + 6.0;
+            place
+        });
+        let mark = Rect::new(x, middle(MARK), MARK, MARK);
+        x += MARK + 6.0;
+        let gauge = self.base.bound().map(|_| Rect::new((bounds.right() - 4.0 - GAUGE).max(x), middle(6.0), GAUGE, 6.0));
+        let end = gauge.map(|g| g.x - 8.0).unwrap_or(bounds.right() - 4.0);
+        let text = Rect::new(x, bounds.y, (end - x).max(0.0), bounds.height);
+        StatusPlaces { icon, mark, text, gauge }
+    }
+}
+
+/// Draws a check mark in `place`.
+fn check_mark(p: &Painter, place: Rect, color: skia_safe::Color) {
+    let mut path = PathBuilder::new();
+    let (x, y, w, h) = (place.x as f32, place.y as f32, place.width as f32, place.height as f32);
+    path.move_to((x + w * 0.15, y + h * 0.55));
+    path.line_to((x + w * 0.4, y + h * 0.8));
+    path.line_to((x + w * 0.88, y + h * 0.22));
+    stroked(p, &path.detach(), color);
+}
+
+/// Draws a warning in `place`: a triangle with a mark in it.
+fn warning_sign(p: &Painter, place: Rect, color: skia_safe::Color) {
+    let (x, y, w, h) = (place.x as f32, place.y as f32, place.width as f32, place.height as f32);
+    let mut path = PathBuilder::new();
+    path.move_to((x + w * 0.5, y + h * 0.06));
+    path.line_to((x + w * 0.96, y + h * 0.92));
+    path.line_to((x + w * 0.04, y + h * 0.92));
+    path.close();
+    path.move_to((x + w * 0.5, y + h * 0.38));
+    path.line_to((x + w * 0.5, y + h * 0.6));
+    path.move_to((x + w * 0.5, y + h * 0.76));
+    path.line_to((x + w * 0.5, y + h * 0.77));
+    stroked(p, &path.detach(), color);
+}
+
+fn stroked(p: &Painter, path: &Path, color: skia_safe::Color) {
+    let mut paint = Paint::default();
+    paint.set_color(color);
+    paint.set_anti_alias(true);
+    paint.set_style(PaintStyle::Stroke);
+    paint.set_stroke_width(2.0);
+    paint.set_stroke_cap(PaintCap::Round);
+    paint.set_stroke_join(PaintJoin::Round);
+    p.canvas.draw_path(path, &paint);
+}
+
+impl Element for StatusItemPart {
+    part_element!();
+
+    fn draw(&self, p: &Painter) {
+        let look = p.look;
+        let style = self.base.spec.text("style").map(|name| look.style(name)).unwrap_or_default();
+        let places = self.places();
+        let bounds = self.base.node.bounds;
+        let _dim = p.dimmed(self.base.enabled());
+        if let Some(background) = style.background {
+            p.fill(bounds, background, look.radius("button"));
+        }
+        let warning = self.warning();
+        let text_color = style.text.unwrap_or_else(|| look.color("text"));
+        if let (Some(place), Some(name)) = (places.icon, self.icon_name()) {
+            let path = self.base.host.icon_path(name);
+            let color = if warning.is_some() { look.color("warning") } else { look.color("muted") };
+            crate::parts::containers::icon::draw_icon(p, path.as_deref(), place, color);
+        }
+        if warning.is_some() {
+            warning_sign(p, places.mark, look.color("warning"));
+        } else if self.checked() {
+            check_mark(p, places.mark, look.color("success"));
+        }
+        let size = look.size("small");
+        let shown = p.fit(&self.says(), places.text.width, size, "text", false);
+        p.text(&shown, places.text, text_color, size, "text", false, TextAlign::Left);
+        if let (Some(gauge), Some(full)) = (places.gauge, self.full()) {
+            p.fill(gauge, look.color("raised"), 3.0);
+            if full > 0.0 {
+                let _clip = p.clip(Rect { width: gauge.width * full, ..gauge });
+                p.fill(gauge, look.color("accent"), 3.0);
+            }
+            p.stroke(gauge, look.color("border"), look.border(), 3.0);
+        }
+    }
+
+    fn on_click(&mut self, cx: &mut Cx) {
+        if self.base.enabled() {
+            self.base.fire("click");
+            cx.invalidate();
+        }
+    }
+
+    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        let _ = (x, y);
+        self.warning()
+    }
+}
+
+impl Part for StatusItemPart {
+    fn base(&self) -> &PartBase {
+        &self.base
+    }
+
+    fn draws_own_style(&self) -> bool {
+        true
     }
 }

@@ -23,6 +23,7 @@ const KIND_NAMES: Record<Selected["kind"], string> = {
   mapping: "Mapping",
   signin: "Sign-in",
   agents: "Agents",
+  settingsBlock: "Settings",
 };
 
 /** What is open, like `Window Main`. */

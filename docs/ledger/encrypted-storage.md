@@ -2,6 +2,8 @@
 
 Status: not built. Any storage the application owns (a SQLite source, a file source, a file store, their backups) encrypted on disk, its key taken from a secret setting and never kept in the project.
 
+Progress: 0%
+
 ## Code
 - none. Designed in APP-CAPABILITIES-PLAN.md step 2. What it would build on: secret settings and the unconnected window ([settings-secrets](settings-secrets.md), [databases](databases.md)), the vault's scheme (`crates/clarity-vault`: Argon2id, AES-256-GCM per record), backups ([backups](backups.md)), file sources ([formats](formats.md)).
 - Docs: none.

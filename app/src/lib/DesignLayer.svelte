@@ -6,12 +6,14 @@
   // its cells when the snap grid shows; and, while a frame region is
   // dragged, the window's edges it docks to. A container's headers switch
   // the page it shows, a table's header edges size its columns, and a
-  // frame's buttons are picked. The drawing below takes no input.
+  // frame's buttons are picked. A splitter's divider, dragged, sets the size
+  // its first pane starts with; a slide-out's inner edge, dragged, its width
+  // (its height at the top or bottom). The drawing below takes no input.
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import { gapOf, rowAt } from "@clarity/ui/screen/grid.ts";
   import { contentViews, locateKey, widgetInfo, withProps, type DesignKey, type ShownPage } from "@clarity/ui/screen/pages.ts";
   import type { Layout } from "./clarityWindow";
-  import { cellsOf, layerOf, placeIn, type LayerGrid, type LayerPart } from "./designLayer";
+  import { cellsOf, dividerOf, layerOf, paneSizeAt, placeIn, slideEdgeOf, slideSizeAt, type LayerGrid, type LayerPart } from "./designLayer";
   import { pageDesigner } from "./pageDesignerStore.svelte";
 
   let {
@@ -89,6 +91,92 @@
 
   /** A column's width while its edge is dragged. */
   let sizing = $state<{ item: DesignKey; field: string; width: number } | null>(null);
+
+  /** Whether a splitter lays its panes one above the other. */
+  function stackedOf(part: LayerPart): boolean {
+    return locateKey(preview, shown, part.item)?.widget.props.orientation === "vertical";
+  }
+
+  /** A splitter's divider while it is dragged: where it is now, and the size the first pane would start with. */
+  let splitting = $state<{ item: DesignKey; at: number; size: number } | null>(null);
+
+  /** A splitter's divider, dragged: the size its first pane starts with (`rows` stacked, `span` side by side), written into the pane. */
+  function pressDivider(e: PointerEvent, part: LayerPart) {
+    const found = locateKey(preview, shown, part.item);
+    if (!found || e.button !== 0 || found.widget.pages.length !== 2) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const props = found.widget.props;
+    const stacked = props.orientation === "vertical";
+    const length = stacked ? props.height : props.width;
+    const handle = e.currentTarget as HTMLElement;
+    const layerBox = handle.closest<HTMLElement>("[data-design-layer]");
+    if (!layerBox) return;
+    // The window may be shown smaller than it is.
+    const scale = layerBox.offsetWidth > 0 ? layerBox.getBoundingClientRect().width / layerBox.offsetWidth : 1;
+    const origin = layerBox.getBoundingClientRect();
+    const along = (m: PointerEvent) => (stacked ? (m.clientY - origin.top) / scale : (m.clientX - origin.left) / scale);
+    handle.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      const at = along(m);
+      splitting = { item: part.item, at, size: paneSizeAt(part, at, length, stacked) };
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      const done = splitting;
+      splitting = null;
+      if (!done || done.size === found.widget.pages[0].columns) return;
+      pageDesigner.edit({ op: "setPaneSpan", target: found.widget.pages[0].span.start, columns: done.size }, part.item);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+  }
+
+  /** A slide-out's inner edge while it is dragged: where it is now, and the size it would take. */
+  let sliding = $state<{ item: DesignKey; at: number; size: number } | null>(null);
+
+  /** The side a slide-out comes in from, as designed; the right without one. */
+  function slideSideOf(part: LayerPart) {
+    return locateKey(preview, shown, part.item)?.widget.props.side ?? null;
+  }
+
+  /** A slide-out's inner edge, dragged: its width (`slideWidth`), or its height at the top or bottom (`slideHeight`), within its min and max. */
+  function pressSlideEdge(e: PointerEvent, part: LayerPart) {
+    const found = locateKey(preview, shown, part.item);
+    if (!found || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const props = found.widget.props;
+    const side = props.side ?? null;
+    const across = side === "top" || side === "bottom";
+    const limit = (v: string | null) => (v === null || v.trim() === "" || Number.isNaN(Number(v)) ? null : Number(v));
+    const handle = e.currentTarget as HTMLElement;
+    const layerBox = handle.closest<HTMLElement>("[data-design-layer]");
+    if (!layerBox) return;
+    // The window may be shown smaller than it is.
+    const scale = layerBox.offsetWidth > 0 ? layerBox.getBoundingClientRect().width / layerBox.offsetWidth : 1;
+    const origin = layerBox.getBoundingClientRect();
+    const along = (m: PointerEvent) => (across ? (m.clientY - origin.top) / scale : (m.clientX - origin.left) / scale);
+    handle.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      const at = along(m);
+      sliding = { item: part.item, at, size: slideSizeAt(part, side, at, limit(props.min), limit(props.max)) };
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      const done = sliding;
+      sliding = null;
+      if (!done) return;
+      const now = across ? props.slideHeight : props.slideWidth;
+      if (done.size === now) return;
+      const changed = across ? { slideHeight: done.size } : { slideWidth: done.size };
+      pageDesigner.edit({ op: "updateWidget", item: found.widget.span.start, container: null, props: withProps(props, changed) }, part.item);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+  }
 
   function pressMove(e: PointerEvent, part: LayerPart) {
     const found = locateKey(preview, shown, part.item);
@@ -218,6 +306,52 @@
           >
         {/each}
       </div>
+    {/if}
+    {#if part.kind === "splitter" && part.pages.length === 2}
+      {@const stacked = stackedOf(part)}
+      {@const divider = dividerOf(part, layer.grids, stacked)}
+      {#if divider}
+        <div
+          class="pane-divider"
+          class:stacked
+          data-divider={part.item}
+          style={where(divider)}
+          role="separator"
+          aria-label="Where the first pane of {part.name ?? 'the splitter'} ends"
+          title={stacked ? "Drag to set the rows the first pane starts with" : "Drag to set the columns the first pane starts with"}
+          onpointerdown={(e) => pressDivider(e, part)}
+        ></div>
+        {#if splitting && splitting.item === part.item}
+          <span
+            class="pane-size"
+            style={stacked
+              ? `left: ${part.box.x}px; top: ${splitting.at - 1}px; width: ${part.box.width}px; height: 2px;`
+              : `left: ${splitting.at - 1}px; top: ${part.box.y}px; width: 2px; height: ${part.box.height}px;`}
+          ><em>{splitting.size} {stacked ? "rows" : "columns"}</em></span>
+        {/if}
+      {/if}
+    {/if}
+    {#if part.kind === "slideout"}
+      {@const side = slideSideOf(part)}
+      {@const across = side === "top" || side === "bottom"}
+      <div
+        class="slide-edge"
+        class:across
+        data-slide-edge={part.item}
+        style={where(slideEdgeOf(part, side))}
+        role="separator"
+        aria-label="The inner edge of {part.name ?? 'the slide-out'}"
+        title={across ? "Drag to set the slide-out's height" : "Drag to set the slide-out's width"}
+        onpointerdown={(e) => pressSlideEdge(e, part)}
+      ></div>
+      {#if sliding && sliding.item === part.item}
+        <span
+          class="pane-size"
+          style={across
+            ? `left: ${part.box.x}px; top: ${sliding.at - 1}px; width: ${part.box.width}px; height: 2px;`
+            : `left: ${sliding.at - 1}px; top: ${part.box.y}px; width: 2px; height: ${part.box.height}px;`}
+        ><em>{sliding.size} px</em></span>
+      {/if}
     {/if}
     {#each part.columns as column (column.field)}
       <div
@@ -381,6 +515,48 @@
     width: 6px;
     cursor: ew-resize;
     z-index: 2;
+  }
+
+  .pane-divider {
+    position: absolute;
+    cursor: ew-resize;
+    z-index: 3;
+  }
+
+  .pane-divider.stacked {
+    cursor: ns-resize;
+  }
+
+  .slide-edge {
+    position: absolute;
+    cursor: ew-resize;
+    z-index: 3;
+  }
+
+  .slide-edge.across {
+    cursor: ns-resize;
+  }
+
+  .slide-edge:hover,
+  .pane-divider:hover {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
+  .pane-size {
+    position: absolute;
+    pointer-events: none;
+    background: var(--accent);
+    z-index: 3;
+  }
+
+  .pane-size em {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    font-style: normal;
+    font-size: 10px;
+    color: var(--accent);
+    white-space: nowrap;
   }
 
   .column-edge:hover {

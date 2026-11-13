@@ -1,6 +1,7 @@
-//! A splitter's first pane can start at a width of its own (`pane span 4`):
-//! its grid has those columns, the second pane the rest, and the person
-//! drags the divider between them.
+//! A splitter's first pane can start at a size of its own: side by side its
+//! width (`span="4"`, its grid has those columns), one above the other its
+//! height (`rows="4"`); the second pane has the rest, and the person drags
+//! the divider between them.
 
 use clarity_spec::{Severity, load_in};
 
@@ -42,8 +43,32 @@ fn a_part_must_fit_its_pane() {
 fn only_the_first_pane_of_a_splitter_side_by_side_has_a_width_and_leaves_room() {
     assert!(errors(&page("pane", "pane span 4")).iter().any(|m| m.contains("only the first pane")));
     assert!(errors(&page("pane span 12", "pane")).iter().any(|m| m.contains("1 to 11")));
-    let vertical = page("pane span 4", "pane").replace("rows 4\n", "rows 4 vertical\n");
-    assert!(errors(&vertical).iter().any(|m| m.contains("side by side")), "{:#?}", errors(&vertical));
+}
+
+/// One above the other, the first pane can start at a height of its own:
+/// `rows="4"` on the pane in the window's file, from 1 to one less than the
+/// splitter's rows; the second pane has the rest.
+#[test]
+fn stacked_the_first_pane_starts_at_rows_of_its_own() {
+    let stacked = |first: &str| page(first, "pane").replace("rows 4\n", "rows 4 vertical\n");
+    assert!(errors(&stacked("pane span 3")).is_empty(), "{:#?}", errors(&stacked("pane span 3")));
+    assert!(errors(&stacked("pane span 4")).iter().any(|m| m.contains("1 to 3 of the splitter's 4 rows")), "{:#?}", errors(&stacked("pane span 4")));
+    let markup = design(&stacked("pane span 1"), "Main");
+    assert!(markup.contains("<Pane rows=\"1\">"), "{markup}");
+    let read = clarity_spec::cxaml::read_page(&markup, "").0.expect("the page");
+    assert_eq!(read.widgets[0].pages[0].columns, Some(1));
+    // Each pane still has all of the splitter's columns.
+    assert_eq!(clarity_spec::widgets::pane_columns(&read.widgets[0]), [12, 12]);
+}
+
+/// The designer sets a stacked pane's height (its Height field) with the same edit: `rows="2"`.
+#[test]
+fn the_designer_sets_the_first_stacked_pane_s_height() {
+    use clarity_spec::edit::Edit;
+    let markup = design(&page("pane", "pane").replace("rows 4\n", "rows 4 vertical\n"), "Main");
+    let pane = |markup: &str| clarity_spec::cxaml::read_page(markup, "").0.expect("the page").widgets[0].pages[0].span.start;
+    let out = clarity_spec::cxaml::apply(None, &markup, &Edit::SetPaneSpan { target: pane(&markup), columns: Some(2) }).unwrap();
+    assert!(out.text.contains("<Pane rows=\"2\">"), "{}", out.text);
 }
 
 /// The designer sets a pane's width (its Width field): `span="4"` on the
@@ -63,4 +88,29 @@ fn the_designer_sets_the_first_pane_s_width() {
 fn design(module: &str, page: &str) -> String {
     let file = format!("design/{page}.cxaml");
     clarity_spec::converted([("m.clarity", module)]).into_iter().find(|(p, _)| p.ends_with(&file)).map(|(_, t)| t).expect("the page's file")
+}
+
+/// A splitter in a sidebar (or the footer) takes the same edits as one in
+/// the window's grid: every edit of a container's pages finds it there.
+#[test]
+fn a_splitter_in_a_sidebar_sets_its_first_pane_too() {
+    use clarity_spec::edit::Edit;
+    let markup = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Window class="m.Main">
+  <Sidebar side="left" name="side" width="300" columns="6">
+    <Splitter name="split" at="1,1" span="6" rows="8" orientation="vertical">
+      <Pane>
+        <Text name="a" at="1,1" span="6" />
+      </Pane>
+      <Pane>
+        <Text name="b" at="1,1" span="6" />
+      </Pane>
+    </Splitter>
+  </Sidebar>
+</Window>
+"#;
+    let page = clarity_spec::cxaml::read_page(markup, "").0.expect("the page");
+    let pane = page.frame.sidebars[0].widgets[0].pages[0].span.start;
+    let out = clarity_spec::cxaml::apply(None, markup, &Edit::SetPaneSpan { target: pane, columns: Some(2) }).unwrap_or_else(|e| panic!("{e}"));
+    assert!(out.text.contains("<Pane rows=\"2\">"), "{}", out.text);
 }

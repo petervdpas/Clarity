@@ -2,6 +2,8 @@
 
 Status: built. Parts that hold a grid of parts (form, panel, tabs, steps, accordion, scroll, splitter, popover, slideout), context menus on parts, and a window's content that shows one view at a time.
 
+Progress: 95%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (Containers group; `Content` with `view X` lines), `views.rs` (`places` :33, `placed` :102 folds each view into its window for every generator), `templates.rs` (`in_content_of` :487: a new window is window, content, view), `code/check.rs:2608-2620` (`main.swap(View)`), `model.rs:662` (`Widget.menu`, a part's context menu)
 - Generators: no code of their own; `views::placed` writes `main.swap(X)` as `main.tab = n` and a view's tells as calls of the window's handlers
@@ -36,6 +38,7 @@ Status: built. Parts that hold a grid of parts (form, panel, tabs, steps, accord
 - 2026-11-05: a slide-out slides in over the window from an edge, with a handle tab, `resizable`, `pinnable`; width and pin kept per person; at the bottom its handles stand above the footer (the person asked for it above the footer, not in it).
 - 2026-11-09: a view shows only in content; a slide-out, tab, step or section that names one is refused.
 - 2026-11-09: every window is window, content, view, even one that never swaps; a dialog holds its parts; content has no look of its own.
+- 2026-11-13: a stacked splitter's first pane starts at rows of its own, `<Pane rows="4">`, as a side by side one starts at `span`. User, on the maintenance sidebar: "I want a slider between projects and items panel", then "default heights 25%/75% ?!". By hand in the designer: drag the splitter's divider on the canvas (`DesignLayer.svelte` `pressDivider`, `designLayer.ts` `dividerOf`, `paneSizeAt`, tested in `designLayer.test.ts`), or the pane's Width or Height field; user: "I SHOULD be able to do this by hand... what if the internet is down?!". The edits of a container's pages (pane size, content view, view tells, section color) now find containers in sidebars and the footer too; before, "there is no pane there" for a splitter in a sidebar (`design_edit.rs` `page_anywhere`, test `pane_span.rs`).
 
 ## Was
 - DESIGN 5.6 (Containers), 5.15, 5.16, 5.32, 5.33 (all but the tree levels and .cxaml bullets)

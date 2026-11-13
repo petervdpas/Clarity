@@ -2,6 +2,8 @@
 
 Status: partial. A `timer` part with no place in the window that runs `on tick` every `every n` seconds while its window is on the screen and it is enabled.
 
+Progress: 75%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs:1341` (`WidgetKind::Timer`, palette Time, `Event::Tick`; placeless kinds :1472)
 - Generators: written into the window markup as any part (`<Timer>`), left out of the grid (`crates/clarity-gen/src/web_windows.rs`)

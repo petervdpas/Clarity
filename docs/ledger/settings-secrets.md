@@ -2,6 +2,8 @@
 
 Status: built. One `settings` block of typed values kept per person on their machine (`settings.json`), with `secret` settings in the system's protected store and `folder` settings that place a file store.
 
+Progress: 90%
+
 ## Code
 - Spec: `settings` block (`crates/clarity-spec/src/parser.rs:624`, `check.rs:583-603`), the record type `Settings` (`Entity.settings`, `FieldType::Language`, `Theme`, `Secret`, folder); settings window template (`crates/clarity-spec/src/templates.rs:302`, :442); secret and unconnected keys in `translations.rs`
 - Project file: `setting:name` in `auth` and `datasource` locations, `filestore x "setting:name"`; `keychain:` refused (`crates/clarity-project/src/lib.rs:607`)

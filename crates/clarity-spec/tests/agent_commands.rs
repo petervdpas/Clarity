@@ -151,3 +151,21 @@ fn the_app_s_settings_turn_agents_on_and_off_while_it_is_closed() {
     let found: Vec<String> = closed.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect();
     assert_eq!(found, ["agentReadsWhileClosed is a setting of an app whose commands agents call; no command says agent", "agentChangesWhileClosed is a setting of an app whose commands agents call; no command says agent"]);
 }
+
+/// A command is offered to agents by hand with a checkbox: the edit adds
+/// its `agent` line after its help, options and allow, or takes it away.
+#[test]
+fn an_edit_offers_a_command_to_agents_and_takes_it_back() {
+    use clarity_spec::edit::{Edit, apply};
+    let source = "module shop\n\ncommand customer list\n    help \"Lists\"\n    option all: bool\n    print 1\n\ncommand backup\n    print 2\n";
+    let item = source.find("command customer").unwrap() as u32;
+    let on = apply(source, &Edit::SetCommandAgent { item, agent: true }).unwrap().text;
+    assert!(on.contains("    option all: bool\n    agent\n    print 1\n"), "{on}");
+    assert_eq!(apply(&on, &Edit::SetCommandAgent { item, agent: true }).unwrap().text, on, "once");
+    let off = apply(&on, &Edit::SetCommandAgent { item, agent: false }).unwrap().text;
+    assert_eq!(off, source);
+    let bare = source.find("command backup").unwrap() as u32;
+    let on = apply(source, &Edit::SetCommandAgent { item: bare, agent: true }).unwrap().text;
+    assert!(on.ends_with("command backup\n    agent\n    print 2\n"), "{on}");
+    assert!(apply(source, &Edit::SetCommandAgent { item: 0, agent: true }).is_err());
+}

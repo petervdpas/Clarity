@@ -73,11 +73,11 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "add_command",
-            "Adds an item at the end of a menu, toolbar, ribbon, ribbon tab or group, or under a menu item (a submenu): an item in a menu, a button in a toolbar or ribbon group, a separator in either, a tab in the ribbon, a group in a ribbon tab. Tells the new item's name.",
+            "Adds an item at the end of a menu, toolbar, ribbon, ribbon tab or group, a part's context menu, or under a menu item (a submenu): an item in a menu, a button in a toolbar or ribbon group, a separator in either, a tab in the ribbon, a group in a ribbon tab. Tells the new item's name.",
             schema(
                 json!({
                     "window": owner,
-                    "in": { "type": "string", "description": "The name of the menu, toolbar, ribbon, ribbon tab, ribbon group or menu item it goes in, like mainMenu." },
+                    "in": { "type": "string", "description": "The name of the menu, toolbar, ribbon, ribbon tab, ribbon group or menu item it goes in, like mainMenu, or of a part whose context menu it goes in." },
                     "kind": { "type": "string", "enum": ITEMS },
                     "caption": { "type": "string", "description": "What it says; a starter caption when left out." }
                 }),
@@ -974,7 +974,7 @@ mod tests {
         let open = said.split_whitespace().nth(3).unwrap().to_string();
         assert!(said.starts_with("Added an item ") && said.contains("to mainMenu in Todo"), "{said}");
         let nowhere = refused(&mut tools, "add_command", json!({"window": "app", "in": "fileMenu", "kind": "item"}));
-        assert!(nowhere.contains("there is no menu, toolbar, ribbon, ribbon tab or group, or menu item fileMenu in Todo") && nowhere.contains("mainMenu"), "{nowhere}");
+        assert!(nowhere.contains("there is no menu, toolbar, ribbon, ribbon tab or group, menu item, or part with a context menu fileMenu in Todo") && nowhere.contains("mainMenu"), "{nowhere}");
 
         ok(&mut tools, "change_command", json!({"window": "app", "command": open, "shortcut": "Ctrl+O", "opens": "Main"}));
         let app = read(&dir, "design/Todo.cxaml");
@@ -1050,6 +1050,11 @@ mod tests {
         let said = ok(&mut tools, "add_context_menu", json!({"window": "MainView", "part": button}));
         assert!(said.contains("menu with the item firstItem"), "{said}");
         ok(&mut tools, "add_command", json!({"window": "MainView", "in": "firstItem", "kind": "item", "caption": "Deeper"}));
+        // A second item at the root of the part's menu, named by the part.
+        ok(&mut tools, "add_command", json!({"window": "MainView", "in": button, "kind": "item", "caption": "Second"}));
+        ok(&mut tools, "add_command", json!({"window": "MainView", "in": button, "kind": "separator"}));
+        let view = read(&dir, "design/MainView.cxaml");
+        assert!(view.contains("<Item caption=\"@secondItem\" name=\"secondItem\" />\n      <Item kind=\"separator\" />\n    </Menu>"), "{view}");
         ok(&mut tools, "change_command", json!({"window": "MainView", "command": "firstItem", "caption": "Actions"}));
 
         ok(&mut tools, "wire_event", json!({"window": "MainView", "part": button, "event": "click"}));

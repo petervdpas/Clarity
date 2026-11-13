@@ -2,6 +2,8 @@
 
 Status: built. `stack csharp ...`: a net10.0 project on the Clarity NuGets; desktop on Clarity.Ui, web as a second program.
 
+Progress: 90%
+
 ## Code
 - Generators: `crates/clarity-gen/src/csharp/` (logic.rs 1551 lines, windows.rs 897 (view models), mod.rs 787, model.rs 530, cli.rs 323, names.rs 262, parts.rs 221, plus web.rs, texts.rs (`.resx` and a typed `Texts`), themes.rs (theme JSON))
 - Runtimes: C# `runtimes/csharp` (Version 0.92.0, `Directory.Build.props:9`; `Clarity.slnx`). 13 NuGets: Clarity.Runtime, .Sqlite, .PostgreSql, .MySql, .SqlServer, .Engines (Wasmtime 48), Clarity.Ui, Clarity.Ui.Server, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth

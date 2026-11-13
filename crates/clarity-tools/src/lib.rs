@@ -53,16 +53,10 @@ fn headings(doc: &str) -> Vec<(usize, usize, &str)> {
 /// How many texts each language other than the default still lacks (empty,
 /// or the default's own text), as `nl 3, de 1`; none when every one has its own.
 fn untranslated(project: &clarity_spec::Project) -> Option<String> {
-    let default = clarity_spec::translations::default_language(project);
-    let texts = project.translations.get(&default)?;
-    let counts: Vec<String> = project
-        .translations
-        .iter()
-        .filter(|(l, _)| **l != default)
-        .filter_map(|(language, own)| {
-            let n = texts.iter().filter(|(key, text)| !text.trim().is_empty() && own.get(*key).is_none_or(|t| t.trim().is_empty() || t == *text)).count();
-            (n > 0).then(|| format!("{language} {n}"))
-        })
+    let counts: Vec<String> = clarity_spec::translations::left_to_translate(project)
+        .into_iter()
+        .filter(|(_, left)| !left.is_empty())
+        .map(|(language, left)| format!("{language} {}", left.len()))
         .collect();
     (!counts.is_empty()).then(|| counts.join(", "))
 }
@@ -344,7 +338,16 @@ impl ProjectTools {
                 let renamed = Some(clarity_spec::migrate::Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone() });
                 (rename_field(&project, source, &entity, &from, &to)?, renamed, format!("field {entity}.{from}"))
             }
-            _ => return Err("kind is entity, enum or field".into()),
+            "window" | "view" => {
+                let page = project.pages().find(|p| p.name.name == from).ok_or_else(|| format!("there is no window or view {from}"))?;
+                let is_view = page.kind == clarity_spec::model::PageKind::View;
+                if (kind == "view") != is_view {
+                    let (is, not) = if is_view { ("view", "window") } else { ("window", "view") };
+                    return Err(format!("{from} is a {is}, not a {not}: give kind {is}"));
+                }
+                (rename(&project, source, RenameKind::Page, &from, &to)?, None, format!("{kind} {from}"))
+            }
+            _ => return Err("kind is entity, enum, field, window or view".into()),
         };
         if changed.is_empty() {
             return Ok(format!("Nothing to rename: {what} is called {to} already."));
@@ -356,6 +359,13 @@ impl ProjectTools {
             write_atomically(&path, &file.text)?;
             paths.push(clarity_project::slashed(path.strip_prefix(&dir).unwrap_or(&path)));
             self.written.push(Written { file: path, before, after: Some(file.text) });
+            // A window's file takes its new name: the old one goes, kept for Undo.
+            if let Some(was) = file.moved_from {
+                let was = at(&was);
+                let before = std::fs::read_to_string(&was).ok();
+                std::fs::remove_file(&was).map_err(|err| format!("cannot remove {}: {err}", was.display()))?;
+                self.written.push(Written { file: was, before, after: None });
+            }
         }
         let step = self.follow(&renamed.into_iter().collect::<Vec<_>>())?;
         Ok(format!("Renamed {what} to {to} in {}. {step}{}", listed(&paths.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
@@ -412,14 +422,12 @@ impl ProjectTools {
         let (_, dir) = self.open()?;
         let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
         let default = clarity_spec::translations::default_language(&project);
-        let Some(texts) = project.translations.get(&default) else { return Ok(format!("The project has no {default} language file.")) };
+        if !project.translations.contains_key(&default) {
+            return Ok(format!("The project has no {default} language file."));
+        }
         let mut out = Vec::new();
-        for (language, own) in project.translations.iter().filter(|(l, _)| **l != default) {
-            let left: Vec<String> = texts
-                .iter()
-                .filter(|(key, text)| !text.trim().is_empty() && own.get(*key).is_none_or(|t| t.trim().is_empty() || t == *text))
-                .map(|(key, text)| format!("    {key} {text:?}"))
-                .collect();
+        for (language, left) in clarity_spec::translations::left_to_translate(&project) {
+            let left: Vec<String> = left.iter().map(|(key, text)| format!("    {key} {text:?}")).collect();
             if !left.is_empty() {
                 out.push(format!("{language} ({} to translate; the {default} text after each key):\n{}", left.len(), left.join("\n")));
             }
@@ -851,10 +859,10 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "rename",
-                "Renames an entity, an enum, or a field of an entity or record, everywhere the project names it: modules, windows, views and translations. The migration step records the rename, so a stored table or column keeps its data. Rename with this tool, never by writing the new name over the old one.",
+                "Renames an entity, an enum, a field of an entity or record, a window or a view, everywhere the project names it: modules, windows, views and translations; a window's or view's file takes the new name. The migration step records a data rename, so a stored table or column keeps its data. Rename with this tool, never by writing the new name over the old one.",
                 schema(
                     json!({
-                        "kind": { "type": "string", "enum": ["entity", "enum", "field"], "description": "What is renamed." },
+                        "kind": { "type": "string", "enum": ["entity", "enum", "field", "window", "view"], "description": "What is renamed; window covers dialogs and splash pages too." },
                         "entity": { "type": "string", "description": "For a field: the entity or record it belongs to, like Customer." },
                         "from": { "type": "string", "description": "The name now." },
                         "to": { "type": "string", "description": "The new name." }
@@ -1028,6 +1036,26 @@ mod tests {
 
         let wrong = tools.call("pick_api", &json!({"source": "forms", "operations": ["listForms"]}));
         assert!(wrong.is_error && wrong.text.contains("forms.yaml has no operation listForms; it has listTemplates and createTemplate"), "{}", wrong.text);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A window or view is renamed by name: its file takes the new name, and
+    /// every place that names it follows.
+    #[test]
+    fn a_window_or_view_is_renamed_with_its_file() {
+        let (root, file, dir) = project("rename-page");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let wrong = tools.call("rename", &json!({"kind": "view", "from": "Main", "to": "Home"}));
+        assert!(wrong.is_error && wrong.text.contains("Main is a window, not a view"), "{}", wrong.text);
+        let renamed = tools.call("rename", &json!({"kind": "window", "from": "Main", "to": "Home"}));
+        assert!(!renamed.is_error && renamed.text.contains("Renamed window Main to Home"), "{}", renamed.text);
+        assert!(!dir.join("design/Main.cxaml").exists() && dir.join("design/Home.cxaml").exists());
+        assert!(std::fs::read_to_string(dir.join("design/Todo.cxaml")).unwrap().contains("main=\"Home\""));
+        // Undo takes the old file back: the move is a removal and a new file.
+        assert!(tools.written.iter().any(|w| w.file == dir.join("design/Main.cxaml") && w.after.is_none()));
+        let view = tools.call("rename", &json!({"kind": "view", "from": "MainView", "to": "TaskView"}));
+        assert!(!view.is_error && view.text.contains("No problems"), "{}", view.text);
+        assert!(std::fs::read_to_string(dir.join("design/Home.cxaml")).unwrap().contains("TaskView"));
         let _ = std::fs::remove_dir_all(root);
     }
 

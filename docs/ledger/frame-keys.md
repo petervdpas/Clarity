@@ -2,6 +2,8 @@
 
 Status: partial. The app's and a window's frame (menu, toolbar, ribbon, sidebars, footer), its commands, shortcut keys per layer, and the keys window where people set their own keys.
 
+Progress: 80%
+
 ## Code
 - Spec: `crates/clarity-spec/src/frame.rs` (regions :16, :54-96; `BUILT_IN_COMMANDS` quit, close, language, theme, keys, undo, redo, back, forward :187; `BUTTON_COMMANDS` :191; sign-in and sign-out targets :195), `shortcuts.rs` (`catalog`: commands per place), `check.rs` (`check_page_keys` :664, `frame_keys` :2773; a frame on a non-window page :467)
 - Project file: `keys editable` (`crates/clarity-project/src/file.rs:351`)

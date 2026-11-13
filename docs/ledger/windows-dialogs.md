@@ -2,6 +2,8 @@
 
 Status: built. The window stack (one desktop window, windows opened in place), Clarity's own message and ask dialogs, the splash page, the app's icon and its version.
 
+Progress: 90%
+
 ## Code
 - Spec: `crates/clarity-spec/src/model.rs:512` (page kinds window, dialog, view, splash, toolbox, signin), `parser.rs:951` (page kind), app `main`, `splash ... for N seconds` (0.1 to 30, `parser.rs:1306-1355`), `layout.rs` (window 1100 x 760, min 200 x 150, max 3840 x 2160; splash 480 x 280); `code/mod.rs:429-437` (`app.version`, `{app.version}`); asks in `code/check.rs`
 - Project file: `icon "app.png"` (`crates/clarity-project/src/file.rs:310`), `version "1.2.0"` (:303); warning for an unnamed `icon.png` (`crates/clarity-project/src/lib.rs:1172`)

@@ -18,4 +18,9 @@ values: Array<string | null>,
 /**
  * The file of the resources each language points it at, if any.
  */
-resources: Array<string | null>, };
+resources: Array<string | null>, 
+/**
+ * Per language, whether it is left to translate (`untranslated`): the
+ * default's when empty, another's when empty or the same as the default's.
+ */
+missing: Array<boolean>, };

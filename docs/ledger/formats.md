@@ -2,6 +2,8 @@
 
 Status: partial. One catalog of data formats (json, csv, xml, yaml) in Clarity.Formats, used by code (`read ... from <format>`, `<format> of`), by mappings, and by data sources that are files in a format.
 
+Progress: 55%
+
 ## Code
 - Library: `runtimes/rust-formats` (crate `clarity-formats` 0.2.0; one document model `doc.rs`, formats as syntax only behind `Format` in `format.rs`: `json.rs`, `csv.rs`, `xml.rs` with `markup.rs` and `xsd.rs`, `yaml.rs`; one engine `path.rs`, `mapping.rs`, `shape.rs`, `fit.rs`, `build.rs`, `table.rs`, `describe.rs`, `check.rs`; own JSON tree `tree.rs`); C table `runtimes/rust-formats-ffi` (`include/clarity_formats.h`, `clarity_formats_api()`)
 - Spec: `ReadFormat`, `FormatOf` (`crates/clarity-spec/src/code/mod.rs`), `mapping M of E from fmt` (`code/parse.rs:1091`, `code/mapping.rs`), `formats.rs`, `xml.rs`; the catalog read by parser, checker and highlighter

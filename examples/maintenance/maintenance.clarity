@@ -19,6 +19,7 @@ entity Review
     reviewed: bool, label @reviewedLabel
     reviewer: Reviewer, default Peter, label @reviewerLabel
     reviewedOn: date, label @reviewedOnLabel
+    reviewedAt: datetime, label @reviewedAtLabel
     notes: text, label @notesLabel
     ownReferences: text, label @ownReferencesLabel
     project: ref Project, required, cascade, label @reviewProjectLabel
@@ -31,6 +32,9 @@ record Entry
     status: text
     reviewed: text
     body: text
+    progress: integer
+    changed: datetime
+    stale: bool
 
 // What the person sets for themselves: the ledger folder the picked project
 // points the ledger store at, the project picked last, and what AI agents
@@ -42,6 +46,19 @@ settings
     lastProject: text, label @lastProjectSetting
     agentReadsWhileClosed
     agentChangesWhileClosed
+
+// The number of an entry's Progress line (`Progress: 60%`); -1 when it has none.
+function progressOf(body: text) -> integer
+    let line = lineAfter(body, "Progress: ")
+    if line == ""
+        return -1
+    let n = 0
+    for c in split(line, "")
+        let digit = indexOf("0123456789", c)
+        if digit == 0
+            return n
+        n = n * 10 + digit - 1
+    return n
 
 // The rest of the first line that starts with `prefix`; empty when none does.
 function lineAfter(body: text, prefix: text) -> text
@@ -96,6 +113,7 @@ function pieceOf(fileName: text) -> text
 
 code Main
     handler windowOpened
+        clearEntry()
         loadProjects()
 
     // Projects may have been added, changed or removed.
@@ -130,10 +148,7 @@ code Main
     // entries the index does not list yet.
     handler loadEntries
         let rows: list<Entry> = []
-        let done: list<text> = []
-        let reviews = find r in Review where r.project == project and r.reviewed
-        for one in reviews
-            done = done + [one.piece]
+        let reviews = find r in Review where r.project == project
         let found = files f in ledger where f.extension == "md" order by f.path
         let index = ""
         for f in found
@@ -152,23 +167,71 @@ code Main
                 if startsWith(line, "| [")
                     let listedPiece = slice(line, 4, indexOf(line, "]") - 4)
                     listed = listed + [listedPiece]
-                    rows = rows + [entryOf(found, listedPiece, "group:" + group, done)]
+                    rows = rows + [entryOf(found, listedPiece, "group:" + group)]
         let unlisted: list<Entry> = []
         for f in found
             let filePiece = pieceOf(f.name)
             if indexOf(f.path, "/") == 0 and f.path != "README.md" and not (listed contains filePiece)
-                unlisted = unlisted + [entryOf(found, filePiece, "group:unlisted", done)]
+                unlisted = unlisted + [entryOf(found, filePiece, "group:unlisted")]
         if count(unlisted) > 0
             let g = new Entry
             g.key = "group:unlisted"
             g.label = @notInIndexGroup
             rows = rows + [g] + unlisted
-        entries = rows
+        entries = marked(rows, reviews)
+        checkReviews(reviews, found)
         clearEntry()
+
+    // The reviews kept in the app's database against the ledger's files: a
+    // review whose entry has no file, and a review whose entry changed after it.
+    handler checkReviews(reviews: list<Review>, found: list<file>)
+        let missing = 0
+        let changed = 0
+        for one in reviews
+            let there = false
+            for f in found
+                if f.path == one.piece + ".md"
+                    there = true
+                    if one.reviewed and changedSince(f.modified, one)
+                        changed = changed + 1
+            if not there
+                missing = missing + 1
+        ledgerItem.checked = missing == 0 and changed == 0
+        if missing == 0 and changed == 0
+            ledgerItem.caption = @ledgerItemCaption
+            ledgerItem.error = ""
+        else
+            ledgerItem.caption = @ledgerOutOfStepCaption
+            ledgerItem.error = @ledgerOutOfStep(missing = missing, changed = changed)
 
     handler clearEntry
         piece = ""
         entryBody = ""
+        entryProgress = 0
+        progressItem.caption = @progressItemCaption
+        reviewItem.caption = @reviewItemCaption
+        reviewItem.checked = false
+        reviewItem.error = ""
+
+    // The footer for the entry picked: how much of it is implemented, as
+    // its Progress line says, and whether it is reviewed since it changed.
+    handler showFooter(e: Entry)
+        if e.progress < 0
+            entryProgress = 0
+            progressItem.caption = @noProgressLine
+        else
+            entryProgress = e.progress
+            progressItem.caption = @progressPercent(percent = e.progress)
+        reviewItem.checked = review.reviewed
+        if review.reviewed
+            reviewItem.caption = @reviewedOnCaption(day = review.reviewedOn)
+            if e.stale
+                reviewItem.error = @changedSinceReview
+            else
+                reviewItem.error = ""
+        else
+            reviewItem.caption = @reviewItemCaption
+            reviewItem.error = ""
 
     // Shows the entry picked, with its review from the app's database, or a
     // new review when it has none yet.
@@ -189,6 +252,7 @@ code Main
             fresh.project = project
             fresh.piece = piece
             review = fresh
+        showFooter(e)
 
     handler reviewClicked
         if piece == ""
@@ -204,13 +268,21 @@ code Main
             return
         write entryBody to ledger piece + ".md"
         let rows: list<Entry> = []
+        let saved = new Entry
         for e in entries
             if e.key == piece
                 e.body = entryBody
                 e.label = titleOf(entryBody, piece)
                 e.status = statusOf(entryBody)
+                e.progress = progressOf(entryBody)
+                e.changed = now()
+                e.stale = review.reviewed
+                if review.reviewed
+                    e.reviewed = @changedMark
+                saved = e
             rows = rows + [e]
         entries = rows
+        showFooter(saved)
         related = linksOf(entryBody)
         codePaths = sectionOf(entryBody, "Code") + "\n\n" + sectionOf(entryBody, "Tests")
         oldReferences = sectionOf(entryBody, "Was")
@@ -220,23 +292,60 @@ code Main
     handler saveReviewClicked
         if piece == ""
             return
-        if review.reviewed and review.reviewedOn == none
+        if review.reviewed
             review.reviewedOn = today()
+            review.reviewedAt = now()
         save review
         let rows: list<Entry> = []
+        let saved = new Entry
         for e in entries
             if e.key == piece
+                e.stale = false
                 if review.reviewed
-                    e.reviewed = "yes"
+                    e.reviewed = @reviewedMark
                 else
                     e.reviewed = ""
+                saved = e
             rows = rows + [e]
         entries = rows
+        showFooter(saved)
+        let reviews = find r in Review where r.project == project
+        let found = files f in ledger where f.extension == "md" order by f.path
+        checkReviews(reviews, found)
         message info @reviewSaved(piece = piece)
 
-// One row of the tree for the ledger file of `piece`, marked when it is
-// among the pieces reviewed (`done`).
-action entryOf(found: list<file>, piece: text, parent: text, done: list<text>) -> Entry
+// Whether a ledger file changed after the time it was reviewed. A review
+// kept before that time was recorded counts as changed since: reviewing it
+// again records it.
+function changedSince(modified: datetime, one: Review) -> bool
+    if one.reviewedAt == none
+        return true
+    return modified > one.reviewedAt
+
+// The rows with each entry's review marked: reviewed, or changed since.
+function marked(rows: list<Entry>, reviews: list<Review>) -> list<Entry>
+    let out: list<Entry> = []
+    for row in rows
+        let e = new Entry
+        e.key = row.key
+        e.parent = row.parent
+        e.label = row.label
+        e.status = row.status
+        e.body = row.body
+        e.progress = row.progress
+        e.changed = row.changed
+        for one in reviews
+            if one.piece == e.key and one.reviewed
+                e.stale = changedSince(e.changed, one)
+                if e.stale
+                    e.reviewed = @changedMark
+                else
+                    e.reviewed = @reviewedMark
+        out = out + [e]
+    return out
+
+// One row of the tree for the ledger file of `piece`.
+action entryOf(found: list<file>, piece: text, parent: text) -> Entry
     effects files.read
     let e = new Entry
     e.key = piece
@@ -247,8 +356,8 @@ action entryOf(found: list<file>, piece: text, parent: text, done: list<text>) -
             e.body = read text of f
             e.label = titleOf(e.body, piece)
             e.status = statusOf(e.body)
-    if done contains piece
-        e.reviewed = "yes"
+            e.progress = progressOf(e.body)
+            e.changed = f.modified
     return e
 
 code Projects
@@ -332,7 +441,8 @@ command review set(project: text, piece: text)
     r.reviewer = reviewer
     if notes != ""
         r.notes = notes
-    if reviewed and r.reviewedOn == none
+    if reviewed
         r.reviewedOn = today()
+        r.reviewedAt = now()
     save r
     print @reviewStored(piece = piece, project = project)

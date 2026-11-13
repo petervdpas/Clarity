@@ -64,7 +64,7 @@ export type FrameElement =
   | { kind: "menu"; menu: Menu }
   | { kind: "toolbar"; toolbar: Toolbar }
   | { kind: "ribbon"; ribbon: Ribbon }
-  | { kind: "sidebar"; sidebar: Sidebar }
+  | { kind: "sidebar"; sidebar: Sidebar; index: number; count: number }
   | { kind: "footer"; footer: Footer }
   | { kind: "status"; footer: Footer }
   | { kind: "ribbonTab"; tab: RibbonTab; index: number; count: number }
@@ -105,8 +105,8 @@ export function findFrameElement(frame: Frame, offset: number, widgets: Widget[]
       }
     }
   }
-  for (const sidebar of frame.sidebars) {
-    if (sidebar.span.start === offset) return { kind: "sidebar", sidebar };
+  for (const [index, sidebar] of frame.sidebars.entries()) {
+    if (sidebar.span.start === offset) return { kind: "sidebar", sidebar, index, count: frame.sidebars.length };
   }
   if (frame.footer) {
     if (frame.footer.span.start === offset) return { kind: "footer", footer: frame.footer };

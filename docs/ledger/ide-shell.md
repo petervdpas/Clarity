@@ -2,6 +2,8 @@
 
 Status: partial. The Tauri app's frame: ribbon, project tree, project browser, settings, status bar, keys, undo, manual window, dialogs.
 
+Progress: 75%
+
 ## Code
 - IDE: `app/` (Svelte in `app/src`, commands in `app/src-tauri/src`, registered in lib.rs:866-1002)
   - Ribbon tabs Project, Design, Preview, Vault, no menu bar (`app/src/App.svelte:100-104`, 2573 lines); a sidebar per tab; Problems list with one-click fixes; right-click menus (`lib/ContextMenu.svelte`); splitters whose sizes are kept (`lib/layout.svelte.ts`); toasts (`lib/Toasts.svelte`)

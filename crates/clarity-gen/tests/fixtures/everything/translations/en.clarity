@@ -7,6 +7,7 @@ translation en
     album "Album"
     albums "Albums"
     copies "Copies"
+    tooManyCopies "More copies than the gauge shows"
     cover "Cover"
     delete "Delete"
     deleteAlbum "Delete {title}?"

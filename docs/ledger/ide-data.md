@@ -2,6 +2,8 @@
 
 Status: partial. The IDE's pages for the data model and the project's settings: entity and enum editors, mappings, web APIs, translations, project settings, migrations, backups, import.
 
+Progress: 75%
+
 ## Code
 - Spec: `crates/clarity-spec/src/edit.rs` (module text edits: entities, fields, enums, variants, uses), `dictionary.rs`, `field_rename.rs`, `rename.rs`, `migrate.rs`; `code/mapping.rs` (`MappingForm`, `form_of`)
 - IDE:

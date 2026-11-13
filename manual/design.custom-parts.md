@@ -37,7 +37,10 @@ Place it by its name, from the Custom parts group of the palette or as a line: `
 
 ## Writing its code
 
-Pick the part under Custom parts in the project tree. Its view shows what the window sees, and its folder:
+**+ New custom part** under Custom parts in the project tree asks for its name, its module and what draws it, in the kinds of the project's stack (a folder for C, C++, Rust and Go; a NuGet package or an assembly for C#), and declares it.
+
+Pick the part under Custom parts in the project tree. Its view shows what the window sees as a form, and its folder. The form sets the library, the value it binds, its size on the palette, its picture, **Grows with the window**, its properties (name, type, min, max, default) and its tells and hears with their values; each change writes one line of the declaration, which the first tab shows as text.
+
 
 - **Write interface and starter** writes the file Clarity owns (the interface the declaration gives) and, in an empty folder, a starter that builds and draws nothing yet.
 - The **file tree** opens files in tabs; **+ File**, **+ Folder**, **Rename** and **Delete** change the folder. Clarity's file opens read only: change the declaration and it follows.

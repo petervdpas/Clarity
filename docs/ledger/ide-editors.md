@@ -2,6 +2,8 @@
 
 Status: partial. The editors that open from the project tree: Clarity text, other languages, part and library folders, engines, modules, README and resources.
 
+Progress: 85%
+
 ## Code
 - Spec: `crates/clarity-spec/src/highlight.rs` (colors from the lexer, the same words the grammar has), `native.rs` (custom part folders)
 - Generators: `crates/clarity-gen/src/part_code.rs` (reads a part's own code without building it; each stack's `code_mismatches`)

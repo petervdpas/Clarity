@@ -2,6 +2,8 @@
 
 Status: partial. This folder: one entry per piece, read through the index; it replaces the plan documents, DESIGN.md and the status documents. Written; the move off the old documents is not finished.
 
+Progress: 25%
+
 ## Code
 - Docs: `docs/ledger/README.md` (index and how to keep it), `docs/ledger/<piece>.md`
 - Old documents still in the tree: `docs/DESIGN.md`, `docs/*-PLAN.md`, `docs/WINDOWS-TESTS.md`, `docs/MODULAR-PLAN.md`, `docs/IMPLEMENTED.md`, `docs/UNIMPLEMENTED.md`, `docs/CONFLICTING.md`

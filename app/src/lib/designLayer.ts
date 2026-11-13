@@ -8,8 +8,10 @@ import { ROW_HEIGHT } from "@clarity/ui/screen/grid.ts";
 import type { Command } from "@clarity/ui/generated/Command.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
+import type { SlideSide } from "@clarity/ui/generated/SlideSide.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
 import type { DesignKey } from "@clarity/ui/screen/pages.ts";
+import { sidebarWidth } from "@clarity/ui/frame/sidebars.ts";
 import type { Layout } from "./clarityWindow";
 
 export type Box = { x: number; y: number; width: number; height: number };
@@ -187,4 +189,65 @@ export function resizedBy(from: { x: number; y: number }, to: { x: number; y: nu
 /** A part's size after its handle moved `by` cells: at least one cell, and not past its grid's last column. */
 export function resizedTo(at: { col: number; width: number; height: number }, by: { columns: number; rows: number }, columns: number): { width: number; height: number } {
   return { width: Math.min(columns - at.col + 1, Math.max(1, at.width + by.columns)), height: Math.max(1, at.height + by.rows) };
+}
+
+/**
+ * Where a splitter's divider lies, between its two panes' grids as
+ * Clarity.UI laid them out: across it one above the other (`stacked`), down
+ * it side by side, 6 pixels thick to take the pointer. None until both
+ * panes are laid out.
+ */
+export function dividerOf(part: LayerPart, grids: LayerGrid[], stacked: boolean): Box | null {
+  const [first, second] = part.pages.map((p) => grids.find((g) => g.item === p.item)?.box);
+  if (!first || !second) return null;
+  if (stacked) {
+    const y = Math.round((first.y + first.height + second.y) / 2);
+    return { x: part.box.x, y: y - 3, width: part.box.width, height: 6 };
+  }
+  const x = Math.round((first.x + first.width + second.x) / 2);
+  return { x: x - 3, y: part.box.y, width: 6, height: part.box.height };
+}
+
+/**
+ * The size a splitter's first pane starts with when its divider is let go
+ * at `at` (down it stacked, across it side by side, in the layer's pixels):
+ * its share of the splitter in the splitter's `length` rows or columns,
+ * from 1 to one less, as `rows` and `span` on the pane say.
+ */
+export function paneSizeAt(part: LayerPart, at: number, length: number, stacked: boolean): number {
+  const start = stacked ? part.box.y : part.box.x;
+  const whole = stacked ? part.box.height : part.box.width;
+  const share = whole > 0 ? (at - start) / whole : 0.5;
+  return Math.min(length - 1, Math.max(1, Math.round(share * length)));
+}
+
+/**
+ * Where a slide-out's inner edge lies on the canvas: on the side away from
+ * the window's edge it comes in from (`side`, the right without one), 6
+ * pixels thick to take the pointer.
+ */
+export function slideEdgeOf(part: LayerPart, side: SlideSide | null): Box {
+  const b = part.box;
+  switch (side ?? "right") {
+    case "left":
+      return { x: b.x + b.width - 3, y: b.y, width: 6, height: b.height };
+    case "top":
+      return { x: b.x, y: b.y + b.height - 3, width: b.width, height: 6 };
+    case "bottom":
+      return { x: b.x, y: b.y - 3, width: b.width, height: 6 };
+    default:
+      return { x: b.x - 3, y: b.y, width: 6, height: b.height };
+  }
+}
+
+/**
+ * The size a slide-out takes when its inner edge is let go at `at` (across
+ * it at the left or right, down it at the top or bottom, in the layer's
+ * pixels): from its outer edge to there, in whole pixels, within its `min`
+ * and `max` and the widths a sidebar may have, as its width or height says.
+ */
+export function slideSizeAt(part: LayerPart, side: SlideSide | null, at: number, min: number | null, max: number | null): number {
+  const b = part.box;
+  const size = side === "left" ? at - b.x : side === "top" ? at - b.y : side === "bottom" ? b.y + b.height - at : b.x + b.width - at;
+  return sidebarWidth(size, min, max);
 }

@@ -1206,6 +1206,9 @@ pub struct TranslationRow {
     pub values: Vec<Option<String>>,
     /// The file of the resources each language points it at, if any.
     pub resources: Vec<Option<String>>,
+    /// Per language, whether it is left to translate (`untranslated`): the
+    /// default's when empty, another's when empty or the same as the default's.
+    pub missing: Vec<bool>,
 }
 
 /// What a key's value is in every language: a text, or a file of the
@@ -1259,6 +1262,34 @@ pub struct TranslationTable {
     pub missing: Vec<usize>,
 }
 
+/// Whether a language's text of a key is left to translate, given the
+/// default language's text: empty, or the same as the default's. The one
+/// rule the languages table and the agents' missing_translations share.
+pub fn untranslated(default: Option<&str>, own: Option<&str>) -> bool {
+    let own = own.unwrap_or("").trim();
+    own.is_empty() || default.is_some_and(|d| !d.trim().is_empty() && d == own)
+}
+
+/// Per language other than the default, the keys of the default's file
+/// still left to translate (`untranslated`), with the default's text.
+pub fn left_to_translate(project: &Project) -> BTreeMap<String, Vec<(String, String)>> {
+    let default = default_language(project);
+    let Some(texts) = project.translations.get(&default) else { return BTreeMap::new() };
+    project
+        .translations
+        .iter()
+        .filter(|(l, _)| **l != default)
+        .map(|(language, own)| {
+            let left = texts
+                .iter()
+                .filter(|(key, text)| !text.trim().is_empty() && untranslated(Some(text), own.get(*key).map(String::as_str)))
+                .map(|(key, text)| (key.clone(), text.clone()))
+                .collect();
+            (language.clone(), left)
+        })
+        .collect()
+}
+
 /// The languages table of a project.
 pub fn table(project: &Project) -> TranslationTable {
     let default = default_language(project);
@@ -1273,11 +1304,20 @@ pub fn table(project: &Project) -> TranslationTable {
             values: languages.iter().map(|l| project.translations[l].get(&used.key).filter(|v| !v.is_empty()).cloned()).collect(),
             resources: languages.iter().map(|l| project.resource_keys.get(l).and_then(|r| r.get(&used.key)).cloned()).collect(),
             takes: kinds.get(&used.key).copied().unwrap_or(Takes::Text),
+            missing: Vec::new(),
             key: used.key,
             places: used.places,
         })
+        .map(|mut row| {
+            // The default's own text is what another language must not still say.
+            let first = if languages.first() == Some(&default) { row.values[0].clone() } else { None };
+            row.missing = (0..languages.len())
+                .map(|i| row.resources[i].is_none() && untranslated(if languages[i] == default { None } else { first.as_deref() }, row.values[i].as_deref()))
+                .collect();
+            row
+        })
         .collect();
-    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.values[i].is_none() && r.resources[i].is_none()).count()).collect();
+    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.missing[i]).count()).collect();
     TranslationTable { default, languages, rows, missing }
 }
 

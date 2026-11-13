@@ -55,9 +55,9 @@
   const others = $derived((table?.languages ?? []).map((l, i) => ({ l, i })).filter(({ l }) => l !== table?.default));
   const total = $derived(table?.rows.length ?? 0);
 
-  /** Whether a key has no value in column `i`: no text and no file. */
-  function empty(row: TranslationRow, i: number): boolean {
-    return row.values[i] === null && row.resources[i] === null;
+  /** Whether a key is left to translate in column `i`, as the backend says (translations::untranslated, the rule the agents' tool counts by too): no text and no file, or still the default's text. */
+  function missing(row: TranslationRow, i: number): boolean {
+    return row.missing[i] ?? false;
   }
 
   /** A key's value in column `i` as it reads: its text, or the file it points at. */
@@ -71,7 +71,7 @@
       const said = [r.key, shown(r, 0), column >= 0 ? shown(r, column) : ""].join(" ").toLocaleLowerCase();
       if (words && !said.includes(words)) return false;
       if (!onlyMissing) return true;
-      return isDefault ? r.values.some((_, i) => empty(r, i)) : empty(r, column);
+      return isDefault ? r.missing.some((m) => m) : missing(r, column);
     }),
   );
 
@@ -119,7 +119,7 @@
       {#if isDefault}
         <p class="lead">Every key with its text, {total} in all; each needs one. Translations show this text where they leave a key empty.</p>
       {:else}
-        <p class="lead">{total - missing} of {total} keys translated{missing === 0 ? ": complete" : ""}. A key left empty shows the {named(table.default)} text.</p>
+        <p class="lead">{total - missing} of {total} keys translated{missing === 0 ? ": complete" : ""}. A key left empty shows the {named(table.default)} text; one still the same as it counts as not translated.</p>
       {/if}
     {/if}
   </header>
@@ -178,7 +178,7 @@
                   rows="1"
                   use:grow
                   value={row.values[column] ?? ""}
-                  class:missing={row.values[column] === null}
+                  class:missing={missing(row, column)}
                   placeholder={isDefault ? "Needs a text" : (row.values[0] ?? "")}
                   aria-label={`${row.key} in ${named(language)}`}
                   onchange={(e) => setValue(row.key, e.currentTarget.value)}
@@ -187,8 +187,8 @@
               </td>
               {#if isDefault}
                 {#each others as { l: tag, i } (tag)}
-                  <td class="status" class:missing={empty(row, i)} title={empty(row, i) ? "Not translated yet" : shown(row, i)}>
-                    {empty(row, i) ? "missing" : "\u2713"}
+                  <td class="status" class:missing={missing(row, i)} title={missing(row, i) ? (row.values[i] === null ? "Not translated yet" : "Still the default's text: translate it, or keep it where the language says it the same way") : shown(row, i)}>
+                    {missing(row, i) ? (row.values[i] === null && row.resources[i] === null ? "missing" : "same") : "\u2713"}
                   </td>
                 {/each}
               {/if}

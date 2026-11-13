@@ -2,6 +2,8 @@
 
 Status: not built. A `clarity-pdf` crate on Typst (Markdown and Clarity content to PDF, from code, on every stack), then a band report designer with a flow part and a formula part.
 
+Progress: 0%
+
 ## Code
 - Spec: none (no `<Report>` page kind, no `pdf of`)
 - Generators: none

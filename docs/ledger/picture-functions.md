@@ -2,6 +2,8 @@
 
 Status: partial. Built-in functions on pictures (resize, crop, rotate, flip, blend, adjust, pictureWidth, pictureHeight) on Clarity.Image, giving PNG, on every stack.
 
+Progress: 75%
+
 ## Code
 - Spec: `crates/clarity-spec/src/code/check.rs:2109` (the functions typed)
 - Generators: `crates/clarity-gen/src/lib.rs:344` (`uses_picture_functions`), :972 (`pictures_without_library`); rust/logic.rs, csharp/logic.rs, cpp/logic.rs, go/mod.rs (generated `pictures.go`), c/mod.rs, cpp/mod.rs, `crates/clarity-gen/src/clarity_ui.rs`

@@ -2,6 +2,8 @@
 
 Status: partial. The `canvas` part (draw handler, modes objects, paint and vector) and toolboxes: Clarity's own per mode, or a designed `<Toolbox>` page.
 
+Progress: 65%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (canvas props; toolbox kinds tool, toolGroup, toolSize, toolOpacity, toolColors, toolLayers at :23-33, :151, :462-466, :928); `crates/clarity-spec/src/views.rs:129, 240, 290` (a toolbox page placed in the canvas that names it); `crates/clarity-spec/src/code/check.rs:2230` (`canvas.shape(...)`: clear, line, rect, circle, ring, text, link, object, ellipse, path, image); page kind toolbox `model.rs:512`, root `<Toolbox>` in `cxaml.rs`
 - Generators: `crates/clarity-gen/src/lib.rs:505` (`canvas_draws`), :544 (`canvas_tool`); each stack's logic.rs for draw handlers and `on change`

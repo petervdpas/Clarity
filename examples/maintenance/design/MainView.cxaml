@@ -3,5 +3,5 @@
      writes it back into its file in the ledger. -->
 <View class="maintenance.MainView">
   <Data name="entryBody" type="text" />
-  <Memo name="entryText" at="1,1" span="12" rows="15" bind="entryBody" markdown="true" />
+  <Memo name="entryText" at="1,1" span="12" rows="14" bind="entryBody" markdown="true" />
 </View>

@@ -2,6 +2,8 @@
 
 Status: not built. An action started in the background, `at most N` at a time, its results coming back to the window as ordinary handlers; the runtime does the counting, no thread or lock appears in Clarity code.
 
+Progress: 0%
+
 ## Code
 - none. Designed in APP-CAPABILITIES-PLAN.md step 6.
 - What it builds on: actions with declared effects and no screen, handlers running one at a time, row versions ([row-versions](row-versions.md)), `me` ([signin](signin.md)), the progress part.

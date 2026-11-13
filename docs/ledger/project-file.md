@@ -2,6 +2,8 @@
 
 Status: built. The `<name>.clarity` project file: title, version, icon, stack, output, language, currency, themes, sign-in, keys, engines, port, row height, data sources, file stores, codecs.
 
+Progress: 100%
+
 ## Code
 - Spec: `crates/clarity-project/src/file.rs:293-569` (reading and writing; an unknown line is an error listing the valid ones); `Settings` in `crates/clarity-project/src/lib.rs:213-277`, `SourceKind` :66-75, `Backend`, `Ui`, `Target`; new projects start as `stack rust desktop` with one SQLite source (lib.rs:396)
 - Generators: read through `clarity_project`; no project-file code of their own

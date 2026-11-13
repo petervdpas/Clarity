@@ -2,6 +2,8 @@
 
 Status: built. `chart` draws a list the window holds as bars, a line or a pie (grouped by a field, or a list of numbers as they are); `trend` follows one number over time.
 
+Progress: 95%
+
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (`Chart`, `Trend`), `model.rs` (`ChartKind`, `ChartMeasure`), `check.rs` (`check_number_chart`: a pie or `by` refused on a list of numbers)
 - Generators: through window markup (`crates/clarity-gen/src/web_windows.rs`)

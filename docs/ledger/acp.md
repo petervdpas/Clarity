@@ -2,6 +2,8 @@
 
 Status: partial. Codex and Copilot run in the IDE's agent panel on the person's own subscription and login, through the Agent Client Protocol, with Clarity's tools.
 
+Progress: 70%
+
 ## Code
 - Spec: none
 - Generators: none

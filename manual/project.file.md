@@ -58,7 +58,7 @@ Entities live in the first data source unless their module names another with `s
 
 On the **Project** tab, click **Settings** (or the app folder or the stack in the sidebar). The view edits every setting:
 
-- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), chosen with Browse in Clarity's file browser (see [Opening a project](start.overview.md#opening-a-project)) and set back to `out` with Default, and the folder Generate writes to.
+- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), chosen with Browse in Clarity's file browser (see [Opening a project](start.overview.md#opening-a-project)) and set back to `out` with Default, and the folder Generate writes to; **Output keeps**, the folders of the output that are the project's own (`output keeps`), and **Codecs**, a row per codec library with its name and path (`codec`), with Add codec.
 - Stack: Backend, UI and Targets (Desktop, Web, CLI), and the Build tools row with Environment..., which opens Clarity settings where the tools are chosen.
 - Language, formats and theme: Language, Currency, Keys, Engines, Row height, Port (for the `web` target), and the themes that are offered, with the one the application starts with.
 - Data sources: a row per source with its kind, location, auth and the External and Read-only boxes; Import for an external SQLite database or a file source (for an XML file, its repeated elements or its XSD schema), and Own for an external SQLite database; the format's options under a file source; API for a web API, which picks what the application uses of its description; Add data source.

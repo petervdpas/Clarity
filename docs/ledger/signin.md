@@ -2,6 +2,8 @@
 
 Status: partial. Who is using the program: a `signin` block names the entity of people and its strategies from Clarity.Auth's catalog; `me`, `allow when`, `readable/writable when`; a guided sign-in window or the splash's sign-in part.
 
+Progress: 70%
+
 ## Code
 - Shared core: `runtimes/rust-auth` (`clarity-auth`: `catalog.rs`, `attempt.rs` (ops `signinBegin`, `signinDecide`, uncommitted), `hash.rs` Argon2id, `sessions.rs`, `tries.rs`, `remember.rs`, `account.rs`; `openid.rs` and `providers.rs` behind feature `openid`); C table `runtimes/rust-auth-ffi` (one JSON `call`)
 - Project file: `crates/clarity-project/src/signin_file.rs` (`signin E on targets`, strategy lines, `minimum`, `session`, `tries`, `remember N days [when asked]`, `shows`, `language picker`, provider settings :75)

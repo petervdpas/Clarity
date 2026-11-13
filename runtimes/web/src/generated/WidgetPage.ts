@@ -8,9 +8,9 @@ import type { Widget } from "./Widget";
  */
 export type WidgetPage = { title: string | null, 
 /**
- * `pane span 4`: the columns a splitter's first pane starts with, so
- * its grid has them; the second pane has the rest. Without it each pane
- * has the splitter's columns and they start alike.
+ * `span="4"`: the columns a splitter's first pane starts with, so its
+ * grid has them; one above the other (`rows="4"`) the rows it starts
+ * with. The second pane has the rest. Without it the panes start alike.
  */
 columns: number | null, 
 /**

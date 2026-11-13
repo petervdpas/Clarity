@@ -348,7 +348,7 @@ pub fn part(widget: &Widget, depth: usize, out: &mut String, marks: &Marks) {
         part(child, depth + 1, out, marks);
     }
     for page in &widget.pages {
-        page_element(p.kind, page, depth + 1, out, marks);
+        page_element(p.kind, page, depth + 1, out, marks, p.orientation == Some(crate::model::Orientation::Vertical));
     }
     if levels {
         for level in &widget.levels {
@@ -435,7 +435,7 @@ pub fn page_element_name(kind: WidgetKind) -> &'static str {
 
 /// A tab, step, section or pane, with the parts on it; in the source, the
 /// view it shows and what it does with the view's tells.
-fn page_element(kind: WidgetKind, page: &WidgetPage, depth: usize, out: &mut String, marks: &Marks) {
+fn page_element(kind: WidgetKind, page: &WidgetPage, depth: usize, out: &mut String, marks: &Marks, stacked: bool) {
     let pad = "  ".repeat(depth);
     let element = page_element_name(kind);
     let mut attributes = String::new();
@@ -451,9 +451,14 @@ fn page_element(kind: WidgetKind, page: &WidgetPage, depth: usize, out: &mut Str
     if let Some(color) = &page.color {
         attributes.push_str(&attribute("color", &Value::String(color.clone())));
     }
-    // A splitter's pane starts as wide as its span; a tab, step or section showing a view keeps the view's columns.
+    // A splitter's pane starts as wide as its span (as high as its rows, one
+    // above the other); a tab, step or section showing a view keeps the view's columns.
     if let Some(columns) = page.columns {
-        let name = if kind == WidgetKind::Splitter { "span" } else { "columns" };
+        let name = match kind {
+            WidgetKind::Splitter if stacked => "rows",
+            WidgetKind::Splitter => "span",
+            _ => "columns",
+        };
         attributes.push_str(&attribute(name, &Value::from(columns)));
     }
     if marks.source {
@@ -947,7 +952,7 @@ impl Reading {
     fn widget_page(&mut self, kind: WidgetKind, element: &Element) -> WidgetPage {
         let content = kind == WidgetKind::Content;
         let columns_word = if kind == WidgetKind::Splitter { "span" } else { "columns" };
-        let reserved = ["name", "title", "color", "span", "columns", "view"];
+        let reserved = ["name", "title", "color", "span", "rows", "columns", "view"];
         let tells = element
             .attributes
             .iter()
@@ -957,7 +962,8 @@ impl Reading {
         let view = if content { element.get("name") } else { element.get("view") };
         WidgetPage {
             title: element.get("title").map(str::to_string),
-            columns: self.number(element, columns_word),
+            // A stacked splitter's first pane starts at `rows`, a side by side one's at `span`.
+            columns: self.number(element, columns_word).or_else(|| if kind == WidgetKind::Splitter { self.number(element, "rows") } else { None }),
             view: view.map(str::to_string),
             tells,
             color: element.get("color").map(str::to_string),

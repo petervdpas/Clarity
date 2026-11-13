@@ -412,7 +412,8 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
             pages.push(PageSpec {
                 kind: page.to_string(),
                 title: child.attribute("title").map(str::to_string),
-                columns: child.attribute("span").and_then(|s| s.trim().parse().ok()),
+                // A pane's start along the split: `span` side by side, `rows` one above the other.
+                columns: child.attribute("span").or_else(|| (child.name == "Pane").then(|| child.attribute("rows")).flatten()).and_then(|s| s.trim().parse().ok()),
                 grid: child.attribute("columns").and_then(|s| s.trim().parse().ok()),
                 color: child.attribute("color").map(str::to_string).filter(|c| !c.is_empty()),
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,

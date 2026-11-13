@@ -2,6 +2,8 @@
 
 Status: partial (steps 1 to 4 built 2026-11-12, with the IDE's Agents part; step 5, the guidance wizard and the `agent` line in the designer of commands, not built: it waits for the questionnaire of MCP-PLAN step 7). A program Clarity generates offers its actions to an AI agent over MCP while it runs, and the person using it grants each outside change; beside it, a command line of the app for when it is closed. First user: the maintenance example (see [examples](examples.md)).
 
+Progress: 75%
+
 ## Code
 - Spec: the `agent` line (`CommandDecl.agent`, `crates/clarity-spec/src/code/parse.rs` `parse_command`); a command for agents needs `help` (`code/check.rs`); what a command changes, `crates/clarity-spec/src/agent.rs`; the guidance format and its checks, `crates/clarity-spec/src/guidance.rs`, read with the project (`Project.guidance`, `load_dir_signed` in `lib.rs`)
 - Generators: the tool list, `crates/clarity-gen/src/agent_tools.rs` (`tool_list`, `offers_agents`, `tool_list_file`), with each tool's `line` and `arguments` for the command line a call becomes; written into each command-line program with a command for agents: Rust `src/tools.json` and the runtime's `mcp` feature (`rust/cli.rs`); Go `tools.json`, `agents_library.go` and `agents_host.go` copied from the runtime (`go/mod.rs` `agents_files`, `go/cli.rs`); C and C++ `clarity-runtime/agents/*` and `clarity_use_agents` (`c/mod.rs`, `cpp/mod.rs` `AGENTS_FILES`, `c::agents_cmake_lines`); C# `tools.json` as an embedded resource and the package Clarity.AppMcp (`csharp/cli.rs`, `APP_MCP_PACKAGE`)
@@ -28,7 +30,7 @@ Status: partial (steps 1 to 4 built 2026-11-12, with the IDE's Agents part; step
 - `crates/clarity-gen/tests/agent_tools.rs` `the_list_has_the_shape_the_mcp_core_serves`: the writer's list keeps the shape of the conformance file's
 
 ## Open
-- The whole piece: NOT BUILT. Sketch, to be agreed before building:
+- The first sketch (2026-11-12), kept for the record; steps 1 to 4 are BUILT, step 5 NOT BUILT (see Status):
   - The app declares which of its actions an agent may call (an `action` with its effects, as in the language today), with a description people and agents read from the translations.
   - The running desktop app serves them over MCP; every call asks the person in Clarity's own dialog what it would change: allow once, allow for this session, refuse. A refused call tells the agent so. The change shows live in the open windows.
   - The command line of the same app (desktop + cli in the project file) runs the same actions when the app is not running.

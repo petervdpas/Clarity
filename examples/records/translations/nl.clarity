@@ -166,6 +166,8 @@ translation nl
     lastPage "Laatste pagina"
     expandRow "Uitklappen"
     collapseRow "Inklappen"
+    expandAll "Alles uitklappen"
+    collapseAll "Alles inklappen"
     settingsItem "Instellingen..."
     exportsFolderSetting "Exportmap"
     preferencesTitle "Instellingen"

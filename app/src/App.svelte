@@ -40,6 +40,10 @@
   import EngineEditor from "./lib/EngineEditor.svelte";
   import PartView from "./lib/PartView.svelte";
   import LibraryView from "./lib/LibraryView.svelte";
+  import ToastView from "./lib/ToastView.svelte";
+  import DeclCodeView from "./lib/DeclCodeView.svelte";
+  import { commandLine } from "./lib/commandLine";
+  import { isToastName, newToastText, textKeyOf } from "./lib/toastLines";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
   import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
   import { languageChoice } from "@clarity/ui/screen/i18n.svelte.ts";
@@ -344,6 +348,47 @@
     const decl = declaring?.libraries.find((l) => l.name.name === current.name);
     return declaring && decl ? { decl, file: declaring } : null;
   });
+  /** The open command (by the line it is typed as) and the module that declares it. */
+  const openCommand = $derived.by(() => {
+    if (current?.kind !== "command") return null;
+    for (const f of files) {
+      const decl = f.commands.find((c) => commandLine(c.group?.name ?? null, c.name.name) === current.name);
+      if (decl) return { decl, file: f, line: current.name };
+    }
+    return null;
+  });
+
+  /** Writes a command's declaration back; a command renamed in its first line stays open under its new name. */
+  async function saveCommand(target: SpecFile, item: number, text: string) {
+    applyPreview((await applyEdit(target, { op: "replaceDecl", item, text })).preview);
+    const head = /^command\s+([A-Za-z]\w*(?:\s+[A-Za-z]\w*)?)\s*(?:\(|$)/m.exec(text)?.[1];
+    if (head && head !== current?.name) select({ kind: "command", name: head.trim() });
+  }
+
+  /** The open function or action and the module that declares it. */
+  const openFunction = $derived.by(() => {
+    if (current?.kind !== "function") return null;
+    for (const f of files) {
+      const decl = f.functions.find((d) => d.name.name === current.name);
+      if (decl) return { decl, file: f };
+    }
+    return null;
+  });
+
+  /** Writes a function's or action's declaration back; one renamed in its first line stays open under its new name. */
+  async function saveFunctionDecl(target: SpecFile, item: number, text: string) {
+    applyPreview((await applyEdit(target, { op: "replaceDecl", item, text })).preview);
+    const name = /^(?:function|action)\s+([A-Za-z]\w*)/m.exec(text)?.[1];
+    if (name && name !== current?.name) select({ kind: "function", name });
+  }
+
+  /** The open toast and the module that declares it. */
+  const openToast = $derived.by(() => {
+    if (current?.kind !== "toast") return null;
+    const declaring = files.find((f) => (f.toasts ?? []).some((t) => t.name.name === current.name));
+    const decl = declaring?.toasts.find((t) => t.name.name === current.name);
+    return declaring && decl ? { decl, file: declaring } : null;
+  });
   /** A line of an engine's code to show, from the Problems list. */
   let engineGoTo = $state<{ line: number; n: number } | null>(null);
   const builtProblems = $derived(engineProblems());
@@ -477,6 +522,12 @@
         return p.project.diagrams.some((d) => d.name === o.name);
       case "mapping":
         return all.some((f) => f.mappings.some((m) => m.name.name === o.name));
+      case "toast":
+        return all.some((f) => (f.toasts ?? []).some((t) => t.name.name === o.name));
+      case "function":
+        return all.some((f) => f.functions.some((d) => d.name.name === o.name));
+      case "command":
+        return all.some((f) => f.commands.some((c) => commandLine(c.group?.name ?? null, c.name.name) === o.name));
       case "settings":
       case "api":
       // The README view stays open while it is written, also before the file exists;
@@ -518,6 +569,105 @@
       await loadProjectFile();
     }
     refreshHistory();
+  }
+
+  /** A new toast: its name asked, declared in the module that has toasts (else the open one), its text given its name, and opened. */
+  async function startNewToast() {
+    const target = files.find((f) => (f.toasts ?? []).length > 0) ?? file ?? files[0];
+    if (!target) return;
+    const name = (await dialogs.prompt({
+      title: "New toast",
+      text: "Its name, as code shows it: toast saved. A short camelCase name, like saved.",
+      value: "",
+      placeholder: "saved",
+      action: "Add",
+    }))?.trim();
+    if (!name) return;
+    if (!isToastName(name)) {
+      actionError = `'${name}' is not a toast's name; start with a small letter, letters and digits only, like saved`;
+      return;
+    }
+    if (files.some((f) => (f.toasts ?? []).some((t) => t.name.name === name))) {
+      actionError = `the project already has a toast ${name}`;
+      return;
+    }
+    try {
+      applyPreview((await applyEdit(target, { op: "appendDecl", text: newToastText(name) })).preview);
+      applyPreview(await invoke<Preview>("set_translation", { language: preview?.project.locale.language ?? "en", key: textKeyOf(name), value: name }));
+      select({ kind: "toast", name });
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** A new function or action: its name asked, declared in the module that has functions (else the open one), and its code opened. */
+  async function startNewFunction(kind: "function" | "action") {
+    const target = files.find((f) => f.functions.length > 0) ?? file ?? files[0];
+    if (!target) return;
+    const name = (await dialogs.prompt({
+      title: kind === "function" ? "New function" : "New action",
+      text: kind === "function" ? "Its name, as code calls it: a camelCase name, like totalOf." : "Its name, as code calls it: a camelCase name, like archiveOld.",
+      value: "",
+      placeholder: kind === "function" ? "totalOf" : "archiveOld",
+      action: "Add",
+    }))?.trim();
+    if (!name) return;
+    if (!/^[a-z][A-Za-z0-9]*$/.test(name)) {
+      actionError = `'${name}' is not a name code can use; start with a small letter, letters and digits only, like ${kind === "function" ? "totalOf" : "archiveOld"}`;
+      return;
+    }
+    if (files.some((f) => f.functions.some((d) => d.name.name === name))) {
+      actionError = `the project already has a function or action ${name}`;
+      return;
+    }
+    const text = kind === "function" ? `function ${name}(value: integer) -> integer\n    return value\n` : `action ${name}()\n    effects db.write\n`;
+    try {
+      applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
+      select({ kind: "function", name });
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** A new command: the words it is typed as asked (one or two, as order list), declared in the module that has commands (else the open one), and its code opened. */
+  async function startNewCommand() {
+    const target = files.find((f) => f.commands.length > 0) ?? file ?? files[0];
+    if (!target) return;
+    const line = (await dialogs.prompt({
+      title: "New command",
+      text: "The words it is typed as: one or two camelCase words, like list or order list.",
+      value: "",
+      placeholder: "order list",
+      action: "Add",
+    }))?.trim().replace(/\s+/g, " ");
+    if (!line) return;
+    if (!/^[a-z][A-Za-z0-9]*( [a-z][A-Za-z0-9]*)?$/.test(line)) {
+      actionError = `'${line}' is not a command; give one or two words that start with a small letter, like order list`;
+      return;
+    }
+    if (files.some((f) => f.commands.some((c) => commandLine(c.group?.name ?? null, c.name.name) === line))) {
+      actionError = `the project already has a command ${line}`;
+      return;
+    }
+    // Its help text is a key, which gets the command's words in the default language to start with.
+    const key = line.split(" ").map((w, i) => (i === 0 ? w : w[0].toUpperCase() + w.slice(1))).join("") + "Help";
+    try {
+      applyPreview((await applyEdit(target, { op: "appendDecl", text: `command ${line}\n    help @${key}\n    exit 0\n` })).preview);
+      applyPreview(await invoke<Preview>("set_translation", { language: preview?.project.locale.language ?? "en", key, value: line }));
+      select({ kind: "command", name: line });
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** Takes the toast away, after asking. */
+  async function deleteToast(target: SpecFile, name: string, item: number) {
+    if (!(await dialogs.confirm({ title: "Delete toast", text: `Take the toast ${name} away? Code that shows it then says there is no such toast.`, action: "Delete" }))) return;
+    try {
+      applyPreview((await applyEdit(target, { op: "remove", item })).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
   }
 
   /** A new web API (DESIGN 5.23): a rest data source of the project file, by the name code calls it by. */
@@ -621,14 +771,39 @@
     }
   }
 
-  /** Declares the custom part or library the dialog wrote and opens it. */
+  /** A new custom part asked for by a Custom part dropped on a window: its name goes back to the designer, which places it. */
+  let newCustomForDrop: ((name: string | null) => void) | null = null;
+
+  /** Makes a new custom part in its dialog for a dropped Custom part: its name, or null when cancelled. */
+  function newPartForDrop(): Promise<string | null> {
+    newCustomForDrop?.(null);
+    return new Promise((resolve) => {
+      newCustomForDrop = resolve;
+      startNewCustom("part");
+      if (!newCustom) {
+        newCustomForDrop = null;
+        resolve(null);
+      }
+    });
+  }
+
+  /** Ends the New custom part dialog: a dropped Custom part gets the new part's name, or null. */
+  function endNewCustom(name: string | null) {
+    newCustom = null;
+    const forDrop = newCustomForDrop;
+    newCustomForDrop = null;
+    forDrop?.(name);
+  }
+
+  /** Declares the custom part or library the dialog wrote and opens it, or, for a dropped Custom part, hands it to the designer. */
   async function addCustom(target: SpecFile, name: string, text: string) {
     if (!newCustom) return;
     const what = newCustom.what;
+    const forDrop = newCustomForDrop !== null;
     try {
       applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
-      newCustom = null;
-      select({ kind: what, name });
+      endNewCustom(name);
+      if (!forDrop) select({ kind: what, name });
     } catch (err) {
       newCustomError = String(err);
     }
@@ -1402,6 +1577,9 @@
         onnewengine={full ? startNewEngine : null}
         onnewpart={full ? () => startNewCustom("part") : null}
         onnewlibrary={full ? () => startNewCustom("library") : null}
+        onnewtoast={full ? startNewToast : null}
+        onnewfunction={full ? startNewFunction : null}
+        onnewcommand={full ? startNewCommand : null}
         onnewlanguage={full ? startNewLanguage : null}
         onnewresource={full ? startNewResource : null}
         onnewdiagram={full ? startNewDiagram : null}
@@ -1697,7 +1875,8 @@
     <Splitter axis="x" label="Width of the sidebar" onmove={(d) => layout.resize("sidebar", d)} />
 
     <div class="work">
-      <main>
+      <!-- A command's or function's code takes the whole area, edge to edge. -->
+      <main class:edge={!!(openCommand || openFunction)}>
         <!-- What is open, guarded: an error drawing it shows in its place. -->
         <Guarded shows={`${tab} ${current?.kind ?? ""} ${current?.name ?? ""}`}>
           {#if tab === "vault"}
@@ -1793,6 +1972,19 @@
             <PartView decl={openPart.decl} file={openPart.file} onapply={async (edit) => applyPreview((await applyEdit(openPart.file, edit)).preview)} />
           {:else if openLibrary}
             <LibraryView decl={openLibrary.decl} file={openLibrary.file} onapply={async (edit) => applyPreview((await applyEdit(openLibrary.file, edit)).preview)} />
+          {:else if openCommand}
+            <DeclCodeView title={openCommand.line} what="command" item={openCommand.decl.span.start} file={openCommand.file} onsave={(item, text) => saveCommand(openCommand.file, item, text)} />
+          {:else if openFunction}
+            <DeclCodeView title={openFunction.decl.name.name} what={openFunction.decl.kind} item={openFunction.decl.span.start} file={openFunction.file} onsave={(item, text) => saveFunctionDecl(openFunction.file, item, text)} />
+          {:else if openToast}
+            <ToastView
+              {preview}
+              decl={openToast.decl}
+              file={openToast.file}
+              onapply={async (edit) => applyPreview((await applyEdit(openToast.file, edit)).preview)}
+              ontext={async (key, value) => applyPreview(await invoke<Preview>("set_translation", { language: preview?.project.locale.language ?? "en", key, value }))}
+              ondelete={() => deleteToast(openToast.file, openToast.decl.name.name, openToast.decl.span.start)}
+            />
           {:else if moduleFile}
             <ModuleView
               {preview}
@@ -1802,9 +1994,9 @@
               onopen={(kind, name) => select({ kind, name })}
             />
           {:else if tab === "design" && openApp && appPage && file}
-            <PageDesigner {preview} page={appPage} app={openApp} {file} settings={projectFile?.settings ?? null} onsavesettings={saveSettings} onapplied={applyPreview} onopen={select} />
+            <PageDesigner {preview} page={appPage} app={openApp} {file} settings={projectFile?.settings ?? null} onsavesettings={saveSettings} onapplied={applyPreview} onopen={select} onnewpart={newPartForDrop} />
           {:else if tab === "design" && page && file}
-            <PageDesigner {preview} {page} {file} onapplied={applyPreview} onopen={select} />
+            <PageDesigner {preview} {page} {file} onapplied={applyPreview} onopen={select} onnewpart={newPartForDrop} />
           {:else if page}
             <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
               <div class="titlebar">
@@ -1929,7 +2121,7 @@
       backend={projectFile?.settings?.stack.backend ?? null}
       error={newCustomError}
       onsubmit={addCustom}
-      oncancel={() => (newCustom = null)}
+      oncancel={() => endNewCustom(null)}
     />
   </PartGuard>
 {/if}
@@ -2603,6 +2795,11 @@
     flex-direction: column;
     gap: 12px;
     min-width: 0;
+  }
+
+  main.edge {
+    padding: 0;
+    gap: 0;
   }
 
   .placeholder {

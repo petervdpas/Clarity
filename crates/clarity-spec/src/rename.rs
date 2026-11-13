@@ -255,6 +255,11 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                 }
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => expr(text, name, found),
+            StmtKind::Toast { args, .. } => {
+                for arg in args {
+                    expr(&arg.value, name, found);
+                }
+            }
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
                     expr(question, name, found);

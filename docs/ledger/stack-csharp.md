@@ -5,13 +5,13 @@ Status: built. `stack csharp ...`: a net10.0 project on the Clarity NuGets; desk
 Progress: 90%
 
 ## Code
-- Generators: `crates/clarity-gen/src/csharp/` (logic.rs 1551 lines, windows.rs 897 (view models), mod.rs 787, model.rs 530, cli.rs 323, names.rs 262, parts.rs 221, plus web.rs, texts.rs (`.resx` and a typed `Texts`), themes.rs (theme JSON))
-- Runtimes: C# `runtimes/csharp` (Version 0.92.0, `Directory.Build.props:9`; `Clarity.slnx`). 13 NuGets: Clarity.Runtime, .Sqlite, .PostgreSql, .MySql, .SqlServer, .Engines (Wasmtime 48), Clarity.Ui, Clarity.Ui.Server, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth
-  - `Clarity.Runtime/`: Db, Query, Sql, Dialect, Record, EditBus, Undo, Backup, Signin, Secrets, Files, Pictures, RecordFiles, Http, Zip, Cli, Formats, WindowViewModel, PartState, `Program/` (ProgramWire, Handlers, Members, OpenWindow, WindowMarkup, AppFiles)
+- Generators: `crates/clarity-gen/src/csharp/` (logic.rs 1551 lines, windows.rs 898 (view models), mod.rs 811, model.rs 530, cli.rs 383, names.rs 262, parts.rs 221, plus web.rs, texts.rs (`.resx` and a typed `Texts`), themes.rs (theme JSON))
+- Runtimes: C# `runtimes/csharp` (Version 0.96.0, `Directory.Build.props:9`, tagged; `Clarity.slnx`). 14 NuGets: Clarity.Runtime, .Sqlite, .PostgreSql, .MySql, .SqlServer, .Engines (Wasmtime 48), Clarity.Ui, Clarity.Ui.Server, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth, Clarity.AppMcp (`runtimes/csharp/Clarity.AppMcp`, `<program> mcp`; see [app-mcp](app-mcp.md))
+  - `Clarity.Runtime/`: Db, Query, Sql, Dialect, Record, EditBus, Undo, Backup, Signin, Secrets, Files, Pictures, RecordFiles, Http, Zip, Cli, Formats, Agents, WindowViewModel, PartState, `Program/` (ProgramWire, Handlers, Members, OpenWindow, WindowMarkup, AppFiles)
   - `Clarity.Ui/`: DesktopWindow.cs and `Custom/` (CustomPart, CustomParts, Drawing); the drawing is the Rust Clarity.UI library in the package's native folder
   - `Clarity.Ui.Server/WebServer.cs`: its own socket server for the browser files and the wire
-- Desktop program: `<Name>.csproj` WinExe on Clarity.Ui; one C# file per module, a view model per window, `Windows/*.cxaml`, `Apps/*.cxaml`, theme JSON, `.resx` (`csharp/mod.rs:1-9`). `ClarityRuntime` (or CLARITY_RUNTIME) switches PackageReference to the repository's projects (`csharp/mod.rs:301-312`)
-- Web: a second program, `out/web/` with `App/` (library on Clarity.Runtime) and `Server/` (on Clarity.Ui.Server) (`csharp/web.rs`, `crates/clarity-gen/src/lib.rs:953`); see [web-target](web-target.md)
+- Desktop program: `<Name>.csproj` WinExe on Clarity.Ui; one C# file per module, a view model per window, `Windows/*.cxaml`, `Apps/*.cxaml`, theme JSON, `.resx` (`csharp/mod.rs:1-9`). `ClarityRuntime` (or CLARITY_RUNTIME) switches PackageReference to the repository's projects (`csharp/mod.rs:317-359`)
+- Web: a second program, `out/web/` with `App/` (library on Clarity.Runtime) and `Server/` (on Clarity.Ui.Server) (`csharp/web.rs`, `crates/clarity-gen/src/lib.rs:974-980`); see [web-target](web-target.md)
 - Custom parts: `nuget` and `dll` libraries become Clarity.UI custom controls (`csharp/parts.rs:26, 56, 138`)
 - Docs: manual/stacks.csharp.md
 
@@ -32,10 +32,9 @@ Progress: 90%
 - The person's keys have two writers: Clarity.UI (`runtimes/rust-ui/src/window/mod.rs:104-109`) and `PersonKeys` on every settings save (`csharp/model.rs:287`, `PersonKeys.cs:25`)
 - HTTP timeout says "no answer within 30 seconds" (`Http.cs:260`); the others pass the library's text
 - One-letter keys counted in UTF-16 units (`KeyRules.cs:79`); Rust counts chars (`runtimes/rust/src/keys.rs:107`)
-- `csharp/logic.rs:557` says custom parts are refused "until CP1 builds them"; they are generated
+- `csharp/logic.rs:558` says custom parts are refused "until CP1 builds them"; they are generated
 - Conformance "about" texts still name Avalonia (custom-parts.json, forms.json, tables.json, table-order.json, display.json, themes.json)
-- `.github/workflows/release-csharp-runtime.yml` says eleven packages; it publishes 13. DESIGN says eight or nine
-- Runtime changed by the sign-in work (`Clarity.Auth/Signins.cs`) without a bump (CONFLICTING 5)
+- `.github/workflows/release-csharp-runtime.yml` says eleven packages; it publishes 14 (`release-csharp-runtime.yml:198`).
 
 ## Decisions
 - 2026-10-19: runtimes are NuGets, not copied sources. User: "we'll need to make that one into a nuget too... and there where others which I said should be nugets"

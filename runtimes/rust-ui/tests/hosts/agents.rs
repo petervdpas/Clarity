@@ -214,13 +214,18 @@ const FILES: clarity_ui::AppFiles = clarity_ui::AppFiles { windows: &[("Main", M
 
 /// A screen with the app's window, and the grant `title` asked over it; what the person chooses goes to the cell.
 fn granting(title: &str) -> (clarity_ui::Screen, std::rc::Rc<std::cell::Cell<Option<clarity_ui::dialogs::GrantChoice>>>) {
+    granting_lines(title, vec!["Adds a customer".into(), "name: Ada".into()])
+}
+
+/// As `granting`, with the grant's own lines (what the command does, then each value given).
+fn granting_lines(title: &str, lines: Vec<String>) -> (clarity_ui::Screen, std::rc::Rc<std::cell::Cell<Option<clarity_ui::dialogs::GrantChoice>>>) {
     let program: Arc<dyn Program> = Arc::new(Offering::default());
     let mut screen = clarity_ui::Screen::new(Box::new(clarity_ui::window::WindowStack::start(program, FILES)), FILES.look(false));
     screen.resize(800.0, 500.0, 1.0);
     let chosen = std::rc::Rc::new(std::cell::Cell::new(None));
     let given = chosen.clone();
     let title = title.to_string();
-    screen.act_root::<clarity_ui::window::WindowStack, _>(|stack, cx| stack.ask_grant(title, vec!["Adds a customer".into(), "name: Ada".into()], Box::new(move |choice| given.set(Some(choice))), cx));
+    screen.act_root::<clarity_ui::window::WindowStack, _>(|stack, cx| stack.ask_grant(title, lines, Box::new(move |choice| given.set(Some(choice))), cx));
     (screen, chosen)
 }
 
@@ -245,6 +250,54 @@ fn escape_refuses() {
     let (mut screen, chosen) = granting("Claude wants to read Shop");
     screen.key_pressed(clarity_ui::input::KeyInput::plain(clarity_ui::input::Key::Escape));
     assert_eq!(chosen.get(), Some(clarity_ui::dialogs::GrantChoice::Refuse));
+}
+
+/// A value as long as a review's notes: the dialog stays as large as a
+/// window's dialog is, its buttons on the screen, and the lines scroll in it.
+fn long_notes() -> Vec<String> {
+    let notes: Vec<String> = (1..=120).map(|n| format!("- note line {n}: what the entry says against what the code does")).collect();
+    vec!["Keeps the review of one entry".into(), format!("notes: {}", notes.join("\n"))]
+}
+
+#[test]
+fn a_long_value_scrolls_inside_a_dialog_that_keeps_its_size() {
+    let (screen, _) = granting_lines("Claude wants to change Shop", long_notes());
+    let d = dialog(&screen);
+    let panel = d.panel();
+    assert!(panel.y >= 0.0 && panel.bottom() <= 500.0, "the dialog stays on the screen: {panel:?}");
+    assert!(panel.height <= 420.0, "the dialog keeps about a dialog's size: {panel:?}");
+    for b in d.buttons() {
+        let r = b.node().bounds;
+        assert!(r.y >= panel.y && r.bottom() <= panel.bottom(), "{} shows in the dialog: {r:?} in {panel:?}", b.text);
+    }
+    let text = d.text();
+    assert!(text.max_scroll() > 0.0, "the lines are more than the dialog shows");
+    assert_eq!(text.scroll_y(), 0.0, "it opens at the top");
+    let area = text.node().bounds;
+    assert!(area.y >= panel.y && area.bottom() <= panel.bottom(), "the lines' area is inside the dialog");
+}
+
+#[test]
+fn the_wheel_and_the_keys_scroll_the_lines_and_refuse_keeps_the_focus() {
+    let (mut screen, chosen) = granting_lines("Claude wants to change Shop", long_notes());
+    let area = dialog(&screen).text().node().bounds;
+    screen.wheel(area.x + 20.0, area.y + 20.0, 0.0, 60.0, clarity_ui::input::Modifiers::NONE);
+    assert_eq!(dialog(&screen).text().scroll_y(), 60.0, "the wheel scrolls the lines");
+    screen.key_pressed(clarity_ui::input::KeyInput::plain(clarity_ui::input::Key::End));
+    let text = dialog(&screen).text();
+    assert_eq!(text.scroll_y(), text.max_scroll(), "End goes to the last line");
+    screen.key_pressed(clarity_ui::input::KeyInput::plain(clarity_ui::input::Key::Home));
+    assert_eq!(dialog(&screen).text().scroll_y(), 0.0, "Home goes to the first");
+    screen.key_pressed(clarity_ui::input::KeyInput::plain(clarity_ui::input::Key::PageDown));
+    assert!(dialog(&screen).text().scroll_y() > 0.0, "Page Down scrolls");
+    assert_eq!(screen.focused(), Some(dialog(&screen).first()), "Refuse keeps the focus");
+    assert_eq!(chosen.get(), None, "no key chose anything");
+}
+
+#[test]
+fn a_short_grant_shows_all_its_lines_without_scrolling() {
+    let (screen, _) = granting("Claude wants to change Shop");
+    assert_eq!(dialog(&screen).text().max_scroll(), 0.0);
 }
 
 /// The program across the wire, as every stack's desktop program is: Clarity.UI's
@@ -284,15 +337,15 @@ fn an_agent_s_change_shows_in_the_open_window_with_a_note() {
     let before = *app.returned.lock().unwrap();
     screen.act_root::<clarity_ui::window::WindowStack, _>(|stack, cx| stack.agent_changed("Claude: Added the project Grace.".into(), 7, cx));
     assert_eq!(*app.returned.lock().unwrap(), before + 1, "the window read its data again");
-    let notes = screen.find::<clarity_ui::window::WindowStack>().unwrap().notes();
+    let notes = screen.find::<clarity_ui::window::WindowStack>().unwrap().toasts();
     assert!(notes.iter().any(|n| n.text.show() == "Claude: Added the project Grace."), "{notes:?}");
     // The note's Undo takes the change's step back, and the window reads its data again.
-    let list = screen.find::<clarity_ui::window::NoteList>().unwrap();
+    let list = screen.find::<clarity_ui::window::ToastList>().unwrap();
     assert_eq!(list.actions().last().cloned().flatten().as_deref(), Some("Undo"));
     let index = list.actions().len() - 1;
-    let id = screen.find::<clarity_ui::window::NoteList>().map(|n| n.node().id()).unwrap();
+    let id = screen.find::<clarity_ui::window::ToastList>().map(|n| n.node().id()).unwrap();
     screen.act(id, |element, cx| {
-        if let Some(list) = element.as_any_mut().downcast_mut::<clarity_ui::window::NoteList>() {
+        if let Some(list) = element.as_any_mut().downcast_mut::<clarity_ui::window::ToastList>() {
             list.act(index, cx);
         }
     });
@@ -301,12 +354,35 @@ fn an_agent_s_change_shows_in_the_open_window_with_a_note() {
     assert_eq!(*app.returned.lock().unwrap(), before + 2, "and the window read its data again");
 }
 
+/// An agent's toasts have a lifespan: they go by themselves, so a run of
+/// changes never fills the window; the Undo goes with the toast.
+#[test]
+fn an_agent_s_toasts_go_by_themselves() {
+    let program: Arc<dyn Program> = Arc::new(Offering::default());
+    let mut screen = clarity_ui::Screen::new(Box::new(clarity_ui::window::WindowStack::start(program, FILES)), FILES.look(false));
+    screen.resize(800.0, 500.0, 1.0);
+    let now = std::time::Instant::now();
+    let clock = std::rc::Rc::new(std::cell::Cell::new(now));
+    let read = clock.clone();
+    screen.now = Box::new(move || read.get());
+    screen.act_root::<clarity_ui::window::WindowStack, _>(|stack, cx| stack.agent_changed("Claude: Added the project Grace.".into(), 7, cx));
+    screen.act_root::<clarity_ui::window::WindowStack, _>(|stack, cx| stack.agent_said("Codex was turned away.".into(), cx));
+    let shown = |screen: &clarity_ui::Screen| screen.find::<clarity_ui::window::WindowStack>().unwrap().toasts().len();
+    assert_eq!(shown(&screen), 2);
+    clock.set(now + clarity_ui::window::messages::AGENT_TOAST_DURATION - std::time::Duration::from_secs(1));
+    screen.wake_due(clock.get());
+    assert_eq!(shown(&screen), 2, "they stay a while, to read and to Undo");
+    clock.set(now + clarity_ui::window::messages::AGENT_TOAST_DURATION);
+    screen.wake_due(clock.get());
+    assert_eq!(shown(&screen), 0, "then they go by themselves");
+}
+
 #[test]
 fn the_note_says_who_did_what() {
     let ran = AgentRan { text: "Added the project Grace.\nmore".into(), refused: false, step: 0 };
-    assert_eq!(agents::change_note("Claude", "project-add", &ran), "Claude: Added the project Grace.");
+    assert_eq!(agents::change_toast("Claude", "project-add", &ran), "Claude: Added the project Grace.");
     let silent = AgentRan { text: String::new(), refused: false, step: 0 };
-    assert_eq!(agents::change_note("", "review-set", &silent), "An agent ran review-set");
+    assert_eq!(agents::change_toast("", "review-set", &silent), "An agent ran review-set");
 }
 
 /// One agent more than the app serves at once is refused, and the open app

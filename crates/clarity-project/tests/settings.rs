@@ -473,22 +473,32 @@ fn picked_paths_inside_the_project_folder_become_relative() {
     assert_eq!(project_path(file, Path::new("/work/examples/shopping/x")), "/work/examples/shopping/x");
 }
 
-/// The project files in docs/LANGUAGE.md are read like real ones.
+/// The project files the manual shows are read like real ones.
 #[test]
-fn the_language_reference_project_files_are_valid() {
-    const DOC: &str = include_str!("../../../docs/LANGUAGE.md");
+fn the_manual_s_project_files_are_valid() {
     let mut found = 0;
-    for block in DOC.split("```").skip(1).step_by(2) {
+    for page in ["project.file", "start.complete-example"] {
+        let doc = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../manual/{page}.md"))).unwrap();
+        found += valid_project_files(&doc);
+    }
+    assert!(found >= 2, "the manual shows {found} project files");
+}
+
+/// Each project file among `doc`'s code blocks, parsed and validated; how many there were.
+fn valid_project_files(doc: &str) -> usize {
+    let mut found = 0;
+    for block in doc.split("```").skip(1).step_by(2) {
         // The line of the opening fence: its language, as `clarity`.
-        let block = block.split_once('\n').map_or("", |(_, code)| code);
-        if !block.starts_with("project ") {
+        // A ```text block is syntax to read, not a whole project file.
+        let (fence, block) = block.split_once('\n').unwrap_or(("", ""));
+        if fence.trim() == "text" || !block.starts_with("project ") {
             continue;
         }
         let settings = parse(block).unwrap_or_else(|e| panic!("{e} in\n{block}"));
         assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
         found += 1;
     }
-    assert_eq!(found, 3);
+    found
 }
 
 #[test]

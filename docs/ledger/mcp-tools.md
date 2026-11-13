@@ -5,36 +5,32 @@ Status: partial. One set of design-and-generate tools for every agent (the IDE's
 Progress: 70%
 
 ## Code
-- Spec: structural edits shared with the designer (`clarity_spec::edit`); field renames `crates/clarity-spec/src/field_rename.rs`
-- Tools: `crates/clarity-tools/src/lib.rs` (66 tools, none builds, runs or touches a database; general tools :807-920; `write_file` refuses `.cxaml` and declaration-written files :491-499; `design` reads `docs/DESIGN.md` by `include_str!` :33, `reference` reads `docs/LANGUAGE.md` :30), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`
-- MCP server: `crates/clarity-mcp/src/lib.rs` on `rmcp` over stdio (`LEFT_OUT` :27, `WITHOUT_PROJECT` :31, `WHEN_OFF` :35, `for_turn` :101, call log without file contents :126)
-- CLI: `clarity mcp [--turn <file>]` (`crates/clarity-cli/src/main.rs:318`); the open project from `ide.json` (`crates/clarity-project/src/ide.rs`)
+- Spec: structural edits shared with the designer (`clarity_spec::edit`); field renames `crates/clarity-spec/src/field_rename.rs`; window and view renames `page_rename.rs` (`rename` kinds window and view, `crates/clarity-tools/src/lib.rs:341-348`); every edit fitted, parts cut to what holds them (`fit.rs`, called from `crates/clarity-tools/src/edits.rs:166-177`)
+- Tools: `crates/clarity-tools/src/lib.rs` (64 tools, none builds, runs or touches a database; general tools :818-941; `write_file` refuses `.cxaml`, declaration-written files and `agent/guidance.md` :500-514; `manual` reads the manual's pages, the only documentation agents read; the `design` and `reference` tools went with DESIGN.md and LANGUAGE.md on 2026-11-13), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/guidance.rs` (`guidance`, `set_guidance`; see [app-mcp](app-mcp.md)), `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`
+- MCP server: `crates/clarity-mcp/src/lib.rs` on `rmcp` over stdio (`LEFT_OUT` :27, `WITHOUT_PROJECT` :31, `WHEN_OFF` :35, `for_turn` :101, call log without file contents :125-131)
+- CLI: `clarity mcp [--turn <file>]` (`crates/clarity-cli/src/main.rs:320`); the open project from `ide.json` (`crates/clarity-project/src/ide.rs`)
+- Repo setup: `.mcp.json` names `./mcp.sh`, which builds `clarity-cli` when behind and runs `clarity mcp` (README.md:125)
 - Claude Code hook: `~/.claude/hooks/clarity-tools-only.sh`, user-level, outside the repository; denies Write/Edit/MultiEdit on `.clarity` and `.cxaml` outside the Clarity repo
 - IDE: `app/src-tauri/src/agent.rs` keeps only build, backups, show window, show diagram
 - Docs: manual/ai.mcp.md, manual/ai.agent.md
 
 ## Tests
-- `crates/clarity-tools/src/lib.rs:1430` (`the_shared_tools_design_and_generate_only`); unit tests in `structural/model.rs`, `windows.rs`, `frame.rs`, `steps.rs`
+- `crates/clarity-tools/src/lib.rs:1462` (`the_shared_tools_design_and_generate_only`); unit tests in `structural/model.rs`, `windows.rs`, `frame.rs`, `steps.rs`
 - `crates/clarity-tools/tests/turn.rs`, `crates/clarity-mcp/tests/server.rs`, `crates/clarity-cli/tests/mcp.rs`
 - conformance: none
 
 ## Open
-- `design` tool and the ledger: NOT BUILT. `crates/clarity-tools/src/lib.rs:33` embeds `docs/DESIGN.md` (and :1387 tests its roadmap section); removing DESIGN.md breaks the build until the tool reads the ledger.
 - Questionnaire (MCP-PLAN step 7): NOT BUILT. A tool the agent calls for a new app; a separate form program on Clarity.UI started by `clarity mcp`; answers into README.md under fixed headings; same form in the IDE agent; texts from translations.
 - Forms to clarify with decision trees: NOT BUILT. Simple questions as the protocol's own form (MCP elicitation, ACP's equivalent); rich form in Clarity's own centered pop-up when Clarity runs.
 - Who writes the decision trees (Clarity per kind of question, or the agent per case): needs decision.
 - Whether clarify-form answers are kept in the project or only go back to the agent: needs decision.
 - Where the questionnaire falls beside clarity-pdf ([reports-pdf](reports-pdf.md)): the user's choice.
-- A view's tells in the IDE designer (the view's Tells, the view line's handlers): NOT BUILT; the tools and edits have them.
 - Tool schemas listing existing entities, windows and parts as choices: PARTIAL. Only fixed lists are enums.
 - `diagram_view` gives the class view too: PARTIAL; see [diagrams](diagrams.md).
 - The Claude Code hook: PARTIAL. Nothing in the repository installs or documents it; a shell write still slips past it.
 
 ## Conflicts
 - The plain types window data can hold are written twice: `PLAIN_DATA_TYPES` in `crates/clarity-tools/src/structural/windows.rs` and `PLAIN_TYPES` in `runtimes/web/src/screen/windowData.ts`; equal today.
-- DESIGN.md:2406-2413 (17.3) lists spec_for, directives_for, module_map, check(diff), tdd_state, explain_violation; `crates/clarity-mcp/src/lib.rs` serves the shared tools.
-- DESIGN.md:2439 describes `clarity-tools` as running native toolchains; it holds the agents' design tools, and runs nothing.
-- DESIGN roadmap A1 (DESIGN.md:2534) and M8 (:2547) show no status; the server is built.
 
 ## Decisions
 - 2026-11-09: an MCP server in a crate plus `clarity mcp`. User: "I think we need to make a clarity-mcp!"
@@ -55,9 +51,10 @@ Progress: 70%
 - 2026-11-12: `add_data` declares what the designer's Data panel does: a record of an entity or a record type, a list of them, or a value (a plain type or an enum); it took only entities, which blocked the maintenance example. Test `data_fields_and_tabs_go_on_by_name`. User: "A, fix the tool... and we continue tomorrow, bc it wont be in this instance"
 
 - 2026-11-12: `change_field` with only `length` (or only `precision` or `scale`) keeps the field's type and changes its size; it said "nothing changed". Test `entities_and_fields_by_name`.
-- 2026-11-12: a view's tells through the tools: `add_tell` and `remove_tell` on a view (edit `SetPageTell`), and `wire_event` with `view` wires a tell on the content's view line with a handler that takes the tell's values (edit `SetViewTell`). Asked for the maintenance review slide-out as a view that tells its window `saved`. Tests `a_view_tells_and_its_window_hears_it` (frame.rs), `the_designer_edits_what_a_view_tells_and_who_hears_it` (clarity-spec tests/content.rs). The IDE designer has no property for either yet.
+- 2026-11-12: a view's tells through the tools: `add_tell` and `remove_tell` on a view (edit `SetPageTell`), and `wire_event` with `view` wires a tell on the content's view line with a handler that takes the tell's values (edit `SetViewTell`). Asked for the maintenance review slide-out as a view that tells its window `saved`. Tests `a_view_tells_and_its_window_hears_it` (frame.rs), `the_designer_edits_what_a_view_tells_and_who_hears_it` (clarity-spec tests/content.rs).
 - 2026-11-12: a refused edit names the file and line of the error it would add (`refusal` in `edits.rs`); `remove_data` of data the code still uses says the code uses it. Test `data_fields_and_tabs_go_on_by_name`.
 - 2026-11-12: Clarity's own words of parts in a sidebar or footer (a tree's Expand and Collapse) were added but then warned "not used anywhere": the check looked only at a window's grid. It walks every list of parts now (`part_lists` in `translations.rs`). Test `a_tree_in_a_sidebar_uses_clarity_s_own_words` (clarity-spec tests/trees.rs).
+- 2026-11-13: a view's tells BUILT in the designer (`app/src/lib/PageTells.svelte`, `ViewLineTells.svelte` in `PageProperties.svelte`; test `app/src/lib/viewTells.test.ts`); see [by-hand](by-hand.md).
 
 ## Was
 - DESIGN 17.3, roadmap A1, M8 (MCP half)

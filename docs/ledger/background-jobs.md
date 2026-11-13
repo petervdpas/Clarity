@@ -7,7 +7,7 @@ Progress: 0%
 ## Code
 - none. Designed in APP-CAPABILITIES-PLAN.md step 6.
 - What it builds on: actions with declared effects and no screen, handlers running one at a time, row versions ([row-versions](row-versions.md)), `me` ([signin](signin.md)), the progress part.
-- Docs: none. Planned: manual `code.jobs.md` registered in `crates/clarity-tools/src/manual.rs`; LANGUAGE.md; agent reference.
+- Docs: none. Planned: manual `code.jobs.md` registered in `crates/clarity-tools/src/manual.rs`.
 
 ## Tests
 - none. Planned: `conformance/jobs.json` (the limit holds, `on done` per call, `on failed` without stopping the rest, `on finished` once, `stop`).
@@ -19,7 +19,7 @@ Progress: 0%
 - A run runs as the person who started it: `me` is that person, `allow when` checked at `start`, signing out stops the person's runs: NOT BUILT.
 - Per runtime: Rust threads with a counting gate, Go goroutines with a buffered channel, C# `Task` with `SemaphoreSlim`, C and C++ a small thread pool; one gate for data, files, settings and libraries; served programs count the limit across the server; a CLI command waits for its runs: NOT BUILT.
 - Designer: `at most` in the action's properties; wiring `on done`, `on failed`, `on finished`: NOT BUILT.
-- Scheduled work (`every day at 08:00`) and runs that outlive their window or start from `on start`: NOT BUILT, open questions (APP-CAPABILITIES-PLAN.md:397, :414).
+- Scheduled work (`every day at 08:00`) and runs that outlive their window or start from `on start`: NOT BUILT, open questions (APP-CAPABILITIES-PLAN.md:398, :417).
 - The `examples/erasure` example (`stack go desktop cli`), acceptance test of all six steps: NOT BUILT (APP-CAPABILITIES-PLAN.md "The example").
 - Open questions: `on done` in the order calls end (proposed) or list order; `me` in a run with no person; later, database work and safe library functions outside the gate.
 

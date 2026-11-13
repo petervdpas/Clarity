@@ -73,12 +73,12 @@ pub enum AgentWork {
     Grant { asked: GrantAsked, app: String, reply: Sender<Decision> },
     /// Run the command line `line`; what it says goes to `said`. `change` names
     /// the agent and the command when it changes the app: the windows read
-    /// their data again after it, and a note says what the agent did.
+    /// their data again after it, and a toast says what the agent did.
     Call { line: Vec<String>, said: Sender<CallSaid>, change: Option<(String, String)> },
     /// What agents do changed (`agent_activity`): the windows draw it again.
     Changed,
     /// An agent was turned away, as the app serves so many at once already
-    /// (`agents at most`): the windows say so with this note.
+    /// (`agents at most`): the windows say so with this toast.
     TurnedAway(String),
 }
 
@@ -88,7 +88,7 @@ impl std::fmt::Debug for AgentWork {
             AgentWork::Grant { asked, .. } => write!(f, "Grant({:?})", asked.title("")),
             AgentWork::Call { line, .. } => write!(f, "Call({line:?})"),
             AgentWork::Changed => write!(f, "Changed"),
-            AgentWork::TurnedAway(note) => write!(f, "TurnedAway({note})"),
+            AgentWork::TurnedAway(toast) => write!(f, "TurnedAway({toast})"),
         }
     }
 }
@@ -227,8 +227,8 @@ impl Host for Relayed {
     }
 }
 
-/// The note in the app's window after an agent's change: who, and what the command said.
-pub fn change_note(agent: &str, tool: &str, ran: &AgentRan) -> String {
+/// The toast in the app's window after an agent's change: who, and what the command said.
+pub fn change_toast(agent: &str, tool: &str, ran: &AgentRan) -> String {
     let agent = if agent.trim().is_empty() { translate("agentSomeone", "An agent") } else { agent.to_string() };
     match ran.text.lines().next().filter(|l| !l.trim().is_empty()) {
         Some(what) => translate("agentDid", "{agent}: {what}").replace("{agent}", &agent).replace("{what}", what),

@@ -86,6 +86,37 @@
           left: 100%;
         }
       }
+      /* A rebuild in development: the build's lines under the name, the newest at the bottom. */
+      .log {
+        display: none;
+      }
+      body.building .card {
+        grid-template-rows: auto 1fr auto;
+        row-gap: 12px;
+      }
+      body.building .logo svg {
+        width: 64px;
+        height: 64px;
+      }
+      body.building .card {
+        grid-template-columns: 64px 1fr;
+      }
+      body.building .log {
+        grid-column: 1 / 3;
+        margin: 0;
+        padding: 8px 10px;
+        overflow: hidden;
+        background: #0d0f13;
+        border: 1px solid #2c313a;
+        border-radius: 4px;
+        color: #c9ced6;
+        font: 11px/1.45 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
       @media (prefers-reduced-motion: reduce) {
         .bar::after {
           animation: none;
@@ -102,6 +133,7 @@
         <p class="tagline">One language, built on every stack</p>
         <p class="version" id="version"></p>
       </div>
+      <pre class="log" id="log" aria-live="polite"></pre>
       <div class="foot">
         <span id="status">Starting</span>
         <span class="bar"></span>
@@ -116,6 +148,25 @@
       // Clarity says what loads now.
       window.__clarity_splash_status = (text) => {
         document.getElementById("status").textContent = text;
+      };
+      // A rebuild in development: the splash shows the build, line for line; the last ones show.
+      window.__clarity_splash_build = () => {
+        document.body.classList.add("building");
+        document.getElementById("status").textContent = "Building";
+      };
+      if (window.__clarity_splash_building) window.__clarity_splash_build();
+      // Clarity sends every line so far each time, so none is lost while the page loads.
+      window.__clarity_splash_lines = (lines) => {
+        window.__clarity_splash_build();
+        const log = document.getElementById("log");
+        log.replaceChildren(
+          ...lines.map((text) => {
+            const line = document.createElement("div");
+            line.textContent = text;
+            return line;
+          }),
+        );
+        if (lines.length) document.getElementById("status").textContent = lines[lines.length - 1];
       };
     </script>
   </body>

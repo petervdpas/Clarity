@@ -28,11 +28,11 @@ pub const LEFT_OUT: [&str; 7] = ["build", "build_output", "list_backups", "backu
 
 /// The tools that work without an open project: Clarity's documents, its
 /// parts, and making a new project.
-pub const WITHOUT_PROJECT: [&str; 5] = ["manual", "reference", "design", "parts", "new_project"];
+pub const WITHOUT_PROJECT: [&str; 3] = ["manual", "parts", "new_project"];
 
 /// The tools that still answer when the person turned outside agents off:
 /// Clarity's documents and its parts, which touch no project.
-pub const WHEN_OFF: [&str; 4] = ["manual", "reference", "design", "parts"];
+pub const WHEN_OFF: [&str; 2] = ["manual", "parts"];
 
 /// What every other tool answers while outside agents are turned off.
 pub const NOT_ALLOWED: &str = "Clarity does not allow outside agents to work on the project now: the person turned it \

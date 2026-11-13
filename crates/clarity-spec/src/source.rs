@@ -9,7 +9,7 @@ use crate::edit::{EditError, EditResult};
 use crate::lexer::lex;
 
 /// The words a declaration that can be edited as text starts with.
-const DECL_WORDS: [&str; 12] = ["page", "app", "entity", "enum", "function", "action", "code", "theme", "engine", "part", "library", "mapping"];
+const DECL_WORDS: [&str; 14] = ["page", "app", "entity", "enum", "function", "action", "code", "theme", "engine", "part", "library", "mapping", "toast", "command"];
 
 fn fail<T>(message: impl Into<String>) -> EditResult<T> {
     Err(EditError(message.into()))

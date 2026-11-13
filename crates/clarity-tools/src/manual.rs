@@ -7,34 +7,49 @@
 
 /// Every topic, in the order of the manual. A topic file that is not listed
 /// here fails the tests, and so does a listed one that the index leaves out.
-const TOPICS: [(&str, &str); 41] = [
+const TOPICS: [(&str, &str); 56] = [
     ("start.overview", include_str!("../../../manual/start.overview.md")),
+    ("start.how-it-works", include_str!("../../../manual/start.how-it-works.md")),
     ("start.first-project", include_str!("../../../manual/start.first-project.md")),
+    ("start.complete-example", include_str!("../../../manual/start.complete-example.md")),
     ("project.file", include_str!("../../../manual/project.file.md")),
     ("project.run-build", include_str!("../../../manual/project.run-build.md")),
     ("project.signin", include_str!("../../../manual/project.signin.md")),
     ("project.agents", include_str!("../../../manual/project.agents.md")),
     ("setup.tools", include_str!("../../../manual/setup.tools.md")),
     ("design.windows", include_str!("../../../manual/design.windows.md")),
-    ("design.parts", include_str!("../../../manual/design.parts.md")),
     ("design.frame", include_str!("../../../manual/design.frame.md")),
+    ("design.parts", include_str!("../../../manual/design.parts.md")),
     ("design.custom-parts", include_str!("../../../manual/design.custom-parts.md")),
     ("design.sound", include_str!("../../../manual/design.sound.md")),
     ("design.video", include_str!("../../../manual/design.video.md")),
     ("design.text", include_str!("../../../manual/design.text.md")),
-    ("code.language", include_str!("../../../manual/code.language.md")),
+    ("parts.text", include_str!("../../../manual/parts.text.md")),
+    ("parts.input", include_str!("../../../manual/parts.input.md")),
+    ("parts.containers", include_str!("../../../manual/parts.containers.md")),
+    ("parts.data", include_str!("../../../manual/parts.data.md")),
+    ("parts.graphics", include_str!("../../../manual/parts.graphics.md")),
+    ("parts.media", include_str!("../../../manual/parts.media.md")),
+    ("parts.time", include_str!("../../../manual/parts.time.md")),
+    ("parts.toolbox", include_str!("../../../manual/parts.toolbox.md")),
+    ("parts.signin", include_str!("../../../manual/parts.signin.md")),
+    ("code.modules", include_str!("../../../manual/code.modules.md")),
     ("code.handlers", include_str!("../../../manual/code.handlers.md")),
+    ("code.statements", include_str!("../../../manual/code.statements.md")),
+    ("code.expressions", include_str!("../../../manual/code.expressions.md")),
     ("code.functions", include_str!("../../../manual/code.functions.md")),
+    ("code.commands", include_str!("../../../manual/code.commands.md")),
     ("code.queries", include_str!("../../../manual/code.queries.md")),
-    ("code.data-events", include_str!("../../../manual/code.data-events.md")),
+    ("code.toasts", include_str!("../../../manual/code.toasts.md")),
     ("code.libraries", include_str!("../../../manual/code.libraries.md")),
     ("code.web-apis", include_str!("../../../manual/code.web-apis.md")),
     ("code.formats", include_str!("../../../manual/code.formats.md")),
     ("code.engines", include_str!("../../../manual/code.engines.md")),
     ("data.entities", include_str!("../../../manual/data.entities.md")),
+    ("data.settings", include_str!("../../../manual/data.settings.md")),
+    ("data.sources", include_str!("../../../manual/data.sources.md")),
     ("data.migrations", include_str!("../../../manual/data.migrations.md")),
     ("data.diagrams", include_str!("../../../manual/data.diagrams.md")),
-    ("data.sources", include_str!("../../../manual/data.sources.md")),
     ("data.pictures-files", include_str!("../../../manual/data.pictures-files.md")),
     ("languages", include_str!("../../../manual/languages.md")),
     ("themes", include_str!("../../../manual/themes.md")),
@@ -80,14 +95,8 @@ pub fn topic(id: &str) -> Option<Topic> {
     TOPICS.iter().find(|(name, _)| *name == id.trim()).map(|(id, text)| read(id, text))
 }
 
-/// The language reference, which the manual's pages link to.
-const REFERENCE: &str = include_str!("../../../docs/LANGUAGE.md");
-
-/// A page for the manual's window: a topic, or the language reference (`reference`).
+/// A page for the manual's window: a topic.
 pub fn page(id: &str) -> Result<String, String> {
-    if id.trim() == "reference" {
-        return Ok(REFERENCE.to_string());
-    }
     topic(id).map(|t| t.text.to_string()).ok_or_else(|| format!("the manual has no page {}", id.trim()))
 }
 
@@ -95,7 +104,9 @@ pub fn page(id: &str) -> Result<String, String> {
 /// The manual as a list for the agent: one line per topic with its id,
 /// title and summary.
 pub fn index() -> String {
-    topics().iter().map(|t| format!("- {}: {}. {}\n", t.id, t.title, t.summary)).collect()
+    // The summary up to its colon, where one has the details after it: enough to choose a page by.
+    let short = |summary: &str| summary.split_once(": ").map_or_else(|| summary.to_string(), |(head, _)| format!("{head}."));
+    topics().iter().map(|t| format!("- {}: {}. {}\n", t.id, t.title, short(&t.summary))).collect()
 }
 
 #[cfg(test)]
@@ -146,6 +157,11 @@ mod tests {
     fn every_link_leads_somewhere() {
         for t in topics() {
             for (at, _) in t.text.match_indices("](") {
+                // A `](` inside inline code on its line is code, not a link.
+                let line_start = t.text[..at].rfind('\n').map_or(0, |i| i + 1);
+                if t.text[line_start..at].matches('`').count() % 2 == 1 {
+                    continue;
+                }
                 let target = t.text[at + 2..].split(')').next().unwrap_or_default();
                 if target.starts_with("http") || target.starts_with('#') {
                     continue;
@@ -168,9 +184,9 @@ mod tests {
 
 
     #[test]
-    fn a_page_is_a_topic_or_the_reference() {
+    fn a_page_is_a_topic() {
         assert!(page("code.queries").unwrap().starts_with("# "));
-        assert!(page("reference").unwrap().starts_with("# The Clarity language"));
+        assert!(page("reference").is_err(), "the language reference is the manual's pages now");
         assert!(page("teleport").unwrap_err().contains("teleport"));
     }
 

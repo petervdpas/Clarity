@@ -284,7 +284,7 @@ impl PartHost for CallbackHost {
 
     fn say(&self, level: Level, text: Text) {
         if let Some(f) = self.callbacks.say {
-            let message = serde_json::to_string(&Message { level, text }).unwrap_or_default();
+            let message = serde_json::to_string(&Message { level, text, toast: None }).unwrap_or_default();
             let (a, al) = arg(Some(&message));
             unsafe { f(self.user(), a, al) };
         }

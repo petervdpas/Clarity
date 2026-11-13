@@ -39,6 +39,8 @@ struct PartState {
     std::optional<bool> snap;
     // Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
     std::optional<bool> connecting;
+    /// Whether a tree or tree table shows Expand all and Collapse all (`tree.foldButtons`), as a handler set it; none keeps the design.
+    std::optional<bool> fold_buttons;
     // Whether people resize the boxes of a canvas with `on resize` by their grip, as a handler set it; none is true.
     std::optional<bool> resizable;
     // What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
@@ -108,9 +110,22 @@ void window_closed(uint64_t instance);
 /// How a message shows: info goes away by itself.
 enum class Level { Info, Warning, Error };
 
+/// A toast the project declares (`toast saved`), as the screen shows it:
+/// its name, level (info, success, warning, error), how long it shows in
+/// milliseconds, its icon (empty for none) and its corner (topRight,
+/// topLeft, bottomRight, bottomLeft). An empty name is a plain message.
+struct Toast {
+    std::string name;
+    std::string level;
+    int lifespan = 0;
+    std::string icon;
+    std::string corner;
+};
+
 struct Message {
     Level level;
     Text text;
+    Toast toast{};
 };
 
 /// `open Window with name = value, ...`
@@ -235,6 +250,9 @@ public:
     /// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
     bool connecting(const std::string& part) const;
     void set_connecting(const std::string& part, bool value) { parts_[part].connecting = value; }
+    /// Whether a tree or tree table shows Expand all and Collapse all (`tree.foldButtons`), as its line says until a handler sets it.
+    bool fold_buttons(const std::string& part, bool design) const;
+    void set_fold_buttons(const std::string& part, bool value) { parts_[part].fold_buttons = value; }
     /// Whether people resize a canvas's boxes by their grip (`canvas.resizable`), true until a handler sets it.
     bool resizable(const std::string& part) const;
     void set_resizable(const std::string& part, bool value) { parts_[part].resizable = value; }
@@ -308,6 +326,8 @@ public:
     }
 
     void message(Level level, Text text) { messages_.push_back({level, std::move(text)}); }
+    /// `toast saved(...)`: the screen shows `text` as the toast `toast`.
+    void toast(Toast toast, Text text) { messages_.push_back({Level::Info, std::move(text), std::move(toast)}); }
     /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
     void copy(Text text) { copied_ = std::move(text); }
     /// The text value `data` shows `text`, translated and formatted by the screen.

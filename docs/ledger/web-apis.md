@@ -5,13 +5,13 @@ Status: partial. `http` calls from code with a reply that never throws, `rest` d
 Progress: 75%
 
 ## Code
-- Project file: `datasource name rest "url"` with `auth bearer|api-key|basic "env:..|setting:.."`, `paging page|offset|cursor|link ...`, `openapi "file"`, `pick ...`, `pick schema ...` (`crates/clarity-project/src/file.rs:474-540`)
-- OpenAPI: `crates/clarity-project/src/openapi.rs` (OpenAPI 3, Swagger 2), `refresh_apis` (`crates/clarity-project/src/lib.rs:1560`) writes `apis/<source>.clarity`
-- Spec: `ExprKind::Http` (`http get|post|put|patch|delete url [from source] [with body] [header ..] [query ..] [when ..] [every page]`), type `http reply`, effect `net`; records held inside records only in web-API entities (`code/check.rs:5252`); web-API entities are never found or saved (`code/check.rs:5336`)
+- Project file: `datasource name rest "url"` with `auth bearer|api-key|basic "env:..|setting:.."`, `paging page|offset|cursor|link ...`, `openapi "file"`, `pick ...`, `pick schema ...` (`datasource` `crates/clarity-project/src/file.rs:504-570`; the indented lines :219-271)
+- OpenAPI: `crates/clarity-project/src/openapi.rs` (OpenAPI 3, Swagger 2), `refresh_apis` (`crates/clarity-project/src/lib.rs:1650`) writes `apis/<source>.clarity`
+- Spec: `ExprKind::Http` (`http get|post|put|patch|delete url [from source] [with body] [header ..] [query ..] [when ..] [every page]`), type `http reply`, effect `net`; records held inside records only in web-API entities (`held_records`, `code/check.rs:5263`); web-API entities are never found or saved (`check_web_sources`, `code/check.rs:5168`, message :5207)
 - Generators: calls filled in before a stack is written (`crates/clarity-gen/src/calls.rs`); `when` per stack in each `logic.rs`
 - Runtimes: R `runtimes/rust/src/http.rs` (ureq, feature `http`; 1000-page cap :178); Go `runtimes/go/clarity/http.go`; C `runtimes/c/http/http.c` and C++ `runtimes/cpp/http/http.cpp` (libcurl, linked only when code calls out); C# `Clarity.Runtime/Http.cs`
-- IDE: `app/src/lib/ApiPanel.svelte` (pick operations and schemas, Paging form), `ApiView.svelte`, `app/src-tauri/src/apis.rs`; agent tools `api`, `pick_api` (`crates/clarity-tools/src/lib.rs:827-941`)
-- Docs: manual `code.web-apis.md`; LANGUAGE.md section 10 "Calling web APIs" (:2850), section 2 (`auth` :90)
+- IDE: `app/src/lib/ApiPanel.svelte` (pick operations and schemas, Paging form), `ApiView.svelte`, `app/src-tauri/src/apis.rs`; agent tools `api`, `pick_api` (`crates/clarity-tools/src/lib.rs:839-953`)
+- Docs: manual `code.web-apis.md`, `data.sources.md` (A web API, `auth`)
 
 ## Tests
 - `conformance/http.json` (calls against each runtime's own test server, paging on `/paged`, `/offset`, `/cursor`, `/linked`): run by R, Go, C, C++, C#
@@ -28,7 +28,6 @@ Progress: 75%
 - HTTP timeout text: C# says "no answer within 30 seconds" (`runtimes/csharp/Clarity.Runtime/Http.cs:260`); the others pass the library's text; `http.json` checks only the start.
 - The 30-second timeout is written in each runtime (CONFLICTING.md 4; equal today).
 - manual `code.web-apis.md` uses snake_case action names (:117-121; OpenAPI actions are camelCase, `crates/clarity-project/src/openapi.rs:260-283`) and a quoted text in `message` (:16), which must be a key.
-- LANGUAGE.md grammar summary (:3028-3149) lacks `http patch` and `every page`.
 
 ## Decisions
 - 2026-10-24: a call is an expression and never stops the handler: a failure is a reply with status 0 and why (DESIGN 5.23).

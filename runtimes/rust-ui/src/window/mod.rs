@@ -50,7 +50,7 @@ use crate::overlay::Overlay;
 use crate::parts::PartHost;
 
 pub use host::{Call, Effect, ProgramHost};
-pub use messages::{NoteList, SaidDialog};
+pub use messages::{ToastList, SaidDialog};
 pub use view::WindowView;
 
 /// What every window of a program shares, in every desktop window: the
@@ -295,7 +295,7 @@ pub fn view_of(files: AppFiles, host: &Rc<ProgramHost>, name: &str) -> WindowVie
 impl WindowStack {
     fn empty(running: Rc<Running>) -> WindowStack {
         let mut node = Node::new();
-        node.add(Box::new(NoteList::default()));
+        node.add(Box::new(ToastList::default()));
         WindowStack {
             node,
             running,
@@ -499,7 +499,7 @@ impl WindowStack {
                     self.early.push(Effect::Say(reply.messages));
                 }
             }
-            Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text }])),
+            Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text, toast: None }])),
         }
         self.open_window(&main, Map::new(), cx);
     }
@@ -522,11 +522,11 @@ impl WindowStack {
                         self.open_window(&open.window, open.with, cx.as_deref_mut());
                     }
                 }
-                Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text }])),
+                Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text, toast: None }])),
             }
         }
         if self.stack.is_empty() {
-            self.early.push(Effect::Say(vec![Message { level: Level::Error, text: unconnected.problem.clone() }]));
+            self.early.push(Effect::Say(vec![Message { level: Level::Error, text: unconnected.problem.clone(), toast: None }]));
             if let Some(window) = &unconnected.window {
                 self.open_window(window, Map::new(), cx.as_deref_mut());
             }
@@ -652,13 +652,13 @@ impl WindowStack {
         self.node.children().iter().position(|c| c.as_any().is::<WindowView>())
     }
 
-    fn notes_mut(&mut self) -> &mut NoteList {
-        self.node.children_mut().iter_mut().find_map(|c| c.as_any_mut().downcast_mut::<NoteList>()).expect("the stack holds its notes")
+    fn toasts_mut(&mut self) -> &mut ToastList {
+        self.node.children_mut().iter_mut().find_map(|c| c.as_any_mut().downcast_mut::<ToastList>()).expect("the stack holds its toasts")
     }
 
     /// The info messages on screen.
-    pub fn notes(&self) -> Vec<Message> {
-        self.node.children().iter().find_map(|c| c.as_any().downcast_ref::<NoteList>()).map(NoteList::notes).unwrap_or_default()
+    pub fn toasts(&self) -> Vec<Message> {
+        self.node.children().iter().find_map(|c| c.as_any().downcast_ref::<ToastList>()).map(ToastList::toasts).unwrap_or_default()
     }
 
     /// The warning or error its dialog shows now, and those waiting after it.
@@ -686,7 +686,7 @@ impl WindowStack {
         let reply = match self.running.program.open_window(name, with) {
             Ok(reply) => reply,
             Err(text) => {
-                self.early.push(Effect::Say(vec![Message { level: Level::Error, text }]));
+                self.early.push(Effect::Say(vec![Message { level: Level::Error, text, toast: None }]));
                 return;
             }
         };
@@ -730,7 +730,7 @@ impl WindowStack {
         let reply = match self.running.program.open_window(name, with) {
             Ok(reply) => reply,
             Err(text) => {
-                self.said.push(Message { level: Level::Error, text });
+                self.said.push(Message { level: Level::Error, text, toast: None });
                 return;
             }
         };
@@ -783,8 +783,8 @@ impl WindowStack {
                 return;
             }
             if let Some((opener, asked)) = self.opener.take() {
-                // What it said just before (a note its handler said with the close) goes with it to its opener.
-                let mut said = self.notes();
+                // What it said just before (a toast its handler said with the close) goes with it to its opener.
+                let mut said = self.toasts();
                 said.extend(effects.into_iter().flat_map(|e| if let Effect::Say(m) = e { m } else { Vec::new() }));
                 self.closed = Some(ApartClosed { opener, result, asked, said });
             }
@@ -845,9 +845,15 @@ impl WindowStack {
             match effect {
                 Effect::Say(messages) => {
                     for message in messages {
-                        if message.level == Level::Info {
+                        // A toast the project declares: its own lifespan and icon, whatever its level.
+                        if let Some(toast) = &message.toast {
+                            let ms = toast.lifespan.unwrap_or(messages::DEFAULT_TOAST_LIFESPAN_MS);
+                            let until = cx.now() + std::time::Duration::from_millis(u64::from(ms));
+                            let icon = toast.icon.as_deref().and_then(|name| from.as_ref().and_then(|host| crate::parts::PartHost::icon_path(host.as_ref(), name)));
+                            self.toasts_mut().add_toast(message, until, icon, cx);
+                        } else if message.level == Level::Info {
                             let until = cx.now() + messages::INFO_DURATION;
-                            self.notes_mut().add(message, until, cx);
+                            self.toasts_mut().add(message, until, cx);
                         } else {
                             self.said.push(message);
                         }
@@ -960,24 +966,24 @@ impl WindowStack {
 
     /// An AI agent changed the app's data (docs/ledger/app-mcp.md): the window on
     /// top reads it again, as when it is on top again (its `on return`), and a
-    /// note says what the agent did.
-    /// `step` is the database step of the change, which the note's Undo takes back; 0 for none.
-    pub fn agent_changed(&mut self, note: String, step: u64, cx: &mut Cx) {
+    /// toast says what the agent did.
+    /// `step` is the database step of the change, which the toast's Undo takes back; 0 for none.
+    pub fn agent_changed(&mut self, toast: String, step: u64, cx: &mut Cx) {
         self.reread(cx);
         let action = (step > 0).then(|| {
             let (program, undone) = (self.running.program.clone(), self.agent_undone.clone());
-            messages::NoteAction { word: crate::locale::translate("agentUndo", "Undo"), act: Rc::new(move |_cx: &mut Cx| *undone.borrow_mut() = Some(program.agent_undo(step))) }
+            messages::ToastAction { word: crate::locale::translate("agentUndo", "Undo"), act: Rc::new(move |_cx: &mut Cx| *undone.borrow_mut() = Some(program.agent_undo(step))) }
         });
-        // It stays until the person closes it: they may be away while the agent works.
-        let until = cx.now() + messages::KEPT_DURATION;
-        self.notes_mut().add_with(Message { level: Level::Info, text: Text::plain(note) }, until, action, cx);
+        // It goes by itself after a while, so a run of changes never fills the window.
+        let until = cx.now() + messages::AGENT_TOAST_DURATION;
+        self.toasts_mut().add_with(Message { level: Level::Info, text: Text::plain(toast), toast: None }, until, action, cx);
         cx.invalidate();
     }
 
-    /// A note about agents that stays until the person closes it (an agent turned away).
-    pub fn agent_said(&mut self, note: String, cx: &mut Cx) {
-        let until = cx.now() + messages::KEPT_DURATION;
-        self.notes_mut().add(Message { level: Level::Info, text: Text::plain(note) }, until, cx);
+    /// A toast about agents (an agent turned away), which goes by itself after a while.
+    pub fn agent_said(&mut self, toast: String, cx: &mut Cx) {
+        let until = cx.now() + messages::AGENT_TOAST_DURATION;
+        self.toasts_mut().add(Message { level: Level::Info, text: Text::plain(toast), toast: None }, until, cx);
         cx.invalidate();
     }
 
@@ -1000,10 +1006,10 @@ impl WindowStack {
                 self.reread(cx);
                 let until = cx.now() + messages::INFO_DURATION;
                 let said = crate::locale::translate("agentUndone", "The agent's change is undone.");
-                self.notes_mut().add(Message { level: Level::Info, text: Text::plain(said) }, until, cx);
+                self.toasts_mut().add(Message { level: Level::Info, text: Text::plain(said), toast: None }, until, cx);
             }
             Err(why) => {
-                self.said.push(Message { level: Level::Error, text: why });
+                self.said.push(Message { level: Level::Error, text: why, toast: None });
                 self.say_next(cx);
             }
         }
@@ -1094,7 +1100,7 @@ impl WindowStack {
 
     /// Says something among the messages, as a handler's reply does.
     pub fn say(&mut self, level: Level, text: Text, cx: &mut Cx) {
-        self.take(None, vec![Effect::Say(vec![Message { level, text }])], cx);
+        self.take(None, vec![Effect::Say(vec![Message { level, text, toast: None }])], cx);
     }
 
     /// The part with the focus, or the first part it is in, when it is no button: its name.

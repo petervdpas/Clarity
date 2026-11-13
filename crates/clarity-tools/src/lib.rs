@@ -26,29 +26,6 @@ use serde_json::{Value, json};
 use files::{is_spec_file, write_atomically};
 
 
-/// The language reference, which the model reads by section.
-const LANGUAGE: &str = include_str!("../../../docs/LANGUAGE.md");
-/// Clarity's design document: its aims, its stacks and its roadmap. Too long
-/// for every message, so the model reads the sections it needs.
-const DESIGN: &str = include_str!("../../../docs/DESIGN.md");
-
-/// The headings (`##` and `###`) of a Markdown document with their levels
-/// and lines, leaving out what is in code blocks.
-fn headings(doc: &str) -> Vec<(usize, usize, &str)> {
-    let mut code = false;
-    let mut found = Vec::new();
-    for (i, line) in doc.lines().enumerate() {
-        if line.trim_start().starts_with("```") {
-            code = !code;
-        } else if !code {
-            let level = line.chars().take_while(|c| *c == '#').count();
-            if (2..=3).contains(&level) && line[level..].starts_with(' ') {
-                found.push((i, level, line));
-            }
-        }
-    }
-    found
-}
 
 /// How many texts each language other than the default still lacks (empty,
 /// or the default's own text), as `nl 3, de 1`; none when every one has its own.
@@ -72,33 +49,6 @@ fn dotted_class(text: &str) -> Option<String> {
             (ident(module) && class.chars().next().is_some_and(char::is_uppercase)).then(|| word.to_string())
         })
     })
-}
-
-/// A section of a Markdown document (`name` says which in messages):
-/// without `wanted`, the contents; with it, the section whose number or
-/// title it is (or whose title holds it), up to the next section of its level.
-fn section(doc: &str, name: &str, wanted: &str) -> Result<String, String> {
-    let all = headings(doc);
-    let wanted = wanted.trim().to_lowercase();
-    if wanted.is_empty() {
-        return Ok(format!("The sections of the {name}; ask for one by its number or title.\n\n{}", contents(doc)));
-    }
-    let title = |line: &str| line.trim_start_matches('#').trim().to_lowercase();
-    let number = |line: &str| title(line).split_whitespace().next().unwrap_or_default().trim_end_matches('.').to_string();
-    let found = all
-        .iter()
-        .position(|(_, _, line)| number(line) == wanted)
-        .or_else(|| all.iter().position(|(_, _, line)| title(line).contains(&wanted)))
-        .ok_or_else(|| format!("the {name} has no section '{wanted}'; ask without a section for the contents"))?;
-    let (start, level, _) = all[found];
-    let end = all[found + 1..].iter().find(|(_, l, _)| *l <= level).map_or(usize::MAX, |(i, _, _)| *i);
-    let lines: Vec<&str> = doc.lines().skip(start).take(end.saturating_sub(start)).collect();
-    Ok(lines.join("\n").trim_end().to_string())
-}
-
-/// The headings of a document, one per line.
-fn contents(doc: &str) -> String {
-    headings(doc).iter().map(|(_, _, line)| *line).collect::<Vec<_>>().join("\n")
 }
 
 /// The manual tool: a topic's page, or the list of topics.
@@ -130,7 +80,7 @@ code can do; use those. Reach for a library or a custom part only for what nothi
 and tell the person why. When the request needs data, design it in a diagram first (below). Then write the windows \
 and their code and fix what each write's check reports. \
 Finish by saying what works and what Clarity cannot do yet; never invent syntax or a part to fill a gap.
-- Before you write Clarity new to this conversation, check its exact syntax with the reference tool.
+- Before you write Clarity new to this conversation, read its exact syntax in the manual: every declaration, part, statement and expression has its topic there.
 - A project is one project file (path `project`), modules (`.clarity` files: app, entities, enums, themes, code) \
 and windows and views, one `.cxaml` each in design/ (`design/Main.cxaml`, `<Window class=\"todo.Main\">`), which \
 you read but never write.
@@ -174,13 +124,12 @@ yet, make diagrams/data.mermaid from diagram_view, the whole Data model. Write i
 adjusts it in Clarity. Apply it with apply_diagram only when the person asks, reading diagram_proposals first since \
 they may have changed it. Diagrams propose and the data dictionary decides; never apply a removal unless the person \
 asks for that one. A data change is done only when the windows show it: once applied, put each new field on the \
-forms of its entity with place_field, say which lists could show it as a column, then show_window. Write a diagram as the reference's section 13 \
-(Diagrams) says, every field with its modifiers, and keep its `%% clarity:` lines.
+forms of its entity with place_field, say which lists could show it as a column, then show_window. Write a diagram as the manual's \
+data.diagrams topic says, every field with its modifiers, and keep its `%% clarity:` lines.
 - Entity changes go into a migration step by themselves. Rename an entity, enum or field with the rename tool: a name \
 written over is a drop and an add, which loses the data.
 - Read generated code with read_generated and never edit it: fix the project, or say what in Clarity needs fixing.
-- When asked what Clarity can do or plans, read the manual or the design tool (Stacks, Roadmap) rather than guess; \
-never promise what is not built.
+- When asked what Clarity can do, read the manual rather than guess; never promise what is not built.
 - Read only what the task needs: every page you read is sent again with each later message.
 - You execute nothing yourself.\n{host}- Say briefly what you did when you finish. Write plain, short sentences.
 - Write in Clarity's house style, in what you say and in what you write into the project (comments, texts, Markdown): \
@@ -189,12 +138,9 @@ write \"1 to 9\"). No filler such as \"it is worth noting\", \"moreover\" or \"s
 no recap at the end of a short answer.
 
 Clarity's manual (read a topic with the manual tool):
-{manual}
-The language reference's sections (read one with the reference tool):
-{reference}",
+{manual}",
         host = host.iter().map(|line| format!("- {line}\n")).collect::<String>(),
         manual = crate::manual::index(),
-        reference = contents(LANGUAGE),
     )
 }
 
@@ -877,16 +823,6 @@ impl Tools for ProjectTools {
                 schema(json!({ "topic": { "type": "string", "description": "A topic id, like code.queries." } }), &["topic"]),
             ),
             tool(
-                "reference",
-                "Reads a section of the Clarity language reference, the exact syntax of every construct. Ask by a section's number (like 6) or a word of its title (like queries). Without a section it gives the contents.",
-                schema(json!({ "section": { "type": "string", "description": "A section's number or a word of its title." } }), &[]),
-            ),
-            tool(
-                "design",
-                "Reads Clarity's design document: what Clarity aims at, which stacks there are and what each supports, and the roadmap of what is done and what is planned. Without a section it gives the contents.",
-                schema(json!({ "section": { "type": "string", "description": "A section's number (like 19 or 1.2) or a word of its title (like roadmap)." } }), &[]),
-            ),
-            tool(
                 "new_project",
                 "Makes a new project with its first module, an app and a main window, and opens it. Use it when the person asks for a new application.",
                 schema(
@@ -952,9 +888,7 @@ impl Tools for ProjectTools {
             "api" => self.api(&text("source")),
             "pick_api" => self.pick_api(input),
             "parts" => serde_json::to_string(&clarity_spec::widgets::catalog()).map_err(|err| err.to_string()),
-            "design" => section(DESIGN, "design document", &text("section")),
             "manual" => manual_topic(&text("topic")),
-            "reference" => section(LANGUAGE, "language reference", &text("section")),
             "new_project" => self.new_project(input),
             "migrate" => self.migrate(input),
             "rename" => self.rename(input),
@@ -1401,24 +1335,6 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    const DOC: &str ="# Design\n\nIntro.\n\n## 1. Purpose\n\nWhy.\n\n### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```\n\n### 1.3 Data\n\nSQLite.\n\n## 19. Roadmap\n\nG5 is next.\n\n## 20. Open questions\n\nMany.\n";
-
-    #[test]
-    fn the_design_tool_gives_the_contents_and_a_section() {
-        // Without a section: the headings, to pick from.
-        let contents = section(DOC, "design document", "").unwrap();
-        assert_eq!(contents.lines().filter(|l| l.starts_with('#')).collect::<Vec<_>>(), ["## 1. Purpose", "### 1.2 Stacks", "### 1.3 Data", "## 19. Roadmap", "## 20. Open questions"]);
-        // By number or by title: the section up to the next one of its level.
-        assert_eq!(section(DOC, "design document", "19").unwrap(), "## 19. Roadmap\n\nG5 is next.");
-        assert_eq!(section(DOC, "design document", "roadmap").unwrap(), "## 19. Roadmap\n\nG5 is next.");
-        assert_eq!(section(DOC, "design document", "1.2").unwrap(), "### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```");
-        // A chapter holds its subsections.
-        assert!(section(DOC, "design document", "1").unwrap().contains("### 1.3 Data"));
-        assert!(section(DOC, "design document", "teleport").unwrap_err().contains("no section"));
-        // The real document has its roadmap.
-        assert!(section(DESIGN, "design document", "roadmap").unwrap().starts_with("## 19. Roadmap"));
-    }
-
     #[test]
     fn the_model_is_told_the_manual_and_reads_it_on_demand() {
         let told = instructions(&[]);
@@ -1426,9 +1342,7 @@ mod tests {
         for topic in crate::manual::topics() {
             assert!(told.contains(&format!("- {}: ", topic.id)), "{} is not offered", topic.id);
         }
-        // The reference's sections by title, not the reference itself.
-        assert!(told.contains("Queries") && told.contains("## 13. Diagrams") && !told.contains("A class name is written once"));
-        assert!(told.contains("manual tool") && told.contains("reference tool") && told.contains("write_file"));
+        assert!(told.contains("manual tool") && told.contains("write_file") && !told.contains("reference tool"));
         // How parts and keys are named, as the examples are: never a number, never a statement word.
         for rule in ["never `button1` or `label2`", "`nameLabel`", "`nameHelp`", "`saveOrder`", "not a word code uses, such as `save` or `close`", "`saveCaption`"] {
             assert!(told.contains(rule), "the instructions lack {rule}");
@@ -1439,7 +1353,7 @@ mod tests {
     }
 
     #[test]
-    fn the_manual_and_the_reference_are_read_on_demand() {
+    fn the_manual_is_read_on_demand() {
         let mut tools = ProjectTools::new(None, std::env::temp_dir());
         let page = tools.call("manual", &json!({"topic": "code.queries"}));
         assert!(!page.is_error && page.text.starts_with("# "), "{}", page.text);
@@ -1448,10 +1362,6 @@ mod tests {
         // Without a topic: the list again.
         assert!(tools.call("manual", &json!({})).text.contains("- start.overview: "));
 
-        let section = tools.call("reference", &json!({"section": "Queries"}));
-        assert!(!section.is_error && section.text.starts_with("#"), "{}", section.text);
-        assert!(tools.call("reference", &json!({})).text.contains("12. Grammar summary"));
-        assert!(tools.call("reference", &json!({"section": "teleport"})).text.contains("the language reference has no section"));
     }
 
     /// The shared tools design and generate only: they read, write project
@@ -1465,8 +1375,7 @@ mod tests {
         names.sort();
         let mut allowed: Vec<String> = [
             // Reading.
-            "api", "check", "design", "diagram_proposals", "diagram_view", "manual", "missing_translations", "parts", "project_overview", "read_file", "read_generated",
-            "reference",
+            "api", "check", "diagram_proposals", "diagram_view", "manual", "missing_translations", "parts", "project_overview", "read_file", "read_generated",
             // Writing project files, checked at once and undone with one Undo.
             "apply_diagram", "migrate", "new_project", "pick_api", "rename", "write_diagram", "write_file",
             // Writing the generated source tree for the stack, as `clarity gen` does; it builds nothing.

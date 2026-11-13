@@ -22,7 +22,7 @@ Progress: 90%
 - The vault's crypto as a shared crate for encrypted files and stores: NOT BUILT (APP-CAPABILITIES-PLAN.md:362, 384); see [encrypted-storage](encrypted-storage.md)
 
 ## Conflicts
-- DESIGN 5.28 (:1505) lists one Vault layer with Ctrl+N, F2, Delete, Ctrl+Shift+C; the code splits it into vault.secrets and vault.connections (`keys.ts:7, 19-20`)
+- none
 
 ## Decisions
 - 2026-10-19: Clarity holds its own vault and connections, in Clarity's own format (Argon2id + AES-256-GCM), with no compatibility with other tools; a designed app gets its own only when its design adds config parts, never Clarity's (memory: clarity-status.md)

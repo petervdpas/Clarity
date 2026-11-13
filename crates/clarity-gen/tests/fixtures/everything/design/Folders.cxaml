@@ -2,7 +2,7 @@
 <Window class="everything.Folders" onopen="loadFolders">
   <Data name="folders" type="list&lt;Folder&gt;" />
   <Data name="albums" type="list&lt;Album&gt;" />
-  <Tree name="folderTree" at="1,1" span="4" rows="8" bind="folders" reorder="position" childList="children" onselect="folderPicked" onreorder="foldersMoved" />
+  <Tree name="folderTree" at="1,1" span="4" rows="8" bind="folders" foldButtons="true" reorder="position" childList="children" onselect="folderPicked" onreorder="foldersMoved" />
   <TreeTable name="folderTable" at="5,1" span="8" rows="8" bind="folders" columns="name, size" widths="{&quot;name&quot;:200}" reorder="position" childList="children" noUndo="true" onopen="folderPicked" onreorder="foldersMoved" />
   <Chart name="formatChart" at="1,9" span="4" rows="6" bind="albums" by="format" />
   <Chart name="copiesChart" at="5,9" span="4" rows="6" bind="albums" chart="line" by="copies" measure="{&quot;field&quot;:&quot;rating&quot;,&quot;kind&quot;:&quot;sum&quot;}" />

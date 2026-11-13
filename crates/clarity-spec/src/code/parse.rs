@@ -3,7 +3,7 @@
 
 use super::{AskForm, HttpPair, MappingUse, MappingDecl, MappedField, MappedInside, MappedParent, MappingOption, MappingText, MappingValue, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
-    Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
+    Stmt, StmtKind, ToastCorner, ToastDecl, ToastLevel, TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Token, TokenKind};
@@ -500,7 +500,8 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 17] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write", "print", "exit", "tell", "copy"];
+/// The words a statement starts with: what the manual has a section for each of.
+pub const STATEMENT_WORDS: [&str; 18] = ["let", "if", "for", "return", "message", "toast", "ask", "open", "close", "save", "delete", "reload", "refuse", "write", "print", "exit", "tell", "copy"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -579,6 +580,24 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 level: level.unwrap_or(MessageLevel::Info),
                 text,
             }
+        }
+        Some("toast") => {
+            cursor.next();
+            let name = cursor.expect_ident("the toast to show, as in toast saved")?;
+            let mut args = Vec::new();
+            if cursor.eat(TokenKind::LParen) {
+                loop {
+                    let slot = cursor.expect_ident("a slot of the toast's text, as in toast saved(name = customer.name)")?;
+                    cursor.expect(TokenKind::Assign, "'=' and the slot's value, as in name = customer.name")?;
+                    let value = parse_expr(&mut cursor)?;
+                    args.push(Arg { name: slot, value });
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+                cursor.expect(TokenKind::RParen, "')'")?;
+            }
+            StmtKind::Toast { name, args }
         }
         Some("ask") => {
             cursor.next();
@@ -1093,6 +1112,58 @@ pub(crate) fn parse_library(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
 /// step 4): `at`, a line per field, the records inside with their own lines,
 /// `check`, and the format's options. The checker holds them to the entity
 /// and the catalog; the parser only reads their shape.
+/// `toast saved` and its lines: `text @savedToast`, `lifespan 3000` (in
+/// milliseconds), `level success`, `icon "check"`, `corner bottomRight`. A
+/// line it cannot read is an error of its own; the toast keeps the rest.
+pub(crate) fn parse_toast(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<ToastDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let name = cursor.expect_ident("the toast's name, as in 'toast saved'")?;
+    cursor.expect_end()?;
+    if !crate::names::is_camel_case(&name.name) {
+        diagnostics.push(Diagnostic::error(crate::names::camel_case_problem("a toast's name", &name.name), name.span));
+    }
+    let mut toast = ToastDecl { name, text: None, lifespan: None, level: ToastLevel::Info, icon: None, corner: ToastCorner::TopRight, span: node.span() };
+    for child in &node.children {
+        let parsed = (|| {
+            no_children(child)?;
+            let mut line = Cursor::new(child.line);
+            let word = line.expect_ident("a line of the toast: text, lifespan, level, icon or corner")?;
+            match word.name.as_str() {
+                "text" => match line.next() {
+                    Some(t) if t.kind == TokenKind::Key => toast.text = Some(Ident { name: t.text.clone(), span: t.span }),
+                    _ => return Err(line.error_here("a toast's text is a key, as in text @savedToast")),
+                },
+                "lifespan" => match line.next() {
+                    Some(t) if t.kind == TokenKind::Number && t.text.parse::<u32>().is_ok() => toast.lifespan = t.text.parse().ok(),
+                    _ => return Err(line.error_here("a toast's lifespan is how many milliseconds it shows, as in lifespan 3000")),
+                },
+                "level" => {
+                    let level = line.expect_ident("info, success, warning or error")?;
+                    match ToastLevel::by_keyword(&level.name) {
+                        Some(l) => toast.level = l,
+                        None => return Err(Diagnostic::error(format!("a toast's level is info, success, warning or error, not '{}'", level.name), level.span)),
+                    }
+                }
+                "icon" => toast.icon = Some(line.expect_string("the icon's name, as in icon \"check\"")?),
+                "corner" => {
+                    let corner = line.expect_ident("topRight, topLeft, bottomRight or bottomLeft")?;
+                    match ToastCorner::by_keyword(&corner.name) {
+                        Some(c) => toast.corner = c,
+                        None => return Err(Diagnostic::error(format!("a toast shows in the corner topRight, topLeft, bottomRight or bottomLeft, not '{}'", corner.name), corner.span)),
+                    }
+                }
+                other => return Err(Diagnostic::error(format!("a toast has the lines text, lifespan, level, icon and corner, not '{other}'"), word.span)),
+            }
+            line.expect_end()
+        })();
+        if let Err(e) = parsed {
+            diagnostics.push(e);
+        }
+    }
+    Ok(toast)
+}
+
 pub(crate) fn parse_mapping(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<MappingDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -1459,7 +1530,8 @@ fn parse_postfix(cursor: &mut Cursor) -> ParseResult<Expr> {
     Ok(expr)
 }
 
-const RESERVED: [&str; 5] = ["and", "or", "not", "in", "contains"];
+/// The words an expression never takes as a name.
+pub const RESERVED: [&str; 5] = ["and", "or", "not", "in", "contains"];
 
 /// The empty value of a date, a date and time or a reference.
 pub const NONE: &str = "none";

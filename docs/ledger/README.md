@@ -1,6 +1,6 @@
 # Development ledger
 
-One small entry per piece of Clarity. Read this index, then only the entries the work touches. The ledger replaces the plan documents, `docs/DESIGN.md` and the one-off status documents; `docs/LANGUAGE.md` (the language reference) and `manual/` (the user manual) stay as they are.
+One small entry per piece of Clarity. Read this index, then only the entries the work touches. The ledger replaces the plan documents and the one-off status documents. The manual (`manual/`) is the only documentation for app builders and agents: `docs/LANGUAGE.md` and `docs/DESIGN.md` were removed on 2026-11-13 and their content moved into the manual.
 
 ## How to keep it
 
@@ -20,10 +20,10 @@ Plain ASCII, no em-dashes, short lines.
 
 | Piece | Status | First open item |
 |---|---|---|
-| [ledger](ledger.md) | partial | old references, the `design` tool, deleting the old documents |
+| [ledger](ledger.md) | partial | old references, deleting the plans and status documents |
 | [vision](vision.md) | partial | what Clarity is for and the rules every piece follows |
-| [modularity](modularity.md) | partial | the guide: one module per layer, step by step, with what each step settles |
-| [docs](docs.md) | partial | LANGUAGE.md, the manual and READMEs against the code |
+| [modularity](modularity.md) | partial | each generator's sign-in emitting in a module of its own |
+| [docs](docs.md) | partial | the manual and READMEs against the code |
 | [os-checks](os-checks.md) | partial | what has never run on Windows or macOS |
 
 ### Language and core
@@ -46,7 +46,7 @@ Plain ASCII, no em-dashes, short lines.
 | [migrations](migrations.md) | partial | fill expression when a field becomes required |
 | [row-versions](row-versions.md) | partial | the IDE's data browser through the version check |
 | [backups](backups.md) | partial | server databases in a portable form |
-| [files-pictures](files-pictures.md) | built | none |
+| [files-pictures](files-pictures.md) | built | folder picker on Windows and macOS untried |
 | [formats](formats.md) | partial | file sources in a data browser |
 | [web-apis](web-apis.md) | partial | REST entities mapped onto endpoints |
 | [settings-secrets](settings-secrets.md) | built | Go's secrets on macOS read by other stacks |
@@ -65,11 +65,12 @@ Plain ASCII, no em-dashes, short lines.
 | [themes](themes.md) | built | none |
 | [parts-inputs](parts-inputs.md) | built | dropdown search on labels, accent-blind sorting |
 | [parts-containers](parts-containers.md) | built | menu key opens a part's context menu |
-| [parts-data](parts-data.md) | built | moving several rows, dragging between parts |
+| [parts-data](parts-data.md) | built | moving several rows at once |
 | [charts](charts.md) | built | chart grouping in one place |
 | [graph](graph.md) | partial | looks bound to fields; the modelling example |
 | [markdown](markdown.md) | built | real italic faces |
 | [timer](timer.md) | partial | `once`, `start()`, `stop()`, timers.json |
+| [toasts](toasts.md) | built | an app-wide default lifespan for plain messages |
 
 ### Media
 
@@ -90,12 +91,12 @@ Plain ASCII, no em-dashes, short lines.
 | [build-tools](build-tools.md) | partial | library check on Windows and macOS |
 | [offline](offline.md) | not built | `clarity prepare`, `clarity vendor` |
 | [release-ci](release-ci.md) | partial | a Windows job in checks.yml |
-| [examples](examples.md) | built | maintenance not yet tried on a real ledger |
+| [examples](examples.md) | built | maintenance ReviewView |
 | [stack-rust](stack-rust.md) | built | list fields not loaded |
 | [stack-go](stack-go.md) | built | file-source tests skipped in CI |
 | [stack-c](stack-c.md) | built | server databases |
 | [stack-cpp](stack-cpp.md) | built | server databases |
-| [stack-csharp](stack-csharp.md) | built | comparisons, skipped conformance files, dead copies |
+| [stack-csharp](stack-csharp.md) | built | not driven live in tests |
 
 ### IDE
 
@@ -115,7 +116,7 @@ Plain ASCII, no em-dashes, short lines.
 |---|---|---|
 | [agent](agent.md) | partial | local models (ollama, openai-compatible) |
 | [acp](acp.md) | partial | Codex and Copilot checked by hand |
-| [mcp-tools](mcp-tools.md) | partial | the `design` tool reads the ledger; the questionnaire |
+| [mcp-tools](mcp-tools.md) | partial | the questionnaire |
 | [app-mcp](app-mcp.md) | partial | the guidance wizard (step 5) |
 
 ### Planned, nothing built
@@ -126,3 +127,4 @@ Plain ASCII, no em-dashes, short lines.
 | [parts-library](parts-library.md) | not built | packages of Clarity parts |
 | [reports-pdf](reports-pdf.md) | not built | clarity-pdf on Typst |
 | [debugger](debugger.md) | not built | marks per statement in the Rust generator |
+| [network](network.md) | not built | node and identity: a `network` declaration on the app |

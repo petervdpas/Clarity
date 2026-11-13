@@ -52,6 +52,7 @@ Clarity checks generated files against their source in tests that fail when a fi
 | `conformance/migrations.json` | `CLARITY_WRITE_CONFORMANCE=1 cargo test -p clarity-gen --test servers` |
 | `runtimes/rust-ui/themes/` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test clarity_ui_theme` |
 | the picture cases | `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image --test pictures` |
+| the parts pages' catalog tables (`manual/parts.*.md`) | `CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test manual_catalog` |
 
 A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runtimes --include=*.rs -o | sort -u`.
 
@@ -66,5 +67,7 @@ A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runt
 - The C# runtime step gets `"next_after": "workflow"`: nuget.org indexes slowly and nothing after it needs the packages listed (Go, the IDE). The Go sums step is a manual step with its own `commit_message`.
 
 ## The IDE while it runs
+
+**NEVER BUILD OR COPY CLARITY'S OWN PIECES BY HAND FOR THE IDE: TICK THEM.** After changing Clarity.UI (`runtimes/rust-ui`), its browser files (`runtimes/rust-ui-browser`) or a library (`runtimes/*-ffi`), write their keys into `target/dev-rebuild.json` (`{"ticked": ["clarityUi", "browser"]}`; keys: clarityUi, browser, audio, video, image, formats, auth, appMcp) and tell the user. The IDE builds them at its next start, or with Restart in Clarity settings > Rebuild, the splash showing the build line for line, and clears the ticks. No `cargo build -p clarity-*-ffi`, no `build.sh`, no copying libraries.
 
 The user runs the IDE with `./dev.sh`. Editing `app/src/*` reloads its page; editing `app/src-tauri/*` or a crate it uses restarts it and clears the agent chat. While it runs, make no Rust edits and run no cargo builds without asking; gather IDE changes and apply them in one go.

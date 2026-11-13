@@ -5,11 +5,11 @@ Status: built. `stack <backend> cli`: a command-line program over the same recor
 Progress: 95%
 
 ## Code
-- Spec: `crates/clarity-spec/src/code/parse.rs:785-849` (`cli`, `command [group] name(args)`, `option` lines, `help @key`); statements `print`, `print list columns`, `ask` as an expression, `exit n`; `crates/clarity-project/src/file.rs:401-473` (`cli` target)
-- Generators: `crates/clarity-gen/src/lib.rs:990` (`generate_cli`), :1539 (`cli_toolchain`); `crates/clarity-gen/src/commands.rs` (`CommandSpec`, `ParamSpec`); per stack `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/cli.rs`
+- Spec: `crates/clarity-spec/src/code/parse.rs:785` (`parse_cli`), :805 (`parse_command`: `command [group] name(args)` with `help @key`, `option`, `allow` and `agent` lines, :816, :845), :854 (`parse_option`); statements `print`, `print list columns`, `ask` as an expression, `exit n`; `crates/clarity-project/src/file.rs:431` (`cli` target)
+- Generators: `crates/clarity-gen/src/lib.rs:1011` (`generate_cli`), :1579 (`cli_toolchain`); `crates/clarity-gen/src/commands.rs` (`CommandSpec`, `ParamSpec`); per stack `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/cli.rs`
 - Runtimes: R `runtimes/rust/src/cli.rs` (crate without Clarity.UI); Go `runtimes/go/clarity/cli.go` (module without Clarity.UI), `signin_cli.go`; C `runtimes/c/clarity/cli.c`; C++ `runtimes/cpp/clarity/cli.cpp`; C# `runtimes/csharp/Clarity.Runtime/Cli.cs` (console project on Clarity.Runtime only)
 - IDE: Commands in the project tree; Run asks which program and the command line, output and `ask` answers in the Output panel with `CLARITY_TERMINAL=1` (`app/src-tauri/src/build.rs:514`)
-- Docs: LANGUAGE.md "Commands" (:1792, :2569)
+- Docs: manual `code.commands.md`, `project.file.md` (`stack`)
 
 What each stack writes in `out/cli/`:
 
@@ -24,6 +24,7 @@ What each stack writes in `out/cli/`:
 - Exit codes: 0 done, 1 refused or failed, 2 wrong command line, `exit n` otherwise.
 - Help and error words are Clarity's own keys; language from `settings.language`, else the system locale, else the project's `language`.
 - Without a terminal, `ask` with a default gives it; without one, exit 2.
+- `<program> mcp` serves commands with an `agent` line to AI agents (feature `mcp`, `crates/clarity-gen/src/rust/cli.rs:112-114`; runtimes' `agents.rs`, `agents.go`, `agents/agents.c`, `agents/agents.cpp`, `Agents.cs`): see [app-mcp](app-mcp.md).
 - Sign-in strategy `account` (the OS user) works in cli programs: see [signin](signin.md).
 
 ## Tests
@@ -36,9 +37,8 @@ What each stack writes in `out/cli/`:
 - A record as a command argument: NOT BUILT ("for now", DESIGN 5.20).
 
 ## Conflicts
-- The cli duration readers say "as formats.json reads them" (`runtimes/rust/src/cli.rs:308`, `runtimes/go/clarity/cli.go:387`), but the R and Go runtime tests do not load `conformance/formats.json`.
-- The C and C++ non-SQLite refusal says "is a server database" in the cli generator and "is a PostgreSQL/MySQL/SQL Server database" in the desktop one (`c/cli.rs:142` vs `c/mod.rs:248`; `cpp/cli.rs:123` vs `cpp/mod.rs:253`).
-- DESIGN 5.20 still writes `stack go webview desktop cli` and "the UI word"; naming a UI is refused now.
+- The cli duration readers say "as formats.json reads them" (`runtimes/rust/src/cli.rs:320`, `runtimes/go/clarity/cli.go:389`), but the R and Go runtime tests do not load `conformance/formats.json`.
+- The C and C++ non-SQLite refusal says "is a server database" in the cli generator and "is a PostgreSQL/MySQL/SQL Server database" in the desktop one (`c/cli.rs:142` vs `c/mod.rs:252-253`; `cpp/cli.rs:124` vs `cpp/mod.rs:262`).
 
 ## Decisions
 - 2026-10-23: `cli` is a target beside `desktop` and `web`; one folder per target in `out/` (C1, decided with the user).

@@ -129,3 +129,5 @@ translation en
     signinBack "Back"
     signinNothing "No way to sign in here"
     cliPassword "Password"
+    lentToast "Lent to {name}"
+    addedToast "Added {title}"

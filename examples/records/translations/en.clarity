@@ -165,6 +165,8 @@ translation en
     lastPage "Last page"
     expandRow "Expand"
     collapseRow "Collapse"
+    expandAll "Expand all"
+    collapseAll "Collapse all"
     settingsItem "Settings..."
     exportsFolderSetting "Exports folder"
     preferencesTitle "Settings"

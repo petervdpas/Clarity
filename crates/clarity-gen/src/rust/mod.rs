@@ -659,8 +659,8 @@ fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_w
     }
     let (run, files_type) = ("clarity_runtime::native_ui::run", "clarity_runtime::native_ui::AppFiles");
     let externs = match (songs || videos, videos) {
-        (true, true) => "\n/// Clarity.Audio's and Clarity.Video's tables, from their libraries beside Clarity.UI's (build.rs links them).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n    fn clarity_video_api() -> *const std::ffi::c_void;\n}\n",
-        (true, false) => "\n/// Clarity.Audio's table, from its library beside Clarity.UI's (build.rs links it).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n}\n",
+        (true, true) => "\n// Clarity.Audio's and Clarity.Video's tables, from their libraries beside Clarity.UI's (build.rs links them).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n    fn clarity_video_api() -> *const std::ffi::c_void;\n}\n",
+        (true, false) => "\n// Clarity.Audio's table, from its library beside Clarity.UI's (build.rs links it).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n}\n",
         _ => "",
     };
     format!(

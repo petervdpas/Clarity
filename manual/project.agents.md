@@ -57,4 +57,4 @@ A change an agent makes is one step: all of it is kept, or none of it when the c
 
 An app that hosts an agent in a chat of its own (Codex or Copilot, through ACP) is a later feature.
 
-See also [Clarity in your own agent](ai.mcp.md), which is about Clarity itself as an MCP server for designing projects, and the [language reference](../docs/LANGUAGE.md), under Commands.
+See also [Clarity in your own agent](ai.mcp.md), which is about Clarity itself as an MCP server for designing projects, and [Commands](code.commands.md).

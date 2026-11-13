@@ -10,6 +10,8 @@
   import FoldersSettings from "./FoldersSettings.svelte";
   import KeysSettings from "./KeysSettings.svelte";
   import LibrariesSettings from "./LibrariesSettings.svelte";
+  import DevRebuildSettings from "./DevRebuildSettings.svelte";
+  import { devRebuild } from "./devRebuildStore.svelte";
   import LoggingSettings from "./LoggingSettings.svelte";
   import OutsideAgentsSettings from "./OutsideAgentsSettings.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
@@ -21,8 +23,8 @@
 
   type Section = AppSettingsSection;
 
-  /** The sections, in the sidebar's order. */
-  const SECTIONS: { key: Section; name: string; note: string }[] = [
+  /** The sections, in the sidebar's order; Rebuild only in a Clarity run from its repository. */
+  const ALL_SECTIONS: { key: Section; name: string; note: string }[] = [
     { key: "display", name: "Display", note: "Clarity's theme and its colors" },
     { key: "keys", name: "Keys", note: "Clarity's shortcut keys, as you want them" },
     { key: "folders", name: "Folders", note: "Where projects and their apps go" },
@@ -31,7 +33,13 @@
     { key: "agent", name: "Agent", note: "What agents may run, and what outside agents did" },
     { key: "logging", name: "Logging", note: "A log of what Clarity does" },
     { key: "system", name: "System", note: "How busy the computer is" },
+    { key: "rebuild", name: "Rebuild", note: "Build Clarity's own pieces again from its source" },
   ];
+  const SECTIONS = $derived(ALL_SECTIONS.filter((s) => s.key !== "rebuild" || devRebuild.view));
+
+  $effect(() => {
+    void devRebuild.load();
+  });
 
   // The section shown, kept while Clarity runs, so the settings open where they were left.
   const section = $derived(appSettings.section);
@@ -100,6 +108,8 @@
       <EnvironmentSettings />
     {:else if section === "libraries"}
       <LibrariesSettings />
+    {:else if section === "rebuild"}
+      <DevRebuildSettings />
     {:else}
       <fieldset>
         <legend>Running and building</legend>

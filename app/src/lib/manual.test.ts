@@ -10,8 +10,7 @@ import { linkTarget, topicForTab } from "./manual.ts";
 test("a link leads to a topic, the reference, or a heading on the page", () => {
   assert.deepEqual(linkTarget("code.queries.md"), { topic: "code.queries", anchor: null });
   assert.deepEqual(linkTarget("code.queries.md#files"), { topic: "code.queries", anchor: "files" });
-  assert.deepEqual(linkTarget("../LANGUAGE.md#queries"), { topic: "reference", anchor: "queries" });
-  assert.deepEqual(linkTarget("../LANGUAGE.md"), { topic: "reference", anchor: null });
+  assert.equal(linkTarget("../LANGUAGE.md#queries"), null, "the language reference is the manual's pages now");
   assert.deepEqual(linkTarget("#formats"), { topic: null, anchor: "formats" });
   // The reference links to manual pages from the folder above them.
   assert.deepEqual(linkTarget("manual/code.engines.md#writing-an-engine"), { topic: "code.engines", anchor: "writing-an-engine" });

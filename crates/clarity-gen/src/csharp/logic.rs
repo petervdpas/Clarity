@@ -221,6 +221,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "fromY" => "FromY",
         "grid" => "Grid",
         "snap" => "Snap",
+        "foldButtons" => "FoldButtons",
         "connecting" => "Connecting",
         "resizable" => "Resizable",
         "background" => "Background",
@@ -331,8 +332,14 @@ impl<'a> Emitter<'a> {
     }
 
     fn block(&mut self, body: &[Stmt], depth: usize, out: &mut String) {
-        for stmt in body {
+        for (i, stmt) in body.iter().enumerate() {
             self.stmt(stmt, depth, out);
+            // C# warns of a local nobody reads: one read nowhere after its let is read once, as a discard.
+            if let StmtKind::Let { name, .. } = &stmt.kind
+                && !read_after(&body[i + 1..], &name.name)
+            {
+                out.push_str(&format!("{}_ = {};\n", "    ".repeat(depth), camel(&name.name)));
+            }
         }
     }
 
@@ -545,6 +552,21 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}throw new RefusedException({text});\n"));
             }
             // A command says it on standard error.
+            // A toast the project declares, by name; a command says its text on standard error.
+            StmtKind::Toast { name, args } => match crate::toasts::shown(self.project, name, args) {
+                Err(why) => self.errors.push(why),
+                Ok(_) if self.window.is_none() && !self.command => self.errors.push("toasts belong in handlers".into()),
+                Ok((look, text)) => {
+                    let text = self.shown(&text);
+                    if self.command {
+                        out.push_str(&format!("{pad}cli.Message({text});\n"));
+                    } else {
+                        let q = crate::toasts::quoted;
+                        let icon = look.icon.as_deref().map_or("null".to_string(), q);
+                        out.push_str(&format!("{pad}ShowToast(new ToastLook({}, {}, {}, {icon}, {}), {text});\n", q(&look.name), q(look.level), look.lifespan, q(look.corner)));
+                    }
+                }
+            },
             StmtKind::Message { text, .. } if self.command => {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}cli.Message({text});\n"));
@@ -1548,4 +1570,21 @@ fn reloads(body: &[Stmt], name: &str) -> bool {
         StmtKind::For { var, body, .. } => var.name != name && reloads(body, name),
         _ => false,
     })
+}
+
+/// Whether any statement of `rest`, nested blocks too, names the local
+/// `name`: in an expression, or as what `reload` reads again.
+fn read_after(rest: &[Stmt], name: &str) -> bool {
+    let mut read = false;
+    clarity_spec::code::each_expr_in(rest, &mut |e| {
+        if matches!(&e.kind, ExprKind::Name { name: n } if n == name) {
+            read = true;
+        }
+    });
+    clarity_spec::code::check::each_stmt(rest, &mut |stmt| {
+        if matches!(&stmt.kind, StmtKind::Reload { data } if data.name == name) {
+            read = true;
+        }
+    });
+    read
 }

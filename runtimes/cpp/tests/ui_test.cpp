@@ -372,3 +372,17 @@ TEST(an_open_says_new_window_only_when_asked) {
     CHECK(!open[0].contains("new_window"));
     CHECK_EQ(open[1], json({{"window", "Other"}, {"with", {{"note", "hi"}}}, {"new_window", true}}));
 }
+
+// `toast saved(...)`: the reply carries the toast's look with its text; a plain message none.
+TEST(a_toast_travels_with_its_look) {
+    WindowState state;
+    state.window = "Card";
+    Ui ui(state);
+    ui.message(Level::Info, Text::plain("Plain"));
+    ui.toast(Toast{"saved", "success", 3000, "check", "bottomRight"}, Text::plain("Saved Ada"));
+    ui.toast(Toast{"imported", "info", 8000, "", "topLeft"}, Text::plain("Imported"));
+    json messages = json(ui.reply("Card", json::object()))["messages"];
+    CHECK(!messages[0].contains("toast"));
+    CHECK_EQ(messages[1]["toast"], json::parse(R"({"name":"saved","level":"success","lifespan":3000,"icon":"check","corner":"bottomRight"})"));
+    CHECK_EQ(messages[2]["toast"], json::parse(R"({"name":"imported","level":"info","lifespan":8000,"corner":"topLeft"})"));
+}

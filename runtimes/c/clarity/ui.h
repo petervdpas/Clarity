@@ -27,6 +27,8 @@ typedef struct {
     bool has_grid, has_snap, snap;
     /// Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
     bool has_connecting, connecting;
+    /// Whether a tree or tree table shows Expand all and Collapse all (`tree.foldButtons`), as a handler set it.
+    bool has_fold_buttons, fold_buttons;
     /// Whether people resize the boxes of a canvas with `on resize` by their grip, as a handler set it; without `has_resizable` it is true.
     bool has_resizable, resizable;
     int64_t grid;
@@ -98,9 +100,23 @@ typedef struct {
 /// How a message shows: info goes away by itself.
 typedef enum { CLARITY_INFO, CLARITY_WARNING, CLARITY_ERROR } ClarityLevel;
 
+/// A toast the project declares (`toast saved`), as the screen shows it:
+/// its name, level ("info", "success", "warning", "error"), how long it
+/// shows in milliseconds, its icon (or NULL) and its corner ("topRight",
+/// "topLeft", "bottomRight", "bottomLeft"). The texts are the program's
+/// own, never freed. A name of NULL is a plain message.
+typedef struct {
+    const char* name;
+    const char* level;
+    int lifespan;
+    const char* icon;
+    const char* corner;
+} ClarityToast;
+
 typedef struct {
     ClarityLevel level;
     const ClarityText* text;
+    ClarityToast toast;
 } ClarityMessage;
 
 /// A text a handler put in a text value, which the screen shows translated.
@@ -233,6 +249,9 @@ void clarity_ui_set_snap(ClarityUi* ui, const char* part, bool value);
 /// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
 bool clarity_ui_connecting(const ClarityUi* ui, const char* part);
 void clarity_ui_set_connecting(ClarityUi* ui, const char* part, bool value);
+/// Whether a tree or tree table shows Expand all and Collapse all (`tree.foldButtons`), as its line says (`design`) until a handler sets it.
+bool clarity_ui_fold_buttons(const ClarityUi* ui, const char* part, bool design);
+void clarity_ui_set_fold_buttons(ClarityUi* ui, const char* part, bool value);
 /// Whether people resize a canvas's boxes by their grip (`canvas.resizable`), true until a handler sets it.
 bool clarity_ui_resizable(const ClarityUi* ui, const char* part);
 void clarity_ui_set_resizable(ClarityUi* ui, const char* part, bool value);
@@ -300,6 +319,8 @@ void clarity_ui_deselect(ClarityUi* ui, const char* part);
 void clarity_ui_select(ClarityUi* ui, const char* part, int64_t place);
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text);
+/// `toast saved(...)`: the screen shows `text` as the toast `name`, with its level, lifespan, icon (or NULL) and corner.
+void clarity_ui_toast(ClarityUi* ui, const char* name, const char* level, int lifespan, const char* icon, const char* corner, const ClarityText* text);
 /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
 void clarity_ui_copy(ClarityUi* ui, const ClarityText* text);
 /// The text value `data` shows `text`, translated and formatted by the screen.

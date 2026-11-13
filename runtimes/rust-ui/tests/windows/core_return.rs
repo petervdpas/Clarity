@@ -50,7 +50,7 @@ fn a_note_said_before_a_close_shows_in_the_window_below() {
     click(&mut screen, "saveConnection");
     drawn(&mut screen);
     assert_eq!(stack(&screen).windows(), ["Main"]);
-    let notes: Vec<String> = stack(&screen).notes().iter().map(|m| m.text.show()).collect();
+    let notes: Vec<String> = stack(&screen).toasts().iter().map(|m| m.text.show()).collect();
     assert_eq!(notes, ["Saved"]);
     shot(&mut screen, "note-after-return");
 }
@@ -94,7 +94,7 @@ fn a_note_said_before_a_window_of_its_own_closes_shows_in_its_opener() {
     let closed = closed.expect("the window that opened it is told");
     assert_eq!(closed.said.iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Saved"]);
     screen.act_root::<WindowStack, _>(move |s, cx| s.apart_closed(closed, cx));
-    assert_eq!(stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Saved"]);
+    assert_eq!(stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Saved"]);
 }
 
 /// A handler's `open ... in new window` opens a desktop window of its own,

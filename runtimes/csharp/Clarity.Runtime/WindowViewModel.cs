@@ -55,6 +55,9 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
+    /// <summary><c>toast saved(...)</c>: the screen shows <paramref name="text"/> as the toast <paramref name="toast"/>.</summary>
+    public void ShowToast(ToastLook toast, Text text) => Messages.Add(new Message(Level.Info, text, toast));
+
     /// <summary>The texts said into text values (a status line), by the value's property: what was said, what it showed and how it is set.</summary>
     readonly Dictionary<string, (Text Said, string Shown, Action<string> Set)> said = [];
 

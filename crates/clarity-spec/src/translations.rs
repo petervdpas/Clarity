@@ -143,7 +143,7 @@ pub const TAGS_KEYS: [(&str, &str); 2] = [("addTag", "Add"), ("removeTag", "Remo
 /// buttons to the first, the previous, the next and the last page.
 pub const PAGE_KEYS: [(&str, &str); 4] = [("firstPage", "First page"), ("previousPage", "Previous page"), ("nextPage", "Next page"), ("lastPage", "Last page")];
 /// Clarity's words of a tree's toggle, which shows or hides the rows under a row.
-pub const TREE_KEYS: [(&str, &str); 2] = [("expandRow", "Expand"), ("collapseRow", "Collapse")];
+pub const TREE_KEYS: [(&str, &str); 4] = [("expandRow", "Expand"), ("collapseRow", "Collapse"), ("expandAll", "Expand all"), ("collapseAll", "Collapse all")];
 /// What an image part bound to a picture shows of its own, by key: in its
 /// empty state, and on its buttons to load a picture and to remove it.
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
@@ -450,6 +450,9 @@ struct Use {
     /// Whether `args` are the names it may fill rather than those it fills:
     /// a tree level's key, filled from the fields of its record.
     from_fields: bool,
+    /// A toast's text where the toast is declared: code fills its slots
+    /// where it shows the toast, so its slots are checked there.
+    declared: bool,
 }
 
 /// Everything the project shows: the keys it uses, and the texts it writes
@@ -465,13 +468,15 @@ struct Shown {
     place: String,
     /// Each entity's fields, by name: the slots a tree level's key fills from its record.
     entity_fields: std::collections::HashMap<String, Vec<String>>,
+    /// Each toast's text key, by the toast's name: `toast saved(name = x)` fills its slots.
+    toast_texts: std::collections::HashMap<String, String>,
 }
 
 impl Shown {
     /// A text in the design: a key, or a text as written.
     fn text(&mut self, text: &str, span: Span) {
         match key_of(text) {
-            Some(key) => self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span, args: None, from_fields: false }),
+            Some(key) => self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span, args: None, from_fields: false, declared: false }),
             None if has_letters(text) => self.literals.push((text.to_string(), self.path.clone(), span)),
             None => {}
         }
@@ -515,7 +520,7 @@ impl Shown {
             if let Some(show) = level.show.as_deref().filter(|s| s.starts_with('@')) {
                 let mut fields = level.entity.as_ref().and_then(|e| self.entity_fields.get(e)).cloned().unwrap_or_default();
                 fields.push("id".to_string());
-                self.uses.push(Use { key: show[1..].to_string(), place: self.place.clone(), path: self.path.clone(), span: level.span, args: Some(fields), from_fields: true });
+                self.uses.push(Use { key: show[1..].to_string(), place: self.place.clone(), path: self.path.clone(), span: level.span, args: Some(fields), from_fields: true, declared: false });
             }
             self.levels(&level.levels);
         }
@@ -559,7 +564,7 @@ impl Shown {
             if let DataKind::Value { default: Some(Literal::Str(text)), .. } = &decl.of
                 && let Some(key) = key_of(text)
             {
-                self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span: decl.span, args: None, from_fields: false });
+                self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span: decl.span, args: None, from_fields: false, declared: false });
             }
         }
     }
@@ -575,6 +580,7 @@ impl Shown {
                 span: key.span,
                 args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
                 from_fields: false,
+                declared: false,
             });
         }
         self.written(expr);
@@ -600,12 +606,23 @@ impl Shown {
                     span: key.span,
                     args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
                     from_fields: false,
+                    declared: false,
                 });
             }
         });
         for text in &asked {
             self.written(text);
         }
+        // A toast shown by name fills the slots of its text.
+        let mut toasts = Vec::new();
+        crate::code::check::each_stmt(body, &mut |stmt| {
+            if let StmtKind::Toast { name, args } = &stmt.kind
+                && let Some(key) = self.toast_texts.get(&name.name)
+            {
+                toasts.push(Use { key: key.clone(), place: self.place.clone(), path: self.path.clone(), span: name.span, args: Some(args.iter().map(|a| a.name.name.clone()).collect()), from_fields: false, declared: false });
+            }
+        });
+        self.uses.extend(toasts);
         self.shown_as_written(body);
     }
 
@@ -690,8 +707,14 @@ pub(crate) fn literal_places(project: &Project) -> Vec<(String, u32)> {
 fn shown(project: &Project) -> Shown {
     let mut shown = Shown::default();
     shown.entity_fields = project.files.iter().flat_map(|f| &f.entities).map(|e| (e.name.name.clone(), e.fields.iter().map(|f| f.name.name.clone()).collect())).collect();
+    shown.toast_texts = project.files.iter().flat_map(|f| &f.toasts).filter_map(|t| Some((t.name.name.clone(), t.text.as_ref()?.name.clone()))).collect();
     for file in &project.files {
         shown.path = file.path.clone();
+        for toast in &file.toasts {
+            if let Some(key) = &toast.text {
+                shown.uses.push(Use { key: key.name.clone(), place: format!("toast {}", toast.name.name), path: file.path.clone(), span: key.span, args: None, from_fields: false, declared: true });
+            }
+        }
         for entity in &file.entities {
             shown.place = format!("entity {}", entity.name.name);
             for field in &entity.fields {
@@ -708,7 +731,7 @@ fn shown(project: &Project) -> Shown {
             // A refused save's text fills its slots from the record as stored now.
             if let Some(key) = &entity.saved_since {
                 let slots = crate::versions::saved_since_slots(project, entity);
-                shown.uses.push(Use { key: key.clone(), place: shown.place.clone(), path: shown.path.clone(), span: entity.name.span, args: Some(slots), from_fields: true });
+                shown.uses.push(Use { key: key.clone(), place: shown.place.clone(), path: shown.path.clone(), span: entity.name.span, args: Some(slots), from_fields: true, declared: false });
             }
         }
         for decl in &file.enums {
@@ -918,7 +941,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if project.signin.as_ref().is_some_and(|s| s.targets.iter().any(|t| t == "cli")) { SIGNIN_CLI_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
-        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false });
+        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false, declared: false });
     }
     shown
 }
@@ -1117,6 +1140,8 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
                     )));
                 }
                 None => found.push(place(Diagnostic::error(format!("key '{}' has no value in {default}, the default language", u.key), u.span))),
+                // Where a toast is declared its slots are not filled: where code shows it, they are.
+                Some(_) if u.declared => {}
                 Some(value) => {
                     let wanted = slots(value);
                     let given = u.args.clone().unwrap_or_default();

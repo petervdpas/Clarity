@@ -23,6 +23,15 @@ action describe(order: Order)
 | Go | `go "module/path" v1.0.0` | a module whose package has the functions (`clarity.go` types them) |
 | C, C++ | `cmake "Package"` | a CMake target `Words` with the functions of `clarity/Words.h` or `.hpp` |
 
+### `library`
+
+    library Name
+        nuget "Package" version | dll "file" | crate "name" "version" | go "module" version | cmake "Package"
+        function name(parameter: type, ...) [-> type]
+
+- One package line, in the project's language, and a `function` line per function code calls. Values in and out are text, a number, a date, a duration or bool.
+- The checker says: "library Words needs its package, in the project's language: nuget "Package" version or dll "file" (C#), crate "name" "version" (Rust), go "module" version (Go), cmake "Package" (C, C++)"; "library Words has two functions named 'spell'"; "a library's values are text, a number, a date, a duration or bool, not Order". At a call: "library Words has no function spel"; "Words.spell takes 1 argument, not 2"; "argument 'n' of Words.spell is an integer, not text".
+
 ## Writing the adapter
 
 The file Clarity writes from the declaration names each function as your language spells it, with its types; the adapter writes exactly those. Read it first.

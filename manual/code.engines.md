@@ -35,9 +35,40 @@ engine Dice
 - **State** decides whose values they are: without a state line every call starts from the values as written; `state per app` keeps one set for the whole application; `state per window` keeps a set for each open window, which goes when the window closes.
 - **A call that fails changes nothing.** A function works on a copy of what the engine keeps and keeps it only when it succeeds, so a refusal leaves the values as they were.
 - **It keeps to itself**: no windows, data, parts, messages or database. It gives back what the screen should show, and its texts are keys, translated like your own.
-- **`random(n)`**, with `uses random`, gives a whole number from 1 to `n`, from the same sequence every stack gives (`conformance/lists.json`).
+- **`random(n)`**, with `uses random`, gives a whole number from 1 to `n`, from the same sequence every stack gives (`conformance/lists.json`). No other service is needed in Clarity: the language the person picked is already how its texts show.
+- **`progress(done, total)`**, with `uses progress`, on a line of its own, says how far a long call is, such as `progress(day, total)` in a loop over the days of a year. While the handler that made the call runs, its window shows a bar of how far it is with a **Stop** button (Clarity's word `stopCall`), keeps painting and takes no other click. Stop ends the call, which fails with `it was stopped`, shown as any error. A page a server serves to a browser shows no bar.
+- **Its functions** are written as functions are, with `require` and `ensure` if wanted, and call each other by name (`answer()`). Code outside calls them as `Board.play(5)`.
+- **`const`** lines inside the engine are its own constants, read before the module's of the same name; see [Modules](code.modules.md#const).
+
+```clarity
+engine Board
+    uses random
+    state per window
+    keep squares: list<integer> = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    keep moves: integer = 0
+
+    function play(square: integer) -> text
+        if squares[square] != 0
+            refuse @thatSquareIsTaken
+        squares[square] = 1
+        moves = moves + 1
+        return @yourMove
+
+    function mark(square: integer) -> integer
+        return squares[square]
+```
 
 The noughts example keeps its game in such an engine: `Board`, with the board as `keep squares: list<integer>`, one board for each window.
+
+### What an engine's code may use
+
+An engine written in Clarity is compiled to WebAssembly, and its code uses what that compiler knows:
+
+- **Statements:** `let`, setting a local, a kept value, an item of a list or a field of a record, `if`, `for` (over a list, or `for i in 1 to n`), `return`, `refuse`, `tell` (beside the screen) and calls of its own functions and of `progress`.
+- **Values:** numbers, text, text with slots (filled with the values, as plain text), `true` and `false`, keys without values (`@youWin`), its constants and kept values, lists (`[0, 0, 0]`, `squares[3]`, `+`), records (`new Dot`, `d.x`), and the operators `not`, `-`, `+`, `-`, `*`, `/`, `div`, `mod`, comparisons, `in` and `contains`.
+- **Built-in functions:** `count`, `round`, `sin`, `cos`, and `random` with `uses random`.
+
+What else code can do is refused when the engine is built, such as a key with values (`@welcome(name = n)`), `to` outside a `for`, or `join`. An engine has no window, data, parts or database: `message`, `open`, `save`, `find` and the like are errors in it ("an engine shows nothing: 'message' belongs in a handler, which shows what engine Board gives").
 
 ## Making an engine in WebAssembly
 
@@ -311,15 +342,90 @@ The canvas's `units` (160 by 100) and its `tells` (the tell `finished` runs the 
 - **Hears.** What a handler tells the engine: `hears start(level: integer)` declares it, and `sky.start(2)` in a handler tells it through the canvas. It reaches the engine at the start of the next frame, before the pointer, keys and tick that came after it, and runs the file's function `start` with `[2]`. A hear told before the canvas shows (in `on open`) waits for it. A hear the engine refuses ends it, as a failed frame does.
 - **Pointer and keys.** When the file exports `clarity_pointer`, the canvas sends it the pointer: `["down", x, y]` when the primary button or a finger goes down on the drawing, `["move", x, y]` while it moves over the drawing or is down, `["up", x, y]` when it lets go, in the canvas's units. While it is down the canvas keeps it, so a drag that leaves the drawing is at its nearest edge. When the file exports `clarity_key`, a click on the canvas (or Tab) gives it the keyboard, and each key goes as `["down", key]` once, however long it repeats, and `["up", key]`; when the canvas loses the keyboard, every key still down comes up. Keys are named alike on every stack: `a` to `z`, `0` to `9`, `Space`, `Enter`, `Escape`, `Backspace`, `Delete`, the arrows (`ArrowLeft`), `Home`, `End`, `PageUp`, `PageDown`, `Shift`, `Control`, `Alt` and `F1` to `F12`. A key with Control, Alt or the command key stays the window's shortcut. What happens between two frames goes at the start of the next, before its tick; moves in a row keep only the last.
 - **Services.** `uses clock, random, log, language` as for any engine. The clock and random are the screen's own. A line the engine logs goes into the application's log, the standard error, as `engine Screen: <the line>`, where the backend's engines write; on the web stacks the page hands it to the application's shell, which writes it there.
-- **Written in Clarity.** An engine beside the screen can be written in Clarity too, compiled like any Clarity engine. Its frames are its functions `clarity_tick(ms: integer)` and `clarity_draw()`, which returns a list of records with the shape's fields (`op`, `x`, `y`, `r`, `color` and the like); a hear is a function of its name, and `tell finished(time)` tells the window. See [An engine written in Clarity](../docs/LANGUAGE.md#an-engine-written-in-clarity) and [Records](../docs/LANGUAGE.md#records).
 - **Where it runs.** On the web stacks in a Web Worker of its own, with the browser's WebAssembly, so an engine that loops never freezes the window; the engine's file travels in the model the screen reads. On C# in Wasmtime, in the application's process, its frames worked off the screen's thread. The backend never loads it.
 
-The file exports `clarity_tick`, `clarity_draw` and a function per hear besides the engine interface; the designer says so when it lacks one. Values of tells and hears are plain: text, numbers, dates, durations, enums and yes or no. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
+The file exports `clarity_tick`, `clarity_draw` and a function per hear besides the engine interface; the designer says so when it lacks one. Values of tells and hears are plain: text, numbers, dates, durations, enums and yes or no. Only an engine beside the screen tells and hears. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
 
-## Not yet
+### Beside the screen, written in Clarity
 
-These are designed but not built:
+An engine beside the screen can be written in Clarity too, compiled like any Clarity engine. It has no words of its own for frames: its frames are functions of the interface's names, what it draws is a list of [records](code.modules.md#record) it returns, a hear is a function of its name, and `tell finished(time)` puts a tell in the answer of the call it is in.
 
-- The service `progress`, which would let a long call show on the screen how far it is.
-- In an engine written in Clarity: a text with slots (`"odd {n}"`) is given as written, not translated, and a key with values (`@welcome(name = n)`) is not compiled; a plain key (`@youWin`) is translated.
-- Records in code outside an engine.
+```clarity
+module game
+
+record Shape
+    op: text
+    x: integer
+    y: integer
+    r: integer
+    color: text, default "accent"
+
+engine Sky
+    beside the screen
+    tells finished(time: integer)
+    hears start(level: integer)
+    keep elapsed: integer = 0
+    keep stage: integer = 1
+
+    function clarity_tick(ms: integer)
+        elapsed = elapsed + ms
+        if elapsed > 10000
+            tell finished(elapsed)
+
+    function clarity_draw() -> list<Shape>
+        let dot = new Shape
+        dot.op = "circle"
+        dot.x = stage * 10
+        dot.y = 50
+        dot.r = 5
+        return [dot]
+
+    function start(level: integer)
+        elapsed = 0
+        stage = level
+```
+
+- It has `clarity_tick(ms: integer)`, `clarity_draw()` giving a list of records, and a function for each hear with its values; `clarity_pointer(kind: text, x: integer, y: integer)` and `clarity_key(kind: text, key: text)` when it wants the pointer and keys.
+- What it keeps starts as written, so it has no `on open`. A record's fields that a shape does not have are left alone by the canvas.
+
+## Declarations
+
+### `engine`
+
+    engine Name from "file.wasm"
+        uses service, ...
+        says @key, ...
+        limit n seconds, n MB
+        state per app | state per window
+        on open
+        beside the screen
+        tells name(values)
+        hears name(values)
+        function name(parameter: type, ...) -> type
+    engine Name
+        uses random, progress
+        state per app | state per window
+        beside the screen
+        tells name(values)
+        hears name(values)
+        const name = value
+        keep name: type = value
+        function name(parameter: type, ...) [-> type]
+            statements
+
+| Line | What it says | Default |
+|---|---|---|
+| `from "file.wasm"` | The file in the `engines` folder; without it, the engine is written in Clarity. | written in Clarity |
+| `uses` | The services it may call: `clock`, `random`, `log`, `language`, `progress`. | none |
+| `says` | The keys of the texts it gives people to read. | none |
+| `limit` | The time a call may run (1 to 3600 seconds) and the memory it may use (1 to 4096 MB). | 5 seconds, 256 MB |
+| `state per app`, `state per window` | Whose instance it is: one for the application, or one per open window. | a fresh instance per call |
+| `on open` | Runs `clarity_open` on every new instance. | off |
+| `beside the screen` | It draws a canvas frame by frame where the canvas is drawn. | off |
+| `tells`, `hears` | What it tells its window, and what a handler tells it, beside the screen. | none |
+| `function` | A function with its signature; in Clarity, with its statements. | none |
+| `keep name: type = value` | In Clarity: a plain value or a list of them kept between calls, and what it starts as. | none |
+
+The declaration is visible to the modules that `use` the module, like its functions.
+
+The checker says: "there is already an engine Board"; "engine Pricing has function total twice"; "engine function total gives a value: write its type after '->'"; "an engine takes values, records and lists of records, not file"; "engine function total takes every value; a default is for functions and actions"; "'clocks' is no service; an engine uses clock, random, log, language or progress"; "engine Pricing uses random twice"; "an engine's time limit is between 1 and 3600 seconds"; "an engine's memory limit is between 1 and 4096 MB"; "engine Screen runs beside the screen, one instance per canvas, so it has no state line"; "engine Screen runs beside the screen, so code does not call it; it has no functions"; "engine Board tells and hears only beside the screen: code calls it and has its answer"; "engine Board is written in Clarity: what it keeps starts as written, so it has no 'on open'"; "engine Sky beside the screen has no function clarity_tick(ms: integer), which its frames call"; "engine Sky hears start, so it has a function start(level: integer)"; "an engine beside the screen draws as it goes; progress is for a long call on the backend"; "engine Board keeps squares twice"; "squares starts as text: expected list<integer>". At a call: "unknown engine 'Pricng'"; "engine Pricing has no function totl"; "Pricing.total takes 1 argument, not 2"; "engine Board keeps state per window, so only a window's handlers call it, not action approve"; "random needs 'uses random' in engine Board"; "random is a service of an engine; a function gives the same answer for the same values"; "engine Board runs without a person; pass what it needs from me as values".

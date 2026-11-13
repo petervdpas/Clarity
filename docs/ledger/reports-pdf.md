@@ -5,7 +5,7 @@ Status: not built. A `clarity-pdf` crate on Typst (Markdown and Clarity content 
 Progress: 0%
 
 ## Code
-- Spec: none (no `<Report>` page kind, no `pdf of`)
+- Spec: none (no `<Report>` page kind, no `pdf of`); `ResourceKind::Pdf` (`crates/clarity-spec/src/resources.rs:99`) is a PDF file among the resources, not PDF making
 - Generators: none
 - Runtimes: none (planned `runtimes/rust-pdf` as crate `clarity-pdf`, with `rust-pdf-ffi` for Go, C#, C and C++, as Clarity.Audio and Clarity.Video have)
 - Clarity.UI: none (planned: a painter of Typst frames with Skia, after `typst-render`)
@@ -28,7 +28,7 @@ Progress: 0%
 - Order beside the questionnaire ([mcp-tools](mcp-tools.md)): the user's choice.
 
 ## Conflicts
-- DESIGN.md section 20, open question 5, asks which engine or format the `report` screen pattern targets; the plan of 2026-11-09 chose Typst and PDF.
+- none
 
 ## Decisions
 - 2026-11-09: a pdf crate that works like pandoc. User: "how hard (set aside) would it be to make a clarity-pdf crate? It's should function like pandoc.", "there isnt a rust latex crate or something?"

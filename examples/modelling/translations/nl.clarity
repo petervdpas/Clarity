@@ -37,6 +37,8 @@ translation nl
     keepRow "Bewaren"
     expandRow "Uitklappen"
     collapseRow "Inklappen"
+    expandAll "Alles uitklappen"
+    collapseAll "Alles inklappen"
     slideoutClose "Sluiten"
     slideoutPin "Vastzetten"
     slideoutUnpin "Laten wegschuiven"

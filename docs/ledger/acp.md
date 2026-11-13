@@ -18,6 +18,7 @@ Progress: 70%
 ## Tests
 - `crates/clarity-acp/tests/client.rs` (against a fake agent program, no vendor login), `crates/clarity-acp/tests/vendors.rs`
 - `crates/clarity-tools/tests/turn.rs`
+- `crates/clarity-project/tests/activity.rs` (`a_writer_waits_while_the_log_keeps_being_written` :122, the activity log's lock wait)
 - conformance: none
 
 ## Open
@@ -27,7 +28,7 @@ Progress: 70%
 - Panel, picker and dialog texts from translations: NOT BUILT (see [ide-shell](ide-shell.md)).
 
 ## Conflicts
-- Undo after an outside agent: manual/ai.mcp.md:91 says Undo does not take back an outside agent's turn (true for agents through `clarity mcp`); in the panel a turn is one Undo step (`crates/clarity-tools/src/turn.rs`); DESIGN.md:82 says Undo takes an AI's changes back.
+- none
 
 ## Decisions
 - 2026-11-09: the panel talks to an agent the person already pays for, with that vendor's login, no API key in Clarity. User: "but I asked for an easier way to use ai in clarity, without and api key!!!!!!!!", and "but I want it inside the ide!!"

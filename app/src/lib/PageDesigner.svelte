@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogs } from "./dialogStore.svelte";
   import { designLog } from "./designLog";
   import { onMount, untrack } from "svelte";
   import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
@@ -32,8 +33,7 @@
   import type { Selected } from "./selection";
   import type { WidgetInfo } from "@clarity/ui/generated/WidgetInfo.ts";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "@clarity/ui/screen/frame.ts";
-  import { describeType, themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
-  import { dataEntity, dataType, isList, valueField } from "@clarity/ui/screen/windowData.ts";
+  import { themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
   import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
   import {
@@ -50,7 +50,6 @@
     type DesignKey,
     allParts,
     pageData,
-    widgetForField,
     widgetInfo,
     withProps,
   } from "@clarity/ui/screen/pages.ts";
@@ -64,6 +63,7 @@
     settings = null,
     onsavesettings = null,
     onopen = null,
+    onnewpart = null,
   }: {
     preview: Preview;
     /** The page, or the app shown as a page (see `appAsPage`). */
@@ -77,6 +77,8 @@
     onsavesettings?: ((settings: Settings) => void) | null;
     /** Opens another part of the project in the main area, as the project tree does. */
     onopen?: ((selected: Selected) => void) | null;
+    /** Makes a new custom part in Clarity's dialog and gives its name; null when the person cancels. */
+    onnewpart?: (() => Promise<string | null>) | null;
   } = $props();
 
   const CATEGORIES: { key: Category; name: string }[] = [
@@ -90,22 +92,6 @@
     { key: "tools", name: "Toolbox" },
     { key: "signin", name: "Sign-in" },
   ];
-
-  // A toolbox (`page X: toolbox`) holds its tools, buttons, labels, headings and lines; a window or a view holds no tools.
-  function designingToolbox(): boolean {
-    return page.kind === "toolbox";
-  }
-  const TOOLBOX_ALSO = ["button", "label", "heading", "separator"];
-  function paletteHolds(category: Category): boolean {
-    if (guiding) return preview.catalog.some((w) => w.category === category && paletteOffers(w.kind));
-    return designingToolbox() ? category === "tools" || category === "text" || category === "containers" || category === "basicInput" : category !== "tools" && category !== "signin";
-  }
-  function paletteOffers(kind: string): boolean {
-    const info = preview.catalog.find((w) => w.kind === kind);
-    if (guiding === "view") return !!info?.signinView && info.category !== "signin";
-    if (guiding === "window") return !!info?.signinWindow;
-    return !designingToolbox() || TOOLBOX_ALSO.includes(kind) || info?.category === "tools";
-  }
 
   let canvas: HTMLElement | undefined = $state();
 
@@ -208,8 +194,6 @@
         ? NO_FRAME
         : shownFrame(projectApp, page.kind === "window" ? page.frame : null),
   );
-  /** What has fields: the entities, and the records (DESIGN 5.12) code builds and nothing stores. */
-  const entities = $derived(preview.project.files.flatMap((f) => [...f.entities, ...f.records]));
   // Where Clarity.UI drew the window's parts and grids, for the design layer over it.
   let laid = $state<Layout | null>(null);
   // A popover or slide-out shows while it or a part in it is picked, as it opens when the program runs.
@@ -310,49 +294,31 @@
     const into = placeOf(preview, at.container);
     if (!into) return;
     switch (source.kind) {
-      case "new":
+      case "new": {
+        // A Custom part is one of the project's: which, asked here, arriving at its declared size (DESIGN 5.19).
+        let part = source.part ?? null;
+        let height: number | null = null;
+        if (source.widget === "custom" && !part) {
+          const decl = await pickCustom();
+          if (!decl) return;
+          part = decl.name.name;
+          height = (decl.size ?? [4, 3])[1];
+        }
         await apply({
           op: "createWidget",
           container: into.at,
           kind: source.widget,
           col: at.col,
           row: at.row,
-          width: at.width === source.width && !source.part ? null : at.width,
+          width: at.width === source.width && !part ? null : at.width,
           caption: null,
           bind: null,
-          // A custom part arrives at its declared size (DESIGN 5.19).
-          part: source.part ?? null,
-          height: source.part ? at.height : null,
+          part,
+          height: height ?? (source.part ? at.height : null),
           input: source.input ?? null,
           strategy: source.strategy ?? null,
           shows: source.shows ?? null,
         }, at.container);
-        break;
-      case "field": {
-        // A list arrives as a table. A field arrives as its input, with a
-        // label for it and its help text when there is room; the backend
-        // lays these out the same way the form template does.
-        // A list or a plain value arrives as one part bound to it by name.
-        const room = at.columns - at.col + 1;
-        if (source.bind && !source.bind.includes(".")) {
-          await apply({
-            op: "createWidget",
-            container: into.at,
-            kind: source.widget,
-            col: at.col,
-            row: at.row,
-            width: Math.min(source.width, room),
-            caption: null,
-            bind: source.bind,
-            part: null,
-            height: null,
-            input: null,
-            strategy: null,
-            shows: null,
-          }, at.container);
-        } else {
-          await apply({ op: "placeField", container: into.at, col: at.col, row: at.row, room, bind: source.bind }, at.container);
-        }
         break;
       }
       case "move": {
@@ -397,56 +363,27 @@
     pageDesigner.press(e, { kind: "new", widget: tile.kind, width: tile.width, height: tile.height, label: tile.label, input: tile.input, strategy: tile.strategy, shows: tile.shows });
   }
 
-  // The custom parts the project declares (DESIGN 5.19), dropped at their declared size.
+  // The custom parts the project declares (DESIGN 5.19): a dropped Custom part is one of them, or a new one.
   const customParts = $derived(preview.project.files.flatMap((f) => f.parts));
 
-  function pressCustom(e: PointerEvent, part: PartDecl) {
-    const [width, height] = part.size ?? [4, 3];
-    pageDesigner.press(e, { kind: "new", widget: "custom", width, height, label: part.name.name, part: part.name.name });
-  }
-
-  /** A plain value arrives as one part bound to it. */
-  function pressValue(e: PointerEvent, dataName: string, kind: WidgetKind) {
-    const info = widgetInfo(preview, kind);
-    pageDesigner.press(e, {
-      kind: "field",
-      widget: kind,
-      bind: dataName,
-      caption: dataName,
-      width: info.width,
-      height: info.height,
-      label: dataName,
-    });
-  }
-
-  function pressField(e: PointerEvent, dataName: string, fieldName: string, label: string, list: boolean) {
-    if (list) {
-      const table = widgetInfo(preview, "table");
-      pageDesigner.press(e, {
-        kind: "field",
-        widget: "table",
-        bind: dataName,
-        caption: label,
-        width: table.width,
-        height: table.height,
-        label: `Table of ${dataName}`,
+  /** Which custom part a dropped Custom part is: picked from the project's, or made new; none when the person cancels. */
+  async function pickCustom(): Promise<PartDecl | null> {
+    const NEW = "";
+    let name: string | null = NEW;
+    if (customParts.length > 0) {
+      name = await dialogs.choose({
+        title: "Which custom part",
+        text: "A custom part is drawn by a library of the project's language. Pick one the project declares, or make a new one.",
+        choices: [...customParts.map((d) => ({ value: d.name.name, label: d.name.name })), { value: NEW, label: "New custom part..." }],
       });
-      return;
+      if (name === null) return null;
     }
-    const entry = data[dataName];
-    const field = entry?.entity.fields.find((f) => f.name.name === fieldName);
-    if (!field) return;
-    const kind = widgetForField(preview, field);
-    const info = widgetInfo(preview, kind);
-    pageDesigner.press(e, {
-      kind: "field",
-      widget: kind,
-      bind: `${dataName}.${fieldName}`,
-      caption: label,
-      width: info.width,
-      height: info.height,
-      label,
-    });
+    if (name === NEW) {
+      if (!onnewpart) return null;
+      name = await onnewpart();
+      if (!name) return null;
+    }
+    return preview.project.files.flatMap((f) => f.parts).find((d) => d.name.name === name) ?? null;
   }
 
   function dock(region: RegionKind, at: Dock) {
@@ -521,14 +458,6 @@
       {/each}
     </div>
   {/if}
-  {#if customParts.length > 0}
-    <h4>Custom parts</h4>
-    <div class="tiles">
-      {#each customParts as part (part.name.name)}
-        <PartTile kind="custom" name={part.name.name} title="Drawn by its library; drag onto the window." onpointerdown={(e) => pressCustom(e, part)} />
-      {/each}
-    </div>
-  {/if}
   {#if tiles.length > 0}
     <h4>Sign-in</h4>
     <div class="tiles">
@@ -537,45 +466,21 @@
       {/each}
     </div>
   {/if}
-  {#each CATEGORIES.filter((c) => paletteHolds(c.key)) as c (c.key)}
+  <!-- Every part type Clarity has, the same in every project: what a part means is settled where it is dropped. -->
+  {#each CATEGORIES as c (c.key)}
     <h4>{c.name}</h4>
     <div class="tiles">
-      {#each preview.catalog.filter((w) => w.category === c.key && w.kind !== "custom" && paletteOffers(w.kind)) as info (info.kind)}
-        <PartTile kind={info.kind} name={info.name} onpointerdown={(e) => pressPalette(e, info)} />
+      {#each preview.catalog.filter((w) => w.category === c.key) as info (info.kind)}
+        <PartTile
+          kind={info.kind}
+          name={info.name}
+          title={info.kind === "custom" ? "Drag onto the window: pick one of the project's custom parts, or make a new one" : "Drag onto the window"}
+          onpointerdown={(e) => pressPalette(e, info)}
+        />
       {/each}
     </div>
   {/each}
 
-  {#each page.data as decl (decl.span.start)}
-    {@const entity = entities.find((x) => x.name.name === dataEntity(decl))}
-    {@const value = valueField(decl)}
-    <h4>Data <code>{decl.name.name}: {dataType(decl)}</code></h4>
-    <div class="tiles">
-      {#if value}
-        <PartTile
-          kind={widgetForField(preview, value)}
-          name={decl.name.name}
-          detail={dataType(decl)}
-          title="Drag onto the window: a part bound to this value"
-          onpointerdown={(e) => pressValue(e, decl.name.name, widgetForField(preview, value))}
-        />
-      {:else if isList(decl)}
-        <PartTile kind="table" name="Table of {decl.name.name}" onpointerdown={(e) => pressField(e, decl.name.name, "", decl.name.name, true)} />
-      {:else}
-        {#each (entity?.fields ?? []).filter((f) => f.type.kind !== "list") as field (field.name.name)}
-          <PartTile
-            kind={widgetForField(preview, field)}
-            name={tr(preview, field.label)}
-            detail={describeType(field)}
-            title="Drag onto the window: a label and a bound input"
-            onpointerdown={(e) => pressField(e, decl.name.name, field.name.name, tr(preview, field.label), false)}
-          />
-        {/each}
-      {/if}
-    </div>
-  {:else}
-    <p class="hint">Declare data in the window properties to drag bound fields onto the window.</p>
-  {/each}
 </section>
 
 <div use:portal={"design-outline"}>
@@ -772,11 +677,6 @@
     color: var(--text-muted);
   }
 
-  h4 code {
-    font-family: var(--mono);
-    text-transform: none;
-    letter-spacing: 0;
-  }
 
   .tiles {
     display: grid;
@@ -949,11 +849,6 @@
     color: var(--text-muted);
   }
 
-  .hint {
-    margin: 0;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
 
   .error {
     background: var(--error-soft);

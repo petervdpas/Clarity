@@ -36,7 +36,7 @@ migration "Phone and VAT"
 - `add unique Entity.name` and `remove unique Entity.name` make a field unique, or not.
 - `add version Entity` gives the table its version column, `row_version`, at 1 for the records already there, so a save never overwrites someone else's change (see [Entities](data.entities.md#a-save-never-overwrites-someone-elses-change)). A new entity gets it from its first step: a line `version` in its `add entity`, which Clarity writes itself.
 
-Only what is stored counts in a step: the type, `unique`, `column`, and `default` for records that already exist. Labels, help texts and checks such as `min` belong to the entity alone. The `map table`, `map key` and `map column` changes are in [the language reference](../docs/LANGUAGE.md).
+Only what is stored counts in a step: the type, `unique`, `column`, and `default` for records that already exist. Labels, help texts and checks such as `min` belong to the entity alone. The `map table`, `map key` and `map column` changes are in [Data sources](data.sources.md), under the migration steps of a source.
 
 ## Pending changes
 

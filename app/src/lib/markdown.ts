@@ -72,9 +72,11 @@ export function markdown(text: string, options: MarkdownOptions = {}): string {
     const line = lines[i];
     if (line.trim().startsWith("```")) {
       flush();
+      // A page's Mermaid diagram is marked so the manual window draws it.
+      const diagram = page && line.trim().slice(3).trim() === "mermaid";
       const code: string[] = [];
       while (++i < lines.length && !lines[i].trim().startsWith("```")) code.push(lines[i]);
-      out.push(`<pre><code>${escape(code.join("\n"))}</code></pre>`);
+      out.push(`<pre${diagram ? ' class="mermaid"' : ""}><code>${escape(code.join("\n"))}</code></pre>`);
       continue;
     }
     // A table: a header row, a row of dashes, then its rows.

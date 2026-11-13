@@ -5,12 +5,12 @@ Status: partial. The `canvas` part (draw handler, modes objects, paint and vecto
 Progress: 65%
 
 ## Code
-- Spec: `crates/clarity-spec/src/widgets.rs` (canvas props; toolbox kinds tool, toolGroup, toolSize, toolOpacity, toolColors, toolLayers at :23-33, :151, :462-466, :928); `crates/clarity-spec/src/views.rs:129, 240, 290` (a toolbox page placed in the canvas that names it); `crates/clarity-spec/src/code/check.rs:2230` (`canvas.shape(...)`: clear, line, rect, circle, ring, text, link, object, ellipse, path, image); page kind toolbox `model.rs:512`, root `<Toolbox>` in `cxaml.rs`
-- Generators: `crates/clarity-gen/src/lib.rs:505` (`canvas_draws`), :544 (`canvas_tool`); each stack's logic.rs for draw handlers and `on change`
+- Spec: `crates/clarity-spec/src/widgets.rs` (canvas props; toolbox kinds tool, toolGroup, toolSize, toolOpacity, toolColors, toolLayers at :23-34, :155, :463-467, :932); `crates/clarity-spec/src/views.rs:129, 240, 290` (a toolbox page placed in the canvas that names it); `crates/clarity-spec/src/code/check.rs:2239` (`canvas.shape(...)`: clear, line, rect, circle, ring, text, link, object, ellipse, path, image); page kind toolbox `model.rs:519`, root `<Toolbox>` in `cxaml.rs`
+- Generators: `crates/clarity-gen/src/lib.rs:526` (`canvas_draws`), :565 (`canvas_tool`); each stack's logic.rs for draw handlers and `on change`
 - Runtimes: R `runtimes/rust/src/canvas.rs`; Go `runtimes/go/clarity/canvas.go`; C `runtimes/c/clarity/canvas.c`; C++ through Clarity.UI and `runtimes/cpp/tests/canvas_test.cpp`; C# `runtimes/csharp/Clarity.Runtime/CanvasModes.cs`, `Shape.cs`
-- Clarity.UI: `runtimes/rust-ui/src/parts/data/canvas.rs`; `parts/data/canvas/` (drawing.rs, modes.rs, raster.rs, layers.rs, adjust.rs, toolbox.rs, engine.rs); toolbox parts `parts/tools.rs`; memo's context toolbox `parts/text_editor.rs:576`
-- IDE: palette and inspector (see [ide-designer](ide-designer.md)); New window offers a toolbox template (`app/src/lib/NewWindowDialog.svelte:83`)
-- Docs: LANGUAGE.md "Drawing on a canvas" (:1993), "Canvas modes" (:2178, toolbox at :2184)
+- Clarity.UI: `runtimes/rust-ui/src/parts/data/canvas.rs`; `parts/data/canvas/` (drawing.rs, modes.rs, raster.rs, layers.rs, adjust.rs, toolbox.rs, engine.rs); toolbox parts `parts/tools.rs`; memo's context toolbox `parts/text_editor.rs:582`
+- IDE: palette and inspector (see [ide-designer](ide-designer.md)); New window offers a toolbox template (`app/src/lib/NewWindowDialog.svelte:92`)
+- Docs: manual `parts.graphics.md` (Drawing on a canvas, The pointer on a canvas, Canvas modes, `canvas`), `parts.toolbox.md`, `code.handlers.md` (Drawing on a canvas)
 
 ## Tests
 - `conformance/drawing.json`: run by R (`runtimes/rust/tests/values.rs`), Go (`drawing_test.go`), C (`values_test.c`), C++ (`values_test.cpp`, `ui_test.cpp`), C# (`FrameLoopTests.cs`, `RoundingTests.cs`), Clarity.UI (`tests/data/data_canvas.rs`)
@@ -19,7 +19,7 @@ Progress: 65%
 - Engine canvases: see [engines](engines.md)
 
 ## Open
-- `surface svg|bitmap|gpu`: PARTIAL. Parsed and stored (`crates/clarity-spec/src/parser.rs:2531`), read by nothing.
+- `surface svg|bitmap|gpu`: PARTIAL. Parsed and stored (`crates/clarity-spec/src/parser.rs:2538`), read by nothing; only `widgets.rs:2083` writes it back.
 - `bitmap` and `vector` field types: NOT BUILT. Painting stores into an `image` field, vector into a `text` field (SVG).
 - Layer opacity: NOT BUILT (IMAGE-PLAN.md:46-48).
 - `board.picture()` (the composed canvas read back as a picture): NOT BUILT (IMAGE-PLAN.md:48).
@@ -29,9 +29,7 @@ Progress: 65%
 - No example uses the paint toolbox with picture functions (see [picture-functions](picture-functions.md)).
 
 ## Conflicts
-- Toolbox syntax: IMAGE-PLAN.md:60-77 writes a `toolbox Painting` module block; the code and LANGUAGE.md:2184 use a `<Toolbox>` page (`crates/clarity-spec/src/views.rs:290`).
-- LANGUAGE.md:1044 parts catalog leaves out canvas `connect` and `resize` events.
-- DESIGN 5.7 (:602-650) still describes `screen ... canvas`, `renderer` and `bitmap`/`vector` fields as the design; none is built that way.
+- Toolbox syntax: IMAGE-PLAN.md:60-77 writes a `toolbox Painting` module block; the code and manual `parts.toolbox.md` use a `<Toolbox>` page (`crates/clarity-spec/src/views.rs:290`).
 
 ## Decisions
 - 2026-10-19: the backend renderer is a draw handler written in Clarity, shapes in the canvas's units, on every stack; the frontend renderer is an engine beside the screen.

@@ -5,12 +5,12 @@ Status: partial. A `timer` part with no place in the window that runs `on tick` 
 Progress: 75%
 
 ## Code
-- Spec: `crates/clarity-spec/src/widgets.rs:1341` (`WidgetKind::Timer`, palette Time, `Event::Tick`; placeless kinds :1472)
+- Spec: `crates/clarity-spec/src/widgets.rs:1362` (`WidgetKind::Timer`, palette Time, `Event::Tick`; placeless kinds `off_grid` :1492)
 - Generators: written into the window markup as any part (`<Timer>`), left out of the grid (`crates/clarity-gen/src/web_windows.rs`)
 - Runtimes: each tick runs the handler as an event of the window (`dispatch_event`); `clock.enabled` is part state in every runtime
 - Clarity.UI: `runtimes/rust-ui/src/parts/timer.rs` (ticks are the screen's wake-ups; starts as its window joins the screen, stops as it leaves; `every` kept between 0.1 s and a day)
-- IDE: the designer's tray under the window, with the sounds (`app/src/lib/PageDesigner.svelte`)
-- Docs: manual `design.parts.md` (Time), `design.sound.md`; LANGUAGE.md section 6 (Live graphs)
+- IDE: the designer's tray under the window, with the sounds (`app/src/lib/PageDesigner.svelte:622-624`)
+- Docs: manual `parts.time.md` (`timer`, Live graphs), `design.sound.md`
 
 ## Tests
 - No conformance file (`conformance/timers.json` does not exist).
@@ -21,8 +21,7 @@ Progress: 75%
 - `once`, a settable `every`, `start()` and `stop()`, `conformance/timers.json`: PARTIAL. Code starts and stops a timer through `enabled` only (DESIGN.md:2490).
 
 ## Conflicts
-- DESIGN.md:2490 (TI1) says "planned"; the timer is built (5.26).
-- DESIGN.md 5.26 (:1479) names `Runtime.svelte` and C# `TimerPart`; the timer is `runtimes/rust-ui/src/parts/timer.rs`.
+- none
 
 ## Decisions
 - 2026-10-25: a tick that comes while a handler runs is left out, not saved up; time a long handler took is not made up.

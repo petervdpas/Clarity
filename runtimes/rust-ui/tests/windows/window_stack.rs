@@ -27,6 +27,7 @@ const MAIN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   <Button name="fail" at="10,3" span="3" caption="Fail" onclick="fail" />
   <Button name="digit" at="1,4" span="3" caption="7" onclick="digit(7)" />
   <Button name="twoErrors" at="4,4" span="3" caption="Errors" onclick="twoErrors" />
+  <Button name="toasts" at="7,4" span="3" caption="Toasts" onclick="toasts" />
 </Window>
 "#;
 
@@ -36,7 +37,7 @@ const USERS: &str = r#"<Window name="Users">
 </Window>
 "#;
 
-const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "translations": {"en": {"countCaption": "How many"}}}}"#;
+const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "translations": {"en": {"countCaption": "How many"}}}, "icons": {"check": "M 20 6 L 9 17 L 4 12"}}"#;
 
 const FILES: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Users", USERS)], apps: &[], themes: &[], model: MODEL, resources: &[], title: "Orders", width: 800.0, height: 500.0 };
 
@@ -77,7 +78,7 @@ impl Program for Fake {
     fn close_window(&self, state: WindowState) -> Answer<Reply> {
         self.said(format!("close {}", state.window));
         let mut r = reply(state);
-        r.messages.push(Message { level: Level::Info, text: Text::plain("Users closed") });
+        r.messages.push(Message { level: Level::Info, text: Text::plain("Users closed"), toast: None });
         Ok(r)
     }
     fn return_to(&self, state: WindowState) -> Answer<Reply> {
@@ -92,19 +93,28 @@ impl Program for Fake {
                 state.data.insert("saved".into(), json!(saved));
                 state.parts.entry("count".into()).or_default().caption = Some(Text::plain(format!("Saved {saved}")));
                 let mut r = reply(state);
-                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved") });
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved"), toast: None });
                 Ok(r)
             }
             "warn" => {
                 let mut r = reply(state);
-                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful") });
+                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful"), toast: None });
                 Ok(r)
             }
             "fail" => Err(Text::plain("That did not work")),
+            // Two toasts the project declares, each with its own look and lifespan.
+            "toasts" => {
+                let mut r = reply(state);
+                let saved = clarity_runtime::ui::Toast { name: "saved".into(), level: "success".into(), lifespan: Some(3000), icon: Some("check".into()), corner: "bottomRight".into() };
+                let imported = clarity_runtime::ui::Toast { name: "imported".into(), level: "warning".into(), lifespan: Some(8000), icon: None, corner: "topLeft".into() };
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved Ada"), toast: Some(saved) });
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Imported 3"), toast: Some(imported) });
+                Ok(r)
+            }
             "twoErrors" => {
                 let mut r = reply(state);
-                r.messages.push(Message { level: Level::Error, text: Text::plain("one") });
-                r.messages.push(Message { level: Level::Error, text: Text::plain("two") });
+                r.messages.push(Message { level: Level::Error, text: Text::plain("one"), toast: None });
+                r.messages.push(Message { level: Level::Error, text: Text::plain("two"), toast: None });
                 Ok(r)
             }
             "done" => {
@@ -220,7 +230,7 @@ fn a_click_runs_its_handler_through_the_program_and_the_reply_redraws() {
     let count = part_named(&screen, "count");
     assert_eq!("Saved 1", screen.element(count).unwrap().as_any().downcast_ref::<LabelPart>().unwrap().text());
     // Its info message shows as a note.
-    assert_eq!(vec!["Saved".to_string()], stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>());
+    assert_eq!(vec!["Saved".to_string()], stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>());
     // A call with values is sent as Clarity writes it.
     click(&mut screen, "digit");
     assert_eq!(vec!["dispatch digit(7)"], fake.calls());
@@ -260,14 +270,43 @@ fn an_info_message_is_a_note_that_goes_by_itself() {
     let read = clock.clone();
     screen.now = Box::new(move || read.get());
     click(&mut screen, "save");
-    assert_eq!(vec!["Saved".to_string()], stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>());
+    assert_eq!(vec!["Saved".to_string()], stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>());
     clock.set(now + std::time::Duration::from_secs(4));
     screen.wake_due(clock.get());
-    assert_eq!(1, stack(&screen).notes().len());
+    assert_eq!(1, stack(&screen).toasts().len());
     clock.set(now + clarity_ui::window::messages::INFO_DURATION);
     screen.wake_due(clock.get());
-    assert!(stack(&screen).notes().is_empty());
+    assert!(stack(&screen).toasts().is_empty());
     assert!(stack(&screen).said().is_empty());
+}
+
+/// Toasts the project declares: each in its own corner, with its own
+/// lifespan, its level's color and its icon; a warning toast is a toast,
+/// not a dialog.
+#[test]
+fn a_declared_toast_shows_in_its_corner_for_its_lifespan() {
+    let (mut screen, _) = started();
+    let now = std::time::Instant::now();
+    let clock = std::rc::Rc::new(std::cell::Cell::new(now));
+    let read = clock.clone();
+    screen.now = Box::new(move || read.get());
+    click(&mut screen, "toasts");
+    assert_eq!(stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Saved Ada", "Imported 3"]);
+    assert!(stack(&screen).said().is_empty(), "a warning toast shows as a toast");
+    screen.resize(800.0, 500.0, 1.0);
+    let list = screen.find::<clarity_ui::window::ToastList>().unwrap();
+    let places = list.places();
+    let (saved, imported) = (places[0], places[1]);
+    assert!(saved.right() > 700.0 && saved.bottom() > 400.0, "saved shows at the bottom right: {saved:?}");
+    assert!(imported.x < 100.0 && imported.y < 100.0, "imported shows at the top left: {imported:?}");
+    assert_eq!(list.colors(), ["success", "warning"]);
+    assert_eq!(list.icons(), [true, false], "saved shows its icon");
+    clock.set(now + std::time::Duration::from_millis(3000));
+    screen.wake_due(clock.get());
+    assert_eq!(stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Imported 3"], "saved goes after 3 seconds");
+    clock.set(now + std::time::Duration::from_millis(8000));
+    screen.wake_due(clock.get());
+    assert!(stack(&screen).toasts().is_empty(), "imported after 8");
 }
 
 #[test]
@@ -275,12 +314,12 @@ fn a_note_closes_with_its_x() {
     let (mut screen, _) = started();
     click(&mut screen, "save");
     Shot::of(&mut screen, 800, 500, 1.0);
-    let list = clarity_ui::Element::node(screen.find::<clarity_ui::window::messages::NoteList>().unwrap()).bounds;
+    let list = clarity_ui::Element::node(screen.find::<clarity_ui::window::messages::ToastList>().unwrap()).bounds;
     // The x sits at the note's top right: 30 in from its right edge, 6 down, 24 square.
     let (x, y) = (list.right() - 30.0 + 12.0, list.y + 6.0 + 12.0);
     screen.pointer_pressed(x, y, clarity_ui::input::PointerButton::Left, 1);
     screen.pointer_released(x, y, clarity_ui::input::PointerButton::Left);
-    assert!(stack(&screen).notes().is_empty());
+    assert!(stack(&screen).toasts().is_empty());
 }
 
 #[test]
@@ -320,7 +359,7 @@ fn a_window_opens_in_place_and_closes_back_to_the_one_below() {
     assert_eq!(vec!["Main"], stack(&screen).windows());
     part_named(&screen, "save");
     // What the closing window said shows in the window below.
-    assert_eq!(vec!["Users closed".to_string()], stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>());
+    assert_eq!(vec!["Users closed".to_string()], stack(&screen).toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>());
 }
 
 #[test]

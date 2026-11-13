@@ -5,14 +5,14 @@ Status: partial. SQL data sources (SQLite, PostgreSQL, MySQL, SQL Server), owned
 Progress: 65%
 
 ## Code
-- Project file: `datasource name kind "where"` with external, readonly, beside (`crates/clarity-project/src/file.rs:474-540`); `SourceKind` (`crates/clarity-project/src/lib.rs:66-75`); `keychain:` refused (lib.rs:607); import and take ownership (lib.rs:1399, `file_import.rs`)
-- Spec: `source erp` per module (`crates/clarity-spec/src/parser.rs:332`, `check.rs:2636`); external mapping `table`, `key`, `column`
+- Project file: `datasource name kind "where"` with external, readonly, beside (`crates/clarity-project/src/file.rs:504-570`); `SourceKind` (`crates/clarity-project/src/lib.rs:66-75`); `keychain:` refused (lib.rs:748, :757, `keychain_problem` :677); import and take ownership (`import_tables` lib.rs:1550, `take_ownership` :1613, `file_import.rs`)
+- Spec: `source erp` per module (`crates/clarity-spec/src/parser.rs:332`, `check.rs:2651`); external mapping `table`, `key`, `column`
 - Core: `crates/clarity-db` (live-table checks, keys `src/lib.rs:42-49`)
-- Generators: SQL per dialect `crates/clarity-gen/src/ddl.rs` (`Sql::of`, `feature`); entities without a source refused (`crates/clarity-gen/src/lib.rs:53`); C and C++ refuse non-SQLite (`c/mod.rs:248`, `cpp/mod.rs:257`, cli `c/cli.rs:142`, `cpp/cli.rs:123`)
+- Generators: SQL per dialect `crates/clarity-gen/src/ddl.rs` (`Sql::of`, `feature`); entities without a source refused (`crates/clarity-gen/src/lib.rs:53`); C and C++ refuse non-SQLite (`c/mod.rs:253`, `cpp/mod.rs:262`, cli `c/cli.rs:142`, `cpp/cli.rs:124`)
 - Runtimes: R `runtimes/rust/src/{sqlite,postgres,mysql,mssql,dialect,store,data_folder}.rs` (Cargo features); Go `runtimes/go/clarity/{sqlite,server,dialect,db,data_folder}.go`, `runtimes/go/{postgresql,mysql,sqlserver}`; C `runtimes/c/clarity/{sqlite.c,db.c,store.c,dialect.c}`; C++ `runtimes/cpp/clarity/{sqlite,db,store,dialect,paths}.cpp`; C# `Clarity.Runtime/{Db,Store,Dialect,Locations,ServerDriver,Unconnected}.cs`, NuGets `Clarity.Runtime.Sqlite`, `.PostgreSql`, `.MySql`, `.SqlServer`
 - IDE: data sources in `app/src/lib/ProjectSettings.svelte`; `app/src/lib/ImportPanel.svelte`; `app/src-tauri/src/external.rs` (source_tables, import_tables, take_ownership)
 - CLI: `clarity import`, `clarity own` (`crates/clarity-cli/src/main.rs`)
-- Docs: manual `data.sources.md`, `project.file.md`; LANGUAGE.md section 4 "Databases" (:542), "External databases" (:587)
+- Docs: manual `data.sources.md` (Kinds, External databases), `project.file.md` (`datasource`)
 
 ## Tests
 - `conformance/data-folder.json`: run by R, Go, C, C++, C#
@@ -22,20 +22,17 @@ Progress: 65%
 - `crates/clarity-gen/tests/no_datasource.rs`, `unconnected_csharp.rs`
 
 ## Open
-- PostgreSQL, MySQL and SQL Server on C and C++: NOT BUILT ("the C backend stores records in SQLite for now", `crates/clarity-gen/src/c/mod.rs:248`).
-- Import, live-table checks and baselines for server databases: NOT BUILT ("importing is for SQLite and files only for now", `crates/clarity-project/src/lib.rs:1399`; `crates/clarity-gen/src/schema.rs:426`).
+- PostgreSQL, MySQL and SQL Server on C and C++: NOT BUILT ("the C backend stores records in SQLite for now", `crates/clarity-gen/src/c/mod.rs:253`).
+- Import, live-table checks and baselines for server databases: NOT BUILT ("importing is for SQLite and files only for now", `crates/clarity-project/src/lib.rs:1480`; `crates/clarity-gen/src/schema.rs:426`).
 - Keys that are not one integer column: NOT BUILT (`crates/clarity-db/src/lib.rs:42-49`).
-- TLS to PostgreSQL and MySQL: PARTIAL. Rust connects without TLS (`runtimes/rust/src/postgres.rs:144`, `runtimes/rust/Cargo.toml:57`); SQL Server uses rustls; Go and C# not checked.
+- TLS to PostgreSQL and MySQL: PARTIAL. Rust connects without TLS (`runtimes/rust/src/postgres.rs:144`, `runtimes/rust/Cargo.toml:58`); SQL Server uses rustls; Go and C# not checked.
 - Money shown with the four decimals the servers store: open (roadmap D1d).
 - Testing a source's connection from the Project tab: NOT BUILT (DESIGN.md:131).
 - Copying data when a source changes kind (SQLite to PostgreSQL): NOT BUILT (DESIGN.md:160, roadmap D3); BACKUP-PLAN step 3 would give it, see [backups](backups.md).
 - The shop's windows against a server database: UNTRIED (roadmap G2d).
 
 ## Conflicts
-- DESIGN.md:138 says C# uses EF Core or Dapper; it is plain ADO.NET (`runtimes/csharp/Clarity.Runtime.Sqlite/SqliteDriver.cs:5`).
-- DESIGN.md:121 lists sqlite, postgres, mysql, mssql, rest; LANGUAGE.md:91 and manual `project.file.md:50` add the file formats ([formats](formats.md)).
-- C and C++ refusal wording differs: "is a PostgreSQL/MySQL/SQL Server database" in `c/mod.rs:248`, `cpp/mod.rs:257`; "is a server database" in `c/cli.rs:142`, `cpp/cli.rs:123`.
-- LANGUAGE.md:87 and the grammar leave out `beside` and the `file` kind with `using Mapping` (`file.rs:484-519`).
+- C and C++ refusal wording differs: "is a PostgreSQL/MySQL/SQL Server database" in `c/mod.rs:253`, `cpp/mod.rs:262`; "is a server database" in `c/cli.rs:142`, `cpp/cli.rs:124`.
 
 ## Decisions
 - 2026-10-16: the first data source is the default; a new project gets one SQLite source `main`; passwords never in the project file, only `env:` or `setting:` (DESIGN 1.3).

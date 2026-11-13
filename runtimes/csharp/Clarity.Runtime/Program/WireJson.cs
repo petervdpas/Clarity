@@ -139,11 +139,21 @@ internal static class WireJson
     }
 
     /// <summary>What a handler said, as the library shows it.</summary>
-    public static JsonObject Message(Message message) => new()
+    public static JsonObject Message(Message message)
     {
-        ["level"] = message.Level.ToString().ToLowerInvariant(),
-        ["text"] = Text(message.Text),
-    };
+        var json = new JsonObject
+        {
+            ["level"] = message.Level.ToString().ToLowerInvariant(),
+            ["text"] = Text(message.Text),
+        };
+        if (message.Toast is { } toast)
+        {
+            var look = new JsonObject { ["name"] = toast.Name, ["level"] = toast.Level, ["lifespan"] = toast.Lifespan, ["corner"] = toast.Corner };
+            if (toast.Icon is not null) look["icon"] = toast.Icon;
+            json["toast"] = look;
+        }
+        return json;
+    }
 
     /// <summary>An error the library shows: its text.</summary>
     public static JsonObject Error(Text text) => new() { ["error"] = Text(text) };
@@ -187,6 +197,8 @@ internal static class WireJson
             state["snap"] = true;
         if (part.Connecting)
             state["connecting"] = true;
+        if (part.FoldButtonsSet)
+            state["foldButtons"] = part.FoldButtons;
         if (!part.Resizable)
             state["resizable"] = false;
         if (part.Background.Length > 0)

@@ -10,13 +10,13 @@ Progress: 60%
 - Runtimes: none (Foundry sign-in uses Clarity.Auth's `openid`, `runtimes/rust-auth/src/openid.rs`; see [signin](signin.md))
 - Clarity.UI: none
 - Agent core: `crates/clarity-agent/src/lib.rs` (loop: tool calls until none, Stop, 40 steps or the token budget, default 200k, :216-278), `anthropic.rs` (Messages API, streaming, prompt caching 5m or 1h; `Auth` key or token, :45), `foundry.rs` (connection fields, `FOUNDRY_SCOPE`, :13)
-- IDE: `app/src-tauri/src/agent.rs` (`Runs` Ask/Allow/Never :52, build tool left out with Never :108, :211; other kinds refused :393), `app/src-tauri/src/foundry.rs`, `app/src-tauri/src/acp.rs` (`agent_sign_in` :358); `app/src/lib/AgentPanel.svelte`, `agentStore.svelte.ts`, `agent.ts`
+- IDE: `app/src-tauri/src/agent.rs` (`Runs` Ask/Allow/Never :52, build tool left out with Never :108, :212; other kinds refused :393), `app/src-tauri/src/foundry.rs`, `app/src-tauri/src/acp.rs` (`agent_sign_in` :358); `app/src/lib/AgentPanel.svelte`, `agentStore.svelte.ts`, `agent.ts`
 - Tools it calls: [mcp-tools](mcp-tools.md); connections kept in the [vault](vault.md)
 - Docs: manual/ai.agent.md, manual/ai.connections.md
 
 ## Tests
 - `crates/clarity-agent/tests/agent.rs`, `anthropic.rs`, `foundry.rs`
-- `app/src-tauri/src/agent.rs:536-722` (`only_the_build_tool_executes_and_it_asks_first` :536)
+- `app/src-tauri/src/agent.rs:536-732` (`only_the_build_tool_executes_and_it_asks_first` :536)
 - `app/src/lib/agent.test.ts`
 - conformance: none
 
@@ -30,9 +30,7 @@ Progress: 60%
 - The panel's words from translations: NOT BUILT (IDE words are English in the Svelte files; see [ide-shell](ide-shell.md)).
 
 ## Conflicts
-- Whether the agent executes (needs decision): CLAUDE.md:21 "Clarity's own agent never executes anything; anything that runs asks first" against `app/src-tauri/src/agent.rs:52, 108, 211` (with Runs = Allow it builds and runs unasked), manual/ai.agent.md:38, README.md:142.
-- Undo after an AI: DESIGN.md:82 says Undo takes an AI's changes back; manual/ai.mcp.md:91 says Undo does not take back an outside agent's turn. The IDE agent's own turn is one Undo step.
-- DESIGN A2 (DESIGN.md:2535) puts ollama first and does not mention Foundry, which is built.
+- Whether the agent executes (needs decision): CLAUDE.md:21 "Clarity's own agent never executes anything; anything that runs asks first" against `app/src-tauri/src/agent.rs:52, 108, 212` (with Runs = Allow it builds and runs unasked), manual/ai.agent.md:38, README.md:145.
 
 ## Decisions
 - 2026-10-21: the agent runs nothing by itself; anything that executes asks in the panel first. User: "the ai can never execute anything and should ask permission when executing"

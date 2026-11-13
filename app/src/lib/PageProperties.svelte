@@ -378,6 +378,17 @@
   {#if location && p && info}
     <div class="kind">{p.kind === "custom" ? p.part : info.name}</div>
 
+    {#if p.kind === "custom"}
+      <!-- Which of the project's custom parts this is (DESIGN 5.19). -->
+      <label class="prop">
+        <span>Custom part</span>
+        <select value={p.part ?? ""} onchange={(e) => update({ part: e.currentTarget.value || null })}>
+          {#if !p.part}<option value="">pick one</option>{/if}
+          {#each preview.project.files.flatMap((f) => f.parts) as d (d.name.name)}<option value={d.name.name}>{d.name.name}</option>{/each}
+        </select>
+      </label>
+    {/if}
+
     <label class="prop">
       <span>Name</span>
       <input value={p.name ?? partName} title="The name the code behind uses" onchange={(e) => update({ name: textOf(e) ?? partName })} />
@@ -695,6 +706,12 @@
       </label>
     {/if}
     <!-- Cards stand apart, so a list of cards has no stripes. -->
+    {#if info.properties.includes("foldButtons")}
+      <label class="prop" title="Expand all and Collapse all above the rows, which open and close every row; code sets it as {p.name ?? 'tree'}.foldButtons">
+        <span>Expand and collapse all</span>
+        <input type="checkbox" checked={p.foldButtons} onchange={(e) => update({ foldButtons: e.currentTarget.checked })} />
+      </label>
+    {/if}
     {#if info.properties.includes("striped") && !p.cards}
       <label class="prop" title="Every other row has a faint stripe; a chosen row shows as without it">
         <span>Striped rows</span>
@@ -1581,7 +1598,7 @@
       </button>
     {:else if info.container === "content"}
       {@const listed = location.widget.pages.map((pg) => pg.view)}
-      <label class="prop" title="A view this content can show; code picks the one it shows with name.view = View">
+      <label class="prop" title="A view this content can show; code picks the one it shows with name.swap(View)">
         <span>Add view</span>
         <select value="" onchange={(e) => { const view = e.currentTarget.value; if (view) onedit({ op: "addTab", item: location.widget.span.start, title: view }); e.currentTarget.value = ""; }}>
           <option value="">pick a view</option>
@@ -1599,7 +1616,7 @@
     {@const tab = inner.widget.pages[inner.index]}
     {#if inner.widget.props.kind === "content"}
       <div class="kind">View</div>
-      <label class="prop" title="The view this line of the content shows; code picks it with name.view = View">
+      <label class="prop" title="The view this line of the content shows; code picks it with name.swap(View)">
         <span>Shows view</span>
         <select value={tab.view ?? ""} onchange={(e) => e.currentTarget.value && onedit({ op: "setPageView", target: tab.span.start, view: e.currentTarget.value })}>
           {#each views as view (view)}

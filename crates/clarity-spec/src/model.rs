@@ -56,6 +56,9 @@ pub struct SpecFile {
     /// Its mappings: how a kind of file is laid over an entity, per case
     /// (docs/FORMATS-PLAN.md, step 4).
     pub mappings: Vec<crate::code::MappingDecl>,
+    /// Its toasts: short messages code shows by name (`toast saved`).
+    #[serde(default)]
+    pub toasts: Vec<crate::code::ToastDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -914,6 +917,10 @@ pub struct WidgetProps {
     /// with a faint stripe.
     #[serde(default)]
     pub striped: bool,
+    /// `fold buttons`: a tree or tree table shows Expand all and Collapse
+    /// all buttons above its rows; code sets it as `tree.foldButtons`.
+    #[serde(default)]
+    pub fold_buttons: bool,
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,
@@ -1742,12 +1749,17 @@ impl Project {
         self.files.iter().flat_map(|f| f.apps.iter())
     }
 
-    /// An entity or a record (DESIGN 5.12) by its name: what has fields.
     /// The mapping `name`, declared in any module (docs/FORMATS-PLAN.md, step 4).
     pub fn mapping(&self, name: &str) -> Option<&crate::code::MappingDecl> {
         self.files.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
     }
 
+    /// The toast declared as `name`, in any module.
+    pub fn toast(&self, name: &str) -> Option<&crate::code::ToastDecl> {
+        self.files.iter().flat_map(|f| &f.toasts).find(|t| t.name.name == name)
+    }
+
+    /// An entity or a record (DESIGN 5.12) by its name: what has fields.
     pub fn entity(&self, name: &str) -> Option<&Entity> {
         self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
     }

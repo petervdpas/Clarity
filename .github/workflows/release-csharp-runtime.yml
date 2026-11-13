@@ -38,6 +38,14 @@ on:
   push:
     tags:
       - "runtimes/csharp/v*"
+  # By hand: unlist every version of the packages but the newest, through
+  # the same Trusted Publishing policy (this file's name) that publishes them.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Unlist old versions: only list what would be unlisted"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -53,6 +61,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   native:
     name: Native library (${{ matrix.rid }})
+    if: github.event_name == 'push'
     strategy:
       fail-fast: true
       matrix:
@@ -135,6 +144,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   pack:
     name: Pack and publish
+    if: github.event_name == 'push'
     needs: [native]
     runs-on: ubuntu-24.04
     permissions:
@@ -263,3 +273,33 @@ jobs:
           for nupkg in packages/*.nupkg; do
             dotnet nuget push "$nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           done
+
+  # Started by hand: every version but the newest of each package is
+  # unlisted (hidden from search and new installs; projects naming one keep
+  # restoring it). The key comes from the Trusted Publishing policy.
+  unlist:
+    name: Unlist old versions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: What would be unlisted
+        if: ${{ inputs.dry_run }}
+        run: python3 .github/scripts/unlist_old_nugets.py Clarity.Avalonia Clarity.Avalonia.Desktop
+
+      - name: NuGet login (Trusted Publishing)
+        if: ${{ !inputs.dry_run }}
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+
+      - name: Unlist
+        if: ${{ !inputs.dry_run }}
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: python3 .github/scripts/unlist_old_nugets.py --yes Clarity.Avalonia Clarity.Avalonia.Desktop

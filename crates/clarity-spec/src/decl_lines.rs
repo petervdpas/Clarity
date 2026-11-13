@@ -10,7 +10,8 @@
 //!   `binds`, `size`, `grows`, `preview`, `description`, `property speed`
 //!   (`speed: integer`), `tells scored`, `hears restart`;
 //! - a library: `source` (its nuget, dll, crate, go or cmake line),
-//!   `function spell`.
+//!   `function spell`;
+//! - a toast: `text`, `lifespan`, `level`, `icon`, `corner`.
 //!
 //! A line is replaced where it is, a new one goes after the last line that
 //! shares most of its key (a state of a part after that part's lines), or at
@@ -63,19 +64,23 @@ pub fn line_key(decl: &str, line: &str) -> Option<String> {
             "function" => Some(format!("function {}", word(1)?)),
             _ => None,
         },
+        "toast" => match first {
+            "text" | "lifespan" | "level" | "icon" | "corner" => Some(first.to_string()),
+            _ => None,
+        },
         _ => None,
     }
 }
 
-/// Sets the line with `key` of the theme, custom part or library declared at
+/// Sets the line with `key` of the theme, custom part, library or toast declared at
 /// `item` to `line`, adds it when there is none, or takes it away (`None`).
 /// A line with another key renames the thing (a property, a tell), unless
 /// the block has a line of that key already.
 pub fn set_decl_line(source: &str, item: u32, key: &str, line: Option<&str>) -> EditResult<String> {
     let (start, end) = crate::source::decl_range(source, item)?;
     let decl = source[start..].split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("");
-    if !["theme", "part", "library"].contains(&decl) {
-        return fail("only a theme, a custom part or a library has lines set one by one");
+    if !["theme", "part", "library", "toast"].contains(&decl) {
+        return fail("only a theme, a custom part, a library or a toast has lines set one by one");
     }
     let new_line = match line {
         Some(text) => {

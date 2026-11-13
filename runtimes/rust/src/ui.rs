@@ -296,6 +296,10 @@ pub struct PartState {
     /// What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
+    /// Whether a tree or tree table shows Expand all and Collapse all, as a
+    /// handler set it (`tree.foldButtons`); none keeps the design.
+    #[serde(default, rename = "foldButtons", skip_serializing_if = "Option::is_none")]
+    pub fold_buttons: Option<bool>,
     /// A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
     #[serde(default, rename = "dotSize", skip_serializing_if = "Option::is_none")]
     pub dot_size: Option<i64>,
@@ -413,6 +417,27 @@ pub enum Level {
 pub struct Message {
     pub level: Level,
     pub text: Text,
+    /// Shown as this toast (`toast saved`), with its level, lifespan, icon
+    /// and corner; none for a plain message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toast: Option<Toast>,
+}
+
+/// A toast the project declares, as the screen shows it: its name, its
+/// level (`info`, `success`, `warning`, `error`), how long it shows in
+/// milliseconds (none for the screen's default), its icon and its corner
+/// (`topRight`, `topLeft`, `bottomRight`, `bottomLeft`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Toast {
+    pub name: String,
+    #[serde(default)]
+    pub level: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifespan: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub corner: String,
 }
 
 /// `open Window with name = value, ...`
@@ -682,6 +707,15 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().snap = Some(value);
     }
 
+    /// Whether a tree or tree table shows Expand all and Collapse all: `tree.foldButtons`, as its line says until a handler sets it.
+    pub fn fold_buttons(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.fold_buttons).unwrap_or(design)
+    }
+
+    pub fn set_fold_buttons(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().fold_buttons = Some(value);
+    }
+
     /// Whether a press anywhere on a box draws a new line: `canvas.connecting`, false until a handler sets it.
     pub fn connecting(&self, part: &str) -> bool {
         self.parts.get(part).and_then(|p| p.connecting).unwrap_or(false)
@@ -875,7 +909,12 @@ impl Ui {
     }
 
     pub fn message(&mut self, level: Level, text: Text) {
-        self.messages.push(Message { level, text });
+        self.messages.push(Message { level, text, toast: None });
+    }
+
+    /// `toast saved(...)`: the screen shows `text` as the toast `toast`.
+    pub fn toast(&mut self, toast: Toast, text: Text) {
+        self.messages.push(Message { level: Level::Info, text, toast: Some(toast) });
     }
 
     /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
@@ -1137,6 +1176,20 @@ mod tests {
 
     /// Quitting, the keys window and a window of its own go in the reply
     /// only when a handler asked for them; a reply without them still reads.
+    /// A toast travels as a message with the look its declaration gives; a plain message carries none.
+    #[test]
+    fn a_toast_travels_with_its_level_lifespan_icon_and_corner() {
+        let mut ui = Ui::from_state(&WindowState::new("Orders", Map::new()));
+        ui.message(Level::Info, Text::plain("Plain"));
+        let toast = Toast { name: "saved".into(), level: "success".into(), lifespan: Some(3000), icon: Some("check".into()), corner: "bottomRight".into() };
+        ui.toast(toast.clone(), Text::plain("Saved Ada"));
+        let json = serde_json::to_value(ui.reply("Orders", Map::new())).unwrap();
+        assert!(json["messages"][0].get("toast").is_none());
+        assert_eq!(json["messages"][1]["toast"], serde_json::json!({"name": "saved", "level": "success", "lifespan": 3000, "icon": "check", "corner": "bottomRight"}));
+        let back: Reply = serde_json::from_value(json).unwrap();
+        assert_eq!(back.messages[1].toast, Some(toast));
+    }
+
     #[test]
     fn a_reply_says_quit_keys_and_a_new_window_only_when_asked() {
         let mut ui = Ui::from_state(&WindowState::new("Orders", Map::new()));

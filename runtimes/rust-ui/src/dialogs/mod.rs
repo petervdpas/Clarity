@@ -19,7 +19,7 @@ use crate::input::{Key, KeyInput, Modifiers};
 use crate::painter::{Painter, TextAlign};
 
 pub use ask::AskDialog;
-pub use grant::{GrantChoice, GrantDialog};
+pub use grant::{GrantChoice, GrantDialog, GrantText};
 pub use keys::KeysWindow;
 pub use long_call::LongCallBar;
 pub use over::DialogOverlay;

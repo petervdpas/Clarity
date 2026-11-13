@@ -60,6 +60,10 @@ export function chosenOf(language: string | null | undefined, written: string): 
 declare global {
   interface Window {
     ClarityUiPage?: { start(canvas: HTMLCanvasElement, options: StartOptions): ClarityUi };
+    /** The worker script's face on the page's thread. */
+    ClarityUiPageWorker?: unknown;
+    /** The library's module maker (clarity-ui.js), on the page's thread. */
+    ClarityUi?: unknown;
   }
 }
 
@@ -87,11 +91,22 @@ export function pageScript(base: string): Promise<NonNullable<Window["ClarityUiP
   return script;
 }
 
-/** Forgets the page script, so the next canvas loads it again from the server: after its files were built again. */
+/** Clarity.UI's scripts on the page: the page script, the worker script (run on the page's thread where a worker cannot draw) and the library. */
+const LIBRARY_SCRIPTS = ['script[src$="clarity-ui-page.js"]', 'script[src$="clarity-ui-worker.js"]', 'script[src$="clarity-ui.js"]'] as const;
+
+/** Forgets Clarity.UI's scripts, so the next canvas loads them all again from the server: after its files were built again. An old library kept would start the new wasm. */
 export function resetPageScript() {
   script = null;
-  delete window.ClarityUiPage;
-  for (const element of document.querySelectorAll('script[src$="clarity-ui-page.js"]')) element.remove();
+  // A script's global may not be deletable (Emscripten's `var ClarityUi`): it is blanked instead.
+  for (const name of ["ClarityUiPage", "ClarityUiPageWorker", "ClarityUi"] as const) {
+    try {
+      delete window[name];
+    } catch {
+      window[name] = undefined;
+    }
+    if (window[name] !== undefined) window[name] = undefined;
+  }
+  for (const selector of LIBRARY_SCRIPTS) for (const element of document.querySelectorAll(selector)) element.remove();
 }
 
 /** The address of files.json for what is shown, new for each change (`revision`), so nothing in between keeps an old one. */

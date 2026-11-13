@@ -5,12 +5,12 @@ Status: built. Parts that hold a grid of parts (form, panel, tabs, steps, accord
 Progress: 95%
 
 ## Code
-- Spec: `crates/clarity-spec/src/widgets.rs` (Containers group; `Content` with `view X` lines), `views.rs` (`places` :33, `placed` :102 folds each view into its window for every generator), `templates.rs` (`in_content_of` :487: a new window is window, content, view), `code/check.rs:2608-2620` (`main.swap(View)`), `model.rs:662` (`Widget.menu`, a part's context menu)
+- Spec: `crates/clarity-spec/src/widgets.rs` (Containers group; `Content` with `view X` lines), `views.rs` (`places` :33, `placed` :102 folds each view into its window for every generator), `templates.rs` (`in_content_of` :487: a new window is window, content, view), `code/check.rs:2617-2629` (`main.swap(View)`), `model.rs:663` (`Widget.menu`, a part's context menu); `fit.rs` cuts a slide-out and a view to the rows the window holds (see [windows-dialogs](windows-dialogs.md))
 - Generators: no code of their own; `views::placed` writes `main.swap(X)` as `main.tab = n` and a view's tells as calls of the window's handlers
 - Runtimes: part state per container (accordion `open`, steps `step`, tabs `tab`, folded panels, popover and slide-out `visible`, slide-out `pinned`): R `runtimes/rust/src/ui.rs:324`, `steps.rs`; Go `clarity/steps.go`; C `clarity/steps.c`; C++ `clarity/steps.cpp`; C# `PartState.cs`, `WindowViewModel.cs` (`IsPinned`)
-- Clarity.UI: `runtimes/rust-ui/src/parts/containers/` `container.rs`, `panel.rs` (form, panel, fold, label column), `tabs.rs` (tabs, and content as tabs without a strip), `steps.rs`, `accordion.rs` (also horizontal), `scroll.rs`, `scroll_view.rs`, `splitter.rs`, `popover.rs`, `slideout.rs` (with `place_slideouts`); context menus `parts/mod.rs:470` (`designed_menu`)
-- IDE: `app/src/lib/PageProperties.svelte` (Shows view, Add view, Remove view), `PageDesigner.svelte`, `ProjectTree.svelte` (Views, New view)
-- Docs: manual `design.parts.md` (Containers), `design.windows.md` (Views and content); LANGUAGE.md section 5 (Views), section 6 (Containers)
+- Clarity.UI: `runtimes/rust-ui/src/parts/containers/` `container.rs`, `panel.rs` (form, panel, fold, label column), `tabs.rs` (tabs, and content as tabs without a strip), `steps.rs`, `accordion.rs` (also horizontal), `scroll.rs`, `scroll_view.rs`, `splitter.rs` (a side by side first pane at `span` columns, a stacked one at `rows`, `<Pane rows="4">`), `popover.rs`, `slideout.rs` (with `place_slideouts`; takes no room in the window's content, `takes_room`); context menus `parts/mod.rs:470` (`designed_menu`)
+- IDE: `app/src/lib/PageProperties.svelte` (Shows view, Add view, Remove view), `PageTells.svelte` (a view's Tells, Add and remove), `ViewLineTells.svelte` + `viewTells.ts` (Tells of a view on the content's view line, Wire), `DesignLayer.svelte` / `designLayer.ts` (dragging a splitter's divider), `PageDesigner.svelte`, `ProjectTree.svelte` (Views, New view); context-menu items by hand: see [by-hand](by-hand.md)
+- Docs: manual `parts.containers.md`, `design.windows.md` (Window, content, view; Views)
 
 ## Tests
 - `conformance/slideouts.json`: run by R, Go, C, C++, C#, rust-ui
@@ -18,16 +18,15 @@ Progress: 95%
 - `conformance/overlays.json`: run by rust-ui only
 - spec `content.rs`, `views.rs`, `view_names.rs`, `accordions.rs`, `steps.rs`, `slideouts.rs`, `overlays.rs`, `folding.rs`, `pane_span.rs`, `tabs_open.rs`, `part_frame.rs`, `form_labels.rs`, `placed_places.rs`
 - gen `accordions.rs`, `folding.rs`, `overlays.rs`, `slideouts.rs`, `views.rs`, `wizards.rs`, `form_labels.rs`
-- rust-ui `tests/parts/parts_accordion.rs`, `parts_content.rs`, `parts_panel.rs`, `parts_popover.rs`, `core_popover_route.rs`, `parts_splitter.rs`, `parts_steps.rs`, `parts_tabs.rs`, `parts_scroll_view.rs`, `parts_frames.rs`; `tests/windows/slideouts.rs`; `tests/screen/core_context_menu.rs`, `grid_around.rs`
+- rust-ui `tests/parts/parts_accordion.rs`, `parts_content.rs`, `parts_panel.rs`, `parts_popover.rs`, `core_popover_route.rs`, `parts_splitter.rs`, `parts_steps.rs`, `parts_tabs.rs`, `parts_scroll_view.rs`, `parts_frames.rs`; `tests/windows/slideouts.rs` (also `a_tall_slide_out_gives_the_window_nothing_to_scroll`); `tests/screen/core_context_menu.rs`, `grid_around.rs`
+- IDE `app/src/lib/viewTells.test.ts`, `designLayer.test.ts` (splitter divider)
 
 ## Open
-- The menu key and Shift+F10 open a part's context menu: PARTIAL. Only a right press does (`runtimes/rust-ui/src/element.rs:336`; DESIGN.md:1122).
+- The menu key and Shift+F10 open a part's context menu: PARTIAL. Only a right press does (`runtimes/rust-ui/src/element.rs:337`, `context_menu_at`; F10 goes to the menu bar only, `window/view.rs:438`; DESIGN.md:1122).
 - A view that brings its own ribbon tab and menu items: see [frame-keys](frame-keys.md).
 
 ## Conflicts
-- LANGUAGE.md:779 writes `main.view = OtherView`; the checker takes `main.swap(OtherView)` or `main.tab` (`crates/clarity-spec/src/code/check.rs:2608-2620`). Memory note ui-content-structure.md also says `main.view = X`.
-- DESIGN.md:1576 says tabs, steps and sections show a view's tells; :1572 says only `content` shows a view (the code agrees with :1572).
-- DESIGN.md 5.15 (:1102) and 5.16 (:1124) name C# `StepsPart` and `PopoverPart`; they live in `runtimes/rust-ui/src/parts/containers/`.
+- Memory note ui-content-structure.md says `main.view = X`; the checker takes `main.swap(OtherView)` or `main.tab` (`crates/clarity-spec/src/code/check.rs:2617-2629`), as manual `design.windows.md` and `parts.containers.md` say.
 - C# carries `PartState.cs` copies for accordions, folding, steps that no test runs against the conformance files.
 
 ## Decisions

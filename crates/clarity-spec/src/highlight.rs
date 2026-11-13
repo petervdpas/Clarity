@@ -46,7 +46,7 @@ pub struct Piece {
 /// The words of the language: declarations, settings, statements, part
 /// properties and the frame. The parts themselves and their events come
 /// from the widget catalog.
-const KEYWORDS: &[&str] = &[
+pub const KEYWORDS: &[&str] = &[
     // Declarations and settings.
     "module", "use", "source", "enum", "entity", "settings", "page", "app", "theme", "code", "function", "action", "engine", "handler", "project",
     "stack", "output", "datasource", "filestore", "language", "currency", "auth", "external", "readonly", "translation", "migration", "port", "keys", "editable", "ui",
@@ -88,13 +88,17 @@ const KEYWORDS: &[&str] = &[
     // Apps as MCP servers (docs/ledger/app-mcp.md): `agent` offers a command to AI agents;
     // the project file's `agents while closed read change` is what they may do while the app is closed.
     "agent", "agents", "while", "closed", "most", "agentReadsWhileClosed", "agentChangesWhileClosed",
+    // Toasts: `toast saved` with `text`, `lifespan`, `level`, `icon` and `corner`; `toast saved(name = x)` shows one.
+    "toast", "lifespan", "corner", "success", "topRight", "topLeft", "bottomRight", "bottomLeft",
+    // A tree's Expand all and Collapse all: `fold buttons` on its line, `tree.foldButtons` in code.
+    "fold", "buttons", "foldButtons",
 ];
 
 /// Clarity's own types.
-const TYPES: &[&str] =
+pub const TYPES: &[&str] =
     &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "color", "id", "ref", "image", "picture"];
 
-const LITERALS: &[&str] = &["true", "false", "none"];
+pub const LITERALS: &[&str] = &["true", "false", "none"];
 
 /// Whether `word` is a word of the language: a keyword, a type, a literal
 /// or a part. A name the project gives should not be one.

@@ -39,6 +39,8 @@
     language = "clarity",
     readonly = false,
     bare = false,
+    heading = null,
+    headingNote = null,
     ondirty = () => {},
     ontext = () => {},
     onclose = () => {},
@@ -63,6 +65,10 @@
     readonly?: boolean;
     /** Without its Save and Revert bar: the view around it saves and reverts. Its problems stay. */
     bare?: boolean;
+    /** What it edits, at the left of its bar: a command's or function's name. */
+    heading?: string | null;
+    /** A word after the heading: what it is and where (command in module shop). */
+    headingNote?: string | null;
     ondirty?: (dirty: boolean) => void;
     /** The text as it is typed, saved or not, for a view that follows it. */
     ontext?: (text: string) => void;
@@ -342,7 +348,9 @@
 <div class="source">
   {#if !readonly && !bare}
   <div class="bar">
-    {#if jumps.length > 0}
+    {#if heading}
+      <div class="heading"><strong>{heading}</strong>{#if headingNote}<span class="note">{headingNote}</span>{/if}</div>
+    {:else if jumps.length > 0}
       <nav class="jumps">
         {#each jumps as j (j.line)}
           <button onclick={() => goToLine(j.line, true)}>{j.name}</button>
@@ -383,6 +391,19 @@
 </div>
 
 <style>
+  .heading {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .heading .note {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
   .source {
     flex: 1;
     display: flex;

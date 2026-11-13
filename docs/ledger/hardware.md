@@ -10,7 +10,7 @@ Progress: 0%
 - Runtimes: none (planned in the shared Rust library behind the C interface Clarity.UI already uses)
 - Clarity.UI: none
 - IDE: none
-- Docs: none (no manual page, no LANGUAGE.md section)
+- Docs: none (no manual page)
 - What works today: Home Assistant over its web API, through `rest` data sources and `http` calls ([web-apis](web-apis.md))
 
 ## Tests
@@ -28,8 +28,7 @@ Progress: 0%
 - To settle when building (needs decision): the crates (`serialport`, a Bluetooth crate, an MQTT client, a Firmata implementation; each asked for first); how a text with spaces is written on a line; the example apps (a plant monitor with a simulated board; a home app); how each system starts, stops and logs a `service`.
 
 ## Conflicts
-- HARDWARE-PLAN.md:35-42 writes the window as a `page Monitor: window` block in a module; the loader refuses page blocks (`crates/clarity-spec/src/cxaml.rs:1385`), windows are `.cxaml` files.
-- DESIGN H1 (2026-10-18) sketches `serialport arduino "env:ARDUINO_PORT"` in settings as "not decided"; the plan of 2026-11-05 chose a `device` declaration instead.
+- HARDWARE-PLAN.md:35-42 writes the window as a `page Monitor: window` block in a module; the loader refuses page blocks (`crates/clarity-spec/src/cxaml.rs:1394`), windows are `.cxaml` files.
 
 ## Decisions
 - 2026-11-05: a `device` declaration, not a custom part, so one implementation in the shared Rust library serves every stack.

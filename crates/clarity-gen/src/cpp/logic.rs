@@ -196,6 +196,8 @@ pub struct PartInfo {
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
+    /// Whether a tree or tree table shows Expand all and Collapse all, as its line says (`fold buttons`).
+    pub fold_buttons: bool,
     /// A canvas's background as its line says; empty is the theme's panel.
     pub background: String,
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
@@ -230,7 +232,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = crate::parts::kept_of(&widget.props);
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), spin: crate::spin_range(&widget.props), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, fold_buttons: widget.props.fold_buttons, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), spin: crate::spin_range(&widget.props), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -590,6 +592,7 @@ impl<'a> Emitter<'a> {
                     let method = match property.as_str() {
                         "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "pinned" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("set_{property}"),
                         "dotSize" => "set_dot_size".to_string(),
+                        "foldButtons" => "set_fold_buttons".to_string(),
                         "min" => "set_spin_min".to_string(),
                         "max" => "set_spin_max".to_string(),
                         "dotColor" => "set_dot_color".to_string(),
@@ -754,6 +757,20 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
             }
             // A command says it on standard error.
+            // A toast the project declares, by name; a command says its text on standard error.
+            StmtKind::Toast { name, args } => match crate::toasts::shown(self.project, name, args) {
+                Err(why) => self.errors.push(why),
+                Ok(_) if self.window.is_none() && !self.command => self.errors.push("toasts belong in handlers".into()),
+                Ok((look, text)) => {
+                    let text = self.shown(&text);
+                    if self.command {
+                        let _ = writeln!(out, "cli.message({text});");
+                    } else {
+                        let q = crate::toasts::quoted;
+                        let _ = writeln!(out, "ui.toast(clarity::Toast{{{}, {}, {}, {}, {}}}, {text});", q(&look.name), q(look.level), look.lifespan, q(look.icon.as_deref().unwrap_or("")), q(look.corner));
+                    }
+                }
+            },
             StmtKind::Message { text, .. } if self.command => {
                 let text = self.shown(text);
                 let _ = writeln!(out, "cli.message({text});");
@@ -1153,6 +1170,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => format!("ui.collapsed({quoted}, {})", info.collapsed),
             "grid" => format!("ui.grid({quoted}, {})", info.grid),
             "snap" => format!("ui.snap({quoted}, {})", info.snap),
+            "foldButtons" => format!("ui.fold_buttons({quoted}, {})", info.fold_buttons),
             "connecting" => format!("ui.connecting({quoted})"),
             "resizable" => format!("ui.resizable({quoted})"),
             "background" => format!("ui.background({quoted}, {})", string(&info.background)),

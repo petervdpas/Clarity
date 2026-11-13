@@ -35,6 +35,7 @@ bool Ui::collapsed(const std::string& part, bool design) const { return part_or(
 int64_t Ui::grid(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::grid, design); }
 bool Ui::snap(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::snap, design); }
 bool Ui::connecting(const std::string& part) const { return part_or(parts_, part, &PartState::connecting, false); }
+bool Ui::fold_buttons(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::fold_buttons, design); }
 bool Ui::resizable(const std::string& part) const { return part_or(parts_, part, &PartState::resizable, true); }
 std::string Ui::background(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::background, design); }
 int64_t Ui::dot_size(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::dot_size, design); }
@@ -149,6 +150,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.grid) out["grid"] = *p.grid;
     if (p.snap) out["snap"] = *p.snap;
     if (p.connecting) out["connecting"] = *p.connecting;
+    if (p.fold_buttons) out["foldButtons"] = *p.fold_buttons;
     if (p.resizable) out["resizable"] = *p.resizable;
     if (p.background) out["background"] = *p.background;
     if (p.dot_size) out["dotSize"] = *p.dot_size;
@@ -184,6 +186,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("grid", p.grid);
     take("snap", p.snap);
     take("connecting", p.connecting);
+    take("foldButtons", p.fold_buttons);
     take("resizable", p.resizable);
     take("background", p.background);
     take("dotSize", p.dot_size);
@@ -221,7 +224,16 @@ void from_json(const nlohmann::json& in, WindowState& s) {
 
 void to_json(nlohmann::json& out, const Reply& r) {
     nlohmann::json messages = nlohmann::json::array();
-    for (const auto& m : r.messages) messages.push_back({{"level", level_name(m.level)}, {"text", m.text}});
+    for (const auto& m : r.messages) {
+        nlohmann::json message = {{"level", level_name(m.level)}, {"text", m.text}};
+        if (!m.toast.name.empty()) {
+            nlohmann::json look = {{"name", m.toast.name}, {"level", m.toast.level}, {"corner", m.toast.corner}};
+            if (m.toast.lifespan > 0) look["lifespan"] = m.toast.lifespan;
+            if (!m.toast.icon.empty()) look["icon"] = m.toast.icon;
+            message["toast"] = look;
+        }
+        messages.push_back(message);
+    }
     nlohmann::json open = nlohmann::json::array();
     for (const auto& o : r.open) {
         nlohmann::json one = {{"window", o.window}, {"with", o.with}};

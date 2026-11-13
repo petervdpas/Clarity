@@ -6,11 +6,11 @@ Progress: 60%
 
 ## Code
 - Core: `crates/clarity-db/src/backup.rs` (`take` :64, `list` :115, `prune_automatic` :130, `restore` :148, `delete` :178; `VACUUM INTO`, names `<db>-<UTC stamp>-<why>.db` in `backups/` beside the database, 10 automatic kept)
-- Project: `crates/clarity-project/src/lib.rs:1078` (`database_to_back_up`: owned SQLite only; external and server sources say why)
+- Project: `crates/clarity-project/src/lib.rs:1157` (`database_to_back_up`: owned SQLite only; external and server sources say why)
 - Runtimes (back up before applying steps to a database that has a schema, refuse to migrate when they cannot): R `runtimes/rust/src/backup.rs`; Go `runtimes/go/clarity/backup.go`; C `runtimes/c/clarity/backup.c`; C++ `runtimes/cpp/clarity/backup.cpp`; C# `runtimes/csharp/Clarity.Runtime/Backup.cs`
 - IDE: `app/src/lib/BackupPanel.svelte` (Back up now, Restore, Delete, each confirmed with Clarity's dialogs; Restore stops the running app), `app/src-tauri/src/backups.rs`; agent tools `list_backups`, `backup_data`, `restore_backup` (the last two ask first) in `app/src-tauri/src/agent.rs`; not served by `clarity mcp`
 - CLI: `clarity data backup | backups | restore` (`crates/clarity-cli/src/main.rs:97-182`)
-- Docs: manual `data.migrations.md`; LANGUAGE.md section 4 "Migrations" ("A backup first")
+- Docs: manual `data.migrations.md`, `data.sources.md` ("Running the steps": a backup first)
 
 ## Tests
 - `conformance/backups.json`: run by R (`runtimes/rust/tests/backups.rs`), Go (`backup_test.go`), C (`backup_test.c`), C++ (`backup_test.cpp`), C# (`BackupTests.cs`), core (`crates/clarity-db/tests/backup.rs`)

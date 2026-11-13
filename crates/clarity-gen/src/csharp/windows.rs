@@ -571,6 +571,9 @@ impl<'a> Window<'a> {
                     set.push(format!("Ink = {}", string(ink)));
                 }
                 if set.is_empty() { starts } else { format!(" {{ {} }}", set.join(", ")) }
+            } else if matches!(widget.props.kind, WidgetKind::Tree | WidgetKind::TreeTable) && widget.props.fold_buttons && starts.is_empty() {
+                // A tree's Expand all and Collapse all as its line says (`fold buttons`), which code reads and sets.
+                " { FoldButtons = true }".to_string()
             } else if widget.props.kind == WidgetKind::Spinbox && starts.is_empty() {
                 // A spin box's range as its line writes it, which code reads and sets (spinbox.min, spinbox.max).
                 let whole = |t: &Option<String>| t.as_deref().and_then(|t| t.trim().parse::<i64>().ok());

@@ -166,6 +166,8 @@ translation de
     lastPage "Letzte Seite"
     expandRow "Aufklappen"
     collapseRow "Zuklappen"
+    expandAll "Alle aufklappen"
+    collapseAll "Alle zuklappen"
     settingsItem "Einstellungen..."
     exportsFolderSetting "Exportordner"
     preferencesTitle "Einstellungen"

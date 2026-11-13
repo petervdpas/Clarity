@@ -349,3 +349,34 @@ fn a_row_dragged_when_the_pointer_is_taken_away_stays_where_it_was() {
     assert_eq!(before, host.get("folders"));
     assert!(!host.logged().iter().any(|l| l.starts_with("write")));
 }
+
+/// `fold buttons`: Expand all and Collapse all above a tree's rows, in a
+/// tree and a tree table alike, which open and close every row; code's
+/// `tree.foldButtons` wins over the design, and a tree without them has none.
+#[test]
+fn fold_buttons_open_and_close_every_row() {
+    let rows = folders(&json!([{ "id": 1 }, { "id": 2, "parent": 1 }, { "id": 3, "parent": 2 }, { "id": 4 }, { "id": 5, "parent": 4 }]));
+    for (kind, fields) in [("Tree", r#"show="name" foldButtons="true""#), ("TreeTable", r#"columns="name" foldButtons="true""#)] {
+        let (mut screen, _) = made(rows.clone(), kind, fields);
+        assert_eq!(tree(&screen).shown_places().len(), 2, "{kind}: only the top rows at first");
+        let expand = tree(&screen).fold_box(true).expect("an Expand all button");
+        let collapse = tree(&screen).fold_box(false).expect("a Collapse all button");
+        let first_row = tree(&screen).row_box(0).unwrap();
+        assert!(expand.bottom() <= first_row.y + 0.5, "{kind}: the buttons are above the rows: {expand:?} {first_row:?}");
+        click(&mut screen, expand);
+        assert_eq!(tree(&screen).shown_places().len(), 5, "{kind}: Expand all opens every row");
+        click(&mut screen, collapse);
+        assert_eq!(tree(&screen).shown_places().len(), 2, "{kind}: Collapse all closes every row");
+    }
+    let (screen, _) = made(rows.clone(), "Tree", r#"show="name""#);
+    assert!(tree(&screen).fold_box(true).is_none(), "no buttons without fold buttons");
+    // Code turns them off where the design has them, and on where it has not.
+    let (mut screen, host) = made(rows.clone(), "Tree", r#"show="name" foldButtons="true""#);
+    clarity_ui::parts::PartHost::set_state(host.as_ref(), "folders", clarity_runtime::ui::PartState { fold_buttons: Some(false), ..Default::default() });
+    laid(&mut screen, 800, 400);
+    assert!(tree(&screen).fold_box(true).is_none(), "code's false wins over the design");
+    let (mut screen, host) = made(rows, "Tree", r#"show="name""#);
+    clarity_ui::parts::PartHost::set_state(host.as_ref(), "folders", clarity_runtime::ui::PartState { fold_buttons: Some(true), ..Default::default() });
+    laid(&mut screen, 800, 400);
+    assert!(tree(&screen).fold_box(true).is_some(), "code's true shows them");
+}

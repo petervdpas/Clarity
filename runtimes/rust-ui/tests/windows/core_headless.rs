@@ -59,7 +59,7 @@ fn keys_and_a_window_in_place_and_back() {
     ok(d.step(&json!({ "do": "click", "part": "saveConnection" })));
     let read = ok(d.step(&json!({ "do": "read" })));
     assert_eq!(read["windows"], json!(["Main"]));
-    assert_eq!(read["notes"], json!(["Saved"]));
+    assert_eq!(read["toasts"], json!(["Saved"]));
     // A step it does not know, or a part that is not there, says so.
     assert_eq!(d.step(&json!({ "do": "fly" }))["ok"], json!(false));
     assert_eq!(d.step(&json!({ "do": "click", "part": "nothing" }))["ok"], json!(false));

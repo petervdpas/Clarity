@@ -6,13 +6,13 @@ Progress: 55%
 
 ## Code
 - Library: `runtimes/rust-formats` (crate `clarity-formats` 0.2.0; one document model `doc.rs`, formats as syntax only behind `Format` in `format.rs`: `json.rs`, `csv.rs`, `xml.rs` with `markup.rs` and `xsd.rs`, `yaml.rs`; one engine `path.rs`, `mapping.rs`, `shape.rs`, `fit.rs`, `build.rs`, `table.rs`, `describe.rs`, `check.rs`; own JSON tree `tree.rs`); C table `runtimes/rust-formats-ffi` (`include/clarity_formats.h`, `clarity_formats_api()`)
-- Spec: `ReadFormat`, `FormatOf` (`crates/clarity-spec/src/code/mod.rs`), `mapping M of E from fmt` (`code/parse.rs:1091`, `code/mapping.rs`), `formats.rs`, `xml.rs`; the catalog read by parser, checker and highlighter
-- Project file: file sources `datasource x csv|json|xml|yaml|file "path" external [using M]` with options (`crates/clarity-project/src/file.rs:474-540`); Import of files `file_import.rs`; `mappings.rs` (`preview_mapping`)
-- Generators: kinds as JSON `crates/clarity-gen/src/shape.rs`; file sources `crates/clarity-gen/src/lib.rs:96-136`; `carries_formats` (lib.rs:200) decides when a program carries the library
+- Spec: `ReadFormat`, `FormatOf` (`crates/clarity-spec/src/code/mod.rs`), `mapping M of E from fmt` (`code/parse.rs:1096`, `code/mapping.rs`), `formats.rs`, `xml.rs`; the catalog read by parser, checker and highlighter
+- Project file: file sources `datasource x csv|json|xml|yaml|file "path" external [using M]` with options (`crates/clarity-project/src/file.rs:504-570`); Import of files `file_import.rs`; `mappings.rs` (`preview_mapping`)
+- Generators: kinds as JSON `crates/clarity-gen/src/shape.rs`; file sources `file_sources` (`crates/clarity-gen/src/lib.rs:99-135`); `carries_formats` (lib.rs:201) decides when a program carries the library
 - Runtimes: R `runtimes/rust/src/formats.rs`, `file_source.rs` (feature `formats`); Go `runtimes/go/clarity/formats.go`, `formats_library.go`, `file_source.go` (generated cgo `formats.go`); C `runtimes/c/formats/{formats,file_source}.c`; C++ `runtimes/cpp/formats/{formats,file_source}.cpp`; C# NuGet `Clarity.Formats` (`FormatFunctions.cs`, `FileSource.cs`). A file source is one in-memory SQLite table per table, written back to `<path>.new` then replaced.
 - IDE: `app/src/lib/MappingPage.svelte` (mapping form, sample preview), `FormatOptions.svelte` (options from the catalog), `ImportPanel.svelte`; `app/src-tauri/src/mappings.rs`
 - CLI: `clarity import <project> <source>` for CSV, JSON, XML (and XSD) files
-- Docs: manual `code.formats.md`, `data.sources.md`, `project.file.md`; LANGUAGE.md section 10 "Data formats" (:2795), "Mappings" (:2828)
+- Docs: manual `code.formats.md` (Mappings), `data.sources.md` (A file as a data source), `project.file.md`
 
 ## Tests
 - `conformance/formats-json-read.json`, `formats-json-write.json`, `formats-csv.json`, `formats-xml.json`, `formats-xml-table.json`, `formats-yaml.json`, `formats-mapping.json`, `formats-table.json`, `formats-check.json`: run by `runtimes/rust-formats/tests/conformance.rs` (once, in the library)

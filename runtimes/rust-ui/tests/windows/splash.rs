@@ -56,7 +56,7 @@ fn the_main_window_follows_with_what_on_start_said() {
     // As the host runs it, off the screen's thread while the splash shows.
     let mut reply = program.start_app();
     if let Ok(reply) = reply.as_mut() {
-        reply.messages.push(Message { level: Level::Info, text: Text::plain("Catalogue loaded") });
+        reply.messages.push(Message { level: Level::Info, text: Text::plain("Catalogue loaded"), toast: None });
     }
     let main = WindowStack::started(running, reply);
     assert_eq!(main.windows(), vec!["Main".to_string()]);

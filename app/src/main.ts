@@ -24,9 +24,13 @@ const shown = (manual ? import("./Manual.svelte") : import("./App.svelte")).then
   // shows once the page has drawn itself in its theme, so it never flashes white.
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
-      getCurrentWindow().show().catch(() => {});
-      // Clarity's window shows: its splash screen goes (src-tauri/src/splash.rs).
-      if (!manual) invoke("splash_done").catch(() => {});
+      if (manual) {
+        getCurrentWindow().show().catch(() => {});
+        return;
+      }
+      // Clarity's window shows and its splash screen goes (src-tauri/src/splash.rs),
+      // unless a rebuild runs at the start, which shows them when it ends (dev_rebuild.rs).
+      invoke("main_drawn").catch(() => getCurrentWindow().show().catch(() => {}));
     }),
   );
   return mounted;

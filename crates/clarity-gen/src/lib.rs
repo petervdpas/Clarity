@@ -19,6 +19,7 @@ pub(crate) mod go;
 mod cpp;
 mod shape;
 mod signin;
+mod toasts;
 pub use signin::carries_auth;
 use clarity_spec::code::print;
 mod query;

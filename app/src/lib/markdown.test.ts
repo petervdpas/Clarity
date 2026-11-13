@@ -19,6 +19,11 @@ test("numbered lists, headings and code blocks", () => {
   assert.equal(markdown("```\nsave grid.selected\n  reload tasks\n```"), "<pre><code>save grid.selected\n  reload tasks</code></pre>");
 });
 
+test("a page's mermaid block is kept for drawing; an answer's stays code", () => {
+  assert.equal(markdown("```mermaid\nflowchart LR\n  a --> b\n```", { page: true }), '<pre class="mermaid"><code>flowchart LR\n  a --&gt; b</code></pre>');
+  assert.equal(markdown("```mermaid\nflowchart LR\n```"), "<pre><code>flowchart LR</code></pre>");
+});
+
 test("HTML in the text is shown as text", () => {
   assert.equal(markdown("<b>hi</b> & **<i>x</i>**"), "<p>&lt;b&gt;hi&lt;/b&gt; &amp; <strong>&lt;i&gt;x&lt;/i&gt;</strong></p>");
 });

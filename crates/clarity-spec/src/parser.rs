@@ -48,6 +48,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         parts: Vec::new(),
         libraries: Vec::new(),
         mappings: Vec::new(),
+        toasts: Vec::new(),
     };
 
     for (index, node) in tree.iter().enumerate() {
@@ -280,6 +281,12 @@ impl<'a> Cursor<'a> {
     }
 }
 
+/// The words a line of a module starts with, one per kind of declaration,
+/// as the module's parser takes them: what the manual has a page for each of.
+pub const DECLARATION_WORDS: [&str; 21] = [
+    "module", "use", "source", "enum", "entity", "record", "settings", "page", "app", "function", "action", "engine", "const", "cli", "command", "part", "library", "mapping", "toast", "theme", "code",
+];
+
 pub(crate) fn first_word<'a>(node: &Node<'a>) -> Option<&'a str> {
     node.line
         .tokens
@@ -399,6 +406,9 @@ fn parse_top_level(
         Some("mapping") => {
             file.mappings.push(crate::code::parse::parse_mapping(node, diagnostics)?);
         }
+        Some("toast") => {
+            file.toasts.push(crate::code::parse::parse_toast(node, diagnostics)?);
+        }
         Some("theme") => {
             cursor.next();
             let name = cursor.expect_ident("a theme name")?;
@@ -412,9 +422,9 @@ fn parse_top_level(
             file.code.push(crate::code::parse::parse_code(node, name, diagnostics));
         }
         _ => {
-            return Err(cursor.error_here(
-                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command', 'part', 'library' or 'mapping'",
-            ));
+            let words: Vec<String> = DECLARATION_WORDS.iter().map(|w| format!("'{w}'")).collect();
+            let (last, rest) = words.split_last().expect("there are declaration words");
+            return Err(cursor.error_here(format!("expected {} or {last}", rest.join(", "))));
         }
     }
     Ok(())
@@ -1958,8 +1968,8 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 85] = [
-    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
+pub const LINE_WORDS: [&str; 86] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "fold", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows",
@@ -2006,6 +2016,7 @@ fn parse_widget_props(
         remove: false,
         confirm: false,
         striped: false,
+        fold_buttons: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -2398,6 +2409,15 @@ fn parse_widget_props(
                     cursor.next();
                     props.confirm = true;
                 }
+            }
+            // `fold buttons`: Expand all and Collapse all above a tree's rows.
+            "fold" => {
+                applies(WidgetProperty::FoldButtons)?;
+                let word = cursor.expect_ident("buttons, as in fold buttons")?;
+                if word.name != "buttons" {
+                    return Err(Diagnostic::error(format!("expected buttons after fold, as in fold buttons, not '{}'", word.name), word.span));
+                }
+                props.fold_buttons = true;
             }
             "striped" => {
                 applies(WidgetProperty::Striped)?;

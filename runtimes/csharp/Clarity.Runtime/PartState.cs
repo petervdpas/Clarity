@@ -108,6 +108,21 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     bool snap;
 
+    /// <summary>Whether a tree or tree table shows Expand all and Collapse all: <c>tree.foldButtons</c>, as its line says until a handler sets it.</summary>
+    public bool FoldButtons
+    {
+        get => foldButtons;
+        set
+        {
+            FoldButtonsSet = true;
+            SetProperty(ref foldButtons, value);
+        }
+    }
+    bool foldButtons;
+
+    /// <summary>Whether <see cref="FoldButtons"/> was set, by the design or a handler: only then does the screen hear it.</summary>
+    public bool FoldButtonsSet { get; private set; }
+
     /// <summary>Whether a press anywhere on a box of a canvas with <c>on connect</c> draws a new line, as a line tool does: <c>canvas.connecting</c>, false until a handler sets it.</summary>
     public bool Connecting
     {

@@ -1,17 +1,27 @@
 //! The code blocks of a Markdown document, and a block as module source:
-//! shared by the tests of docs/LANGUAGE.md and of the manual's pages.
+//! shared by the tests of the manual's pages.
 
 use clarity_spec::widgets;
 
-/// The fenced code blocks of `doc`, in order.
+/// The fenced code blocks of `doc`, in order. A block fenced as ```text
+/// is syntax to read (`entity Name` with its `[options]`), not code, and is
+/// left out.
 pub fn blocks(doc: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current: Option<String> = None;
+    let mut syntax = false;
     for line in doc.lines() {
-        if line.trim_start().starts_with("```") {
+        if let Some(fence) = line.trim_start().strip_prefix("```") {
             match current.take() {
-                Some(block) => out.push(block),
-                None => current = Some(String::new()),
+                Some(block) => {
+                    if !syntax {
+                        out.push(block);
+                    }
+                }
+                None => {
+                    syntax = fence.trim() == "text";
+                    current = Some(String::new());
+                }
             }
         } else if let Some(block) = current.as_mut() {
             block.push_str(line);

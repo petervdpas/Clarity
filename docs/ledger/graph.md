@@ -5,13 +5,13 @@ Status: partial. A `graph` part that shows records as nodes joined by edges, fro
 Progress: 45%
 
 ## Code
-- Spec: `crates/clarity-spec/src/widgets.rs` (`Graph`; events click, select, open on nodes :1171), `model.rs` (`GraphLayout`, `NodeShape`, `EdgeLine`; `graphModel` worked out when the project loads, never written into the source), `check.rs`, `code/check.rs`, `cxaml.rs`
-- Generators: through window markup; a graph loses its picked row when its rows are replaced, as a table does (`rows_shown`, `crates/clarity-gen/src/lib.rs:617`)
+- Spec: `crates/clarity-spec/src/widgets.rs` (`Graph`; events click, select, open on nodes :1175), `model.rs` (`GraphLayout`, `NodeShape`, `EdgeLine`; `graphModel` worked out when the project loads, never written into the source), `check.rs`, `code/check.rs`, `cxaml.rs`
+- Generators: through window markup; a graph loses its picked row when its rows are replaced, as a table does (`rows_shown`, `crates/clarity-gen/src/lib.rs:638`)
 - Runtimes: none of its own; the graph walks the records the window holds
 - Graph core: crate `clarity-graph`, `runtimes/rust-graph/src/` (`read.rs`, `model.rs`, `hops.rs`, `layout.rs`: force, layered, radial, circle, deterministic); released by `.github/workflows/release-rust-graph.yml` before clarity-ui
 - Clarity.UI: `runtimes/rust-ui/src/parts/data/graph.rs` (looks per kind, zoom and pan, dragged places kept, hops control, legend, `limit`)
 - IDE: `app/src/lib/PageProperties.svelte` (inspector), `PartTile.svelte`, `PageDesigner.svelte` (palette); agent tool `crates/clarity-tools/src/structural/windows.rs`
-- Docs: LANGUAGE.md section 6 (Graphs, A graph of the data model); manual `design.parts.md` (Data)
+- Docs: manual `parts.data.md` (`graph`)
 
 ## Tests
 - No conformance file.
@@ -19,7 +19,7 @@ Progress: 45%
 - `examples/network` (Rust desktop) in the example builds
 
 ## Open
-- Looks bound to fields (size by a number, color by a value, label templates, edge thickness): NOT BUILT (GRAPH-PLAN.md:26). `NodeLook` is per kind only (`runtimes/rust-ui/src/parts/data/graph.rs:71-85`).
+- Looks bound to fields (size by a number, color by a value, label templates, edge thickness): NOT BUILT (GRAPH-PLAN.md:26). `NodeLook` is per kind only (`runtimes/rust-ui/src/parts/data/graph.rs:73-77`).
 - Icons per node kind and label placement: NOT BUILT (GRAPH-PLAN.md:77, 86).
 - A panel beside the graph for the picked node, references as links: NOT BUILT (GRAPH-PLAN.md:27, 86); the network example uses a slide-out with `opens`.
 - Filters on any field: NOT BUILT (GRAPH-PLAN.md:28); only the legend's kinds.

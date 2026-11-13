@@ -18,12 +18,25 @@ command album add(title: text)
         made.cover = other.cover
         made.booklet = other.booklet
     save made
+    toast added(title = made.title)
     print @albumSaved(title = made.title)
 
 command album list
     help @albumListHelp
     let found = find a in Album order by a.title
     print found columns title, copies, format
+
+// Two toasts, each with its own look and lifespan.
+toast lent
+    text @lentToast
+    lifespan 3000
+    level success
+    icon "check"
+    corner bottomRight
+
+toast added
+    text @addedToast
+    lifespan 8000
 
 part Gauge
     native "parts/Gauge"
@@ -117,6 +130,7 @@ code Albums
             let before = settings.favouriteFriend
             message before.name
         settings.favouriteFriend = friend
+        toast lent(name = friend.name)
         // Who has it now, ready to paste.
         copy friend.name
 
@@ -215,6 +229,8 @@ code Folders
     handler folderPicked
         if folderTree.selected != none and folderTree.selected.size > 0
             folderTable.visible = true
+        // A picked folder hides the tree's Expand all and Collapse all; the table shows its own.
+        folderTree.foldButtons = not folderTable.foldButtons
 
 code SketchTools
     handler stamped

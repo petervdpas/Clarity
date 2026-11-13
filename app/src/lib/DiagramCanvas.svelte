@@ -7,7 +7,8 @@
 
   import { onDestroy } from "svelte";
   import ZoomBar from "./ZoomBar.svelte";
-  import { boxName, centerScroll, themeVariables, type Mark } from "./diagramCanvas";
+  import { boxName, centerScroll, type Mark } from "./diagramCanvas";
+  import { themedMermaid } from "./mermaidDrawing";
 
   let {
     text,
@@ -26,13 +27,6 @@
     /** How much of the canvas's right side something lies over (the properties drawer), in pixels. */
     covered?: number;
   } = $props();
-
-  type Mermaid = (typeof import("mermaid"))["default"];
-  let loading: Promise<Mermaid> | null = null;
-  function mermaid(): Promise<Mermaid> {
-    loading ??= import("mermaid").then((m) => m.default);
-    return loading;
-  }
 
   const ZOOM_MIN = 0.25;
   const ZOOM_MAX = 4;
@@ -168,14 +162,7 @@
     }
     const id = `clarity-diagram-${turn}`;
     try {
-      const m = await mermaid();
-      const css = getComputedStyle(document.documentElement);
-      m.initialize({
-        startOnLoad: false,
-        securityLevel: "strict",
-        theme: "base",
-        themeVariables: { ...themeVariables((n) => css.getPropertyValue(n)), fontFamily: css.getPropertyValue("font-family") },
-      });
+      const m = await themedMermaid();
       const { svg } = await m.render(id, source);
       if (turn !== renders) return;
       const holder = doc.getElementById("drawing")!;

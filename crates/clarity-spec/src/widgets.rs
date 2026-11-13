@@ -415,6 +415,8 @@ pub enum WidgetProperty {
     Remove,
     /// `striped`: a part with rows draws every other row with a faint stripe.
     Striped,
+    /// `fold buttons`: a tree or tree table shows Expand all and Collapse all buttons above its rows.
+    FoldButtons,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
     /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
@@ -1125,7 +1127,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Striped, WidgetProperty::FoldButtons, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::TreeTable,
@@ -1140,7 +1142,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder, Event::Add, Event::Remove],
-        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Striped, WidgetProperty::FoldButtons, WidgetProperty::Reorder, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     // A list the window holds as a chart: `chart bar ... by status count` (U1c).
     Entry {
@@ -1703,6 +1705,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         remove: false,
         confirm: false,
         striped: false,
+        fold_buttons: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -2125,6 +2128,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.striped {
         parts.push("striped".to_string());
     }
+    if props.fold_buttons {
+        parts.push("fold buttons".to_string());
+    }
     if props.frame {
         parts.push("frame".to_string());
     }
@@ -2322,6 +2328,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Add, props.add, "add"),
         (WidgetProperty::Remove, props.remove, "remove"),
         (WidgetProperty::Striped, props.striped, "striped"),
+        (WidgetProperty::FoldButtons, props.fold_buttons, "fold buttons"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
         (WidgetProperty::Mode, props.mode.is_some(), "mode"),

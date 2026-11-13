@@ -111,8 +111,6 @@ mod tests {
         assert_eq!(list[0].id, "start.overview");
         assert!(!list[0].title.is_empty() && !list[0].summary.is_empty());
         assert!(page("code.queries").unwrap().starts_with("# "));
-        // The language reference is a page of the window too.
-        assert!(page("reference").unwrap().starts_with("# The Clarity language"));
         assert!(page("teleport").unwrap_err().contains("teleport"));
     }
 }

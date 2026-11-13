@@ -5,13 +5,13 @@ Status: partial. Texts by key with named slots, one file per language, resources
 Progress: 85%
 
 ## Code
-- Spec: `crates/clarity-spec/src/translations.rs` (files, checks, Clarity's own words in English :35-320), `keyed.rs`, `design_keys.rs`, `resources.rs`, `formats.rs` (named formats)
+- Spec: `crates/clarity-spec/src/translations.rs` (files, checks, Clarity's own words in English :35-365; `untranslated`/`left_to_translate` :1268, :1275: a key is left to translate when empty or still the default's text, one rule for the languages table and the agents' `missing_translations`, `crates/clarity-tools/src/lib.rs:55`, `app/src/lib/TranslationsPanel.svelte:58`), `keyed.rs`, `design_keys.rs`, `resources.rs`, `formats.rs` (named formats)
 - Generators: languages go into each program's model and `files.json`; C# also writes `.resx` (`crates/clarity-gen/src/csharp/texts.rs`)
 - Runtimes: R `runtimes/rust/src/i18n.rs`; Go `runtimes/go/clarity/i18n.go`, `text.go`; C `runtimes/c/clarity/text.c`; C++ `runtimes/cpp/clarity/text.cpp`; C# `runtimes/csharp/Clarity.Runtime/Text.cs`, `Languages.cs`, `Locale.cs`, `ShownText.cs`, `Formats.cs`
-- Clarity.UI: `runtimes/rust-ui/src/locale.rs`, `parts/inputs/formats.rs`, `choices.rs` (language kept)
+- Clarity.UI: `runtimes/rust-ui/src/locale.rs`, `parts/inputs/formats.rs`, `src/choices.rs` (language kept)
 - IDE: `app/src/lib/TranslationsPanel.svelte`, `NewLanguageDialog.svelte`, `ResourceView.svelte`; `app/src-tauri/src/translations.rs`, `resources.rs`
 - CLI: `clarity spec keys` (make texts keys), `clarity spec texts` (keys without a value)
-- Docs: `manual/languages.md`; LANGUAGE.md section 2 (Translations, Resources), section 4 (Formats), section 10 (Texts by key, Text with slots)
+- Docs: manual `languages.md` (Texts and keys, Texts by key and their slots, Keys that point at resources, Formats), `code.expressions.md` (Text with slots)
 
 ## Tests
 - `conformance/translations.json`: run by R, Go, C, C++, C#, `runtimes/web/src/screen`
@@ -21,16 +21,13 @@ Progress: 85%
 
 ## Open
 - `context` for one text with two meanings: NOT BUILT (DESIGN 1.5, roadmap I1c).
-- Dates and numbers in the system's locale, with a choice apart from the language: PARTIAL. Formats follow the shown language; 8 locales, others fall back to en-US (`runtimes/rust-ui/src/parts/inputs/formats.rs:303-318`).
+- Dates and numbers in the system's locale, with a choice apart from the language: PARTIAL. Formats follow the shown language; 8 locales, others fall back to en-US (`runtimes/rust-ui/src/parts/inputs/formats.rs:303-319`).
 - The IDE's own words: see [ide-shell](ide-shell.md).
 
 ## Conflicts
-- DESIGN :203, :214, :255 and 6.7 (:1719) describe key maps in a UI bundle; programs carry texts in `files.json` and the model (C# also `.resx`).
-- DESIGN 1.5 "Every stack" table describes the web renderer (Intl, CSS) for R, Go, C, C++; every program uses Clarity.UI.
 - `manual/languages.md:154` says translations go through the web renderer; :132 says the locale follows the system, it follows the language shown.
 - Display formats are written three times: `runtimes/rust-ui/src/parts/inputs/formats.rs`, `runtimes/web/src/screen/format.ts`, `runtimes/csharp/Clarity.Runtime/Formats.cs`. Equal on the cases.
-- R and Go cli duration readers say "as formats.json reads them" (`runtimes/rust/src/cli.rs:308`, `runtimes/go/clarity/cli.go:387`) but their tests do not load formats.json.
-- Grammar summary (LANGUAGE.md:3028-3149): translations have no `resource`.
+- R and Go cli duration readers say "as formats.json reads them" (`runtimes/rust/src/cli.rs:320`, `runtimes/go/clarity/cli.go:389`) but their tests do not load formats.json.
 
 ## Decisions
 - 2026-10-17: formats follow the person's locale; `language` and `currency` in the project file; named formats, not patterns (DESIGN 1.5, I1a).

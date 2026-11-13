@@ -120,3 +120,46 @@ fn the_preview_carries_the_theme_catalog() {
     assert!(catalog.selectable.contains(&"tab"));
     assert_eq!(catalog.fonts, ["text", "heading", "mono"]);
 }
+
+/// A toast's lines, as its form in the IDE and the agents' tools set them.
+#[test]
+fn a_toast_s_lines_are_set_one_by_one() {
+    let toast = "module shop\n\ntoast saved\n    text @savedToast\n    lifespan 3000\n";
+    let text = set(toast, "toast saved", "lifespan", Some("lifespan 8000")).unwrap();
+    assert_eq!(text, toast.replace("lifespan 3000", "lifespan 8000"));
+    let text = set(&text, "toast saved", "corner", Some("corner bottomLeft")).unwrap();
+    assert!(text.ends_with("    lifespan 8000\n    corner bottomLeft\n"), "{text}");
+    let text = set(&text, "toast saved", "level", Some("level success")).unwrap();
+    let text = set(&text, "toast saved", "icon", Some("icon \"check\"")).unwrap();
+    let (file, diagnostics) = parse(&text, "shop.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let saved = &file.toasts[0];
+    assert_eq!((saved.lifespan, saved.icon.as_deref()), (Some(8000), Some("check")));
+    let text = set(&text, "toast saved", "corner", None).unwrap();
+    assert!(!text.contains("corner"), "{text}");
+    assert!(set(&text, "toast saved", "lifespan", Some("colour red")).is_err(), "a line no toast has is refused");
+}
+
+/// A toast is declared at the end of its module and taken away whole, as the IDE's + New toast and its Delete do.
+#[test]
+fn a_toast_is_added_and_taken_away() {
+    let source = "module shop\n\npage Main: window\n    title \"Main\"\n";
+    let added = apply(source, &Edit::AppendDecl { text: "toast saved\n    text @savedToast\n    lifespan 3000\n".into() }).map_err(|e| e.0).unwrap().text;
+    let (file, diagnostics) = parse(&added, "shop.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    assert_eq!(file.toasts[0].name.name, "saved");
+    let item = added.find("toast saved").unwrap() as u32;
+    let gone = apply(&added, &Edit::Remove { item }).map_err(|e| e.0).unwrap().text;
+    assert_eq!(gone.trim_end(), source.trim_end());
+}
+
+/// A command's code is a declaration of its own, read and written back whole, as its page in the IDE does.
+#[test]
+fn a_command_is_read_and_written_back_whole() {
+    let source = "module shop\n\ncommand order list\n    help @orderListHelp\n    print \"none\"\n\npage Main: window\n    title \"Main\"\n";
+    let item = source.find("command order list").unwrap() as u32;
+    let text = clarity_spec::source::decl_text(source, item).map_err(|e| e.0).unwrap();
+    assert_eq!(text, "command order list\n    help @orderListHelp\n    print \"none\"\n");
+    let changed = apply(source, &Edit::ReplaceDecl { item, text: "command order list\n    help @orderListHelp\n    print \"all\"".into() }).map_err(|e| e.0).unwrap().text;
+    assert!(changed.contains("print \"all\"") && changed.contains("page Main"), "{changed}");
+}

@@ -11,7 +11,7 @@ Progress: 90%
 - Runtimes: R clarity-ui `audio` feature; Go, C, C++ `clarity_ui_use_audio(clarity_audio_api())` with `libclarity_audio` from the Clarity.UI folder; C# NuGet `Clarity.Audio` (`ClarityAudio.Use()`)
 - Clarity.UI: `runtimes/rust-ui/src/parts/sound.rs`, `src/melodies.rs:16`; browser plays songs through the page's audio elements (`runtimes/rust-ui/src/browser/page.rs:16-22`)
 - IDE: Media palette, tray under the window, inspector `on end` and `on fail`
-- Docs: manual `design.sound.md`; LANGUAGE.md "Sound" (:1491)
+- Docs: manual `design.sound.md`, `parts.media.md` (`sound`)
 
 ## Tests
 - `conformance/melody.json`: run by Clarity.UI (`runtimes/rust-ui/tests/parts/core_parts.rs`), spec (`crates/clarity-spec/tests/sound.rs`), C# (`MelodyTests.cs`); Go, C, C++ use Clarity.UI's melodies
@@ -21,7 +21,7 @@ Progress: 90%
 ## Open
 - `conformance/sound.json` for play, pause and seek: NOT BUILT (AUDIO-PLAN.md:63).
 - `soundTags(path)` (tags of many files): NOT BUILT, deferred (AUDIO-PLAN.md:70).
-- AAC (m4a) playback: NOT BUILT (AUDIO-PLAN.md:19).
+- AAC (m4a) playback: NOT BUILT (AUDIO-PLAN.md:19). The decoder is compiled in (`runtimes/rust-audio/Cargo.toml:20-22`, for video's sound); m4a is not a sound resource (`resources.rs:29`).
 - Played by a person on every stack and OS: UNTRIED (DESIGN SD1 "Not yet heard on every stack by a person").
 
 ## Conflicts

@@ -10,7 +10,7 @@ Progress: 85%
 - IDE:
   - Clarity text: `app/src/lib/SourceEditor.svelte` (CodeMirror, problems while typing, Tab is four spaces :72), `highlight.ts`, `codeMirrorLook.ts`
   - Other languages: `CodeEditor.svelte` (C++, Rust, Go, C#, CMake, Cargo), `codeLanguages.ts`
-  - Custom parts and libraries: `PartView.svelte`, `LibraryView.svelte`, `FolderEditor.svelte` (the folder edited like a project, with Build); Tauri `app/src-tauri/src/parts.rs`; CLI `clarity parts <project>`; see [custom-parts](custom-parts.md)
+  - Custom parts and libraries: `PartView.svelte` + `PartForm.svelte`, `LibraryView.svelte` + `LibraryForm.svelte` (the declaration as a form, one line per change, `customDecl.ts`; spec `decl_lines.rs`, `Edit::SetDeclLine`), `NewCustomDialog.svelte` (+ New custom part, + New library: name, module, package), `FolderEditor.svelte` (the folder edited like a project, with Build); Tauri `app/src-tauri/src/parts.rs`; CLI `clarity parts <project>`; see [custom-parts](custom-parts.md)
   - Engines: `EngineEditor.svelte` (inspector, source, stubs, Build), `engines.ts`, `engineBuilds.svelte.ts`; Tauri `app/src-tauri/src/engines.rs`; the Rust engine crate and its template in `crates/clarity-project/src/engines.rs`; see [engines](engines.md)
   - Modules: `ModuleView.svelte` (a module's file and what it declares)
   - README: `ReadmeView.svelte` (Markdown left, rendered right, `save_readme`, "+ Write README" with Goal, Scope, Order of work)
@@ -18,8 +18,8 @@ Progress: 85%
 - Docs: manual/design.text.md, design.custom-parts.md, code.libraries.md, code.engines.md
 
 ## Tests
-- `app/src/lib/highlight.test.ts`, codeLanguages.test.ts, codeParts.test.ts, engines.test.ts, markdown.test.ts
-- `crates/clarity-spec/tests/highlight.rs` (grammar kept equal to the highlighter; `CLARITY_WRITE_GRAMMAR=1`), editor_snippets.rs
+- `app/src/lib/highlight.test.ts`, codeLanguages.test.ts, codeParts.test.ts, engines.test.ts, markdown.test.ts, customDecl.test.ts
+- `crates/clarity-spec/tests/highlight.rs` (grammar kept equal to the highlighter; `CLARITY_WRITE_GRAMMAR=1`), editor_snippets.rs, decl_lines.rs
 - `crates/clarity-project/tests/engines.rs`, part_stacks.rs
 
 ## Open
@@ -29,7 +29,7 @@ Progress: 85%
 - The generated program's README does not carry the project's README: NOT BUILT (`crates/clarity-gen/src/readme.rs:41`); see [generation](generation.md)
 
 ## Conflicts
-- `codec` is missing from the highlighter's keywords (`crates/clarity-spec/src/highlight.rs:48-90`) while the project file reads it
+- `codec` is missing from the highlighter's keywords (`crates/clarity-spec/src/highlight.rs:49-91`) while the project file reads it
 - manual/design.text.md:55-56 and app.keys.md:76-83 differ on Tab and Escape in the editor (`SourceEditor.svelte:72`)
 - manual/code.engines.md:48: the section is "Texts it gives", not "Keys it says"
 

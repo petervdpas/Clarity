@@ -5,15 +5,15 @@ Status: partial. GitHub workflows run the checks on push and publish by tag: IDE
 Progress: 80%
 
 ## Code
-- Workflows: `.github/workflows/checks.yml` (push to main, or by hand for one part: Linux; the ffi libraries, browser files, workspace tests, app `npm run check` and tests, Go, C, C++, C# runtime tests, examples each on its stack); `release.yml` (tag `v*`: Windows NSIS and MSI, Linux .deb amd64 and arm64, .rpm Fedora 43 and 44, each install-tested, the `.vsix`; the tag stamps the app version, :8-10); `release-clarity-ui.yml` (tag `runtimes/rust-ui-ffi/v*`: native libraries for linux, win, osx, x64 and arm64, and browser files); `release-csharp-runtime.yml` (tag `runtimes/csharp/v*`: 13 NuGets, trusted publishing); `release-rust-{runtime,ui,audio,video,image,formats,graph,auth,engine}.yml` (tag `runtimes/rust*/v*`: one crate each); `release-vscode.yml` (tag `editors/vscode/v*`)
+- Workflows: `.github/workflows/checks.yml` (push to main, or by hand for one part: Linux; the ffi libraries, browser files, workspace tests, app `npm run check` and tests, Go, C, C++, C# runtime tests, examples each on its stack); `release.yml` (tag `v*`: Windows NSIS and MSI, Linux .deb amd64 and arm64, .rpm Fedora 43 and 44, each install-tested, the `.vsix`; the tag stamps the app version, :8-10); `release-clarity-ui.yml` (tag `runtimes/rust-ui-ffi/v*`: native libraries for linux, win, osx, x64 and arm64, and browser files); `release-csharp-runtime.yml` (tag `runtimes/csharp/v*`: 14 NuGets with Clarity.AppMcp, checked at :198, trusted publishing); `release-rust-{runtime,ui,audio,video,image,formats,graph,auth,engine,app-mcp}.yml` (tag `runtimes/rust*/v*`: one crate each); `release-vscode.yml` (tag `editors/vscode/v*`)
 - Scripts: `.github/scripts/build-linux.sh`, `install-test.sh`, `stage-clarity-ui.sh`, `stage-clarity-cli.sh`, `fetch_openh264.py`
 - Go: tag `runtimes/go/v*`, no workflow; sums recorded after the tag in `crates/clarity-gen/src/go/runtime.sum`
-- Versions in tree: `runtimes/rust/Cargo.toml` 0.56.0, `runtimes/go/clarity/version.go` v0.59.0, `runtimes/csharp/Directory.Build.props` 0.92.0, `runtimes/rust-ui-ffi` 0.20.0, `runtimes/rust-ui` 0.21.0, `runtimes/rust-engine` 0.3.1, workspace 0.1.0; C and C++ runtimes are copied into programs and have no version
+- Versions in tree: `runtimes/rust/Cargo.toml` 0.59.0, `runtimes/go/clarity/version.go` v0.62.0, `runtimes/csharp/Directory.Build.props` 0.96.0, `runtimes/rust-ui-ffi` 0.24.0, `runtimes/rust-ui` 0.25.0, `runtimes/rust-app-mcp` 0.1.0, `runtimes/rust-engine` 0.3.1, workspace 0.1.0; C and C++ runtimes are copied into programs and have no version
 - Release plans: `releases/<YYYY-MM-DD-HHMM>.json` (gitignored), run by the Release Helper (`~/Projects/ReleaseHelper/README.md`)
-- Rules: CLAUDE.md "Releasing" (:54-61) and "Generated-file guards" (:38-52); see [os-checks](os-checks.md) for systems
+- Rules: CLAUDE.md "Releasing" (:58-66) and "Generated-file guards" (:42-56); see [os-checks](os-checks.md) for systems
 
 ## Tests
-- The workflows themselves; generated-file guards (CLAUDE.md:42-50) fail a release's checks when a file is behind
+- The workflows themselves; generated-file guards (CLAUDE.md:48-54) fail a release's checks when a file is behind
 
 ## Open
 - A Windows (and macOS) job in `checks.yml`: NOT BUILT (DESIGN.md:1704, 2484). Windows runners appear only in release workflows.
@@ -23,13 +23,11 @@ Progress: 80%
 - An offline CI job: see [offline](offline.md).
 
 ## Conflicts
-- Runtimes changed without a version bump: the sign-in work changes `runtimes/go/clarity/signin.go`, `runtimes/rust/src/signin.rs`, `runtimes/rust-ui/src`, `runtimes/csharp/Clarity.Auth/Signins.cs`, `runtimes/rust-auth/src`, `runtimes/c|cpp/auth`; `version.go`, `runtimes/rust/Cargo.toml` and `Directory.Build.props` are unchanged, so generated programs fetch versions that lack it.
-- Two Clarity.UI versions: `runtimes/rust-ui/Cargo.toml` 0.21.0, `runtimes/rust-ui-ffi/Cargo.toml` 0.20.0; downloads follow the ffi version.
-- The tree's version (workspace, `app/package.json`, `tauri.conf.json`) is 0.1.0; releases are v0.40.0, stamped from the tag.
-- `runtimes/rust/README.md:26` shows `clarity-runtime = "0.10.0"`; the crate is 0.56.0.
-- `release-csharp-runtime.yml:4` says eleven packages; it publishes 13. DESIGN.md :273, :1996, :2012 say eight, :2000 nine.
-- `editors/vscode/README.md:37` installs 0.1.3; the extension is 0.1.38.
-- WINDOWS-TESTS.md lists hand release steps and says C and C++ need no release; releases go through the Release Helper, and C and C++ fetch the Clarity.UI release.
+- Two Clarity.UI versions: `runtimes/rust-ui/Cargo.toml` 0.25.0, `runtimes/rust-ui-ffi/Cargo.toml` 0.24.0; downloads follow the ffi version.
+- The tree's version (workspace, `app/package.json`, `tauri.conf.json`) is 0.1.0; releases are v0.44.0, stamped from the tag.
+- `runtimes/rust/README.md:26` shows `clarity-runtime = "0.10.0"`; the crate is 0.59.0.
+- `release-csharp-runtime.yml:4` says eleven packages; it publishes 14.
+- `editors/vscode/README.md:34` installs 0.1.3; the extension is 0.1.38.
 - Plans say unreleased for work in tags: FORMATS-PLAN.md:3 (steps 2-5 in v0.39.0), APP-CAPABILITIES-PLAN.md:3 (sign-in and row versions before v0.40.0), GRAPH-PLAN.md:3 and AGENT-TOOLS-PLAN.md:3 (in v0.39.0).
 
 ## Decisions
@@ -44,4 +42,4 @@ Progress: 80%
 
 ## Was
 - memory: release-helper.md, release-by-tags.md, runtime-release-status.md, go-sums-after-tag-check.md, nuget-trusted-publishing.md, nuget-build-workflow.md, nuget-packages.md, release-ci-builds.md, release-timing.md, release-test-targets.md, ready-before-release.md, generated-file-guards.md
-- WINDOWS-TESTS.md release steps (at HEAD)
+- WINDOWS-TESTS.md release steps (since removed; only "After releases" checks remain, :61-68)

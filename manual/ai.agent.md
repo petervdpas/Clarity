@@ -20,8 +20,7 @@ The agent is a model that knows Clarity and works on the open project through to
 - Rename an entity, an enum, a field, a window or a view everywhere the project names it. The step records the rename, so the column keeps its data. A name the agent simply writes over is a removal and an addition, never guessed to be a rename.
 - Make a new project and open it.
 - Show a window in Preview when it is done.
-- Read the design document, for what Clarity can do and what is planned.
-- Read this manual and the language reference, the pages it needs for the task.
+- Read the pages of this manual it needs for the task.
 - Read the **Output** of the last Run or Build, such as compiler errors, so you need not paste it.
 - Read the application Clarity generated, in the folder the project's output setting names, to see what an error points at. It only reads there; it fixes the project instead.
 - Run or build the application, only as **Clarity settings** allow; see below.
@@ -68,6 +67,6 @@ The turn counts restart with each request. The session counts add up the whole c
 - Name the entities and fields you mean when they exist already.
 - Ask for one thing at a time, and look at it in the designer before the next.
 - When something is wrong, say what you see and what you expected.
-- Ask the agent what Clarity supports before asking it to build something unusual; it reads the design document and does not promise what is not built.
+- Ask the agent what Clarity supports before asking it to build something unusual; it reads the manual and does not promise what is not built.
 
 A long conversation sends more with every turn. When you move on to another task, click **New**.

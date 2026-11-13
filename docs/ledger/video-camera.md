@@ -5,14 +5,14 @@ Status: partial. The `video` part plays on Clarity.Video beside Clarity.UI on ev
 Progress: 30%
 
 ## Code
-- Spec: `crates/clarity-spec/src/video.rs`; `video` kind in `widgets.rs:1332` (binds nothing); `crates/clarity-spec/src/resources.rs` (`plays_videos`, `carries_audio`; video resources `.mp4`); project line `codec x from "path"` (`crates/clarity-project/src/file.rs:550`)
-- Generators: each stack's mod.rs adds Clarity.Video (`parts::VIDEO_KIND`); codec libraries `crates/clarity-gen/src/lib.rs:1308` (`codec_libraries`), :1398 (`with_codecs`, carried in `codecs/`); openh264 placement `crates/clarity-gen/src/clarity_ui.rs:142-195`
+- Spec: `crates/clarity-spec/src/video.rs`; `video` kind in `widgets.rs:1347` (binds nothing); `crates/clarity-spec/src/resources.rs` (`plays_videos`, `carries_audio`; video resources `.mp4`); project line `codec x from "path"` (`crates/clarity-project/src/file.rs:580`)
+- Generators: each stack's mod.rs adds Clarity.Video (`parts::VIDEO_KIND`); codec libraries `crates/clarity-gen/src/lib.rs:1347` (`codec_libraries`), :1437 (`with_codecs`, carried in `codecs/`); openh264 placement `crates/clarity-gen/src/clarity_ui.rs:142-195`
 - Library: `runtimes/rust-video` (crate `clarity-video`: movie.rs MP4 reading, frames.rs threaded decoding, library.rs codec libraries, openh264.rs, `system/` GStreamer, Media Foundation, AVFoundation); codec C table `runtimes/rust-video/include/clarity_codec.h`; C interface `runtimes/rust-video-ffi` (`clarity_ui_use_video(clarity_video_api())`)
 - Runtimes: R clarity-ui feature; Go, C, C++ `libclarity_video` from the Clarity.UI folder; C# NuGet `Clarity.Video` (`AddCodec`)
 - Clarity.UI: `runtimes/rust-ui/src/parts/video.rs` (sound through Clarity.Audio as the clock); browser: the page's video element, frames to the worker (`runtimes/rust-ui/src/browser/page.rs:16-22`)
 - IDE: `app/src-tauri/src/build.rs` puts openh264 in the Clarity.UI folder when it lacks it (background, checked by hash)
 - Release: `.github/scripts/fetch_openh264.py` puts Cisco's binary in the archives, the installer staging and the NuGet
-- Docs: manual `design.video.md`; LANGUAGE.md "Video" (:1581)
+- Docs: manual `design.video.md`, `parts.media.md` (`video`)
 
 ## Tests
 - `crates/clarity-spec/tests/video.rs`; `crates/clarity-gen/tests/videos_build.rs` (ignored; passes on all five); `runtimes/rust-video` tests with `tests/videos/bar.mp4`
@@ -31,7 +31,7 @@ Progress: 30%
 ## Conflicts
 - Manual `design.video.md:42` describes the Windows and macOS decoders with no caveat; they have not run.
 - VIDEO-PLAN.md:30 writes a page block, which the loader refuses.
-- The highlighter's keywords lack `codec` (`crates/clarity-spec/src/highlight.rs:48-90`).
+- The highlighter's keywords lack `codec` (`crates/clarity-spec/src/highlight.rs:49-91`).
 
 ## Decisions
 - 2026-11-05: camera and video are built-in Clarity.UI parts, not a custom canvas or custom part.

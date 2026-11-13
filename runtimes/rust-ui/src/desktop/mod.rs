@@ -661,9 +661,9 @@ impl Host {
                     shown.window.request_redraw();
                 }
             }
-            crate::agents::AgentWork::TurnedAway(note) => {
+            crate::agents::AgentWork::TurnedAway(toast) => {
                 for win in self.wins.iter_mut() {
-                    win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_said(note.clone(), cx));
+                    win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_said(toast.clone(), cx));
                     win.screen.invalidate();
                     if let Some(shown) = &win.shown {
                         shown.window.request_redraw();
@@ -682,10 +682,10 @@ impl Host {
                 let Some(program) = self.program() else { return };
                 let ran = crate::agents::run_call(program.as_ref(), &line, &said);
                 // A change shows in the open windows at once: each reads its data again, and says what the agent did.
-                let note = change.filter(|_| !ran.refused).map(|(agent, tool)| crate::agents::change_note(&agent, &tool, &ran));
+                let toast = change.filter(|_| !ran.refused).map(|(agent, tool)| crate::agents::change_toast(&agent, &tool, &ran));
                 for win in self.wins.iter_mut() {
-                    if let Some(note) = &note {
-                        win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_changed(note.clone(), ran.step, cx));
+                    if let Some(toast) = &toast {
+                        win.screen.act_root::<WindowStack, _>(|stack, cx| stack.agent_changed(toast.clone(), ran.step, cx));
                     }
                     win.screen.invalidate();
                     if let Some(shown) = &win.shown {
@@ -1036,7 +1036,7 @@ impl Host {
             screen.act_root::<WindowStack, _>(|stack, cx| {
                 let mut shown = Vec::new();
                 if !stack.ended() {
-                    shown = stack.notes();
+                    shown = stack.toasts();
                     shown.extend(stack.said().iter().cloned());
                     stack.closing(cx);
                 }

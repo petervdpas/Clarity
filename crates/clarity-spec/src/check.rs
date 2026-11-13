@@ -143,6 +143,7 @@ pub fn check<'a>(files: &'a [SpecFile], signin: Option<&'a crate::signin::Signin
     checker.collect();
     checker.check_single_app();
     checker.check_settings();
+    checker.diagnostics.extend(check_toasts(files));
     for (file_index, file) in files.iter().enumerate() {
         checker.check_file(file_index, file);
     }
@@ -2187,7 +2188,7 @@ impl<'a> Checker<'a> {
                 self.error(
                     file,
                     format!(
-                        "{at}: '{field}' is {}; a table edits text, numbers, bool, dates, enum and ref columns",
+                        "{at}: '{field}' is {}; a table edits text, numbers, bool, dates, colors, enum and ref columns",
                         widgets::field_type_tag(&f.ty)
                     ),
                     widget.span,
@@ -2668,6 +2669,32 @@ pub(crate) fn check_sources(project: &mut Project) {
     }
     found.extend(check_source_mappings(project));
     project.diagnostics.extend(found);
+}
+
+/// Each toast: its name once in the project, a text, a lifespan Clarity
+/// can show and an icon it knows.
+fn check_toasts(files: &[SpecFile]) -> Vec<Diagnostic> {
+    let mut found = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for file in files {
+        for toast in &file.toasts {
+            let name = &toast.name.name;
+            if !seen.insert(name.clone()) {
+                found.push(Diagnostic::error(format!("toast {name} is declared twice; give each toast a name of its own"), toast.name.span).in_file(&file.path));
+            }
+            if toast.text.is_none() {
+                found.push(Diagnostic::error(format!("toast {name} has no text; give it one, as in text @{name}Toast"), toast.name.span).in_file(&file.path));
+            }
+            if let Some(ms) = toast.lifespan.filter(|ms| !crate::code::TOAST_LIFESPANS.contains(ms)) {
+                let (least, most) = (crate::code::TOAST_LIFESPANS.start(), crate::code::TOAST_LIFESPANS.end());
+                found.push(Diagnostic::error(format!("toast {name} shows from {least} to {most} milliseconds, not a lifespan of {ms}"), toast.span).in_file(&file.path));
+            }
+            if let Some(icon) = toast.icon.as_deref().filter(|i| crate::icons::path(i).is_none()) {
+                found.push(Diagnostic::error(crate::icons::unknown(icon), toast.span).in_file(&file.path));
+            }
+        }
+    }
+    found
 }
 
 /// A file source laid over by a mapping (`using OrderFeed`): a module

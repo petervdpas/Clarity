@@ -83,6 +83,12 @@ pub fn used(project: &Project) -> BTreeMap<String, String> {
             found.insert(name.to_string(), path.to_string());
         }
     };
+    // Each toast's icon.
+    for toast in project.files.iter().flat_map(|f| &f.toasts) {
+        if let Some(icon) = &toast.icon {
+            add(icon);
+        }
+    }
     fn commands(list: &[Command], add: &mut dyn FnMut(&str)) {
         for c in list {
             if let Some(icon) = &c.props.icon {

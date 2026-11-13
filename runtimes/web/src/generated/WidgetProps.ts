@@ -154,6 +154,11 @@ confirm: boolean,
  */
 striped: boolean, 
 /**
+ * `fold buttons`: a tree or tree table shows Expand all and Collapse
+ * all buttons above its rows; code sets it as `tree.foldButtons`.
+ */
+foldButtons: boolean, 
+/**
  * `order by field [desc]`: the order a table's rows show in first.
  */
 order: TableOrder | null, 

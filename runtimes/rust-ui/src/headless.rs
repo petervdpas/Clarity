@@ -47,7 +47,7 @@
 //! (`selected`), the dialog over it (`dialog`, with its `data`), the part
 //! with the focus (`focused`), every part and named frame button that shows
 //! with its place (`shown`), every button that shows with what it says (`buttons`), the
-//! notes and the messages said (`notes`, `said`), how many overlays are
+//! toasts and the messages said (`toasts`, `said`), how many overlays are
 //! open (`overlays`), the parts that show in the top one (`top`), and the
 //! rows of each list, table and tree that show, with their places (`rows`),
 //! and how each canvas maps its units onto the screen (`canvases`).
@@ -530,7 +530,7 @@ impl Driven {
                 let state = dialog.state_now();
                 out.insert("dialog".into(), json!({ "window": state.window, "data": state.data, "parts": state.parts, "selected": state.selected }));
             }
-            out.insert("notes".into(), json!(stack.notes().iter().map(|m| m.text.show()).collect::<Vec<_>>()));
+            out.insert("toasts".into(), json!(stack.toasts().iter().map(|m| m.text.show()).collect::<Vec<_>>()));
             out.insert("said".into(), json!(stack.said().iter().map(|m| m.text.show()).collect::<Vec<_>>()));
         }
         out.insert("keys".into(), json!(self.screen.find::<crate::dialogs::KeysWindow>().is_some()));

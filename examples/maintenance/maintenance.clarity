@@ -47,6 +47,28 @@ settings
     agentReadsWhileClosed
     agentChangesWhileClosed
 
+// The toasts the app shows: saving an entry and a review, each its own.
+toast entrySaved
+    text @entrySaved
+    lifespan 3000
+    level success
+    icon "check"
+    corner bottomRight
+
+toast pickAnEntry
+    text @pickAnEntry
+    lifespan 4000
+    level warning
+    icon "triangle-alert"
+    corner topRight
+
+toast reviewSaved
+    text @reviewSaved
+    lifespan 5000
+    level info
+    icon "clipboard-check"
+    corner bottomRight
+
 // The number of an entry's Progress line (`Progress: 60%`); -1 when it has none.
 function progressOf(body: text) -> integer
     let line = lineAfter(body, "Progress: ")
@@ -74,8 +96,12 @@ function titleOf(body: text, piece: text) -> text
         return piece
     return title
 
-// The word of an entry's status line: built, partial, not built, needs decision.
+// What the tree shows of an entry: its Progress line as written (`60%`),
+// else the word of its status line (built, partial, not built, needs decision).
 function statusOf(body: text) -> text
+    let progress = lineAfter(body, "Progress: ")
+    if progress != ""
+        return progress
     let line = lineAfter(body, "Status: ")
     let stop = indexOf(line, ".")
     if stop == 0
@@ -256,7 +282,7 @@ code Main
 
     handler reviewClicked
         if piece == ""
-            message info @pickAnEntry
+            toast pickAnEntry
             return
         reviewPanel.visible = true
 
@@ -264,7 +290,7 @@ code Main
     // the tree and the review's references in step with it.
     handler saveEntryClicked
         if piece == ""
-            message info @pickAnEntry
+            toast pickAnEntry
             return
         write entryBody to ledger piece + ".md"
         let rows: list<Entry> = []
@@ -286,7 +312,7 @@ code Main
         related = linksOf(entryBody)
         codePaths = sectionOf(entryBody, "Code") + "\n\n" + sectionOf(entryBody, "Tests")
         oldReferences = sectionOf(entryBody, "Was")
-        message info @entrySaved(piece = piece)
+        toast entrySaved(piece = piece)
 
     // Stores the review in the app's database and marks the entry in the tree.
     handler saveReviewClicked
@@ -312,7 +338,7 @@ code Main
         let reviews = find r in Review where r.project == project
         let found = files f in ledger where f.extension == "md" order by f.path
         checkReviews(reviews, found)
-        message info @reviewSaved(piece = piece)
+        toast reviewSaved(piece = piece)
 
 // Whether a ledger file changed after the time it was reviewed. A review
 // kept before that time was recorded counts as changed since: reviewing it

@@ -6,6 +6,7 @@
 mod doc_snippets;
 
 use clarity_spec::Severity;
+use clarity_spec::load_converted;
 use clarity_spec::parser::parse;
 
 /// Every page of the manual, by its file name, with its text.
@@ -47,4 +48,30 @@ fn every_snippet_of_the_manual_parses() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n\n"));
     assert!(checked >= 30, "only {checked} snippets were found");
+}
+
+/// The complete example (start.complete-example) is a whole project: its
+/// module and the `.cxaml` files of its app, windows and views check clean
+/// together.
+#[test]
+fn the_complete_example_checks_clean() {
+    let text = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manual/start.complete-example.md")).unwrap();
+    let blocks = doc_snippets::blocks(&text);
+    let example = blocks.iter().find(|b| b.starts_with("module customers\n")).expect("the page has the customers module");
+    // Its app, windows and views, each a file of its own in design/, named after what its root's class names.
+    let pages: Vec<(String, String)> = blocks.iter().filter_map(|b| page_file(b, "customers")).collect();
+    assert_eq!(pages.len(), 5, "the page shows the app, two windows and their two views");
+    let mut sources = vec![("customers.clarity", example.as_str())];
+    sources.extend(pages.iter().map(|(path, text)| (path.as_str(), text.as_str())));
+    let project = load_converted(sources);
+    let problems: Vec<_> = project.diagnostics.iter().map(|d| (d.severity, &d.message)).collect();
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A `.cxaml` block whose root's class is a page or the app of `module`, as
+/// the file it would be: `design/CustomerBrowse.cxaml` for `class="customers.CustomerBrowse"`.
+fn page_file(block: &str, module: &str) -> Option<(String, String)> {
+    let class = block.split("class=\"").nth(1)?.split('"').next()?;
+    let page = class.strip_prefix(module)?.strip_prefix('.')?;
+    Some((format!("design/{page}.cxaml"), block.to_string()))
 }

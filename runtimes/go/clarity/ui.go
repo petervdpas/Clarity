@@ -32,6 +32,9 @@ type PartState struct {
 	// snaps to it, as a handler set them; nil keeps the design.
 	Grid *int64 `json:"grid,omitempty"`
 	Snap *bool  `json:"snap,omitempty"`
+	// FoldButtons is whether a tree or tree table shows Expand all and
+	// Collapse all, as a handler set it (tree.foldButtons); nil keeps the design.
+	FoldButtons *bool `json:"foldButtons,omitempty"`
 	// Connecting is whether a press anywhere on a box of a canvas with
 	// `on connect` draws a new line, as a handler set it; nil is false.
 	Connecting *bool `json:"connecting,omitempty"`
@@ -165,6 +168,20 @@ const (
 type Message struct {
 	Level Level `json:"level"`
 	Text  Text  `json:"text"`
+	// Toast is the toast the project declares that shows it (toast saved),
+	// with its level, lifespan, icon and corner; nil for a plain message.
+	Toast *Toast `json:"toast,omitempty"`
+}
+
+// Toast is a toast the project declares, as the screen shows it: its name,
+// level (info, success, warning, error), how long it shows in milliseconds,
+// its icon and its corner (topRight, topLeft, bottomRight, bottomLeft).
+type Toast struct {
+	Name     string `json:"name"`
+	Level    string `json:"level"`
+	Lifespan int    `json:"lifespan,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	Corner   string `json:"corner"`
 }
 
 // OpenRequest is open Window with name = value, ...
@@ -378,6 +395,19 @@ func (u *Ui) Snap(part string, design bool) bool {
 
 func (u *Ui) SetSnap(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Snap = &value })
+}
+
+// FoldButtons is whether a tree or tree table shows Expand all and Collapse
+// all: tree.foldButtons, as its line says until a handler sets it.
+func (u *Ui) FoldButtons(part string, design bool) bool {
+	if f := u.parts[part].FoldButtons; f != nil {
+		return *f
+	}
+	return design
+}
+
+func (u *Ui) SetFoldButtons(part string, value bool) {
+	u.part(part, func(p *PartState) { p.FoldButtons = &value })
 }
 
 // Connecting is whether a press anywhere on a box draws a new line:
@@ -710,7 +740,12 @@ func SelectStored[T any](u *Ui, part string, rows []T, wanted any) {
 // read again or replaced: they are other records.
 func (u *Ui) Deselect(part string) { delete(u.selected, part) }
 
-func (u *Ui) Message(level Level, text Text) { u.messages = append(u.messages, Message{level, text}) }
+func (u *Ui) Message(level Level, text Text) { u.messages = append(u.messages, Message{Level: level, Text: text}) }
+
+// Toast is toast saved(...): the screen shows text as the toast toast.
+func (u *Ui) Toast(toast Toast, text Text) {
+	u.messages = append(u.messages, Message{Level: Info, Text: text, Toast: &toast})
+}
 
 // Copy is copy text: the screen puts it, as it shows, on the clipboard when
 // the handler is done; the last copy counts.

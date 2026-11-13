@@ -322,7 +322,7 @@ impl ProgramHost {
                 true
             }
             Err(text) => {
-                self.effects.borrow_mut().push(Effect::Say(vec![Message { level: Level::Error, text }]));
+                self.effects.borrow_mut().push(Effect::Say(vec![Message { level: Level::Error, text, toast: None }]));
                 self.changed();
                 false
             }
@@ -416,7 +416,7 @@ impl ProgramHost {
         let mut kept = self.program.read_settings();
         kept.extend(now);
         if let Err(text) = self.program.keep_settings(kept) {
-            self.effects.borrow_mut().push(Effect::Say(vec![Message { level: Level::Error, text }]));
+            self.effects.borrow_mut().push(Effect::Say(vec![Message { level: Level::Error, text, toast: None }]));
             self.changed();
         }
     }
@@ -664,7 +664,7 @@ impl PartHost for ProgramHost {
     }
 
     fn say(&self, level: Level, text: Text) {
-        self.effects.borrow_mut().push(Effect::Say(vec![Message { level, text }]));
+        self.effects.borrow_mut().push(Effect::Say(vec![Message { level, text, toast: None }]));
         self.changed();
     }
 

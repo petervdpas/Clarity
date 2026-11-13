@@ -33,6 +33,9 @@
     onnewengine = null,
     onnewpart = null,
     onnewlibrary = null,
+    onnewtoast = null,
+    onnewfunction = null,
+    onnewcommand = null,
     onnewlanguage = null,
     onnewresource = null,
     onnewdiagram = null,
@@ -64,6 +67,12 @@
     onnewpart?: (() => void) | null;
     /** Declares a new library, in a dialog. */
     onnewlibrary?: (() => void) | null;
+    /** Declares a new toast, asking its name; null where the tree only shows. */
+    onnewtoast?: (() => void) | null;
+    /** Declares a new function or action, asking its name; null where the tree only shows. */
+    onnewfunction?: ((kind: "function" | "action") => void) | null;
+    /** Declares a new command, asking the words it is typed as; null where the tree only shows. */
+    onnewcommand?: (() => void) | null;
     /** Asks for a new language and writes its translation file; null where the tree only shows. */
     onnewlanguage?: (() => void) | null;
     /** Asks for a new resource: its name, its type and maybe a file to copy in; null where the tree only shows. */
@@ -131,6 +140,10 @@
   const engines = $derived(projectEngines(preview.project));
   // The outside libraries code calls (DESIGN 5.21), with their modules.
   const libraries = $derived(preview.project.files.flatMap((f) => f.libraries.map((library) => ({ library, module: f.module?.name ?? "" }))));
+  // The functions and actions handlers call, with their modules.
+  const functions = $derived(preview.project.files.flatMap((f) => f.functions.map((fn) => ({ fn, module: f.module?.name ?? "" }))));
+  // The toasts code shows by name, with their modules.
+  const toasts = $derived(preview.project.files.flatMap((f) => (f.toasts ?? []).map((toast) => ({ toast, module: f.module?.name ?? "" }))));
   // The custom parts outside libraries draw (DESIGN 5.19), with their modules.
   const customParts = $derived(preview.project.files.flatMap((f) => f.parts.map((part) => ({ part, module: f.module?.name ?? "" }))));
   function libraryNote(part: (typeof customParts)[number]["part"]): string {
@@ -447,16 +460,50 @@
       {/if}
     </details>
 
-    {#if commands.length > 0}
-      <details open>
-        <summary>Commands <span class="count">{commands.length}</span></summary>
-        {#each commands as { line, module } (line)}
-          <button class="row" class:current={is("module", module)} title="in module {module}" onclick={() => onselect({ kind: "module", name: module })}>
-            <code>{line}</code>
-          </button>
-        {/each}
-      </details>
-    {/if}
+    <details open={toasts.length > 0}>
+      <summary>Toasts <span class="count">{toasts.length}</span></summary>
+      {#each toasts as { toast, module } (toast.name.name)}
+        <button class="row" class:current={is("toast", toast.name.name)} title="in module {module}" onclick={() => onselect({ kind: "toast", name: toast.name.name })}>
+          {toast.name.name}
+          <span class="note">{toast.level}, {(toast.lifespan ?? 5000) / 1000} s</span>
+        </button>
+      {:else}
+        <p class="empty">No toasts yet: short messages in a corner of the window that go by themselves, each with its own lifespan, level, icon and corner; code shows one with <code>toast name</code>.</p>
+      {/each}
+      {#if onnewtoast}
+        <button class="row add" onclick={onnewtoast}>+ New toast</button>
+      {/if}
+    </details>
+
+    <details open={functions.length > 0}>
+      <summary>Functions <span class="count">{functions.length}</span></summary>
+      {#each functions as { fn, module } (fn.name.name)}
+        <button class="row" class:current={is("function", fn.name.name)} title="{fn.kind} in module {module}" onclick={() => onselect({ kind: "function", name: fn.name.name })}>
+          {fn.name.name}
+          <span class="note">{fn.kind}</span>
+        </button>
+      {:else}
+        <p class="empty">No functions yet: logic not tied to one window, declared with <code>function name(...)</code> or <code>action name(...)</code> in a module.</p>
+      {/each}
+      {#if onnewfunction}
+        <button class="row add" onclick={() => onnewfunction("function")}>+ New function</button>
+        <button class="row add" onclick={() => onnewfunction("action")}>+ New action</button>
+      {/if}
+    </details>
+
+    <details open={commands.length > 0}>
+      <summary>Commands <span class="count">{commands.length}</span></summary>
+      {#each commands as { line, module } (line)}
+        <button class="row" class:current={is("command", line)} title="in module {module}" onclick={() => onselect({ kind: "command", name: line })}>
+          <code>{line}</code>
+        </button>
+      {:else}
+        <p class="empty">No commands yet: what the program does from its command line (<code>command order list</code>), and with an <code>agent</code> line what AI agents may call.</p>
+      {/each}
+      {#if onnewcommand}
+        <button class="row add" onclick={onnewcommand}>+ New command</button>
+      {/if}
+    </details>
 
     <details>
       <summary>Modules <span class="count">{files.length}</span></summary>

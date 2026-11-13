@@ -56,4 +56,4 @@ The Code tab edits the window's handlers in the same way, checked while you type
 - Enter keeps the indentation of the line, and adds one level after a line that opens a block, such as `handler` or `if` in code, or an element that holds others, such as `<Form>` or `<Menu>`, in a window's file.
 - Ctrl+S saves; Escape goes back to Properties.
 
-Modules, functions and themes have editors of their own that work the same way; see [Functions and actions](code.functions.md) and [Themes](themes.md). For the full syntax, see [the language reference](../docs/LANGUAGE.md).
+Modules, functions and themes have editors of their own that work the same way; see [Functions and actions](code.functions.md) and [Themes](themes.md). The manual has a page for every declaration, part, statement and expression.

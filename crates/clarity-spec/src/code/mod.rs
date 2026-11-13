@@ -6,6 +6,8 @@
 pub mod check;
 pub mod mapping;
 pub(crate) mod parse;
+pub use parse::RESERVED as RESERVED_WORDS;
+pub use parse::STATEMENT_WORDS;
 pub mod edit;
 pub mod print;
 
@@ -181,6 +183,12 @@ pub enum StmtKind {
         level: MessageLevel,
         text: Expr,
     },
+    /// `toast saved(name = customer.name)`: shows the toast `saved` the
+    /// project declares, its text's slots filled with `args`.
+    Toast {
+        name: Ident,
+        args: Vec<Arg>,
+    },
     /// `ask @question ... then handler(values)` (DESIGN 5.14): Clarity's
     /// dialog, shown when the handler has finished. The answer runs `then`
     /// with `args` and, for a value, the answer last; cancelling runs nothing.
@@ -301,6 +309,87 @@ impl MessageLevel {
             "error" => Some(Self::Error),
             _ => None,
         }
+    }
+}
+
+/// How long a toast shows when neither it nor the app says, in milliseconds.
+pub const DEFAULT_TOAST_LIFESPAN: u32 = 5000;
+/// The shortest and the longest lifespan a toast may have, in milliseconds.
+pub const TOAST_LIFESPANS: std::ops::RangeInclusive<u32> = 500..=120_000;
+
+/// A toast (`toast saved` in a module): a short message in a corner of the
+/// window that goes by itself. Each has its own text, lifespan, level, icon
+/// and corner, so one app shows `saved` for 3 seconds and `imported` for 8.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ToastDecl {
+    pub name: Ident,
+    /// Its text's key (`text @savedToast`), whose slots code fills.
+    pub text: Option<Ident>,
+    /// How long it shows, in milliseconds (`lifespan 3000`); none for Clarity's default.
+    pub lifespan: Option<u32>,
+    pub level: ToastLevel,
+    /// A Lucide icon beside its text (`icon "check"`).
+    pub icon: Option<String>,
+    pub corner: ToastCorner,
+    pub span: Span,
+}
+
+/// A toast's level, which sets its color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ToastLevel {
+    #[default]
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl ToastLevel {
+    pub const ALL: [ToastLevel; 4] = [ToastLevel::Info, ToastLevel::Success, ToastLevel::Warning, ToastLevel::Error];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            ToastLevel::Info => "info",
+            ToastLevel::Success => "success",
+            ToastLevel::Warning => "warning",
+            ToastLevel::Error => "error",
+        }
+    }
+
+    pub fn by_keyword(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.keyword() == word)
+    }
+}
+
+/// The corner of the window a toast shows in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ToastCorner {
+    #[default]
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
+}
+
+impl ToastCorner {
+    pub const ALL: [ToastCorner; 4] = [ToastCorner::TopRight, ToastCorner::TopLeft, ToastCorner::BottomRight, ToastCorner::BottomLeft];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            ToastCorner::TopRight => "topRight",
+            ToastCorner::TopLeft => "topLeft",
+            ToastCorner::BottomRight => "bottomRight",
+            ToastCorner::BottomLeft => "bottomLeft",
+        }
+    }
+
+    pub fn by_keyword(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.keyword() == word)
     }
 }
 
@@ -1152,6 +1241,7 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
             StmtKind::Call { call } => each_expr(call, found),
             StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => each_expr(text, found),
+            StmtKind::Toast { args, .. } => args.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
@@ -1284,7 +1374,7 @@ pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
                 each_expr_in_mut(body, found);
             }
             StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
-            StmtKind::Open { with, .. } => with.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
+            StmtKind::Open { with, .. } | StmtKind::Toast { args: with, .. } => with.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
                     each_expr_mut(question, found);

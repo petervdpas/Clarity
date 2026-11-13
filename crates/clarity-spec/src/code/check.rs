@@ -701,6 +701,11 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.libraries).find(|l| l.name.name == name)
     }
 
+    /// A toast declared in a visible module.
+    fn toast(&self, name: &str) -> Option<&'a super::ToastDecl> {
+        self.visible.iter().flat_map(|f| &f.toasts).find(|t| t.name.name == name)
+    }
+
     /// A mapping declared in a visible module (docs/FORMATS-PLAN.md, step 4).
     fn mapping(&self, name: &str) -> Option<&'a super::MappingDecl> {
         self.visible.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
@@ -2182,6 +2187,13 @@ pub const NOW: &str = "now";
 /// `places` decimals, rounded half away from zero (conformance/rounding.json).
 pub const ROUND: &str = "round";
 
+/// The built-in functions code calls by name, besides the text and picture
+/// functions (`TEXT_FUNCTIONS`, `PICTURE_FUNCTIONS`).
+pub const BUILT_IN_FUNCTIONS: [&str; 9] = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW];
+
+/// Built-in functions that a project's own function of the same name replaces.
+pub const UNLESS_DECLARED: [&str; 3] = [NEW_TOKEN, NEW_RECOVERY_CODES, RANDOM];
+
 /// The built-in `sin(degrees)` and `cos(degrees)`, rounded to 10 decimals
 /// (conformance/drawing.json).
 pub const SIN: &str = "sin";
@@ -2935,6 +2947,23 @@ impl<'a> BodyChecker<'_, 'a> {
                 let ty = self.shown_text(text);
                 if !ty.is_value() {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
+                }
+            }
+            StmtKind::Toast { name, args } => {
+                // A command writes it to standard error, as it does a message.
+                if self.command.is_none() {
+                    self.ui_only("toast", stmt.span);
+                }
+                if self.env.toast(&name.name).is_none() {
+                    let declared: Vec<&str> = self.env.visible.iter().flat_map(|f| &f.toasts).map(|t| t.name.name.as_str()).collect();
+                    let known = if declared.is_empty() { "the module declares none; add one, as in 'toast saved' with its text".to_string() } else { format!("the toasts are {}", declared.join(", ")) };
+                    self.error(format!("there is no toast {}; {known}", name.name), name.span);
+                }
+                for arg in args {
+                    let ty = self.expr(&arg.value, None);
+                    if !ty.is_value() {
+                        self.error(format!("a slot shows a value, and {} is {}", arg.name.name, ty.name()), arg.value.span);
+                    }
                 }
             }
             StmtKind::Copy { text } => {
@@ -3810,6 +3839,8 @@ impl<'a> BodyChecker<'_, 'a> {
             "connecting" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect)) => value(Ty::Bool),
             // Whether people resize its boxes by their grip, true until code sets it: only on a canvas with `on resize`.
             "resizable" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Resize)) => value(Ty::Bool),
+            // Whether a tree or tree table shows Expand all and Collapse all: as its line says (`fold buttons`), until code sets it.
+            "foldButtons" if matches!(part, Part::Widget(p) if matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable)) => value(Ty::Bool),
             // What its clear() fills it with; empty is the theme's panel.
             "background" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Text),
             // Its grid's dots: how many pixels across, and their color (empty is the theme's border).
@@ -4269,10 +4300,8 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(self.expr(expr, None));
         };
         // Only functions and actions take values by name.
-        let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str())
-            || (function.name == NEW_TOKEN && self.env.function(NEW_TOKEN).is_none())
-            || (function.name == NEW_RECOVERY_CODES && self.env.function(NEW_RECOVERY_CODES).is_none())
-            || (function.name == RANDOM && self.env.function(RANDOM).is_none())
+        let built_in = BUILT_IN_FUNCTIONS.contains(&function.name.as_str())
+            || (UNLESS_DECLARED.contains(&function.name.as_str()) && self.env.function(&function.name).is_none())
             || (built_in_function(&function.name).is_some() && self.env.function(&function.name).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
@@ -5497,6 +5526,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 }
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => each_expr(text, found),
+            StmtKind::Toast { args, .. } => args.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
                     each_expr(question, found);

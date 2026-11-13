@@ -10,7 +10,7 @@ Progress: 95%
 - Runtimes: groups decided in the runtime and sent in the part's view (DESIGN 1.7): R `runtimes/rust/src/charts.rs`, Go `clarity/charts.go`, C `clarity/charts.c`, C++ `clarity/charts.cpp`, C# `Charts.cs`
 - Clarity.UI: `runtimes/rust-ui/src/parts/data/chart.rs`, `data/trend.rs` (own clock, `every`, `points`), `data/groups.rs`
 - IDE: `app/src/lib/PageProperties.svelte`, `PartTile.svelte` (the designer shows a still sample of a trend)
-- Docs: manual `design.parts.md` (Data); LANGUAGE.md section 6 (Charts, Live graphs)
+- Docs: manual `parts.data.md` (`chart`, `trend`), `parts.time.md` (Live graphs)
 
 ## Tests
 - `conformance/charts.json`: run by R, Go, C, C++, rust-ui; skipped by C# (`Charts.cs` names it in a comment, no test loads it)
@@ -23,7 +23,6 @@ Progress: 95%
 ## Conflicts
 - Chart groups decided twice in Rust: `runtimes/rust/src/charts.rs` and `runtimes/rust-ui/src/parts/data/groups.rs`.
 - C# `Charts.cs` has no callers outside tests.
-- DESIGN.md 5.26 (:1478) names `ui/TrendView.svelte`, `ui/trend.ts` and C# `TrendPart`; trends are drawn by `runtimes/rust-ui/src/parts/data/trend.rs`.
 
 ## Decisions
 - 2026-10-23: `chart bar|line|pie ... by field count|sum f|average f`, grouped over the rows the window holds (the user's choice).

@@ -882,7 +882,7 @@ fn frame_node(builder: &mut Builder, e: &dyn Element, id: ElementId, b: Rect, an
     use crate::frame::{buttons::FrameButton, footer::FrameFooter, menu_bar::FrameMenuBar, menus::FrameMenuList, ribbon::FrameRibbon, sidebar::FrameSidebar, toolbar::FrameToolbar};
     use crate::parts::containers::container::ContainerButton;
     use crate::parts::inputs::choice_list::{ChoiceList, LINE};
-    use crate::window::messages::{NoteList, SaidDialog};
+    use crate::window::messages::{ToastList, SaidDialog};
     use AccessAction::*;
     let button = |name: String| AccessNode::new(id, Role::Button, name, b).with_actions(&[Focus, Click, ScrollIntoView]);
     let mut extra = Vec::new();
@@ -967,9 +967,9 @@ fn frame_node(builder: &mut Builder, e: &dyn Element, id: ElementId, b: Rect, an
             extra.push((AccessNode::new(virtual_id(id, 0), Role::Status, status, footer.status_box()), Vec::new()));
         }
         AccessNode::new(id, Role::ContentInfo, "", b)
-    } else if let Some(notes) = any.downcast_ref::<NoteList>() {
-        for (i, note) in notes.notes().iter().enumerate() {
-            extra.push((AccessNode::new(virtual_id(id, i), Role::Status, note.text.show(), b), Vec::new()));
+    } else if let Some(toasts) = any.downcast_ref::<ToastList>() {
+        for (i, toast) in toasts.toasts().iter().enumerate() {
+            extra.push((AccessNode::new(virtual_id(id, i), Role::Status, toast.text.show(), b), Vec::new()));
         }
         if extra.is_empty() {
             return None;

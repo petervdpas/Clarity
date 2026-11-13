@@ -477,6 +477,8 @@ enum Kind {
     Theme,
     /// A mapping's declaration, which its page writes as a whole.
     Mapping,
+    /// A toast's declaration, which its form sets line by line and Delete takes away.
+    Toast,
     Use,
     /// A menu item, button or separator.
     Command,
@@ -605,6 +607,8 @@ fn top_kind(node: &LNode) -> Kind {
         Kind::Theme
     } else if starts_with_keyword(&node.tokens, "mapping", Some(TokenKind::Ident)) {
         Kind::Mapping
+    } else if starts_with_keyword(&node.tokens, "toast", Some(TokenKind::Ident)) {
+        Kind::Toast
     } else if starts_with_keyword(&node.tokens, "use", Some(TokenKind::Ident)) {
         Kind::Use
     } else {
@@ -877,8 +881,8 @@ impl Doc {
 
     /// Removes an entity, field, enum, variant, engine, theme or mapping of the module.
     fn remove(&mut self, item: u32) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "an entity, field, enum, variant, engine, theme or mapping", |k| {
-            matches!(k, Kind::Entity | Kind::Field | Kind::Enum | Kind::Variant | Kind::Engine | Kind::Theme | Kind::Mapping)
+        let (path, _) = self.find(item, "an entity, field, enum, variant, engine, theme, mapping or toast", |k| {
+            matches!(k, Kind::Entity | Kind::Field | Kind::Enum | Kind::Variant | Kind::Engine | Kind::Theme | Kind::Mapping | Kind::Toast)
         })?;
         self.take(&path);
         Ok(None)

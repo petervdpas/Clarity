@@ -541,3 +541,16 @@ void a_handler_copies_the_last_text_it_copies(void) {
     ClarityUi* quiet = clarity_ui(&state);
     CHECK(cJSON_GetObjectItemCaseSensitive(clarity_reply_json(clarity_ui_reply(quiet, "Main", cJSON_CreateObject())), "copy") == NULL);
 }
+
+// `toast saved(...)`: the reply carries the toast's look with its text; a plain message none.
+void a_toast_travels_with_its_look(void) {
+    ClarityWindowState state = {0};
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_message(ui, CLARITY_INFO, clarity_plain_text("Plain"));
+    clarity_ui_toast(ui, "saved", "success", 3000, "check", "bottomRight", clarity_plain_text("Saved Ada"));
+    clarity_ui_toast(ui, "imported", "info", 8000, NULL, "topLeft", clarity_plain_text("Imported"));
+    cJSON* messages = cJSON_GetObjectItemCaseSensitive(clarity_reply_json(clarity_ui_reply(ui, "Main", cJSON_CreateObject())), "messages");
+    CHECK(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(messages, 0), "toast") == NULL);
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(messages, 1), "toast"), "{\"name\":\"saved\",\"level\":\"success\",\"lifespan\":3000,\"icon\":\"check\",\"corner\":\"bottomRight\"}");
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(messages, 2), "toast"), "{\"name\":\"imported\",\"level\":\"info\",\"lifespan\":8000,\"corner\":\"topLeft\"}");
+}

@@ -2,9 +2,9 @@
 
 # Clarity
 
-A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](manual/README.md), one topic per page. The language is described in full in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
+A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](manual/README.md), one topic per page. The manual also holds the whole language: a page for every declaration, part, statement and expression. Where each piece of Clarity stands, what is built and what is open, is in the [development ledger](docs/ledger/README.md).
 
-Five stacks are generated: Rust, C#, Go, C and C++. Every desktop program draws its windows with Clarity.UI, Clarity's own UI framework, and each stack can also serve the same windows to a browser, where Clarity.UI draws them as WebAssembly. Each window, view and the app is a `.cxaml` file in the project's `design` folder; entities, themes, code, functions and actions are Clarity text in the project's modules. What is built and what is planned is in the roadmap in docs/DESIGN.md and in the plans next to it in `docs/`.
+Five stacks are generated: Rust, C#, Go, C and C++. Every desktop program draws its windows with Clarity.UI, Clarity's own UI framework, and each stack can also serve the same windows to a browser, where Clarity.UI draws them as WebAssembly. Each window, view and the app is a `.cxaml` file in the project's `design` folder; entities, themes, code, functions and actions are Clarity text in the project's modules. What is built and what is open is in the [development ledger](docs/ledger/README.md).
 
 ## Layout
 
@@ -123,6 +123,8 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
 An agent working in this repository uses this checkout's Clarity: `.mcp.json` names `./mcp.sh`, which builds the `clarity` command when it is behind its source and serves `clarity mcp` from it. Claude Code offers it when started here; an installed Clarity added for every folder (`--scope user`) stays in use elsewhere.
+
+In an IDE started with `./dev.sh`, Clarity settings > **Rebuild** builds Clarity's own pieces again from the source: tick what changed (Clarity.UI's library, its browser files, the other libraries) and **Restart**, or start the IDE with them ticked; the splash shows the build line for line and the IDE comes back with it. An agent that changed a piece ticks it in `target/dev-rebuild.json`. An installed Clarity has no such section.
 
 A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 

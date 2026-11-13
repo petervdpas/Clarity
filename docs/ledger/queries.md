@@ -5,11 +5,11 @@ Status: built. `find v in Entity where ... order by ...` in code, with condition
 Progress: 100%
 
 ## Code
-- Spec: `find` in `crates/clarity-spec/src/code/parse.rs`; checks in `code/check.rs:4620-4800` (refs stay in one source, web-API entities never found, read-only sources never saved: :5114, :5157, :5336); `search` modifier in `parser.rs`
+- Spec: `find` in `crates/clarity-spec/src/code/parse.rs`; checks in `code/check.rs:4629` (the `find` expression), read-only sources never saved (:5124), web-API entities never found (:5227), conditions and order through references stay in one source (:5347); `search` modifier in `parser.rs:820`
 - Generators: `crates/clarity-gen/src/query.rs` (paths through references, resolved once for all stacks); each stack's `logic.rs`
 - Runtimes: R `runtimes/rust/src/query.rs`, `sql.rs`, `dialect.rs`; Go `runtimes/go/clarity/query.go`, `dialect.go`; C `runtimes/c/clarity/query.c`, `sql.c`, `dialect.c`; C++ `runtimes/cpp/clarity/query.cpp`, `sql.cpp`, `dialect.cpp`; C# `runtimes/csharp/Clarity.Runtime/Query.cs`, `Sql.cs`, `Dialect.cs`
 - IDE: Search column in `app/src/lib/EntityEditor.svelte`
-- Docs: `manual/code.queries.md`; LANGUAGE.md section 10 "Queries"
+- Docs: manual `code.queries.md`
 
 ## Tests
 - `conformance/queries.json`: run by R, Go, C, C++, C#
@@ -21,8 +21,7 @@ Progress: 100%
 
 ## Conflicts
 - Roadmap D1a says "open: conditions through references"; X2 records them built on 2026-10-18.
-- Grammar summary (LANGUAGE.md:3028-3149): `find` order by takes one dot only; the parser goes through references.
-- `manual/code.queries.md:31-58` uses snake_case names; :54 a quoted text that must be a key.
+- `manual/code.queries.md:31-58` uses snake_case names; :53 a quoted text that must be a key.
 - Empty values in order: see [language](language.md).
 
 ## Decisions

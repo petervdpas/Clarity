@@ -81,7 +81,7 @@ fn only_shown_columns_of_editable_types_can_be_edited() {
     let length = TODO.replace("columns title, done, priority edit done, priority", "columns title, spent edit spent");
     assert_eq!(
         messages(&length, Severity::Error),
-        ["table at 1,1: 'spent' is duration; a table edits text, numbers, bool, dates, enum and ref columns"]
+        ["table at 1,1: 'spent' is duration; a table edits text, numbers, bool, dates, colors, enum and ref columns"]
     );
 }
 

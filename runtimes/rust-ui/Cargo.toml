@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.25.0"
+version = "0.26.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -26,7 +26,7 @@ audio = ["desktop", "dep:clarity-audio"]
 video = ["audio", "dep:clarity-video"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.59.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.60.0", default-features = false }
 clarity-auth = { path = "../rust-auth", version = "0.2.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/IMAGE-PLAN.md).
 clarity-image = { path = "../rust-image", version = "0.1.0" }

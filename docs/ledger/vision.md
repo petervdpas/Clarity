@@ -15,10 +15,9 @@ Progress: 90%
 - The name: "Clarity" is also the Stacks smart-contract language; keep it or rename before publishing (DESIGN 20 question 1). Not decided.
 
 ## Conflicts
-- DESIGN 1 (Purpose) still states the goal as keeping control over AI-written code through a rule engine; the built product is the language, the designer and the transpiler; the rule engine was struck (Decisions, 2026-11-12). README.md:5 says the same old goal ("keeps humans in control of AI-assisted codebases").
+- README.md:5 still states the first goal, keeping humans in control of AI-assisted codebases; the built product is the language, the designer and the transpiler; the rule engine was struck (Decisions, 2026-11-12).
 - memory clarity-direction.md names a shared web renderer and Avalonia as UIs; both were replaced by Clarity.UI (2026-11-02, 2026-11-03; see [clarity-ui](clarity-ui.md)).
-- CLAUDE.md:21 says Clarity's own agent never executes anything; it builds and runs after asking (see [agent](agent.md)).
-- DESIGN 1.2 says an AI's changes are undone by Undo; an outside agent's turn is not (see [mcp-tools](mcp-tools.md)).
+- CLAUDE.md:21's first clause says Clarity's own agent never executes anything; it builds and runs after asking, which only the second clause ("anything that runs asks first") covers (see [agent](agent.md)).
 
 ## Decisions
 - 2026-10-16: one language for UI and behavior, a designer first, transpiled to real code on each stack; form and browse are templates, not screen kinds. User: "its ui designer with later code behind", "clarity get transpiled into the real frontend and backend code"

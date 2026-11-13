@@ -1,7 +1,7 @@
 <script lang="ts">
   // Clarity's manual, in a window of its own beside Clarity's: the topics on
-  // the left, the page on the right. Links go to other pages, to the
-  // language reference and to headings; Back goes back. It remembers the
+  // the left, the page on the right. Links go to other pages and to
+  // headings; Back goes back. It remembers the
   // page you were on. F1 and the Manual button in Clarity open it on the page
   // about what you are doing.
   import { invoke } from "@tauri-apps/api/core";
@@ -12,6 +12,7 @@
   import { layout } from "./lib/layout.svelte";
   import { linkTarget } from "./lib/manual";
   import { markdown } from "./lib/markdown";
+  import { themedMermaid } from "./lib/mermaidDrawing";
   import type { ManualEntry } from "@clarity/ui/generated/ManualEntry.ts";
 
   const REMEMBERED = "clarity.manual.topic";
@@ -39,7 +40,7 @@
       return words === "" || `${t.title} ${t.summary}`.toLowerCase().includes(words);
     }),
   );
-  const title = $derived(current === "reference" ? "The language reference" : (topics.find((t) => t.id === current)?.title ?? current));
+  const title = $derived(topics.find((t) => t.id === current)?.title ?? current);
 
   async function show(id: string, anchor: string | null = null, remember = true) {
     if (remember && id !== current) back = [...back, current];
@@ -57,9 +58,42 @@
       text = "";
     }
     await tick();
+    drawDiagrams();
     const target = anchor ? article?.querySelector(`#${CSS.escape(anchor)}`) : null;
     if (target) target.scrollIntoView();
     else article?.scrollTo(0, 0);
+  }
+
+  /** Draws the page's Mermaid blocks as diagrams in the IDE theme's colors;
+   *  one that does not draw stays as its text. Each keeps its source, so a
+   *  change of theme draws it again. */
+  let drawings = 0;
+  async function drawDiagrams() {
+    const turn = ++drawings;
+    const blocks = Array.from(article?.querySelectorAll<HTMLElement>("pre.mermaid, figure.diagram") ?? []);
+    if (blocks.length === 0) return;
+    const m = await themedMermaid();
+    for (const [i, block] of blocks.entries()) {
+      const source = block.dataset.source ?? block.textContent ?? "";
+      try {
+        const { svg } = await m.render(`manualDiagram${turn}x${i}`, source);
+        if (turn !== drawings) return;
+        const figure = document.createElement("figure");
+        figure.className = "diagram";
+        figure.dataset.source = source;
+        figure.innerHTML = svg;
+        // At its own size, no wider than the page.
+        const drawing = figure.querySelector("svg");
+        if (drawing) {
+          drawing.style.width = `${drawing.viewBox.baseVal.width}px`;
+          drawing.style.maxWidth = "100%";
+          drawing.style.height = "auto";
+        }
+        block.replaceWith(figure);
+      } catch {
+        // Shown as its text.
+      }
+    }
   }
 
   function goBack() {
@@ -69,7 +103,7 @@
     show(previous, null, false);
   }
 
-  /** A link on the page: another page, the reference, or a heading here;
+  /** A link on the page: another page or a heading here;
    *  a web link opens in the browser. */
   function follow(e: MouseEvent) {
     const web = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[data-web]");
@@ -98,9 +132,13 @@
     invoke<ManualEntry[]>("manual_topics").then((list) => (topics = list));
     // At the heading Clarity asked for, such as how to install a missing tool.
     show(current, asked.get("anchor"), false);
+    // The IDE's theme changes: the diagrams take its colors.
+    const watcher = new MutationObserver(() => drawDiagrams());
+    watcher.observe(document.documentElement, { attributes: true, attributeFilter: ["data-ide-theme", "data-scheme"] });
     // Clarity asks for another page while this window is open.
     const stop = listen<{ topic: string; anchor: string | null }>("manual-show", (e) => show(e.payload.topic, e.payload.anchor));
     return () => {
+      watcher.disconnect();
       stop.then((unlisten) => unlisten());
     };
   });
@@ -117,9 +155,6 @@
           <button class:current={topic.id === current} title={topic.summary} onclick={() => show(topic.id)}>{topic.title}</button>
         </li>
       {/each}
-      <li>
-        <button class:current={current === "reference"} title="The exact syntax of every construct" onclick={() => show("reference")}>The language reference</button>
-      </li>
     </ul>
   </nav>
   <Splitter axis="x" label="Width of the topics" onmove={(d) => layout.resize("manualTopics", d)} />
@@ -214,7 +249,6 @@
     flex: 1;
     overflow: auto;
     padding: 8px 32px 32px;
-    max-width: 820px;
     line-height: 1.55;
   }
 
@@ -247,6 +281,16 @@
     border-radius: var(--radius);
     padding: 10px 12px;
     overflow: auto;
+  }
+
+  article :global(figure.diagram) {
+    margin: 1em 0;
+    overflow: auto;
+  }
+
+  article :global(figure.diagram svg) {
+    display: block;
+    margin: 0 auto;
   }
 
   article :global(pre code) {

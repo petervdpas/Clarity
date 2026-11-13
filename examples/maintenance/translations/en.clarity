@@ -72,6 +72,8 @@ translation en
     wasTab "Old references"
     expandRow "Expand"
     collapseRow "Collapse"
+    expandAll "Expand all"
+    collapseAll "Collapse all"
     cliUsage "Usage"
     cliCommands "Commands"
     cliOptions "Options"

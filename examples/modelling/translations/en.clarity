@@ -37,6 +37,8 @@ translation en
     keepRow "Keep"
     expandRow "Expand"
     collapseRow "Collapse"
+    expandAll "Expand all"
+    collapseAll "Collapse all"
     slideoutClose "Close"
     slideoutPin "Pin it open"
     slideoutUnpin "Let it slide away"

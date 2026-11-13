@@ -167,7 +167,7 @@ fn a_dialog_is_as_wide_as_a_tab_that_is_not_open_needs() {
 
 #[test]
 fn it_says_its_text_and_ok_without_a_heading() {
-    let dialog = SaidDialog::new(Message { level: Level::Error, text: Text::plain("The game is over") });
+    let dialog = SaidDialog::new(Message { level: Level::Error, text: Text::plain("The game is over"), toast: None });
     let mut screen = Screen::new(Box::new(dialog), ThemeLook::clarity(false));
     screen.resize(800.0, 400.0, 1.0);
     let mut picture = clarity_ui::testing::Shot::of(&mut screen, 800, 400, 1.0);
@@ -181,7 +181,7 @@ fn it_says_its_text_and_ok_without_a_heading() {
 #[test]
 fn its_ok_is_as_high_as_the_project_s_rows() {
     clarity_ui::grid::set_row_height(30.0);
-    let dialog = SaidDialog::new(Message { level: Level::Error, text: Text::plain("The game is over") });
+    let dialog = SaidDialog::new(Message { level: Level::Error, text: Text::plain("The game is over"), toast: None });
     let mut screen = Screen::new(Box::new(dialog), ThemeLook::clarity(false));
     screen.resize(800.0, 400.0, 1.0);
     clarity_ui::testing::Shot::of(&mut screen, 800, 400, 1.0);
@@ -224,7 +224,7 @@ fn a_note_is_420_wide_at_the_top_right() {
     screen.act_root::<WindowStack, _>(|s, cx| s.say(Level::Info, Text::plain("Saved"), cx));
     // Drawn once, so the note has its place.
     shot(&mut screen, "note");
-    let notes = screen.find::<clarity_ui::window::NoteList>().expect("the notes");
+    let notes = screen.find::<clarity_ui::window::ToastList>().expect("the notes");
     let b = notes.node().bounds;
     assert_eq!(420.0, b.width);
     assert_eq!(800.0 - CONTENT_PADDING, b.right());

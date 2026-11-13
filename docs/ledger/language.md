@@ -9,7 +9,7 @@ Progress: 75%
 - Generators: `crates/clarity-gen/src/{rust,go,c,cpp,csharp}/logic.rs`; named values and defaults filled in by `crates/clarity-gen/src/calls.rs`; `consts.rs`
 - Runtimes: R `runtimes/rust/src/texts.rs`, `lib.rs`; Go `runtimes/go/clarity/values.go`, `texts.go`, `lists.go`, `round.go`; C `runtimes/c/clarity/values.h`, `decimal.c`, `code.c`; C++ `runtimes/cpp/clarity/values.hpp`, `decimal.cpp`, `code.cpp`, `texts.cpp`; C# `runtimes/csharp/Clarity.Runtime/Lists.cs`, `Numbers.cs`, `Program/Members.cs`
 - IDE: `app/src/lib/SourceEditor.svelte` (checks while typing)
-- Docs: `manual/code.language.md`, `code.handlers.md`, `code.functions.md`; LANGUAGE.md sections 1, 3, 8, 9, 10, 12
+- Docs: manual `code.modules.md`, `code.statements.md`, `code.expressions.md`, `code.handlers.md`, `code.functions.md`
 
 ## Tests
 - `conformance/texts.json`, `lists.json`, `rounding.json`: run by R, Go, C, C++, C#
@@ -19,29 +19,18 @@ Progress: 75%
 
 ## Open
 - `while`, `break`, `continue`, `match`: NOT BUILT. Not in `code/parse.rs` or the lexer.
-- Date arithmetic and date members (`d + 1`, `d.year`): NOT BUILT. Dates only compare (`code/check.rs:854`).
-- `duration * 1.5`: PARTIAL. Only whole numbers scale a duration (`code/check.rs:4999-5001`); promised LANGUAGE.md:2884.
-- `computed` with a formula: PARTIAL. The word only skips the required check (`crates/clarity-gen/src/lib.rs:270`).
+- Date arithmetic and date members (`d + 1`, `d.year`): NOT BUILT. Dates only compare: arithmetic takes durations and numbers only (`code/check.rs:5007-5025`, `is_numeric` :863).
+- `computed` with a formula: PARTIAL. The word only skips the required check (`crates/clarity-gen/src/lib.rs:271`).
 - `old(expr)`, `sum(list.field)`, `all(...)`, `any(...)`: NOT BUILT (DESIGN 5.4).
-- `require`/`ensure` as generated tests: NOT BUILT. Run-time checks only (`crates/clarity-gen/src/rust/logic.rs:190-215`).
+- `require`/`ensure` as generated tests: NOT BUILT. Run-time checks only (`crates/clarity-gen/src/rust/logic.rs:202-221`).
 - A context object exposing only declared effects: NOT BUILT. Effects are checked by the checker only.
 - `encoded(text)`, `plainText(html)`: NOT BUILT (APP-CAPABILITIES-PLAN.md:43).
-- `main.view = OtherView`: NOT BUILT as written (LANGUAGE.md:779); code uses `main.swap(OtherView)` or `main.tab`.
-- C generator gaps: PARTIAL. List literals other than records or values (`c/logic.rs:1902`), a position in them (:1926), window data `list<bool>`/`list<Enum>` (:437), a list of values given to a window (:1621), `json of` a `list<bool>` (:2027).
+- C generator gaps: PARTIAL. List literals other than records or values (`c/logic.rs:1905`), a position in them (:1929), window data `list<bool>`/`list<Enum>` (:437), a list of values given to a window (:1624), `json of` a `list<bool>` (:2030).
 - `files f in store where` with a condition that can fail: PARTIAL, missing on Go (`go/logic.rs:701`).
 - Reading a stored `list<Entity>`: see [entities](entities.md). `progress n of total`: see [engines](engines.md).
 
 ## Conflicts
-- Reserved words: LANGUAGE.md:37 lists and, or, not, in; `contains` too (`code/parse.rs` `RESERVED`).
-- Part names: LANGUAGE.md:37 allows `close_button`; camelCase is required (`check.rs:1087`).
-- snake_case in LANGUAGE.md examples: :2038, :2269, :2314, :2653, :2684. Page blocks at :143-161, :257-260 are refused (`cxaml.rs:1376-1399`).
-- `none`: LANGUAGE.md:2653 says dates and references only; pictures and record files too (`code/check.rs:4867`).
-- Precedence: LANGUAGE.md:2673 vs `code/parse.rs:1293-1388` (`to`, comparisons, `in`, `contains`, `matches` share one non-chaining level; `div`/`mod` at `*`).
-- LANGUAGE.md:2611-2640 has no `tell` row (`code/parse.rs:659`).
-- Grammar summary LANGUAGE.md:3028-3149 is behind the parser: declarations (record, const, mapping), types, modifiers, roots, `allow`, http, engines, `find` order by, translations, migrations, `code` for views. Details in CONFLICTING.md section 6.
-- Effects: DESIGN :441, :768, :2114 point to the directive vocabulary; the language has db.read, db.write, files.read, files.write, net (`code/mod.rs:1086`).
-- Page blocks in DESIGN :657, :730 and examples (:469, :566, :660, :1078, :1109, :1138, :1225, :1396).
-- Manual: page blocks (code.handlers.md:31-34, :80, :120), snake_case (code.handlers.md:97, code.language.md:36, code.functions.md:115-121), quoted texts that must be keys (code.functions.md:161-163); code.language.md:17 leaves out `contains`; code.functions.md:152-157 leaves out `net`.
+- Manual: quoted texts that must be keys (`refuse "text"` in code.functions.md:134, code.handlers.md:237, code.statements.md:358); see [docs](docs.md).
 - C# ordered comparisons: a plain `(l < r)` (`csharp/logic.rs:1277`); `none < d` is false on C#, true elsewhere (`go/logic.rs:1917`, `runtimes/c/clarity/values.h:37`); text `<` does not compile on C#.
 - Decimal division: Go, C, C++ keep 16 decimals (`runtimes/c/clarity/decimal.h:13`), R and C# 28 digits; division by zero is a value error on C and C++, a panic or exception on R, Go, C#.
 - Integer overflow in `+ - *`: R panics (debug) or wraps, Go and C# wrap, C and C++ undefined. Decimal range: C/C++ about 38 digits, R/C# 28, Go unlimited.

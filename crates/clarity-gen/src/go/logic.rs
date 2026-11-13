@@ -255,6 +255,8 @@ pub struct PartInfo {
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
+    /// Whether a tree or tree table shows Expand all and Collapse all, as its line says (`fold buttons`).
+    pub fold_buttons: bool,
     /// A canvas's background as its line says; empty is the theme's panel.
     pub background: String,
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
@@ -289,7 +291,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = crate::parts::kept_of(&widget.props);
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), spin: crate::spin_range(&widget.props), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, fold_buttons: widget.props.fold_buttons, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), spin: crate::spin_range(&widget.props), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -868,6 +870,7 @@ impl<'a> Emitter<'a> {
                         "collapsed" => "SetCollapsed",
                         "grid" => "SetGrid",
                         "snap" => "SetSnap",
+                        "foldButtons" => "SetFoldButtons",
                         "connecting" => "SetConnecting",
                         "resizable" => "SetResizable",
                         "background" => "SetBackground",
@@ -1098,6 +1101,28 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{}\n", self.fail(&format!("clarity.Refuse({text})"))));
             }
             // A command says it on standard error.
+            // A toast the project declares, by name; a command says its text on standard error.
+            StmtKind::Toast { name, args } => match crate::toasts::shown(self.project, name, args) {
+                Err(why) => self.errors.push(why),
+                Ok(_) if self.window.is_none() && !self.command => self.errors.push("toasts belong in handlers".into()),
+                Ok((look, text)) => {
+                    let text = self.shown(&text, &mut pre);
+                    out.push_str(&pre);
+                    if self.command {
+                        out.push_str(&format!("cli.Message({text})\n"));
+                    } else {
+                        let q = crate::toasts::quoted;
+                        out.push_str(&format!(
+                            "ui.Toast(clarity.Toast{{Name: {}, Level: {}, Lifespan: {}, Icon: {}, Corner: {}}}, {text})\n",
+                            q(&look.name),
+                            q(look.level),
+                            look.lifespan,
+                            q(look.icon.as_deref().unwrap_or("")),
+                            q(look.corner)
+                        ));
+                    }
+                }
+            },
             StmtKind::Message { text, .. } if self.command => {
                 let text = self.shown(text, &mut pre);
                 out.push_str(&pre);
@@ -1591,6 +1616,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => format!("ui.Collapsed({quoted}, {})", info.collapsed),
             "grid" => format!("ui.Grid({quoted}, {})", info.grid),
             "snap" => format!("ui.Snap({quoted}, {})", info.snap),
+            "foldButtons" => format!("ui.FoldButtons({quoted}, {})", info.fold_buttons),
             "connecting" => format!("ui.Connecting({quoted})"),
             "resizable" => format!("ui.Resizable({quoted})"),
             "background" => format!("ui.Background({quoted}, {})", string(&info.background)),
@@ -2206,9 +2232,14 @@ fn unused_locals(code: &str) -> String {
         out.push_str(line);
         out.push('\n');
         let trimmed = line.trim_start();
-        let Some(name) = trimmed.split_once(" := ").map(|(n, _)| n).filter(|n| is_ident(n)) else { continue };
+        // `name := value`, or `var name Type = value` and `var name Type`, as a let is written.
+        let declared = match trimmed.strip_prefix("var ") {
+            Some(rest) => rest.split_once(' ').map(|(n, rest)| (n, rest.split_once(" = ").map(|(_, v)| v).unwrap_or_default())),
+            None => trimmed.split_once(" := "),
+        };
+        let Some((name, value)) = declared.filter(|(n, _)| is_ident(n)) else { continue };
         if !name.starts_with('v') || !name[1..].chars().all(|c| c.is_ascii_digit()) {
-            let used = lines[i + 1..].iter().any(|l| mentions(l, name)) || mentions(trimmed.split_once(" := ").map(|(_, v)| v).unwrap_or_default(), name);
+            let used = lines[i + 1..].iter().any(|l| mentions(l, name)) || mentions(value, name);
             if !used {
                 let pad: String = line.chars().take_while(|c| *c == '\t').collect();
                 out.push_str(&format!("{pad}_ = {name}\n"));
@@ -2265,4 +2296,18 @@ fn go_pieces(pieces: &[crate::shape::Piece]) -> String {
         .collect::<Vec<_>>()
         // Always a call's argument, where gofmt writes `+` without spaces.
         .join("+")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unused_locals;
+
+    /// Go refuses a local nobody reads, however the let was written: `:=` or `var name Type = value`.
+    #[test]
+    fn a_local_nobody_reads_is_used_with_a_blank_assignment() {
+        assert_eq!(unused_locals("var n int64 = 1\nreturn nil\n"), "var n int64 = 1\n_ = n\nreturn nil\n");
+        assert_eq!(unused_locals("var picked *Album\n"), "var picked *Album\n_ = picked\n");
+        assert_eq!(unused_locals("total := 2\n"), "total := 2\n_ = total\n");
+        assert_eq!(unused_locals("var n int64 = 1\nui.Show(n)\n"), "var n int64 = 1\nui.Show(n)\n", "a local that is read stays as written");
+    }
 }

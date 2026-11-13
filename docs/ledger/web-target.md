@@ -5,9 +5,9 @@ Status: built. `stack <backend> web`: the program keeps the application on a ser
 Progress: 95%
 
 ## Code
-- Spec: `crates/clarity-project/src/file.rs:401-473` (`stack ... web`), :369 (`port N`; default 8080 at `127.0.0.1:<port>`, `crates/clarity-project/src/lib.rs:285`)
-- Generators: browser files `crates/clarity-gen/src/web_browser.rs` (`browser/index.html`, `browser/clarity/files.json`, resources, the library's four files added by `with_library`); `crates/clarity-gen/src/lib.rs:947` (`programs`), :983 (`windowed_target`: `out/web` when served alone), :1628 (`check_parts_in_browser`), :971 (picture functions refused on Go, C, C++ web-only); C# second program `crates/clarity-gen/src/csharp/web.rs`
-- Runtimes: R `runtimes/rust/src/serve.rs:275` (`serve`; `--serve` in a desktop + web program, `crates/clarity-gen/src/rust/mod.rs:816`); Go `runtimes/go/shell/serve.go` (`go/mod.rs:938`); C `runtimes/c/service/serve.c`, `service.c`, `wire.c`; C++ `runtimes/cpp/shell/serve.cpp`, `service.cpp`; C# `runtimes/csharp/Clarity.Ui.Server/WebServer.cs` (plain socket, not HttpListener), the App library on `Clarity.Runtime`
+- Spec: `crates/clarity-project/src/file.rs:431` (`stack ... web`), :399 (`port N`; default 8080 at `127.0.0.1:<port>`, `DEFAULT_PORT` `crates/clarity-project/src/lib.rs:349`)
+- Generators: browser files `crates/clarity-gen/src/web_browser.rs` (`browser/index.html`, `browser/clarity/files.json`, resources, the library's four files added by `with_library`); `crates/clarity-gen/src/lib.rs:968` (`programs`), :1004 (`windowed_target`: `out/web` when served alone), :1668 (`check_parts_in_browser`), :993 (`pictures_without_library`: picture functions refused on Go, C, C++ web-only); C# second program `crates/clarity-gen/src/csharp/web.rs`
+- Runtimes: R `runtimes/rust/src/serve.rs:275` (`serve`; `--serve` in a desktop + web program, `crates/clarity-gen/src/rust/mod.rs:835`); Go `runtimes/go/shell/serve.go` (`go/mod.rs:975-977`); C `runtimes/c/service/serve.c`, `service.c`, `wire.c`; C++ `runtimes/cpp/shell/serve.cpp`, `service.cpp`; C# `runtimes/csharp/Clarity.Ui.Server/WebServer.cs` (plain socket, not HttpListener), the App library on `Clarity.Runtime`
 - Clarity.UI: `runtimes/rust-ui/src/browser/` (host.rs, input.rs, page.rs, web.rs); build for the browser `runtimes/rust-ui-browser` (Emscripten, `build.sh`); sound and video through the page (`page.rs:16-22`)
 - IDE: Run starts the server at the project's port, Browser opens it (`app/src-tauri/src/build.rs:514`)
 - Docs: manual `project.run-build.md`, stack pages
@@ -32,16 +32,14 @@ What each stack writes:
 - Examples: `invaders` (go web), `walker` (csharp web); no example uses rust web, c web or cpp web
 
 ## Open
-- The web targets in Edge; the walker in a browser on Windows; C# web on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:88, :96, :104-110).
+- The web targets in Edge; the walker in a browser on Windows; C# web on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:41, :50, :52).
 - The C# program driven live in tests: NOT BUILT (`everything_live.rs` has go, rust, c, cpp; DESIGN.md:272).
 - Everything in the browser (database in the browser, offline tool): NOT BUILT, later and only on request (DESIGN 7.6 open choices).
 
 ## Conflicts
-- DESIGN.md :57-58, :64, :1746, :1750, :2025-2026 describe the web renderer, axum and ASP.NET as what web programs serve; every web program serves Clarity.UI's browser files.
-- DESIGN 7.8 (G6, `@clarity/ui` built into apps, `windowMarkup.ts`) is written as current; `runtimes/web` serves only the IDE.
-- `crates/clarity-project/src/lib.rs:876-878` speaks of the shared web screen.
-- Port 8080 is written twice: `crates/clarity-project/src/lib.rs:285`, `app/src/lib/ProjectSettings.svelte:369` (equal).
-- WINDOWS-TESTS.md:88 treats C# in the browser as missing; it is built.
+- `crates/clarity-project/src/lib.rs:967-969` speaks of the shared web screen.
+- Port 8080 is written twice: `crates/clarity-project/src/lib.rs:349`, `app/src/lib/ProjectSettings.svelte:416`, :422 (equal).
+- WINDOWS-TESTS.md:41 treats C# in the browser as missing; it is built.
 
 ## Decisions
 - 2026-10-27: the web target serves the application at the project's port; each tab runs its own application against the server's database (W1).

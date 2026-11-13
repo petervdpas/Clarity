@@ -7,28 +7,27 @@ Progress: 70%
 ## Code
 - Spec: `crates/clarity-spec/src/versions.rs` (which entities carry a version, the checks); entity lines `version "Col"`, `version none`, `savedSince @key` (`parser.rs:508-596`); `save x anyway` (`code/parse.rs:649-651`), `reload x`; migration op `AddVersion` (`migrate.rs`); Clarity's words `savedSince`, `undoTooOld` (`translations.rs:218-219`)
 - Generators: version per stored entity in each stack's `model.rs`; tests `crates/clarity-gen/tests/versions_{rust,go,c,cpp,csharp}.rs`
-- Runtimes: R `runtimes/rust/src/lib.rs` (checked UPDATE/DELETE, `UNDO_STEPS` :224), `edits.rs`, `file_source.rs` (file changed on disk); Go `runtimes/go/clarity/db.go`, `record.go`, `undo.go`, `edits.go`; C `runtimes/c/clarity/db.c`, `edits.c`; C++ `runtimes/cpp/clarity/db.cpp`, `edits.cpp`; C# `Clarity.Runtime/Db.cs`, `Record.cs`, `Undo.cs`, `EditBus.cs`
+- Runtimes: R `runtimes/rust/src/lib.rs` (checked UPDATE/DELETE, `UNDO_STEPS` :226), `edits.rs`, `file_source.rs` (file changed on disk); Go `runtimes/go/clarity/db.go`, `record.go`, `undo.go`, `edits.go`; C `runtimes/c/clarity/db.c`, `edits.c`; C++ `runtimes/cpp/clarity/db.cpp`, `edits.cpp`; C# `Clarity.Runtime/Db.cs`, `Record.cs`, `Undo.cs`, `EditBus.cs`
 - Clarity.UI: `rowVersion` carried on the wire with the record (`runtimes/rust-ui/tests` `inputs_record_keys`)
-- IDE: version line in `app/src/lib/EntityEditor.svelte:229-231` (`entity.keptVersion`, not editable)
-- Docs: manual `data.entities.md`, `code.handlers.md`, `data.migrations.md`, `data.sources.md`; LANGUAGE.md section 4 "External databases" (`version`), "Migrations" (`add version`), section 8 "Undo" (:1904)
+- IDE: version line in `app/src/lib/EntityEditor.svelte:357-359` (`entity.keptVersion`, not editable)
+- Docs: manual `data.entities.md` (A save never overwrites someone else's change), `code.handlers.md` (Undo), `data.migrations.md` (`add version`), `data.sources.md` (`version`)
 
 ## Tests
-- `conformance/versions.json`: run by R (`runtimes/rust/tests/versions.rs`), Go (`versions_test.go`), C (`versions_test.c`), C++ (`versions_test.cpp`), C# (`VersionsTests.cs`, `FileSourceTests.cs`)
+- `conformance/versions.json`: run by R (`runtimes/rust/tests/versions.rs`), Go (`versions_test.go`), C (`versions_test.c`), C++ (`versions_test.cpp`), C# (`Clarity.Runtime.Tests/VersionsTests.cs`, `Clarity.Ui.Native.Tests/FileSourceTests.cs`)
 - `conformance/edit-bus.json`: run by R, Go, C, C++, C#
-- `crates/clarity-spec/tests/versions.rs`, `undo.rs`; per-runtime undo tests (`runtimes/rust/tests/edits.rs`, Go `undo_test.go`, C# `UndoTests.cs`)
+- `crates/clarity-spec/tests/versions.rs`, `undo.rs`; per-runtime undo tests (`runtimes/rust/tests/edits.rs`, `undo.rs`, Go `undo_test.go`, C `runtimes/c/tests/undo_test.c`, C++ `runtimes/cpp/tests/undo_test.cpp`, C# `UndoTests.cs`)
 
 ## Open
-- The IDE's data browser saves through the version check: NOT BUILT (no data browser; APP-CAPABILITIES-PLAN.md:228, :247).
-- ETag and `If-Match` on web API writes: NOT BUILT (APP-CAPABILITIES-PLAN.md:240, open question :399).
+- The IDE's data browser saves through the version check: NOT BUILT (no data browser; APP-CAPABILITIES-PLAN.md:229, :248).
+- ETag and `If-Match` on web API writes: NOT BUILT (APP-CAPABILITIES-PLAN.md:241, open question :400).
 - Other windows reload a record saved elsewhere: NOT BUILT (APP-CAPABILITIES-PLAN.md "Later: other screens follow").
-- Whether an owned entity may turn the check off: open question (APP-CAPABILITIES-PLAN.md:400).
+- Whether an owned entity may turn the check off: open question (APP-CAPABILITIES-PLAN.md:401).
 - Shared Rust core for row versions and undo: NOT BUILT; five copies (MODULAR-PLAN.md order 2).
 - A background save refused by the version is a failed call: waits on [background-jobs](background-jobs.md).
 
 ## Conflicts
 - Edit bus size: R, Go, C, C++ keep 500 edits per window (`runtimes/rust/src/edits.rs:37`, `go/clarity/edits.go:40`, `c/clarity/edits.c:44`, `cpp/clarity/edits.cpp:15`); C# drops none (`runtimes/csharp/Clarity.Runtime/EditBus.cs:29-35`). `conformance/edit-bus.json` has no limit case.
 - The 100-step undo cap is written in each runtime (CONFLICTING.md 4; equal today).
-- DESIGN 5.29 describes the screen side as the web renderer and Avalonia view models; both are gone, Clarity.UI draws every stack.
 - APP-CAPABILITIES-PLAN.md:3 says steps 4 and 5 are unreleased; they are before tag v0.40.0.
 
 ## Decisions

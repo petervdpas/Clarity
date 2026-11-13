@@ -5,13 +5,13 @@ Status: built. The parts that show text (label, help, heading, text, link, badge
 Progress: 90%
 
 ## Code
-- Spec: `crates/clarity-spec/src/widgets.rs` (catalog entries, events per kind :162-220, `CODE_LANGUAGES` :596), `colors.rs`, `icons.rs` (Lucide 1.50.0 vendored in `crates/clarity-spec/icons`)
+- Spec: `crates/clarity-spec/src/widgets.rs` (catalog entries, events per kind from `enum Event` :166, `CODE_LANGUAGES` :600), `colors.rs`, `icons.rs` (Lucide 1.50.0 vendored in `crates/clarity-spec/icons`)
 - Generators: parts written into window markup (`crates/clarity-gen/src/web_windows.rs`), form labels and undo scopes filled in; part properties code reads in each stack's logic.rs
 - Runtimes: ranges R `runtimes/rust/src/ranges.rs`, Go `clarity/ranges.go`, C `clarity/ranges.c`, C++ `clarity/ranges.cpp`, C# `Ranges.cs`; dropdown options `dropdown_options.*` in R, Go, C, C++, C# `DropdownOptions.cs`; list fields `list_fields.*` in all five (C# `ListFields.cs`); spin range from code (`spin_min`, `SpinMin`, `clarity_ui_spin_min`, `PartState.SpinMin`)
 - Clarity.UI: `runtimes/rust-ui/src/parts/` `label.rs`, `heading.rs`, `button.rs`, `text_box.rs` (text, password with eye and copy), `text_editor.rs` (memo), `code_colors.rs` (19 languages), `check_box.rs`, `inputs/` (`number.rs`, `slider.rs`, `toggle.rs`, `dropdown.rs`, `typed_dropdown.rs`, `choice_list.rs`, `radio.rs`, `date.rs`, `calendar.rs`, `color.rs`, `file.rs`, `folder.rs`, `tags.rs`, `link.rs`, `picture_field.rs`, `formats.rs`), `containers/` (`small.rs` help, badge, progress, busy; `text.rs`, `icon.rs`, `separator.rs`, `buttons.rs`, `image.rs`, `display.rs`); system pickers `desktop/files/` (portal, osascript, Windows COM)
-- Status item (2026-11-13): spec `widgets.rs` (`StatusItem`), `check.rs` (max), `code/check.rs` (caption, checked, error set by code; a bound one keeps its own check mark); Clarity.UI `parts/containers/small.rs` (`StatusItemPart`), `access/mod.rs`; C# window state `csharp/windows.rs`; the every-part fixture's `copiesItem`
+- Status item (2026-11-13): spec `widgets.rs` (`StatusItem`, :1246, in the palette's Data group), `check.rs` (max), `code/check.rs` (caption, checked, error set by code; a bound one keeps its own check mark); Clarity.UI `parts/containers/small.rs` (`StatusItemPart`), `access/mod.rs`; C# window state `csharp/windows.rs`; the every-part fixture's `copiesItem`
 - IDE: `app/src/lib/PageProperties.svelte` (Placeholder, Code, Copy button, Undo, ranges), `PartTile.svelte`, `IconField.svelte`
-- Docs: manual `design.parts.md` (Text, Basic input, Graphics); LANGUAGE.md section 6 (The catalog, Binding, Labels help texts and forms, Input and button properties), section 8 (Part properties)
+- Docs: manual `parts.text.md`, `parts.input.md`, `parts.graphics.md`, `parts.data.md` (`statusItem`), `design.parts.md` (Binding, What every part has), `code.handlers.md` (Part properties)
 
 ## Tests
 - `conformance/forms.json`, `small-parts.json`: run by rust-ui only
@@ -28,18 +28,17 @@ Progress: 90%
 - Dates and numbers in the system's locale, chosen apart from the language: PARTIAL. Formats follow the shown language, 8 locales, others en-US (`runtimes/rust-ui/src/parts/inputs/formats.rs:303-318`).
 - The file part runs no change handler on open and save a copy: PARTIAL (`inputs/file.rs:1-9`).
 - The folder part has no picker in a browser: PARTIAL; it says a server path is typed (`inputs/folder.rs:8`, word `typeServerFolder`).
-- Unbound input parts as warnings: NOT BUILT (DESIGN.md:489; catalog flag `widgets.rs:540`, no check reads it).
+- Unbound input parts as warnings: NOT BUILT (DESIGN.md:489; the catalog flag `input` at `widgets.rs:545` is read for form labels, no check warns of an unbound input).
 - A `time` field and part: NOT BUILT (DESIGN.md:2474).
 - Conformance cases for `enter`, `leave` and pictures in forms: NOT BUILT (DESIGN.md:277).
 - The folder picker on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:139).
 - The status item's gauge stands at the item's right end, not right after its caption: the caption's width is not known when the places are laid out (`StatusItemPart::places`). PARTIAL by choice; settle if it looks wrong in a wide item.
 
 ## Conflicts
-- Decision needed: CLAUDE.md:19 says no dialog of the system. Generated apps open the system's file and folder pickers (`runtimes/rust-ui/src/desktop/files/mod.rs`), and LANGUAGE.md:675, 994, DESIGN.md:1843, manual design.parts.md:26 describe that as intended.
-- Code-language list twice: `crates/clarity-spec/src/widgets.rs:596`, `runtimes/rust-ui/src/parts/code_colors.rs:9`; equal.
+- Decision needed: CLAUDE.md:19 says no dialog of the system. Generated apps open the system's file and folder pickers (`runtimes/rust-ui/src/desktop/files/mod.rs`), and manual `parts.input.md:202`, `data.settings.md:137` describe the folder picker as intended.
+- Code-language list twice: `crates/clarity-spec/src/widgets.rs:600`, `runtimes/rust-ui/src/parts/code_colors.rs:9`; equal.
 - Display formats three times: `runtimes/rust-ui/src/parts/inputs/formats.rs`, `runtimes/web/src/screen/format.ts`, `runtimes/csharp/Clarity.Runtime/Formats.cs`; equal on the cases.
 - C# `Ranges.cs` and `Palette.cs` have no callers outside tests.
-- LANGUAGE.md catalog: memo has `link` and `toolbox` (:982); number takes `duration` (:986); password takes `secret` (:983).
 
 ## Decisions
 - 2026-10-19: every input tells a change only when the person changed it to a value that differs, never for what code sets.

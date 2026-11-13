@@ -225,6 +225,17 @@ void clarity_ui_set_connecting(ClarityUi* ui, const char* part, bool value) {
     p->connecting = value;
 }
 
+bool clarity_ui_fold_buttons(const ClarityUi* ui, const char* part, bool design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_fold_buttons ? p->fold_buttons : design;
+}
+
+void clarity_ui_set_fold_buttons(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_fold_buttons = true;
+    p->fold_buttons = value;
+}
+
 bool clarity_ui_resizable(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return !p || !p->has_resizable || p->resizable;
@@ -450,7 +461,12 @@ void clarity_ui_select(ClarityUi* ui, const char* part, int64_t place) {
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text) {
     clarity_grow((void**)&ui->messages, &ui->message_room, ui->message_count, sizeof *ui->messages);
-    ui->messages[ui->message_count++] = (ClarityMessage){level, text};
+    ui->messages[ui->message_count++] = (ClarityMessage){.level = level, .text = text};
+}
+
+void clarity_ui_toast(ClarityUi* ui, const char* name, const char* level, int lifespan, const char* icon, const char* corner, const ClarityText* text) {
+    clarity_grow((void**)&ui->messages, &ui->message_room, ui->message_count, sizeof *ui->messages);
+    ui->messages[ui->message_count++] = (ClarityMessage){.level = CLARITY_INFO, .text = text, .toast = {name, level, lifespan, icon, corner}};
 }
 
 void clarity_ui_copy(ClarityUi* ui, const ClarityText* text) { ui->copied = text; }
@@ -570,6 +586,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_grid) cJSON_AddNumberToObject(out, "grid", (double)p->grid);
     if (p->has_snap) cJSON_AddBoolToObject(out, "snap", p->snap);
     if (p->has_connecting) cJSON_AddBoolToObject(out, "connecting", p->connecting);
+    if (p->has_fold_buttons) cJSON_AddBoolToObject(out, "foldButtons", p->fold_buttons);
     if (p->has_resizable) cJSON_AddBoolToObject(out, "resizable", p->resizable);
     if (p->background) cJSON_AddStringToObject(out, "background", p->background);
     if (p->has_dot_size) cJSON_AddNumberToObject(out, "dotSize", (double)p->dot_size);
@@ -603,6 +620,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "grid"))) p->has_grid = true, p->grid = (int64_t)v->valuedouble;
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "snap"))) p->has_snap = true, p->snap = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "connecting"))) p->has_connecting = true, p->connecting = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "foldButtons"))) p->has_fold_buttons = true, p->fold_buttons = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "resizable"))) p->has_resizable = true, p->resizable = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "background"))) p->background = clarity_copy(v->valuestring);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "dotSize"))) p->has_dot_size = true, p->dot_size = (int64_t)v->valuedouble;
@@ -693,6 +711,15 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
         cJSON* m = cJSON_CreateObject();
         cJSON_AddStringToObject(m, "level", level_name(r->messages[i].level));
         cJSON_AddItemToObject(m, "text", clarity_text_json(r->messages[i].text));
+        const ClarityToast* toast = &r->messages[i].toast;
+        if (toast->name) {
+            cJSON* look = cJSON_AddObjectToObject(m, "toast");
+            cJSON_AddStringToObject(look, "name", toast->name);
+            cJSON_AddStringToObject(look, "level", toast->level ? toast->level : "info");
+            if (toast->lifespan > 0) cJSON_AddNumberToObject(look, "lifespan", toast->lifespan);
+            if (toast->icon) cJSON_AddStringToObject(look, "icon", toast->icon);
+            cJSON_AddStringToObject(look, "corner", toast->corner ? toast->corner : "topRight");
+        }
         cJSON_AddItemToArray(messages, m);
     }
     if (r->shown_count > 0) {

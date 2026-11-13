@@ -27,6 +27,7 @@ mod agent;
 mod manual;
 mod migrations;
 mod splash;
+mod dev_rebuild;
 mod backups;
 mod resource_urls;
 mod own_build;
@@ -847,7 +848,12 @@ pub fn run() {
             let title = window_title(&info.name, &info.version.to_string(), dev_release);
             // The version alone, as the title says it after the name (which may be more than one word).
             let version = title.strip_prefix(info.name.as_str()).unwrap_or(&title).trim().to_string();
-            splash::open(app.handle(), &title, &version);
+            // Pieces ticked in Clarity settings > Rebuild (a Clarity run from its repository) build first,
+            // the splash showing the build line for line; else the usual splash.
+            app.manage(dev_rebuild::Building::default());
+            if !dev_rebuild::at_start(app.handle(), &title, &version) {
+                splash::open(app.handle(), &title, &version);
+            }
             // The log first, when logging is on, so it holds the rest of the start.
             logging::begin();
             // Fail safe: a panic in a command shows in the IDE.
@@ -884,9 +890,12 @@ pub fn run() {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
                 browser_keys::turn_off(&window);
                 // Hidden until its page has drawn itself (main.ts); see show_later. The splash goes when it shows, or with it then.
-                manual::show_later(window.clone());
+                dev_rebuild::show_later(app.handle().clone(), window.clone());
                 let later = app.handle().clone();
                 std::thread::spawn(move || {
+                    while dev_rebuild::building(&later) {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                    }
                     std::thread::sleep(std::time::Duration::from_secs(4));
                     splash::done(&later);
                 });
@@ -925,6 +934,10 @@ pub fn run() {
             preview_server_address,
             browser_files,
             rebuild_browser_files,
+            dev_rebuild::dev_rebuild,
+            dev_rebuild::set_dev_rebuild,
+            dev_rebuild::dev_restart,
+            dev_rebuild::main_drawn,
             splash::splash_done,
             splash::splash_status,
             manual::manual_topics,

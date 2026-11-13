@@ -1,0 +1,101 @@
+name: Clean up releases and runs
+
+# Started by hand (Actions > Clean up releases and runs > Run workflow).
+#
+# Releases: of the IDE (v*) and the VS Code extension (editors/vscode/v*)
+# the newest version is kept, of the Clarity.UI library
+# (runtimes/rust-ui-ffi/v*) the newest three, since Go, C and C++ projects
+# made by a recent IDE download the library of their version; the older
+# GitHub releases are deleted with their files. Their tags stay: Go,
+# crates.io and nuget.org versions and old checkouts still find them.
+#
+# Runs: of each workflow only the newest finished runs are kept (keep_runs);
+# older runs are deleted with their logs and artifacts. A run still going is
+# never touched.
+#
+# Caches (clear_caches): every Actions cache is deleted; the next builds fill
+# them again.
+#
+# A dry run (the default) only lists what it would delete.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+      keep_runs:
+        description: "Finished runs to keep of each workflow"
+        type: number
+        default: 5
+      clear_caches:
+        description: "Also delete every Actions cache"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cleanup:
+    name: Clean up
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      KEEP_RUNS: ${{ inputs.keep_runs }}
+    steps:
+      - name: Releases, newest of each kind kept
+        run: |
+          set -euo pipefail
+          gh release list --limit 1000 --json tagName -q '.[].tagName' > tags.txt
+          # Each kind with how many of its newest versions stay.
+          for kind in "v 1" "editors/vscode/v 1" "runtimes/rust-ui-ffi/v 3"; do
+            read -r prefix keep <<< "$kind"
+            # Tags of this kind only: the prefix, then a version.
+            grep -E "^${prefix}[0-9]+\.[0-9]+\.[0-9]+" tags.txt | sed "s#^${prefix}##" | sort -V > versions.txt || true
+            [ -s versions.txt ] || continue
+            echo "== ${prefix}: keeping $(tail -n "$keep" versions.txt | sed "s#^#${prefix}#" | tr '\n' ' ')"
+            head -n "-$keep" versions.txt | while read -r version; do
+              tag="${prefix}${version}"
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "would delete the release ${tag}"
+              else
+                echo "deleting the release ${tag}"
+                gh release delete "$tag" --yes
+              fi
+            done
+          done
+
+      - name: Runs, newest of each workflow kept
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GH_REPO/actions/workflows?per_page=100" -q '.workflows[] | "\(.id) \(.name)"' | while read -r id name; do
+            # Newest first; only finished runs.
+            gh api --paginate "repos/$GH_REPO/actions/workflows/$id/runs?status=completed&per_page=100" -q '.workflow_runs[].id' > runs.txt
+            total=$(wc -l < runs.txt)
+            echo "== ${name}: ${total} finished runs, keeping ${KEEP_RUNS}"
+            tail -n +$((KEEP_RUNS + 1)) runs.txt | while read -r run; do
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "would delete run ${run}"
+              else
+                gh api -X DELETE "repos/$GH_REPO/actions/runs/$run" --silent
+              fi
+            done
+          done
+
+      - name: Caches
+        if: ${{ inputs.clear_caches }}
+        run: |
+          set -euo pipefail
+          gh cache list --limit 1000 --json id,key,sizeInBytes -q '.[] | "\(.id) \(.sizeInBytes) \(.key)"' | while read -r id size key; do
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "would delete the cache ${key} (${size} bytes)"
+            else
+              echo "deleting the cache ${key}"
+              gh cache delete "$id"
+            fi
+          done

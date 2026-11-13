@@ -95,6 +95,8 @@ enum Press {
     /// A header edge: its column, where the press went down, the column's width then, and the widths as kept then.
     Edge(String, f64, f64, String),
     Pager(PageButton),
+    /// Expand all (true) or Collapse all (false) above a tree's rows.
+    Fold(bool),
     Bar,
     Editor,
     /// Its Add button (`add`), and a row's trash button (`remove`).
@@ -146,6 +148,8 @@ pub struct TablePart {
     order_read: bool,
     page: usize,
     opened: Vec<Value>,
+    /// How wide the words of Expand all and Collapse all are, as last laid out.
+    fold_text: (f64, f64),
     person_widths: HashMap<String, f64>,
     marked: HashMap<(usize, String), String>,
     marked_for: Vec<Value>,
@@ -179,6 +183,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         order_read: false,
         page: 1,
         opened: Vec::new(),
+        fold_text: (0.0, 0.0),
         person_widths: HashMap::new(),
         marked: HashMap::new(),
         marked_for: Vec::new(),
@@ -276,6 +281,34 @@ impl TablePart {
 
     fn has_header(&self) -> bool {
         self.base.spec.kind != "tree"
+    }
+
+    /// Whether a tree shows Expand all and Collapse all above its rows: as code set `foldButtons`, else as its line says (`fold buttons`).
+    pub fn folds(&self) -> bool {
+        self.is_tree() && self.base.state().and_then(|s| s.fold_buttons).unwrap_or_else(|| self.base.spec.flag("foldButtons"))
+    }
+
+    /// The bar above the rows that holds Expand all and Collapse all; no height without them.
+    fn fold_bar(&self) -> Rect {
+        Rect { height: if self.folds() { self.row_height() } else { 0.0 }, ..self.inner() }
+    }
+
+    /// Where Expand all (`expand`) or Collapse all is; none without fold buttons.
+    pub fn fold_box(&self, expand: bool) -> Option<Rect> {
+        if !self.folds() {
+            return None;
+        }
+        let bar = self.fold_bar();
+        let (open, close) = (self.fold_text.0.ceil() + 2.0 * self.look.padding, self.fold_text.1.ceil() + 2.0 * self.look.padding);
+        let x = bar.x + self.look.padding;
+        Some(if expand { Rect::new(x, bar.y, open, bar.height) } else { Rect::new(x + open + self.look.padding, bar.y, close, bar.height) })
+    }
+
+    /// Opens every row of the tree (`expand`), or closes them all.
+    pub fn fold_all(&mut self, expand: bool) {
+        self.opened = if expand { self.tree_rows().into_iter().map(|r| r.id).filter(|id| !id.is_null()).collect() } else { Vec::new() };
+        self.rows.scroller.scroll_to(0.0);
+        self.place_rows();
     }
 
     fn sortable(&self) -> bool {
@@ -756,7 +789,8 @@ impl TablePart {
     }
 
     fn header(&self) -> Rect {
-        Rect { height: if self.has_header() { self.row_height() } else { 0.0 }, ..self.inner() }
+        let bar = self.fold_bar();
+        Rect { y: bar.bottom(), height: if self.has_header() { self.row_height() } else { 0.0 }, ..self.inner() }
     }
 
     /// The header's columns as they lie: scrolled sideways with the rows.
@@ -1428,6 +1462,17 @@ impl TablePart {
         p.text(text, inside, input.text.unwrap_or_else(|| look.color("text")), look.size("text"), "text", false, align);
     }
 
+    /// Expand all and Collapse all above a tree's rows, as words that read as buttons, with a line under the bar.
+    fn draw_fold_bar(&self, p: &Painter) {
+        let look = p.look;
+        let bar = self.fold_bar();
+        p.fill(Rect { y: bar.bottom() - look.border(), height: look.border(), ..bar }, look.color("border"), 0.0);
+        for (expand, key, english) in [(true, "expandAll", "Expand all"), (false, "collapseAll", "Collapse all")] {
+            let Some(b) = self.fold_box(expand) else { continue };
+            p.text(&locale::translate(key, english), b, look.color("accent"), look.size("text"), "text", false, TextAlign::Center);
+        }
+    }
+
     fn draw_pager(&self, p: &Painter, paged: Paged) {
         let look = p.look;
         let bar = self.pager();
@@ -1608,6 +1653,10 @@ impl Element for TablePart {
         if let Some(paged) = self.paged() {
             self.pager_text = cx.fonts().measure(&paged.text(), "text", cx.look().size("text"), false);
         }
+        if self.folds() {
+            let size = cx.look().size("text");
+            self.fold_text = (cx.fonts().measure(&locale::translate("expandAll", "Expand all"), "text", size, false), cx.fonts().measure(&locale::translate("collapseAll", "Collapse all"), "text", size, false));
+        }
         if self.adds() {
             self.add_text = cx.fonts().measure(&add_word(), "text", cx.look().size("text"), false);
         }
@@ -1637,6 +1686,9 @@ impl Element for TablePart {
             }
             if let Some(paged) = self.paged() {
                 self.draw_pager(p, paged);
+            }
+            if self.folds() {
+                self.draw_fold_bar(p);
             }
         }
         if framed {
@@ -1673,6 +1725,10 @@ impl Element for TablePart {
         }
         if self.pager().contains(x, y) {
             self.press = PageButton::ALL.into_iter().find(|b| self.pager_box(*b).is_some_and(|r| r.contains(x, y))).map(Press::Pager);
+            return;
+        }
+        if self.fold_bar().contains(x, y) {
+            self.press = [true, false].into_iter().find(|e| self.fold_box(*e).is_some_and(|r| r.contains(x, y))).map(Press::Fold);
             return;
         }
         if self.has_header() && self.header().contains(x, y) {
@@ -1844,6 +1900,12 @@ impl Element for TablePart {
                 if self.header_box(&field).is_some_and(|b| b.contains(at.screen_x, at.screen_y)) {
                     self.sort_by(&field);
                     self.place_editor(cx);
+                }
+            }
+            Some(Press::Fold(expand)) => {
+                if self.fold_box(expand).is_some_and(|b| b.contains(at.screen_x, at.screen_y)) {
+                    self.fold_all(expand);
+                    cx.invalidate();
                 }
             }
             Some(Press::Pager(button)) => {

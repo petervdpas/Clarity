@@ -6,11 +6,11 @@ Progress: 5%
 
 ## Code
 - Spec: none
-- Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); the Clarity.UI library and browser files can come from the installed copy or `CLARITY_UI` (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))
+- Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); a folder chosen in Clarity settings > Libraries replaces downloads of Clarity's Rust crates, NuGets and the Clarity.UI library and browser files (`environment::use_libraries`; see [build-tools](build-tools.md)); the Clarity.UI library and browser files can come from the installed copy or `CLARITY_UI` (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))
 - Runtimes: R from crates.io, C# from nuget.org, Go modules through the proxy: all download on first build
 - Clarity.UI: none
 - IDE: none (no offline sign beside Build)
-- Docs: none in the manual
+- Docs: none for offline in the manual; `project.run-build.md` ("Which of Clarity's libraries builds use") says choosing a folder needs no internet
 
 Where the network is needed today (OFFLINE-PLAN.md):
 
@@ -19,16 +19,16 @@ Where the network is needed today (OFFLINE-PLAN.md):
 | Rust | Clarity's crates and their dependencies from crates.io |
 | Go | the runtime module and its modules through the Go proxy |
 | C# | Clarity's NuGets and theirs |
-| C, C++ | the Clarity.UI archive, unless the installed Clarity carries it or `CLARITY_UI` names a folder |
+| Rust, Go, C, C++ (desktop) | the Clarity.UI archive, unless the installed Clarity carries it or `CLARITY_UI` names a folder |
 | every stack | packages (see [parts-library](parts-library.md)) |
 
 ## Tests
 - none
 
 ## Open
-- `clarity prepare` and Project, Prepare for offline (`cargo fetch`, `go mod download`, `dotnet restore`, the Clarity.UI archive, packages, browser files, codecs): NOT BUILT (OFFLINE-PLAN.md:31-45, step 2).
+- `clarity prepare` and Project, Prepare for offline (`cargo fetch`, `go mod download`, `dotnet restore`, the Clarity.UI archive, packages, browser files, codecs): NOT BUILT (OFFLINE-PLAN.md:29-40, step 2).
 - The IDE's sign beside Build whether a project can build offline: NOT BUILT (step 2).
-- `clarity vendor` and Project, Vendor (`cargo vendor`, `go mod vendor`, a local NuGet folder, the archive), built with the stacks' offline switches: NOT BUILT (OFFLINE-PLAN.md:47-57, step 3).
+- `clarity vendor` and Project, Vendor (`cargo vendor`, `go mod vendor`, a local NuGet folder, the archive), built with the stacks' offline switches: NOT BUILT (OFFLINE-PLAN.md:41-52, step 3).
 - The installer carrying the runtimes in offline form: NOT BUILT (step 4). It carries only the Clarity.UI library and browser files today.
 - A CI job per stack building with the network off; a vendored example in a clean container: NOT BUILT (step 1).
 - A build lacking a piece offline fails naming the piece and Prepare for offline: NOT BUILT.

@@ -167,7 +167,7 @@ impl Program for Fake {
         match handler {
             "warn" => {
                 let mut r = reply(state);
-                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful") });
+                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful"), toast: None });
                 Ok(r)
             }
             "ask" => Ok(asking(state, AskForm::Confirm { yes: Some(Text::plain("Delete")), no: Some(Text::plain("Keep")) }, "confirmed", vec![json!(1)])),
@@ -191,7 +191,7 @@ impl Program for Fake {
             "refuse" => Err(Text::plain("A title first")),
             "savedAndDone" => {
                 let mut r = reply(state);
-                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved") });
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved"), toast: None });
                 r.close = true;
                 Ok(r)
             }

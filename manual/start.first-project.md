@@ -47,7 +47,7 @@ A new entity needs a migration step before the application can be built. Click *
 
 Open `MainView` from the tree and go to the **Design** tab. On the right, under The window, add two pieces of data: `task` of entity `Task`, and `tasks` of entity `Task` with list ticked.
 
-In the sidebar's Parts tab, drag a **Form** from Containers onto the view and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `addClick` into the module's file and opens the Code panel at it. Fill it in and click **Save**:
+In the sidebar's Parts tab, drag a **Form** from Containers onto the view and bind it to `task`. Drag a **Textbox** into the form and set its Bind to `task.title`, and a **Checkbox** with Bind `task.done`, each with a **Label** before it. Drag a **Table** below the form, set its Bind to `tasks`, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `addClick` into the module's file and opens the Code panel at it. Fill it in and click **Save**:
 
 ```clarity
 code MainView

@@ -14,6 +14,7 @@ import type { MappingDecl } from "./MappingDecl";
 import type { Page } from "./Page";
 import type { PartDecl } from "./PartDecl";
 import type { ThemeDecl } from "./ThemeDecl";
+import type { ToastDecl } from "./ToastDecl";
 
 export type SpecFile = { path: string, 
 /**
@@ -70,4 +71,8 @@ libraries: Array<LibraryDecl>,
  * Its mappings: how a kind of file is laid over an entity, per case
  * (docs/FORMATS-PLAN.md, step 4).
  */
-mappings: Array<MappingDecl>, };
+mappings: Array<MappingDecl>, 
+/**
+ * Its toasts: short messages code shows by name (`toast saved`).
+ */
+toasts: Array<ToastDecl>, };

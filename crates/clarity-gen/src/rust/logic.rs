@@ -504,6 +504,26 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}return Err(Error::Refused({text}));\n"));
             }
+            // A toast the project declares, by name; a command says its text on standard error.
+            StmtKind::Toast { name, args } => match crate::toasts::shown(self.project, name, args) {
+                Err(why) => self.errors.push(why),
+                Ok(_) if self.window.is_none() && !self.command => self.errors.push("toasts belong in handlers".into()),
+                Ok((look, text)) => {
+                    let text = self.shown(&text);
+                    if self.command {
+                        out.push_str(&format!("{pad}cli.message({text});\n"));
+                    } else {
+                        let icon = look.icon.as_deref().map_or("None".to_string(), |i| format!("Some({}.into())", crate::toasts::quoted(i)));
+                        out.push_str(&format!(
+                            "{pad}ui.toast(clarity_runtime::ui::Toast {{ name: {}.into(), level: {}.into(), lifespan: Some({}), icon: {icon}, corner: {}.into() }}, {text});\n",
+                            crate::toasts::quoted(&look.name),
+                            crate::toasts::quoted(look.level),
+                            look.lifespan,
+                            crate::toasts::quoted(look.corner)
+                        ));
+                    }
+                }
+            },
             // A command says it on standard error.
             StmtKind::Message { text, .. } if self.command => {
                 let text = self.shown(text);
@@ -765,6 +785,7 @@ impl<'a> Emitter<'a> {
             "fromY" => "from_y",
             "grid" => "grid",
             "snap" => "snap",
+            "foldButtons" => "fold_buttons",
             "connecting" => "connecting",
             "resizable" => "resizable",
             "bent" => "bent",
@@ -815,6 +836,7 @@ impl<'a> Emitter<'a> {
             ("visible", Some(info)) if info.closed => format!("ui.visible_or({part:?}, false)"),
             ("grid", Some(info)) => format!("ui.grid({part:?}, {})", info.grid),
             ("snap", Some(info)) => format!("ui.snap({part:?}, {})", info.snap),
+            ("fold_buttons", Some(info)) => format!("ui.fold_buttons({part:?}, {})", info.fold_buttons),
             ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
             ("dot_size", Some(info)) => format!("ui.dot_size({part:?}, {})", info.dot_size),
             ("spin_min", Some(info)) => format!("ui.spin_min({part:?}, {})", info.spin.0),
@@ -1682,6 +1704,8 @@ pub struct PartInfo {
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
+    /// Whether a tree or tree table shows Expand all and Collapse all, as its line says (`fold buttons`).
+    pub fold_buttons: bool,
     /// A canvas's background as its line says; empty is the theme's panel.
     pub background: String,
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
@@ -1730,6 +1754,7 @@ impl WindowCtx {
                         closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout),
                         grid: widget.props.grid.unwrap_or(0),
                         snap: widget.props.snap,
+                        fold_buttons: widget.props.fold_buttons,
                         background: widget.props.background.clone().unwrap_or_default(),
                         dot_size: widget.props.dot_size.unwrap_or(2),
                         dot_color: widget.props.dot_color.clone().unwrap_or_default(),
@@ -1764,6 +1789,7 @@ impl WindowCtx {
                         closed: false,
                         grid: 0,
                         snap: false,
+                        fold_buttons: false,
                         background: String::new(),
                         dot_size: 2,
                         dot_color: String::new(),

@@ -5,13 +5,13 @@ Status: partial. Built-in functions on pictures (resize, crop, rotate, flip, ble
 Progress: 75%
 
 ## Code
-- Spec: `crates/clarity-spec/src/code/check.rs:2109` (the functions typed)
-- Generators: `crates/clarity-gen/src/lib.rs:344` (`uses_picture_functions`), :972 (`pictures_without_library`); rust/logic.rs, csharp/logic.rs, cpp/logic.rs, go/mod.rs (generated `pictures.go`), c/mod.rs, cpp/mod.rs, `crates/clarity-gen/src/clarity_ui.rs`
+- Spec: `crates/clarity-spec/src/code/check.rs:2118` (the functions typed)
+- Generators: `crates/clarity-gen/src/lib.rs:345` (`uses_picture_functions`), :993 (`pictures_without_library`); rust/logic.rs, csharp/logic.rs, cpp/logic.rs, go/mod.rs (generated `pictures.go`), c/mod.rs, cpp/mod.rs, `crates/clarity-gen/src/clarity_ui.rs`
 - Library: `runtimes/rust-image` (src/lib.rs, src/ops.rs; the `image` crate, PNG, JPEG, WebP in); C table `runtimes/rust-image-ffi` (`clarity_image_api()`)
 - Runtimes: R `runtimes/rust/src/picture_functions.rs` (clarity-runtime feature `pictures`); Go generated `pictures.go` linking `clarity_image`; C `runtimes/c/pictures/pictures.c`; C++ `runtimes/cpp/pictures/pictures.cpp`; C# NuGet `Clarity.Image` (`runtimes/csharp/Clarity.Image/PictureFunctions.cs`)
 - Clarity.UI: the painting canvas uses the crate directly (see [canvas-toolbox](canvas-toolbox.md))
 - IDE: none of its own
-- Docs: LANGUAGE.md "Files" (:2791); manual `data.pictures-files.md`
+- Docs: manual `code.expressions.md` (Picture functions), `data.pictures-files.md`
 
 ## Tests
 - `conformance/picture-functions.json`: run by `runtimes/rust-image/tests/pictures.rs` only; skipped by every stack's wrapper (R, Go, C, C++, C#)
@@ -19,7 +19,7 @@ Progress: 75%
 - Guard: `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image --test pictures` (CLAUDE.md "Generated-file guards")
 
 ## Open
-- Picture functions in Go, C and C++ programs that are web-only or cli: PARTIAL. Refused (`crates/clarity-gen/src/lib.rs:971`); promised IMAGE-PLAN.md:28, LANGUAGE.md:2786.
+- Picture functions in Go, C and C++ programs that are web-only or cli: PARTIAL. Refused (`crates/clarity-gen/src/lib.rs:993`); manual `code.expressions.md:203` states the desktop-only limit; IMAGE-PLAN.md:3 promises every stack.
 - An example that uses the picture functions: NOT BUILT (IMAGE-PLAN.md:90).
 - Picture functions in engines; a video frame as a picture: NOT BUILT (VIDEO-PLAN.md:99; see [engines](engines.md), [video-camera](video-camera.md)).
 

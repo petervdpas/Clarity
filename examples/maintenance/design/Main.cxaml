@@ -27,7 +27,7 @@
         <List name="projectList" at="1,1" span="6" rows="2" bind="projects" show="name" onselect="projectPicked" />
       </Pane>
       <Pane>
-        <TreeTable name="entryTree" at="1,1" span="6" rows="4" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:90}" resizable="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
+        <TreeTable name="entryTree" at="1,1" span="6" rows="4" bind="entries" columns="label, status, reviewed" widths="{&quot;label&quot;:250,&quot;reviewed&quot;:70,&quot;status&quot;:72}" resizable="true" foldButtons="true" rowKey="key" parentKey="parent" onselect="entryPicked" />
       </Pane>
     </Splitter>
   </Sidebar>

@@ -5,6 +5,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import SourceEditor from "./SourceEditor.svelte";
   import { projectEngines } from "./engines";
+  import { typeText } from "@clarity/ui/screen/windowData.ts";
+  import type { FunctionDecl } from "@clarity/ui/generated/FunctionDecl.ts";
   import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
   import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
   import type { Edit } from "@clarity/ui/generated/Edit.ts";
@@ -31,9 +33,15 @@
   /** The engines this module declares, with the errors in their declarations. */
   const engines = $derived(projectEngines(preview.project).filter((e) => e.module === (file.module?.name ?? "")));
 
-  /** The function or action open in the editor, by name. */
+  /** The function or action open in the editor, by name; the first one until another is picked. */
   let openFunction = $state<string | null>(null);
-  const fn = $derived(file.functions.find((f) => f.name.name === openFunction) ?? null);
+  const fn = $derived(file.functions.find((f) => f.name.name === openFunction) ?? file.functions[0] ?? null);
+
+  /** A function's name with its values and result, as the editor's title says which one it shows. */
+  function signature(f: FunctionDecl): string {
+    const params = f.params.map((p) => `${p.name.name}: ${typeText(p.ty.kind)}`).join(", ");
+    return `${f.name.name}(${params})${f.returns ? ` -> ${typeText(f.returns.kind)}` : ""}`;
+  }
 
   const STARTERS = {
     function: (name: string) => `function ${name}(value: integer) -> integer\n    return value\n`,
@@ -43,8 +51,10 @@
   /** Adds a function or action with a free name and opens it. */
   async function addFunction(kind: keyof typeof STARTERS) {
     const taken = new Set(file.functions.map((f) => f.name.name));
-    let name = "new_" + kind;
-    for (let n = 2; taken.has(name); n++) name = "new_" + kind + n;
+    // camelCase, as every name in Clarity: newFunction, newAction2.
+    const base = kind === "function" ? "newFunction" : "newAction";
+    let name = base;
+    for (let n = 2; taken.has(name); n++) name = base + n;
     await onapply({ op: "appendDecl", text: STARTERS[kind](name) });
     openFunction = name;
   }
@@ -140,31 +150,45 @@
       A function computes a value and has no effects. An action may change data, and declares it with <code>effects</code>.
       Handlers and other actions call them by name.
     </p>
-    <ul>
-      {#each file.functions as f (f.name.name)}
-        <li>
-          <button class:active={openFunction === f.name.name} onclick={() => (openFunction = f.name.name)}>
-            <span class="kind">{f.kind}</span>{f.name.name}
-          </button>
-        </li>
-      {/each}
-    </ul>
-    <div class="buttons">
-      <button onclick={() => addFunction("function")}>New function</button>
-      <button onclick={() => addFunction("action")}>New action</button>
-    </div>
-    {#if fn}
-      {@const item = fn.span.start}
-      <div class="function-editor">
-        <SourceEditor
-          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
-          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
-          save={(text) => saveFunction(item, text)}
-          reloadKey={file.path + "\n" + item + "\n" + file.version}
-          onclose={() => (openFunction = null)}
-        />
+    <!-- One widget: the functions and actions at the left, the one picked marked, its code at the right under its own name. -->
+    <div class="functions">
+      <div class="function-list">
+        <ul>
+          {#each file.functions as f (f.name.name)}
+            <li>
+              <button class:active={fn?.name.name === f.name.name} aria-current={fn?.name.name === f.name.name ? "true" : undefined} onclick={() => (openFunction = f.name.name)}>
+                <span class="kind">{f.kind}</span>{f.name.name}
+              </button>
+            </li>
+          {/each}
+        </ul>
+        <div class="buttons">
+          <button onclick={() => addFunction("function")}>New function</button>
+          <button onclick={() => addFunction("action")}>New action</button>
+        </div>
       </div>
-    {/if}
+      <div class="function-editor">
+        {#if fn}
+          {@const item = fn.span.start}
+          <header class="editor-title">
+            <span class="kind">{fn.kind}</span>
+            <code>{signature(fn)}</code>
+          </header>
+          <div class="editor-body">
+            {#key item}
+              <SourceEditor
+                load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+                check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+                save={(text) => saveFunction(item, text)}
+                reloadKey={file.path + "\n" + item + "\n" + file.version}
+              />
+            {/key}
+          </div>
+        {:else}
+          <p class="muted pick">No functions or actions yet: New function and New action add one.</p>
+        {/if}
+      </div>
+    </div>
   </section>
 
   {#if engines.length > 0}
@@ -330,11 +354,67 @@
     margin: 8px 0;
   }
 
-  .function-editor {
-    display: flex;
-    height: 380px;
+  .functions {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+    height: 420px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     overflow: hidden;
+  }
+
+  .function-list {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    background: var(--panel-alt);
+  }
+
+  .function-list ul {
+    flex: 1;
+    overflow: auto;
+    padding: 4px;
+  }
+
+  .function-list li button.active {
+    background: var(--panel);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .function-list .buttons {
+    flex-direction: column;
+    margin: 0;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .function-editor {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .editor-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .editor-title code {
+    font-weight: 600;
+  }
+
+  .editor-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .pick {
+    padding: 16px;
   }
 </style>

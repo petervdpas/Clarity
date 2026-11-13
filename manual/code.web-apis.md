@@ -46,7 +46,7 @@ The window waits while a handler calls out, as it waits for anything a handler d
 let reply = http post "https://api.example.com/orders" with order.summary header "Content-Type": "text/plain" header "Authorization": "Bearer {settings.apiToken}"
 ```
 
-A key or a token does not belong in the code, where everyone who reads the project sees it. Keep it in a [secret setting](../docs/LANGUAGE.md#secret-settings), which the system's protected store keeps, and put it in with a slot, as above, or sign the source's calls with it: `auth bearer "setting:apiToken"`. A header named `Authorization`, or one whose name holds `key`, `token` or `secret`, with a plain text as its value is a warning on its line.
+A key or a token does not belong in the code, where everyone who reads the project sees it. Keep it in a [secret setting](data.settings.md#secret-settings), which the system's protected store keeps, and put it in with a slot, as above, or sign the source's calls with it: `auth bearer "setting:apiToken"`. A header named `Authorization`, or one whose name holds `key`, `token` or `secret`, with a plain text as its value is a warning on its line.
 
 ## JSON
 
@@ -67,6 +67,8 @@ code Orders
 - `read Order from json text` reads one record, `read list<Order> from json text` a list; `at "data"` starts inside the JSON. `json of` writes a record nested as the service sent it.
 - A service names its fields its own way, so names match also ignoring case, underscores, hyphens and spaces, and numbers and strings of numbers stand for each other. What the JSON leaves out keeps its default; JSON that does not fit stops the handler with a message that says where.
 - An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, read each into its own entity. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`.
+
+- An entity of a web API may hold records of the web API only, and a record never holds itself, through any number of records; a list may, as it can be empty. A stored entity refers to another with `ref User` instead, and keeps its lists in their own table. The checker says "field 'owner' of Order holds a User inside the record, which only an entity of a web API does; a stored entity refers to one with ref User", "field 'owner' of Order holds a User, which is stored; a record inside a web API's record is of the web API too" and "record Order holds itself: Order.parent holds an Order".
 
 JSON is the first of Clarity's data formats; how every format reads and writes is on [Data formats](code.formats.md).
 
@@ -127,6 +129,17 @@ Clarity's agent can pick too: ask it to build something on the API, and it reads
 - **Handlers** and **commands** call out as they are.
 - **An action** that calls out declares the effect `net`: `effects net`, beside any others. Its caller then knows the action reaches the network.
 - **A function**, **an engine** and **a data event** cannot call out. A function is safe to call anywhere, an engine keeps to itself, and a data event runs inside the save, which must not wait on the network. Call out in the handler or action around them, and hand them what came back.
+
+## The `http` expression
+
+```text
+http get|post|put|patch|delete url [from source] [every page] [with body]
+    [header "Name": value [when condition]]... [query "name": value [when condition]]...
+```
+
+All of it is written on one line. The url, the body, and each header's and query parameter's value are text; a `when` condition is a bool. The value is an `http reply`, whose `status` (integer), `ok` (bool) and `text` (text) are read.
+
+The checker says: "an http call is get, post, put, patch or delete, not 'fetch'"; "the url of an http call is text, not integer"; "http post sends a body: write 'with' and the text"; "http get sends no body; post, put and patch do"; "the body of an http call is text, not Order" (write `json of order`); "the header 'Accept' is text, not integer"; "the query parameter 'limit' is text, not integer" (write `"{limit}"`); "the condition after 'when' is a bool, not text"; "the header 'Authorization' holds a key written in the code; keep it in a setting and put it in with a slot" (a warning); "unknown data source 'shp'; the project has ..."; "'main' is no web API: 'from' names a rest data source of the project"; "every page reads a web API data source: write 'from' and its name before it"; "write every page, not every item"; "an http reply has status, ok and text, not 'body'"; "action 'sendOrder' calls out, which needs 'effects net'"; "function 'fetch' cannot call out; an action can, with 'effects net'"; "an engine cannot call out: ..."; "a data event cannot call out: it runs inside the save's transaction, which must not wait on the network".
 
 ## On each stack
 

@@ -131,7 +131,7 @@ fn while_a_file_dialog_is_open_the_windows_take_no_input() {
 
 #[test]
 fn what_a_dialog_says_as_it_closes_shows_in_the_window_below() {
-    let message = |level, text: &str| Message { level, text: Text::plain(text) };
+    let message = |level, text: &str| Message { level, text: Text::plain(text), toast: None };
     let mut dialog = vec![message(Level::Info, "Kept the note"), message(Level::Warning, "Check the date")];
     let mut below = vec![message(Level::Info, "Earlier")];
     hand_down(&mut dialog, &mut below);

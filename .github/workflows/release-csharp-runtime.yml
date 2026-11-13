@@ -38,8 +38,9 @@ on:
   push:
     tags:
       - "runtimes/csharp/v*"
-  # By hand: unlist every version of the packages but the newest, through
-  # the same Trusted Publishing policy (this file's name) that publishes them.
+  # By hand: unlist every version of the packages but the newest, through the
+  # same Trusted Publishing policy (this file's name, with the scope "Unlist
+  # or relist package versions") that publishes them.
   workflow_dispatch:
     inputs:
       dry_run:

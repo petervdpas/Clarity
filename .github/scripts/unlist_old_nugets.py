@@ -8,9 +8,10 @@ from search and from new installs; projects that name it keep restoring it,
 and it can be listed again on nuget.org.
 
 It runs in the C# release workflow (release-csharp-runtime.yml), started by
-hand with "Unlist old versions": nuget.org's Trusted Publishing policy for
-that workflow gives it a short-lived key (NuGet/login), which it reads from
-NUGET_API_KEY. Without --yes it only says what it would unlist:
+hand: nuget.org's Trusted Publishing policy for that workflow,
+with the scope "Unlist or relist package versions", gives it a short-lived
+key (NuGet/login), which it reads from NUGET_API_KEY. Without the scope
+nuget.org answers 403. Without --yes it only says what it would unlist:
 
     python3 .github/scripts/unlist_old_nugets.py            # what it would do
     NUGET_API_KEY=... python3 .github/scripts/unlist_old_nugets.py --yes

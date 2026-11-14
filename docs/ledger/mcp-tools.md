@@ -55,6 +55,7 @@ Progress: 70%
 - 2026-11-12: a refused edit names the file and line of the error it would add (`refusal` in `edits.rs`); `remove_data` of data the code still uses says the code uses it. Test `data_fields_and_tabs_go_on_by_name`.
 - 2026-11-12: Clarity's own words of parts in a sidebar or footer (a tree's Expand and Collapse) were added but then warned "not used anywhere": the check looked only at a window's grid. It walks every list of parts now (`part_lists` in `translations.rs`). Test `a_tree_in_a_sidebar_uses_clarity_s_own_words` (clarity-spec tests/trees.rs).
 - 2026-11-13: a view's tells BUILT in the designer (`app/src/lib/PageTells.svelte`, `ViewLineTells.svelte` in `PageProperties.svelte`; test `app/src/lib/viewTells.test.ts`); see [by-hand](by-hand.md).
+- 2026-11-14: the server tells Clarity's icon in its info (`icons`: the 128x128 PNG and the SVG of `app/src-tauri/icons`, embedded as data URIs; `crates/clarity-mcp/src/lib.rs` `icons`; test `the_server_tells_clarity_s_icon` in `crates/clarity-mcp/tests/server.rs`), so a client such as VS Code shows it. User: "can a mcp server get an icon?", "yes, add it after the release".
 
 ## Was
 - DESIGN 17.3, roadmap A1, M8 (MCP half)

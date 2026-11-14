@@ -14,12 +14,29 @@ use clarity_project::activity::Call;
 use clarity_tools::ProjectTools;
 use clarity_tools::turn::{self, Shown};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListToolsResult,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Icon, Implementation, ListToolsResult,
     PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Value, json};
+
+/// Clarity's icon, as the installers have it (app/src-tauri/icons): a PNG
+/// every MCP client takes and the SVG it is made from.
+const ICON_PNG: &[u8] = include_bytes!("../../../app/src-tauri/icons/128x128.png");
+const ICON_SVG: &[u8] = include_bytes!("../../../app/src-tauri/icons/icon.svg");
+
+/// The icons the server's info carries, embedded as data URIs so a client
+/// shows them without the network.
+fn icons() -> Vec<Icon> {
+    use base64::Engine;
+    let embedded = |mime: &str, bytes: &[u8], size: &str| {
+        Icon::new(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+            .with_mime_type(mime)
+            .with_sizes(vec![size.to_string()])
+    };
+    vec![embedded("image/png", ICON_PNG, "128x128"), embedded("image/svg+xml", ICON_SVG, "any")]
+}
 
 /// The IDE agent's tools left out here: they build, run or touch the
 /// database (build, build_output, the backups), or need the IDE (show_window,
@@ -236,7 +253,7 @@ fn mcp_tool(def: ToolDef) -> Tool {
 impl ServerHandler for ClarityServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("clarity", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("clarity", env!("CARGO_PKG_VERSION")).with_icons(icons()))
             .with_instructions(self.instructions())
     }
 

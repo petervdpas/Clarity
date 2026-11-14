@@ -230,3 +230,23 @@ fn every_call_is_logged_without_what_the_file_holds() {
     assert!(!logged[0].said.contains(first_line.trim()), "no file text in the log");
     assert_eq!((logged[1].client.as_str(), logged[1].ok), ("copilot", false));
 }
+
+/// The server tells its client Clarity's own icon, so a client such as VS Code
+/// shows it beside the server's name: a PNG every client takes and the SVG it
+/// is made from, embedded so they need no network.
+#[test]
+fn the_server_tells_clarity_s_icon() {
+    use base64::Engine;
+    use rmcp::ServerHandler;
+    let dir = scratch("icon");
+    let info = ClarityServer::with_ide_file(dir.join("ide.json")).get_info().server_info;
+    let icons = info.icons.expect("the server's info has icons");
+    let embedded = |mime: &str| {
+        let icon = icons.iter().find(|i| i.mime_type.as_deref() == Some(mime)).unwrap_or_else(|| panic!("no {mime} icon in {icons:?}"));
+        let data = icon.src.strip_prefix(&format!("data:{mime};base64,")).unwrap_or_else(|| panic!("the {mime} icon is embedded: {}", icon.src));
+        (base64::engine::general_purpose::STANDARD.decode(data).unwrap(), icon.sizes.clone())
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src-tauri/icons");
+    assert_eq!(embedded("image/png"), (std::fs::read(root.join("128x128.png")).unwrap(), Some(vec!["128x128".to_string()])));
+    assert_eq!(embedded("image/svg+xml"), (std::fs::read(root.join("icon.svg")).unwrap(), Some(vec!["any".to_string()])));
+}

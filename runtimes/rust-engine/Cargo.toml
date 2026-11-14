@@ -10,7 +10,6 @@ version = "0.3.1"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
-homepage = "https://github.com/petervdpas/Clarity"
 readme = "README.md"
 keywords = ["clarity", "webassembly", "wasm", "engine"]
 

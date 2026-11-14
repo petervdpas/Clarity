@@ -17,6 +17,14 @@ use crate::Written;
 /// The title of the steps the agent writes itself; the mark of a step it may fold.
 pub const AGENT_STEP: &str = "Changes by the agent";
 
+/// Whether the step file at `path` is one Clarity wrote from the data
+/// dictionary (its first line says so), not one written by hand.
+fn written_by_clarity(path: &str) -> bool {
+    let first = clarity_spec::migrate::step_text("", &[]);
+    let first = first.lines().next().unwrap_or_default();
+    std::fs::read_to_string(path).is_ok_and(|text| text.lines().next() == Some(first))
+}
+
 /// What following a change wrote: the step files, and a line for the agent.
 #[derive(Debug, Default)]
 pub struct Followed {
@@ -44,7 +52,8 @@ pub fn follow(file: &Path, dir: &Path, renames: &[Rename]) -> Result<Followed, S
             // A server database cannot be seen from here: every change gets a step of its own.
             _ => None,
         };
-        let foldable = steps.last().filter(|last| last.title == AGENT_STEP && !last.baseline && applied.is_some_and(|a| a < steps.len()));
+        // Clarity's own step (the agent's, or one migrate wrote under a title) that no database has run.
+        let foldable = steps.last().filter(|last| (last.title == AGENT_STEP || written_by_clarity(&last.path)) && !last.baseline && applied.is_some_and(|a| a < steps.len()));
         match foldable {
             Some(last) => {
                 let before: Vec<Op> = last.ops.iter().map(|(op, _)| op.clone()).collect();
@@ -68,7 +77,7 @@ pub fn follow(file: &Path, dir: &Path, renames: &[Rename]) -> Result<Followed, S
                     lines.push(format!("The step {} has nothing left to do and is gone.", shown(dir, &path)));
                     continue;
                 }
-                let text = clarity_spec::migrate::step_text(AGENT_STEP, &ops);
+                let text = clarity_spec::migrate::step_text(&last.title, &ops);
                 std::fs::write(&path, &text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
                 lines.push(format!("Folded into the step {}:\n{}", shown(dir, &path), text.trim_end()));
                 out.written.push(Written { file: path, before: was, after: Some(text) });
@@ -98,8 +107,9 @@ fn shown(dir: &Path, path: &Path) -> String {
 fn renames_in(ops: &[Op]) -> Vec<Rename> {
     ops.iter()
         .filter_map(|op| match op {
-            Op::RenameEntity { from, to } => Some(Rename { entity: None, from: from.clone(), to: to.clone() }),
-            Op::RenameField { entity, from, to } => Some(Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone() }),
+            Op::RenameEntity { from, to } => Some(Rename { entity: None, from: from.clone(), to: to.clone(), value: false }),
+            Op::RenameField { entity, from, to } => Some(Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone(), value: false }),
+            Op::RenameValue { enumeration, from, to } => Some(Rename::value(enumeration, from, to)),
             _ => None,
         })
         .collect()
@@ -108,7 +118,7 @@ fn renames_in(ops: &[Op]) -> Vec<Rename> {
 /// The renames with `next` added: a name renamed again keeps one rename,
 /// from its first name to its last; one renamed back keeps none.
 fn composed(mut renames: Vec<Rename>, next: &Rename) -> Vec<Rename> {
-    match renames.iter().position(|r| r.entity == next.entity && r.to == next.from) {
+    match renames.iter().position(|r| r.entity == next.entity && r.value == next.value && r.to == next.from) {
         Some(i) if renames[i].from == next.to => {
             renames.remove(i);
         }
@@ -123,7 +133,7 @@ mod tests {
     use super::*;
 
     fn rename(entity: Option<&str>, from: &str, to: &str) -> Rename {
-        Rename { entity: entity.map(String::from), from: from.into(), to: to.into() }
+        Rename { entity: entity.map(String::from), from: from.into(), to: to.into(), value: false }
     }
 
     #[test]

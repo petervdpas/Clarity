@@ -8,8 +8,8 @@ use crate::parser::parse as parse_spec;
 use super::{DiagramField, Line};
 
 /// Clarity's own type words.
-pub(super) const CLARITY_TYPES: [&str; 15] =
-    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "ref", "list"];
+pub(super) const CLARITY_TYPES: [&str; 16] =
+    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "folder", "ref", "list"];
 
 /// Type words of other languages and databases, read as Clarity's.
 const FOREIGN_TYPES: [(&str, &str); 8] = [
@@ -76,7 +76,7 @@ pub(super) fn field_type(written: &str, foreign_key: bool) -> Result<String, Str
         return Ok(if foreign_key { format!("ref {word}") } else { word.to_string() });
     }
     Err(format!(
-        "'{written}' is not a type Clarity knows: use text, integer, money, bool, date, datetime, duration, image, email or url, or the name of an enum or entity"
+        "'{written}' is not a type Clarity knows: use text, integer, money, bool, date, datetime, duration, image, email, url or folder, or the name of an enum or entity"
     ))
 }
 

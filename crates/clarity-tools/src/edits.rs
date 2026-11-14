@@ -89,9 +89,12 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
     let fits = fitted(dir, &replaced)?;
     replaced.retain(|(path, _)| !fits.iter().any(|(fit, _, _)| fit.as_path() == *path));
     replaced.extend(fits.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
-    // The checker decides what is valid: an edit that adds an error anywhere in the project (an overlap, a wrong binding) is refused.
+    // The checker decides what is valid: an edit that adds an error to a file it writes (an overlap,
+    // a wrong binding) is refused. An error it leaves elsewhere, as code naming a part that is gone,
+    // is made and reported by the tool, so a rework can go a step at a time.
     let after = clarity_project::load_modules_with_files(dir, &replaced).map_err(read_err)?;
-    if let Some(error) = clarity_spec::new_error(&before, &after) {
+    let written = |error: &clarity_spec::Diagnostic| error.path.is_empty() || replaced.iter().any(|(path, _)| *path == dir.join(&error.path).as_path());
+    if let Some(error) = new_errors(&before, &after).into_iter().find(|e| written(e)) {
         return Err(refusal(dir, &replaced, error));
     }
     for (path, _) in &new_pages {
@@ -133,6 +136,13 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
         changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
     }
     Ok(Applied { changes, focus })
+}
+
+/// The errors of `after` that `before` did not have, by file and message.
+fn new_errors<'a>(before: &clarity_spec::Project, after: &'a clarity_spec::Project) -> Vec<&'a clarity_spec::Diagnostic> {
+    use clarity_spec::Severity;
+    let known: Vec<(&str, &str)> = before.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| (d.path.as_str(), d.message.as_str())).collect();
+    after.diagnostics.iter().filter(|d| d.severity == Severity::Error && !known.contains(&(d.path.as_str(), d.message.as_str()))).collect()
 }
 
 /// The design files a project with `replaced` needs written again so nothing

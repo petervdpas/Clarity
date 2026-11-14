@@ -6,4 +6,9 @@ export type Toolbar = {
 /**
  * Its part name, as code hides or disables it: `mainToolbar`.
  */
-name: string | null, items: Array<Command>, span: Span, };
+name: string | null, 
+/**
+ * Its width in pixels (`width 400`) beside a menu bar that has one;
+ * none takes the rest of the row.
+ */
+width: number | null, items: Array<Command>, span: Span, };

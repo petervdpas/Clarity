@@ -542,6 +542,7 @@ entity Genre
     rank: integer, min 1, max 10
     share: decimal(5, 2), format percent
     shade: color
+    covers: folder, extensions \"*.png\"
 
 page Genres: window
     data genres: list<Genre>
@@ -572,6 +573,8 @@ fn every_field_s_facts_are_in_fields() {
     has(fields, "[\"Genre.share\"] = new(\"@genreShareLabel\", new FieldFormat(FormatKind.Decimal, 2, \"percent\"), Required: false,");
     // A color field says so: a table or list shows a swatch beside its value.
     has(fields, "[\"Genre.shade\"] = new(\"@genreShadeLabel\", null, Required: false, Min: null, Max: null, Refers: null, Parent: \"parent\", Color: true),");
+    // A folder field says so: a table's cell of it opens the folder picker.
+    has(fields, "[\"Genre.covers\"] = new(\"@genreCoversLabel\", null, Required: false, Min: null, Max: null, Refers: null, Parent: \"parent\", Folder: true),");
 }
 
 /// What an engine says into a text value (noughts' status line) is kept as

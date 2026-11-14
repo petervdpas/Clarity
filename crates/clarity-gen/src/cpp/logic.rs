@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{HttpMethod, DataEvent,
+use clarity_spec::code::{FilePlace, HttpMethod, DataEvent,
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -750,11 +750,21 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 let _ = writeln!(out, "clarity::refuse({text});");
             }
-            StmtKind::Write { text, store, path } => {
+            StmtKind::Write { text, place, path } => {
                 // Bytes are written as they are, text as UTF-8.
                 let write = if self.types.type_of(text) == TypeInfo::Bytes { "write_bytes" } else { "write_text" };
                 let (path, text) = (self.value(path), self.value(text));
-                let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
+                match place {
+                    FilePlace::Store(store) => {
+                        let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
+                    }
+                    // A folder that is no store: by its path, with the files it takes.
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = self.value(folder);
+                        let _ = writeln!(out, "db.{write}_in(clarity::folder_store + {at}, {}, {hidden}, {path}, {text});", cpp_patterns(&patterns));
+                    }
+                }
             }
             // A command says it on standard error.
             // A toast the project declares, by name; a command says its text on standard error.
@@ -1289,7 +1299,7 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
-            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
             // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
@@ -1584,8 +1594,15 @@ impl<'a> Emitter<'a> {
 
     /// `files f in store where ... order by ...`: the files of a store,
     /// filtered and sorted in memory.
-    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
-        let mut list = format!("db.files({})", string(store));
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut list = match place {
+            FilePlace::Store(store) => format!("db.files({})", string(&store.name)),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = self.value(folder);
+                format!("db.files_in(clarity::folder_store + {at}, {}, {hidden})", cpp_patterns(&patterns))
+            }
+        };
         if let Some(filter) = filter {
             let cond = self.value(filter);
             list = format!("clarity::filter_files({list}, [&](const clarity::FileEntry& {}) {{ return {cond}; }})", ident(var));
@@ -1795,4 +1812,9 @@ fn cpp_pieces(pieces: &[crate::shape::Piece]) -> String {
         })
         .collect();
     parts.join(" + ")
+}
+
+/// A folder's extensions as the runtime takes them: `std::vector<std::string>{"*.md"}`.
+fn cpp_patterns(patterns: &[String]) -> String {
+    format!("std::vector<std::string>{{{}}}", patterns.iter().map(|p| string(p)).collect::<Vec<_>>().join(", "))
 }

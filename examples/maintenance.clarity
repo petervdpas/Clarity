@@ -3,4 +3,3 @@ project Maintenance
     theme Dark Light
     output "out"
     datasource main sqlite "data/maintenance.db"
-    filestore ledger "setting:ledgerFolder"

@@ -12,18 +12,20 @@ The agent is a model that knows Clarity and works on the open project through to
 
 - Look at the project: its project file, its modules and its problems.
 - Read every file of the project, and write the project file, code and texts. Every write is checked at once, and the agent sees the errors it made.
-- Change the data model, windows, views, parts, the app and its frame with structural tools that take names (`add_entity`, `add_field`, `add_window`, `add_part`, `change_part`, `wire_event` and more). Each makes the same checked change the designer makes; an unknown name is refused with the names there are. Windows and views (`.cxaml`) change only through these tools.
+- Change the data model, windows, views, parts, the app and its frame with structural tools that take names (`add_entity`, `add_field`, `add_window`, `add_part`, `change_part`, `wire_event` and more). Each makes the same checked change the designer makes; an unknown name is refused with the names there are. A change that breaks what it edits, such as a part placed over another, is refused; what it leaves broken elsewhere, such as code that still names a removed part, is made and reported, so a larger rework can go a step at a time. Windows and views (`.cxaml`) change only through these tools.
 - Read and write the Markdown files of the resources (`resources/rules-en.md`), and point a key at one per language in the language files, for a markdown part. It cannot add pictures; it uses the ones the resources have.
 - Check the whole project.
 - Look up the parts a window can hold, with their properties.
-- Put every change of your entities into a migration step at once; see [Migrations](data.migrations.md). While no database has run its latest step, the agent adds to that step, so one task leaves one step.
-- Rename an entity, an enum, a field, a window or a view everywhere the project names it. The step records the rename, so the column keeps its data. A name the agent simply writes over is a removal and an addition, never guessed to be a rename.
+- Put every change of your entities into a migration step at once; see [Migrations](data.migrations.md). While no database has run the latest step and Clarity wrote it (the agent's own step, or one written with `migrate` under a title), the agent adds to that step and keeps its title, so one task leaves one step. A step written by hand is never added to.
+- Rename an entity, an enum, a field, a value of an enum, a window or a view everywhere the project names it, its code too (`find`, `new`, the types of parameters, results and locals, an enum's values). The step records the rename, so the column keeps its data and the records that keep a renamed value take its new name. A name the agent simply writes over is a removal and an addition, never guessed to be a rename.
 - Make a new project and open it.
 - Show a window in Preview when it is done.
 - Read the pages of this manual it needs for the task.
 - Read the **Output** of the last Run or Build, such as compiler errors, so you need not paste it.
 - Read the application Clarity generated, in the folder the project's output setting names, to see what an error points at. It only reads there; it fixes the project instead.
 - Run or build the application, only as **Clarity settings** allow; see below.
+
+Every agent (Clarity's own, one of your own through ACP, or a client of Clarity's MCP server) is told to use your words. The entities, fields, windows, parts and texts it names come from what you said; a name it makes up itself, a field you did not ask for or another word for one you gave, it lists under **Open questions** with what it is for before it uses it, in a diagram above all, and uses it only when you agree. It never takes a word Clarity uses for something else (such as page, which is a window or view), and a structure you name it keeps as you named it.
 
 The agent cannot reach files outside the project's folder, and it writes only Clarity files and Markdown files of the resources. The designer follows its changes as they are written.
 

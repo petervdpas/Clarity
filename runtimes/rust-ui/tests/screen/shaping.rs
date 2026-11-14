@@ -331,7 +331,7 @@ fn an_ellipsis_cuts_a_right_to_left_label_at_its_end_on_the_left() {
 #[test]
 fn a_right_to_left_markdown_paragraph_reads_from_the_right() {
     let look = look();
-    let laid = MarkdownLayout::of(SHALOM_OLAM, 400.0, &Fonts::new(look.clone()), &look);
+    let laid = MarkdownLayout::of(SHALOM_OLAM, 400.0, &Fonts::new(look.clone()), &look, false);
     let first: Vec<_> = laid.runs.iter().filter(|r| r.text.starts_with('\u{05e9}')).collect();
     let second: Vec<_> = laid.runs.iter().filter(|r| r.text.starts_with('\u{05e2}')).collect();
     assert_eq!(1, first.len());

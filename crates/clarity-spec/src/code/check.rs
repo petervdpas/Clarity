@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, ConstDecl, HttpPair, HttpMethod, NamedArg, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
+use super::{FilePlace, AskForm, ConstDecl, HttpPair, HttpMethod, NamedArg, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -2874,8 +2874,18 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.block(body);
                 }
             }
-            StmtKind::Write { text, path, .. } => {
+            StmtKind::Write { text, place, path } => {
                 self.check_files("writes a file", "files.write", stmt.span);
+                let (extensions, hidden) = self.folder_text(place, "write to");
+                if let (FilePlace::Folder(folder), Some(written)) = (place, written_name(path))
+                    && !crate::files::matches(&extensions, hidden, &written)
+                {
+                    let holds = if written.starts_with('.') && !hidden { "no hidden".to_string() } else { extensions.join(" ") };
+                    self.error(
+                        format!("{} holds {holds} files, not '{written}'", crate::code::print::expr(folder)),
+                        path.span,
+                    );
+                }
                 // What is written is text, or bytes as they are.
                 let ty = self.expr(text, None);
                 if !matches!(ty, Ty::Bytes | Ty::Unknown) && !Ty::Text.accepts(&ty) {
@@ -3286,6 +3296,33 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// Listing, reading and writing files: not in functions; in actions and
     /// data events only with the effect.
+    /// A folder that is no file store is a folder field (`folder
+    /// category.folder`), which says the extensions of the files it holds:
+    /// those, or none for any file.
+    fn folder_text(&mut self, place: &FilePlace, doing: &str) -> (Vec<String>, bool) {
+        let FilePlace::Folder(folder) = place else { return (Vec::new(), false) };
+        let field = match &folder.kind {
+            ExprKind::Member { object, member } => match self.expr(object, None) {
+                Ty::Record(entity) => entity.field(&member.name).filter(|f| f.ty == FieldType::Folder),
+                Ty::Unknown => return (Vec::new(), true),
+                _ => None,
+            },
+            _ => None,
+        };
+        match field {
+            Some(field) => (field.modifiers.extensions.clone(), field.modifiers.hidden),
+            None => {
+                let ty = self.expr(folder, None);
+                if Ty::Text.accepts(&ty) || matches!(ty, Ty::Unknown) {
+                    self.error(format!("the folder to {doing} is a folder field, as in 'folder category.folder'"), folder.span);
+                } else {
+                    self.error(format!("the folder to {doing} must be text, not {}", ty.name()), folder.span);
+                }
+                (Vec::new(), true)
+            }
+        }
+    }
+
     fn check_files(&mut self, doing: &str, effect: &str, span: Span) {
         let Some(decl) = self.decl else { return };
         match decl.kind {
@@ -4006,6 +4043,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     return match expected {
                         Some(ty @ Ty::Values(_)) => ty,
                         Some(ty @ Ty::List(_)) => ty,
+                        Some(Ty::Files) => Ty::Files,
                         _ => {
                             self.error("an empty list needs its type, as in let squares: list<integer> = []", expr.span);
                             Ty::Unknown
@@ -4127,7 +4165,10 @@ impl<'a> BodyChecker<'_, 'a> {
             ExprKind::Call { .. } => self.call(expr, false).unwrap_or(Ty::Unknown),
             ExprKind::EngineCall { engine, function, args } => self.engine_call(expr, engine, function, args),
             ExprKind::Find { var, entity, filter, order } => self.find(var, entity, filter.as_deref(), order),
-            ExprKind::Files { var, filter, order, .. } => self.files(var, filter.as_deref(), order, expr.span),
+            ExprKind::Files { var, place, filter, order } => {
+                self.folder_text(place, "list");
+                self.files(var, filter.as_deref(), order, expr.span)
+            }
             ExprKind::Ask { question, form } => self.ask_value(question, form),
             ExprKind::ReadText { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
@@ -5456,7 +5497,7 @@ pub(crate) fn code_stores(project: &crate::model::Project) -> Vec<(String, Ident
     fn writes(body: &[Stmt], found: &mut Vec<Ident>) {
         for stmt in body {
             match &stmt.kind {
-                StmtKind::Write { store, .. } => found.push(store.clone()),
+                StmtKind::Write { place: FilePlace::Store(store), .. } => found.push(store.clone()),
                 StmtKind::If { branches, otherwise } => {
                     for branch in branches {
                         writes(&branch.body, found);
@@ -5480,7 +5521,7 @@ pub(crate) fn code_stores(project: &crate::model::Project) -> Vec<(String, Ident
         let mut stores = Vec::new();
         for body in bodies {
             each_stmt_expr(body, &mut |e| {
-                if let ExprKind::Files { store, .. } = &e.kind {
+                if let ExprKind::Files { place: FilePlace::Store(store), .. } = &e.kind {
                     stores.push(store.clone());
                 }
             });
@@ -5543,8 +5584,11 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                     each_expr(&arg.value, found);
                 }
             }
-            StmtKind::Write { text, path, .. } => {
+            StmtKind::Write { text, place, path } => {
                 each_expr(text, found);
+                if let FilePlace::Folder(folder) = place {
+                    each_expr(folder, found);
+                }
                 each_expr(path, found);
             }
             StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => each_expr(value, found),
@@ -5691,5 +5735,15 @@ fn item_ty(item: Item<'_>) -> Ty<'_> {
         Item::Bool => Ty::Bool,
         Item::Date => Ty::Date,
         Item::Enum(e) => Ty::Enum(e),
+    }
+}
+
+/// The file name a write's path ends in, when the path ends in written
+/// text: `"notes.csv"`, or `name + ".md"` (then `.md`, whose extension counts).
+fn written_name(path: &Expr) -> Option<String> {
+    match &path.kind {
+        ExprKind::Str { value } => Some(value.rsplit('/').next().unwrap_or(value).to_string()),
+        ExprKind::Binary { right, .. } => written_name(right).map(|tail| if tail.starts_with('.') { format!("x{tail}") } else { tail }),
+        _ => None,
     }
 }

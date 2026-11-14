@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{HttpMethod, 
+use clarity_spec::code::{FilePlace, HttpMethod, 
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -408,12 +408,20 @@ impl<'a> Emitter<'a> {
                 }
                 out.push('\n');
             }
-            StmtKind::Write { text, store, path } => {
+            StmtKind::Write { text, place, path } => {
                 // Bytes are written as they are, text as UTF-8.
                 let write = if self.types.type_of(text) == TypeInfo::Bytes { "write_bytes" } else { "write_text" };
                 let path = self.text_ref(path);
                 let text = self.text_ref(text);
-                out.push_str(&format!("{pad}db.{write}({:?}, &{path}, &{text})?;\n", store.name));
+                match place {
+                    FilePlace::Store(store) => out.push_str(&format!("{pad}db.{write}({:?}, &{path}, &{text})?;\n", store.name)),
+                    // A folder that is no store: by its path, with the files it takes.
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = self.value(folder);
+                        out.push_str(&format!("{pad}db.{write}_in(&format!(\"folder:{{}}\", {at}), &{}, {hidden}, &{path}, &{text})?;\n", rust_patterns(&patterns)));
+                    }
+                }
             }
             StmtKind::For { var, list, body } => {
                 let source = match self.held(list) {
@@ -1159,7 +1167,7 @@ impl<'a> Emitter<'a> {
                 if returns == "String" { format!("clarity_runtime::i18n::text(&{called})") } else { called }
             }
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
-            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
             // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
             ExprKind::FormatOf { value, mapping } => {
@@ -1332,8 +1340,15 @@ impl<'a> Emitter<'a> {
 
     /// `files f in store where ... order by ...`: the files of a store,
     /// filtered and sorted in memory.
-    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
-        let mut list = format!("db.files({store:?})?.into_iter()");
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut list = match place {
+            FilePlace::Store(store) => format!("db.files({:?})?.into_iter()", store.name),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = self.value(folder);
+                format!("db.files_in(&format!(\"folder:{{}}\", {at}), &{}, {hidden})?.into_iter()", rust_patterns(&patterns))
+            }
+        };
         if let Some(filter) = filter {
             self.refs.push(HashSet::from([var.to_string()]));
             let cond = self.value(filter);
@@ -2371,4 +2386,9 @@ fn rust_pieces(pieces: &[crate::shape::Piece]) -> String {
         })
         .collect();
     format!("[{}].concat()", parts.join(", "))
+}
+
+/// A folder's extensions as the runtime takes them: `vec!["*.md".to_string()]`.
+fn rust_patterns(patterns: &[String]) -> String {
+    format!("vec![{}]", patterns.iter().map(|p| format!("{p:?}.to_string()")).collect::<Vec<_>>().join(", "))
 }

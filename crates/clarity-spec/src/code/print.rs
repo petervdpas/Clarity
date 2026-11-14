@@ -34,7 +34,7 @@ pub fn expr(e: &Expr) -> String {
             args.iter().map(expr).chain(named.iter().map(|n| format!("{}: {}", n.name.name, expr(&n.value)))).collect::<Vec<_>>().join(", ")
         ),
         ExprKind::Find { var, entity, filter, order } => query(&format!("find {} in {}", var.name, entity.name), filter.as_deref(), order),
-        ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
+        ExprKind::Files { var, place, filter, order } => query(&format!("files {} in {}", var.name, place_text(place)), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
         ExprKind::FormatOf { value, mapping: super::MappingUse::Inline { format, options } } => format!("{} of {}{}", format.name, expr(value), format_options(options)),
@@ -127,4 +127,12 @@ pub fn type_ref(ty: &super::TypeRef) -> String {
 /// A format's options as code writes them: ` at "data.orders"`.
 fn format_options(options: &[super::FormatOption]) -> String {
     options.iter().map(|o| format!(" {} {}", o.name.name, expr(&o.value))).collect()
+}
+
+/// A file store by its name, or `folder` and the text that holds the folder.
+pub fn place_text(place: &super::FilePlace) -> String {
+    match place {
+        super::FilePlace::Store(store) => store.name.clone(),
+        super::FilePlace::Folder(folder) => format!("folder {}", expr(folder)),
+    }
 }

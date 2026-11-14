@@ -106,3 +106,46 @@ fn renames_an_enum_in_a_windows_data() {
     let picker = files.iter().find(|f| f.path == "design/Picker.cxaml").expect("the window's file").text.clone();
     assert!(picker.contains("<Data name=\"chosen\" type=\"CustomerKind\" />"), "{picker}");
 }
+
+/// Code names an entity as a type too: what `find` and `new` make, the types
+/// of parameters, results, typed locals and command options, what `ask`
+/// asks for, and the fields of records. A rename reaches all of them, so the
+/// project checks clean after it.
+#[test]
+fn renames_an_entity_where_code_names_it_as_a_type() {
+    const REVIEWS: &str = "module reviews
+
+entity Review
+    notes: text
+
+record Row
+    review: ref Review
+    reviews: list<Review>
+
+function first(all: list<Review>) -> Review
+    let kept: list<Review> = all
+    return kept[1]
+
+action fresh() -> Review
+    effects db.write
+    let r = new Review
+    save r
+    return r
+
+command review count
+    let found = find r in Review
+    print count(found)
+";
+    let all = vec![("reviews.clarity".to_string(), REVIEWS.to_string())];
+    let project = load(&all);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let source = |path: &str| all.iter().find(|(p, _)| p == path).map(|(_, t)| t.clone());
+    let files = rename(&project, source, RenameKind::Entity, "Review", "Assessment").unwrap();
+    let text = &files.iter().find(|f| f.path == "reviews.clarity").unwrap().text;
+    assert!(!text.contains("Review"), "every Review is renamed:\n{text}");
+    for said in ["record Row\n    review: ref Assessment\n    reviews: list<Assessment>", "function first(all: list<Assessment>) -> Assessment", "let kept: list<Assessment> = all", "action fresh() -> Assessment", "let r = new Assessment", "find r in Assessment"] {
+        assert!(text.contains(said), "{said} in\n{text}");
+    }
+    let again = load(&[("reviews.clarity".to_string(), text.clone())]);
+    assert!(again.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", again.diagnostics);
+}

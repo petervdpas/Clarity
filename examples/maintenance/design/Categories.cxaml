@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="maintenance.Categories" title="@categoriesTitle" onopen="categoriesOpened">
+  <Content name="main" at="1,1" span="12">
+    <View name="CategoriesView" />
+  </Content>
+</Window>

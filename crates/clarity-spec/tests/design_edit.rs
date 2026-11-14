@@ -52,6 +52,7 @@ fn frame_edits(frame: &Frame, owner: u32, out: &mut Vec<Edit>) {
     if let Some(menu) = &frame.menu {
         out.push(Edit::Remove { item: menu.span.start });
         out.push(Edit::SetName { item: menu.span.start, name: "otherMenu".into() });
+        out.push(Edit::SetBarWidth { item: menu.span.start, width: Some(320) });
         out.push(Edit::AddFrameItem { parent: menu.span.start, item: FrameItem::Item, caption: None });
         out.push(Edit::AddFrameItem { parent: menu.span.start, item: FrameItem::Separator, caption: None });
         commands(&menu.items, out);
@@ -59,6 +60,7 @@ fn frame_edits(frame: &Frame, owner: u32, out: &mut Vec<Edit>) {
     if let Some(toolbar) = &frame.toolbar {
         out.push(Edit::Remove { item: toolbar.span.start });
         out.push(Edit::SetName { item: toolbar.span.start, name: "otherToolbar".into() });
+        out.push(Edit::SetBarWidth { item: toolbar.span.start, width: Some(400) });
         out.push(Edit::AddFrameItem { parent: toolbar.span.start, item: FrameItem::Button, caption: Some("Go".into()) });
         commands(&toolbar.items, out);
     }
@@ -204,6 +206,24 @@ fn every_edit_writes_a_file_that_reads_back_clean() {
         }
     }
     assert!(made > 5000 && refused > 100, "{made} made, {refused} refused");
+}
+
+/// A menu bar's and a toolbar's width are set and taken away; a width a bar
+/// cannot have is refused, and a part's menu has none.
+#[test]
+fn a_menu_bar_and_a_toolbar_take_a_width_and_lose_it() {
+    let markup = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Window class=\"m.Main\">\n  <Menu name=\"mainMenu\">\n    <Item caption=\"File\" name=\"fileItem\" />\n  </Menu>\n  <Toolbar name=\"mainToolbar\">\n    <Item kind=\"button\" caption=\"Go\" name=\"goButton\" />\n  </Toolbar>\n</Window>\n";
+    let page = read_page(markup, "").0.unwrap();
+    let menu = page.frame.menu.unwrap().span.start;
+    let wide = apply(None, markup, &Edit::SetBarWidth { item: menu, width: Some(320) }).unwrap();
+    assert!(wide.text.contains("<Menu name=\"mainMenu\" width=\"320\">"), "{}", wide.text);
+    let toolbar = read_page(&wide.text, "").0.unwrap().frame.toolbar.unwrap().span.start;
+    let both = apply(None, &wide.text, &Edit::SetBarWidth { item: toolbar, width: Some(400) }).unwrap();
+    assert!(both.text.contains("<Toolbar name=\"mainToolbar\" width=\"400\">"), "{}", both.text);
+    let page = read_page(&both.text, "").0.unwrap();
+    let back = apply(None, &both.text, &Edit::SetBarWidth { item: page.frame.menu.unwrap().span.start, width: None }).unwrap();
+    assert!(back.text.contains("<Menu name=\"mainMenu\">"), "{}", back.text);
+    assert!(apply(None, markup, &Edit::SetBarWidth { item: menu, width: Some(20) }).is_err(), "a menu bar is 100 to 1600 pixels wide");
 }
 
 /// A footer's status is set on the model; through the text it was never found.

@@ -60,6 +60,13 @@ void clarity_hold_setting(ClarityDb* db, const char* setting, const char* value)
 }
 
 bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
+    // A folder that is no store, by its path: just a folder.
+    if (strncmp(name, CLARITY_FOLDER_STORE, strlen(CLARITY_FOLDER_STORE)) == 0) {
+        const char* path = name + strlen(CLARITY_FOLDER_STORE);
+        if (!*path) return clarity_fail(CLARITY_STORAGE, "no folder was chosen");
+        *out = path;
+        return true;
+    }
     // The last one added under a name is the one in use.
     for (size_t i = db->store_count; i-- > 0;) {
         const ClarityStore* store = &db->stores[i];
@@ -91,19 +98,19 @@ typedef struct {
     size_t capacity;
 } Found;
 
-static bool walk(const char* store, const char* folder, const char* prefix, Found* out) {
+static bool walk(const char* store, const char* folder, const char* prefix, bool hidden, Found* out) {
     DIR* dir = opendir(folder);
     if (!dir) return clarity_fail(CLARITY_STORAGE, "cannot read %s", folder);
     struct dirent* entry;
     bool ok = true;
     while (ok && (entry = readdir(dir))) {
         const char* name = entry->d_name;
-        if (name[0] == '.') continue;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0 || (name[0] == '.' && !hidden)) continue;
         const char* full = clarity_format("%s/%s", folder, name);
         struct stat info;
         if (stat(full, &info) != 0) continue;
         if (S_ISDIR(info.st_mode)) {
-            ok = walk(store, full, clarity_format("%s%s/", prefix, name), out);
+            ok = walk(store, full, clarity_format("%s%s/", prefix, name), hidden, out);
         } else if (S_ISREG(info.st_mode)) {
             const char* dot = strrchr(name, '.');
             char* extension = clarity_copy(dot ? dot + 1 : "");
@@ -129,7 +136,7 @@ static int by_path(const void* a, const void* b) { return strcmp(((const Clarity
 bool clarity_files(ClarityDb* db, const char* store, ClarityFileList* out) {
     const char* folder = NULL;
     Found found = {0};
-    if (!clarity_store_folder(db, store, &folder) || !walk(store, folder, "", &found)) return false;
+    if (!clarity_store_folder(db, store, &folder) || !walk(store, folder, "", false, &found)) return false;
     if (found.count) qsort(found.items, found.count, sizeof *found.items, by_path);
     *out = (ClarityFileList){found.items, found.count};
     return true;
@@ -166,6 +173,57 @@ bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, Cla
     const char *folder = NULL, *file = NULL;
     if (!clarity_store_folder(db, store, &folder) || !clarity_in_store(folder, path, &file)) return false;
     return clarity_make_folders(clarity_parent(file)) && clarity_write_file(file, bytes);
+}
+
+bool clarity_folder_takes(const char* patterns, bool hidden, const char* name) {
+    if (name[0] == '.' && !hidden) return false;
+    const char* dot = strrchr(name, '.');
+    // `.env` has no extension, `.notes.md` has md.
+    const char* extension = dot && dot != name ? dot + 1 : "";
+    bool any = true;
+    for (const char* at = patterns ? patterns : ""; *at;) {
+        while (*at == ' ') ++at;
+        const char* end = at;
+        while (*end && *end != ' ') ++end;
+        size_t n = (size_t)(end - at);
+        if (n == 0) break;
+        any = false;
+        if (n == 3 && strncmp(at, "*.*", 3) == 0) return true;
+        if (n > 2 && at[0] == '*' && at[1] == '.' && strlen(extension) == n - 2) {
+            bool same = true;
+            for (size_t k = 0; k < n - 2; ++k)
+                if (tolower((unsigned char)extension[k]) != tolower((unsigned char)at[2 + k])) same = false;
+            if (same && *extension) return true;
+        }
+        at = end;
+    }
+    return any;
+}
+
+bool clarity_files_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, ClarityFileList* out) {
+    const char* root = NULL;
+    Found found = {0};
+    if (!clarity_store_folder(db, folder, &root) || !walk(folder, root, "", hidden, &found)) return false;
+    size_t kept = 0;
+    for (size_t i = 0; i < found.count; ++i)
+        if (clarity_folder_takes(patterns, hidden, found.items[i].name)) found.items[kept++] = found.items[i];
+    if (kept) qsort(found.items, kept, sizeof *found.items, by_path);
+    *out = (ClarityFileList){found.items, kept};
+    return true;
+}
+
+bool clarity_write_text_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, const char* path, const char* text) {
+    return clarity_write_bytes_in(db, folder, patterns, hidden, path, (ClarityBytes){(const uint8_t*)text, strlen(text)});
+}
+
+bool clarity_write_bytes_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, const char* path, ClarityBytes bytes) {
+    const char* slash = strrchr(path, '/');
+    const char* name = slash ? slash + 1 : path;
+    if (!clarity_folder_takes(patterns, hidden, name)) {
+        const char* holds = name[0] == '.' && !hidden ? "no hidden" : patterns;
+        return clarity_fail(CLARITY_INVALID, "the folder holds %s files, not '%s'", holds, path);
+    }
+    return clarity_write_bytes(db, folder, path, bytes);
 }
 
 bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityPicture** out) {

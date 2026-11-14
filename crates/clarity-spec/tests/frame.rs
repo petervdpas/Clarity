@@ -327,3 +327,28 @@ fn one_key_runs_one_command_where_it_is_active() {
         .collect();
     assert_eq!(found, ["key 'Ctrl+N' runs both saveButton and keepButton in window CustomerCard; give one of them another key"]);
 }
+
+/// The menu bar and the toolbar each take an optional width (`width 320` on
+/// the line, `width="320"` in the window's file); a menu bar with one leaves
+/// the rest of its row to the toolbar, so they stand next to each other.
+#[test]
+fn a_menu_and_a_toolbar_take_a_width() {
+    let app = APP.replace("    menu name mainMenu\n", "    menu name mainMenu width 320\n").replace("    toolbar name mainToolbar\n", "    toolbar name mainToolbar width 400\n");
+    let (file, diags) = parse(&app, "shop.clarity");
+    assert!(diags.is_empty(), "{diags:?}");
+    let frame = &file.apps[0].frame;
+    assert_eq!(frame.menu.as_ref().unwrap().width, Some(320));
+    assert_eq!(frame.toolbar.as_ref().unwrap().width, Some(400));
+    // The window's file says it, and reads back the same.
+    let files = clarity_spec::converted([("p.clarity", PAGES), ("shop.clarity", app.as_str())]);
+    let design = files.iter().find(|(p, _)| p.ends_with(".cxaml") && p.contains("Shop")).map(|(_, t)| t.clone()).unwrap();
+    assert!(design.contains("<Menu name=\"mainMenu\" width=\"320\">"), "{design}");
+    assert!(design.contains("<Toolbar name=\"mainToolbar\" width=\"400\">"), "{design}");
+    assert!(errors(&app).is_empty(), "{:?}", errors(&app));
+    // Without one, they stand one under the other as before.
+    let (plain, _) = parse(APP, "shop.clarity");
+    assert_eq!(plain.apps[0].frame.menu.as_ref().unwrap().width, None);
+    // A width a region cannot have is refused.
+    let narrow = APP.replace("    menu name mainMenu\n", "    menu name mainMenu width 20\n");
+    assert!(errors(&narrow).iter().any(|m| m.contains("a menu bar is 100 to 1600 pixels wide")), "{:?}", errors(&narrow));
+}

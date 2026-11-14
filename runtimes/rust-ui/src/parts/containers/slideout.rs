@@ -570,7 +570,8 @@ impl SlideoutFrame {
     fn new(slide: Rc<Slide>, grid: crate::element::GridPanel) -> SlideoutFrame {
         let mut node = Node::new();
         // In Tab order: its parts, then the pin, then the close button.
-        node.add(Box::new(grid));
+        // Its parts scroll in its own place when they go further down than it is high.
+        node.add(Box::new(super::scroll_view::ScrollView::new(Box::new(grid)).keeping_bar_room()));
         if slide.pinnable {
             node.add(Box::new(SlideoutButton { node: Node::new(), slide: slide.clone(), pins: true }));
         }
@@ -590,7 +591,12 @@ impl SlideoutFrame {
 
     /// Its parts' grid.
     pub fn grid(&self) -> &crate::element::GridPanel {
-        self.node.children()[0].as_any().downcast_ref().expect("a slide-out holds its parts on a grid")
+        super::container::grid_in(self.view()).expect("a slide-out holds its parts on a grid")
+    }
+
+    /// The place its parts scroll in.
+    pub fn view(&self) -> &super::scroll_view::ScrollView {
+        self.node.children()[0].as_any().downcast_ref().expect("a slide-out holds its parts in a place that scrolls")
     }
 
     /// Its pin (when it is pinnable) and close buttons, the pin first.
@@ -647,7 +653,8 @@ impl Element for SlideoutFrame {
                 right -= 4.0;
             }
         }
-        let inner = Rect::new(place.x + PADDING, place.y + HEADER_HEIGHT, (place.width - 2.0 * PADDING).max(0.0), (place.height - HEADER_HEIGHT - PADDING).max(0.0));
+        // Its parts a padding below the header, as on its other sides.
+        let inner = Rect::new(place.x + PADDING, place.y + HEADER_HEIGHT + PADDING, (place.width - 2.0 * PADDING).max(0.0), (place.height - HEADER_HEIGHT - 2.0 * PADDING).max(0.0));
         crate::element::arrange_safely(self.node.children_mut()[0].as_mut(), inner, cx);
     }
 

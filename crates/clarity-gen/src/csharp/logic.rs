@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{
+use clarity_spec::code::{FilePlace, 
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, HandlerDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -485,11 +485,19 @@ impl<'a> Emitter<'a> {
                 let value = self.value(value);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
             }
-            StmtKind::Write { text, store, path } => {
+            StmtKind::Write { text, place, path } => {
                 // Bytes are written as they are, text as UTF-8.
                 let write = if self.types.type_of(text) == TypeInfo::Bytes { "WriteBytes" } else { "WriteText" };
                 let (path, text) = (self.value(path), self.value(text));
-                out.push_str(&format!("{pad}{db}.{write}({}, {path}, {text});\n", string(&store.name)));
+                match place {
+                    FilePlace::Store(store) => out.push_str(&format!("{pad}{db}.{write}({}, {path}, {text});\n", string(&store.name))),
+                    // A folder that is no store: by its path, with the files it takes.
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = self.value(folder);
+                        out.push_str(&format!("{pad}{db}.{write}In(Db.FolderStore + {at}, {}, {hidden}, {path}, {text});\n", cs_patterns(&patterns)));
+                    }
+                }
             }
             StmtKind::If { branches, otherwise } => {
                 for (i, branch) in branches.iter().enumerate() {
@@ -1160,7 +1168,7 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
-            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
             ExprKind::ReadText { file } => {
                 let db = self.db;
                 format!("{db}.ReadText({})", self.value(file))
@@ -1401,8 +1409,15 @@ impl<'a> Emitter<'a> {
 
     /// `files f in store where ... order by ...`: the files of a store,
     /// filtered and sorted in memory, text by its ordinal order as on every stack.
-    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
-        let mut code = format!("{}.Files({})", self.db, string(store));
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut code = match place {
+            FilePlace::Store(store) => format!("{}.Files({})", self.db, string(&store.name)),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = self.value(folder);
+                format!("{}.FilesIn(Db.FolderStore + {at}, {}, {hidden})", self.db, cs_patterns(&patterns))
+            }
+        };
         let name = camel(var);
         if let Some(filter) = filter {
             let cond = self.value(filter);
@@ -1587,4 +1602,12 @@ fn read_after(rest: &[Stmt], name: &str) -> bool {
         }
     });
     read
+}
+
+/// A folder's extensions as the runtime takes them: `new string[] { "*.md" }`.
+fn cs_patterns(patterns: &[String]) -> String {
+    if patterns.is_empty() {
+        return "System.Array.Empty<string>()".to_string();
+    }
+    format!("new string[] {{ {} }}", patterns.iter().map(|p| string(p)).collect::<Vec<_>>().join(", "))
 }

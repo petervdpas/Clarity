@@ -733,8 +733,10 @@ fn fields_cs(project: &Project, name: &str) -> String {
             };
             // A color field says so, for the parts that show a swatch beside its value.
             let color = if matches!(field.ty, FieldType::Color) { ", Color: true" } else { "" };
+            // A folder field says so, for a table's cell that opens the folder picker.
+            let folder = if matches!(field.ty, FieldType::Folder) { ", Folder: true" } else { "" };
             lines.push_str(&format!(
-                "        [{key}] = new({label}, {format}, Required: {required}, Min: {min}, Max: {max}, Refers: {refers}, Parent: {parent}{color}),\n",
+                "        [{key}] = new({label}, {format}, Required: {required}, Min: {min}, Max: {max}, Refers: {refers}, Parent: {parent}{color}{folder}),\n",
                 key = string(&format!("{}.{}", entity.name.name, field.name.name)),
                 label = string(&field.label),
                 format = field_format(field).unwrap_or_else(|| "null".to_string()),

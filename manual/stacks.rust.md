@@ -10,7 +10,7 @@ Name the stack in the project file, or pick it on the Project tab:
 stack rust desktop
 ```
 
-Rust names no UI: it draws its windows with Clarity.UI, as C# does. Clarity.UI is Clarity's own UI framework: it draws the windows itself with Skia in the system's own window, and every stack gets its own version of it (see [C# with Clarity.UI](stacks.csharp.md)). A desktop program is nothing web: there is no webview in it. The webview desktop Rust once had (Tauri, `stack rust webview desktop`) is gone; a project file that still says so is refused with the line to write instead.
+Rust names no UI: it draws its windows with Clarity.UI, as C# does. Clarity.UI is Clarity's own UI framework: it draws the windows itself with Skia in the system's own window. It is one library, written in Rust, for every language: a Rust program uses it directly as the crate `clarity-ui`, and Go, C, C++ and C# programs reach the same library through its C interface (see [C# with Clarity.UI](stacks.csharp.md)). A desktop program is nothing web: there is no webview in it. The webview desktop Rust once had (Tauri, `stack rust webview desktop`) is gone; a project file that still says so is refused with the line to write instead.
 
 The web target serves the same windows to a browser:
 
@@ -109,4 +109,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-Clarity.UI in Rust follows Clarity.UI in C# ([C# with Clarity.UI](stacks.csharp.md)) part by part, and every language's web program serves the same Clarity.UI in the browser. The shared cases in `conformance/` say what each part must do, and every renderer runs them.
+A Rust program draws with the same Clarity.UI as every other language ([C# with Clarity.UI](stacks.csharp.md)), and every language's web program serves the same Clarity.UI in the browser. The shared cases in `conformance/` say what each part must do, and every renderer runs them.

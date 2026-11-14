@@ -18,7 +18,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::check::ValueItem;
-use clarity_spec::code::{HttpMethod, 
+use clarity_spec::code::{FilePlace, HttpMethod, 
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp, path_text,
     template,
 };
@@ -846,8 +846,16 @@ impl<'a> Emitter<'a> {
 
     /// `files f in store where ... order by ...`: the files of a store,
     /// kept by a loop of their own and sorted by the runtime.
-    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey], pre: &mut String) -> String {
-        let mut list = self.lift("ClarityFileList", &format!("clarity_files(db, {}, {{out}})", string(store)), pre);
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey], pre: &mut String) -> String {
+        let listed = match place {
+            FilePlace::Store(store) => format!("clarity_files(db, {}, {{out}})", string(&store.name)),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = bare(self.value(folder, pre));
+                format!("clarity_files_in(db, clarity_format(\"%s%s\", CLARITY_FOLDER_STORE, {at}), {}, {hidden}, {{out}})", string(&patterns.join(" ")))
+            }
+        };
+        let mut list = self.lift("ClarityFileList", &listed, pre);
         if let Some(filter) = filter {
             let kept = self.temp();
             self.loops += 1;
@@ -1057,13 +1065,28 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
-            StmtKind::Write { text, store, path } => {
+            StmtKind::Write { text, place, path } => {
                 // Bytes are written as they are, text as UTF-8.
                 let write = if self.types.type_of(text) == TypeInfo::Bytes { "clarity_write_bytes" } else { "clarity_write_text" };
                 let path = bare(self.value(path, &mut pre));
                 let text = bare(self.value(text, &mut pre));
-                out.push_str(&pre);
-                let _ = writeln!(out, "if (!{write}(db, {}, {path}, {text})) return false;", string(&store.name));
+                match place {
+                    FilePlace::Store(store) => {
+                        out.push_str(&pre);
+                        let _ = writeln!(out, "if (!{write}(db, {}, {path}, {text})) return false;", string(&store.name));
+                    }
+                    // A folder that is no store: by its path, with the files it takes.
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = bare(self.value(folder, &mut pre));
+                        out.push_str(&pre);
+                        let _ = writeln!(
+                            out,
+                            "if (!{write}_in(db, clarity_format(\"%s%s\", CLARITY_FOLDER_STORE, {at}), {}, {hidden}, {path}, {text})) return false;",
+                            string(&patterns.join(" "))
+                        );
+                    }
+                }
             }
             StmtKind::For { var, list, body } => {
                 let list_expr = list;
@@ -1920,6 +1943,8 @@ impl<'a> Emitter<'a> {
                     format!("{}_list_of({}, ({entity}[]){{{}}})", prefix(entity), records.len(), records.join(", "))
                 }
             }
+            // An empty list of files.
+            ExprKind::ListOf { items } if ty == TypeInfo::Files && items.is_empty() => "(ClarityFileList){0}".to_string(),
             ExprKind::ListOf { items } => {
                 let TypeInfo::Values(item) = ty else {
                     self.errors.push("only a list of plain values is written out in C yet".into());
@@ -2014,7 +2039,7 @@ impl<'a> Emitter<'a> {
                 let query = self.find(&var.name, &entity.name, filter.as_deref(), order, pre);
                 self.lift(&list_type(&entity.name), &format!("{}_find(db, {query}, {{out}})", prefix(&entity.name)), pre)
             }
-            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order, pre),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order, pre),
             ExprKind::ReadText { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift("const char*", &format!("clarity_read_text(db, {file}, {{out}})"), pre)

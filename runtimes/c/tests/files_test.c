@@ -159,3 +159,43 @@ void bytes_are_read_and_written_as_they_are(void) {
     clarity_db_close(db);
     remove_tree(root);
 }
+
+/// The extensions of a case, written apart by spaces as generated code passes them.
+static const char* patterns_of(const cJSON* c) {
+    const char* out = "";
+    const cJSON* p;
+    cJSON_ArrayForEach(p, cJSON_GetObjectItem(c, "patterns")) out = *out ? clarity_format("%s %s", out, p->valuestring) : clarity_copy(p->valuestring);
+    return out;
+}
+
+// A folder that is no store, by its path after "folder:": it lists the
+// files its extensions take, hidden ones only when it shows them, and
+// writes no other (conformance/files.json, folders and folderWrites).
+void a_folder_lists_and_writes_the_files_of_its_extensions(void) {
+    const char* root = planted();
+    cJSON* cases = conformance("files.json");
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    const char* place = clarity_format("%s%s", CLARITY_FOLDER_STORE, root);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "folders")) {
+        ClarityFileList files;
+        REQUIRE_OK(clarity_files_in(db, place, patterns_of(c), cJSON_IsTrue(cJSON_GetObjectItem(c, "hidden")), &files));
+        cJSON* listed = cJSON_CreateArray();
+        for (size_t i = 0; i < files.count; ++i) cJSON_AddItemToArray(listed, cJSON_CreateString(files.items[i].path));
+        CHECK_JSON(listed, cJSON_PrintUnformatted(cJSON_GetObjectItem(c, "listed")));
+    }
+    ClarityFileList texts;
+    REQUIRE_OK(clarity_files_in(db, place, "*.txt", false, &texts));
+    const char* text;
+    CHECK_OK(clarity_read_text(db, &texts.items[0], &text));
+    CHECK_TEXT(text, "Hello\nworld\n");
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "folderWrites")) {
+        bool written = clarity_write_text_in(db, place, patterns_of(c), cJSON_IsTrue(cJSON_GetObjectItem(c, "hidden")), cJSON_GetObjectItem(c, "path")->valuestring, "x");
+        CHECK(written == cJSON_IsTrue(cJSON_GetObjectItem(c, "written")));
+    }
+    ClarityFileList none;
+    CHECK_FAILS(CLARITY_STORAGE, clarity_files_in(db, CLARITY_FOLDER_STORE, "", false, &none));
+    clarity_db_close(db);
+    remove_tree(root);
+}

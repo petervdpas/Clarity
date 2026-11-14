@@ -616,3 +616,31 @@ fn the_maintenance_window_fits_its_rows_and_its_memo_ends_inside() {
     assert_eq!(scroll, 0.0, "15 rows fit");
     assert!(memo.bottom() <= 756.0 - 12.0 + 0.5, "the memo ends at {} above the window's padding", memo.bottom());
 }
+
+/// Its first row stands a padding below its header, and parts that go further
+/// down than it is high scroll in its own place with the wheel, so nothing is
+/// cut off in a small window.
+#[test]
+fn its_parts_start_below_the_header_and_scroll_when_they_go_further_down() {
+    let tall = WINDOW.replace(r#"<Textbox name="noteBox" at="1,1" span="6" />"#, r#"<Textbox name="noteBox" at="1,1" span="6" /><Button name="saveButton" at="1,40" span="6" caption="Save" />"#).replace(r#"rows="4""#, r#"rows="40""#);
+    let (mut screen, _, _) = opened(&tall);
+    let header = clarity_ui::parts::containers::slideout::HEADER_HEIGHT;
+    let top = frame(&screen).node().bounds.y;
+    let note = placed(&screen, "noteBox");
+    assert!(note.y >= top + header + 8.0, "the first row stands a padding below the header: {} against {}", note.y, top + header);
+    let view = frame(&screen).view();
+    assert!(view.max_scroll_y() > 0.0, "the parts go further down than it is high");
+    let save = placed(&screen, "saveButton");
+    assert!(save.y > HEIGHT, "the last row lies below, until it scrolls");
+    let at = frame(&screen).node().bounds;
+    screen.wheel(at.x + 40.0, at.y + 200.0, 0.0, 100_000.0, Modifiers::NONE);
+    draw(&mut screen);
+    let save = placed(&screen, "saveButton");
+    assert!(save.bottom() <= frame(&screen).node().bounds.bottom(), "scrolled down, the last row shows: {save:?}");
+}
+
+/// Where a part of the slide-out lies, by its name.
+fn placed(screen: &Screen, name: &str) -> Rect {
+    let top = screen.overlays().iter().find(|o| o.content.as_any().is::<SlideoutFrame>()).map(|o| o.content.as_ref()).expect("the slide-out lies over the window");
+    clarity_ui::element::in_order(top).into_iter().find(|e| part_name(*e) == Some(name)).map(|e| e.node().bounds).expect("the part is there")
+}

@@ -159,6 +159,12 @@ striped: boolean,
  */
 foldButtons: boolean, 
 /**
+ * `reading width`: a markdown part, or a memo's Markdown preview, keeps
+ * its text in a column of a reading width from the left, as a book page
+ * reads; without it the text takes the whole width.
+ */
+readingWidth: boolean, 
+/**
  * `order by field [desc]`: the order a table's rows show in first.
  */
 order: TableOrder | null, 
@@ -334,6 +340,19 @@ parentKey: string | null, show: Array<string>,
  * card's title and the others lines below it.
  */
 cards: boolean, 
+/**
+ * `colored by paint`: each card takes the colour of this colour field of
+ * its record; none: the cards keep the theme's `card` look.
+ */
+cardColor: string | null, 
+/**
+ * `band`: the colour is a small band at the start of the card, not the whole card.
+ */
+cardBand: boolean, 
+/**
+ * `chip category`: the colour is a chip around this shown line of the card, not the whole card.
+ */
+cardChip: string | null, 
 /**
  * `frame`: a list, table or tree shows its own border inside a
  * container (a tab page, a pane, a panel), which otherwise frames it alone.

@@ -54,6 +54,8 @@ pub struct FieldFacts {
     pub refers: Option<String>,
     pub parent: Option<String>,
     pub color: bool,
+    /// It holds a folder's path (`folder`): a table's cell of it has a button that opens the folder picker.
+    pub folder: bool,
     /// The help it declares (`help @customerVatNumberHelp`), a key or the text itself; none for none.
     pub help: Option<String>,
 }

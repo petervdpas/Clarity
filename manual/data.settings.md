@@ -136,6 +136,6 @@ And a folder part in a dialog shows it, in `design/Preferences.cxaml`:
 - It is read at every use: a folder chosen while the application runs is where the next file goes, at once. Files already in the old folder stay there: moving them is the person's choice.
 - The folder part shows it: a text field with the path and a button, in Clarity's word `chooseFolder`, that opens the system's folder picker. In a browser there is no picker, so the path is typed. Only a folder part shows a folder setting.
 - In code it is text: `settings.photosFolder = "/mnt/photos"`.
-- Only a setting is a folder (an entity's field that is one is an error), and only a folder setting can be a store's `setting:name`: anything else is an error, "file store photos keeps its files in setting 'photosFolder', which is no folder setting; add it to settings as photosFolder: folder".
+- A record can keep a folder too, in a `folder` field; see [Files in code](data.pictures-files.md#folders-that-are-no-store). Only a folder setting can be a store's `setting:name`: anything else is an error, "file store photos keeps its files in setting 'photosFolder', which is no folder setting; add it to settings as photosFolder: folder".
 
 See also [Pictures and files](data.pictures-files.md), [Data sources](data.sources.md), [Languages](languages.md) and [Themes](themes.md).

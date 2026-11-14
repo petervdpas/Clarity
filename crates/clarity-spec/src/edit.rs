@@ -197,6 +197,9 @@ pub enum Edit {
     UpdateSidebar { item: u32, props: crate::model::SidebarProps },
     /// Rewrite a ribbon's line: its name and whether the person folds it to its tabs.
     UpdateRibbon { item: u32, name: Option<String>, collapsible: bool, collapsed: bool },
+    /// Give the menu bar or toolbar at `item` a width in pixels, or none
+    /// (the whole width): a menu bar with one shares its row with the toolbar.
+    SetBarWidth { item: u32, width: Option<u32> },
     /// Give the menu, toolbar, or ribbon tab or group at `item` the name `name`.
     SetName { item: u32, name: String },
     /// Write every sidebar of the file in the current way: old ones, given in

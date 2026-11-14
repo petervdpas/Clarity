@@ -114,3 +114,33 @@ fn bytes_are_read_and_written_as_they_are() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A folder that is no store, by its path after `folder:`: it lists the
+/// files its extensions take, hidden ones only when it shows them, and
+/// writes no other (conformance/files.json, folders and folderWrites).
+#[test]
+fn a_folder_lists_and_writes_the_files_of_its_patterns() {
+    let root = scratch("folder");
+    plant(&root);
+    let db = Db::memory().unwrap();
+    let place = format!("folder:{}", root.display());
+    let strings = |v: &Value| v.as_array().unwrap().iter().map(|p| p.as_str().unwrap().to_string()).collect::<Vec<String>>();
+    for case in cases()["folders"].as_array().unwrap() {
+        let patterns = strings(&case["patterns"]);
+        let hidden = case["hidden"].as_bool().unwrap();
+        let listed: Vec<String> = db.files_in(&place, &patterns, hidden).unwrap().into_iter().map(|f| f.path).collect();
+        assert_eq!(listed, strings(&case["listed"]), "{patterns:?} {hidden}");
+    }
+    // A file found there reads as a store's does.
+    let notes = db.files_in(&place, &["*.txt".to_string()], false).unwrap().remove(0);
+    assert_eq!(db.read_text(&notes).unwrap(), "Hello\nworld\n");
+    for case in cases()["folderWrites"].as_array().unwrap() {
+        let patterns = strings(&case["patterns"]);
+        let path = case["path"].as_str().unwrap();
+        let written = db.write_text_in(&place, &patterns, case["hidden"].as_bool().unwrap(), path, "x").is_ok();
+        assert_eq!(written, case["written"].as_bool().unwrap(), "{patterns:?} {path}");
+        assert_eq!(root.join(path).exists(), written || path == "README", "{path}");
+    }
+    assert!(db.files_in("folder:", &[], false).is_err(), "no folder chosen");
+    std::fs::remove_dir_all(root).unwrap();
+}

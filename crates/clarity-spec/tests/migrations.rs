@@ -163,6 +163,7 @@ fn renames_are_proposed_and_decided() {
             entity: Some("Customer".into()),
             from: "vatNumber".into(),
             to: "vat".into(),
+            value: false,
         }]
     );
     let taken = pending(&project, &proposed);
@@ -183,6 +184,7 @@ fn an_entity_rename_is_proposed_when_its_fields_stay() {
             entity: None,
             from: "Order".into(),
             to: "SalesOrder".into(),
+            value: false,
         }),
         "{proposed:#?}"
     );
@@ -238,6 +240,36 @@ fn an_integer_that_becomes_a_duration_is_a_rename() {
     let now = "module music\n\nentity Track\n    title: text(80)\n    length: duration\n";
     let project = load_with_migrations([("music.clarity", now)], [("0001.clarity", first)]);
     let proposed = migrate::proposed_renames(&project, "main");
-    assert_eq!(proposed, [Rename { entity: Some("Track".into()), from: "seconds".into(), to: "length".into() }]);
+    assert_eq!(proposed, [Rename { value: false, entity: Some("Track".into()), from: "seconds".into(), to: "length".into() }]);
     assert_eq!(pending(&project, &proposed), ["rename field Track.seconds to length", "change field Track.length: duration"]);
+}
+
+/// A value of an enum renamed: the step says so, reads back as written, and
+/// a column's default of that value takes the new name.
+#[test]
+fn a_renamed_value_is_a_step() {
+    let second = "migration \"Kinds\"
+    rename value Kind.Private to Personal
+";
+    let source = SHOP.replace("    Private\n", "    Personal\n").replace("default Private", "default Personal");
+    let project = load_with_migrations([("shop.clarity", source.as_str())], [("0001.clarity", FIRST), ("0002.clarity", second)]);
+    assert!(messages(&project, Severity::Error).is_empty(), "{:#?}", project.diagnostics);
+    let schema = migrate::schema(&project, "main");
+    let kind = schema.table("Customer").unwrap().column("kind").unwrap();
+    assert_eq!(kind.default, Some(clarity_spec::model::Literal::Ident("Personal".into())));
+    let op = migrate::Op::RenameValue { enumeration: "Kind".into(), from: "Private".into(), to: "Personal".into() };
+    assert_eq!(migrate::op_text(&op), "rename value Kind.Private to Personal");
+}
+
+/// A value renamed by the developer goes into the next step, so the records
+/// that keep it follow; an enum no table stores needs none.
+#[test]
+fn a_value_renamed_by_the_developer_is_pending() {
+    let source = SHOP.replace("    Private\n", "    Personal\n").replace("default Private", "default Personal");
+    let project = load_with_migrations([("shop.clarity", source.as_str())], [("0001.clarity", FIRST)]);
+    let renames = [Rename::value("Kind", "Private", "Personal")];
+    let found = pending(&project, &renames);
+    assert!(found.contains(&"rename value Kind.Private to Personal".to_string()), "{found:#?}");
+    let unstored = [Rename::value("Unused", "A", "B")];
+    assert!(!pending(&project, &unstored).iter().any(|op| op.starts_with("rename value")));
 }

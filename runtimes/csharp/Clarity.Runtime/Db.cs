@@ -124,6 +124,12 @@ public sealed partial class Db : IDisposable
 
     string StoreFolder(string name)
     {
+        // A folder that is no store, by its path: just a folder.
+        if (name.StartsWith(FolderStore, StringComparison.Ordinal))
+        {
+            var path = name[FolderStore.Length..];
+            return path.Length > 0 ? path : throw new StorageException("no folder was chosen");
+        }
         if (storeSettings.TryGetValue(name, out var s))
         {
             var file = KeptSettings.File(s.Program) ?? throw new StorageException("this system names no folder for application settings");

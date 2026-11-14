@@ -582,9 +582,7 @@ fn remove_data(tools: &mut ProjectTools, input: &Value) -> Result<String, String
     let (dir, at) = page_of(tools, input)?;
     let name = required(input, "name")?;
     let item = places::page_data(&at.page, &name)?.span.start;
-    make(tools, &dir, &at.file, &Edit::Remove { item }, &format!("Removed data {name} from {}", at.page.name.name)).map_err(|err| {
-        if err.starts_with(&format!("unknown name '{name}'")) { format!("the code uses {name}, so it stays until that code changes: {err}") } else { err }
-    })
+    make(tools, &dir, &at.file, &Edit::Remove { item }, &format!("Removed data {name} from {}", at.page.name.name))
 }
 
 fn add_tell(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
@@ -685,6 +683,30 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    /// An edit is refused when it breaks what it edits (a part over another
+    /// on the same window); what it leaves broken elsewhere, as code naming a
+    /// part that is gone, is made and reported, so a rework can go a step at
+    /// a time while the project has errors.
+    #[test]
+    fn a_removal_that_leaves_code_behind_is_made_and_reported() {
+        let (root, dir, mut tools) = project("leaves");
+        assert!(!tools.call("add_part", &json!({"page": "MainView", "kind": "textbox", "name": "nameBox", "col": 1, "row": 1, "width": 4})).is_error);
+        assert!(!tools.call("add_part", &json!({"page": "MainView", "kind": "button", "name": "hideButton", "col": 1, "row": 3, "width": 3, "caption": "Hide"})).is_error);
+        assert!(!tools.call("wire_event", &json!({"window": "MainView", "part": "hideButton", "event": "click", "handler": "hideClicked"})).is_error);
+        let code = tools.call("set_handler_code", &json!({"window": "MainView", "handler": "hideClicked", "code": "nameBox.visible = false"}));
+        assert!(!code.is_error && code.text.contains("No problems"), "{}", code.text);
+
+        let removed = tools.call("remove_part", &json!({"page": "MainView", "part": "nameBox"}));
+        assert!(!removed.is_error, "{}", removed.text);
+        assert!(removed.text.contains("unknown name 'nameBox'"), "the code it left behind is reported: {}", removed.text);
+        assert!(!view(&dir, "MainView").contains("nameBox"), "{}", view(&dir, "MainView"));
+
+        // What the edit itself breaks is still refused: a part over another.
+        let over = tools.call("add_part", &json!({"page": "MainView", "kind": "textbox", "name": "overBox", "col": 1, "row": 3, "width": 3}));
+        assert!(over.is_error, "{}", over.text);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn unknown_names_kinds_and_properties_are_refused_with_what_there_is() {
         let (root, dir, mut tools) = project("unknown");
@@ -772,13 +794,14 @@ mod tests {
         let removed = tools.call("remove_data", &json!({"page": "Main", "name": "reviewed"}));
         assert!(!removed.is_error, "{}", removed.text);
         assert!(!view(&dir, "Main").contains("name=\"reviewed\""), "{}", view(&dir, "Main"));
-        // Data the code still uses stays, and the answer says where the code uses it.
+        // Data the code still uses goes too, and the answer reports the code it left behind.
         let noted = tools.call("add_data", &json!({"page": "MainView", "name": "memo", "entity": "text"}));
         assert!(!noted.is_error, "{}", noted.text);
         let module = std::fs::read_to_string(dir.join("todo.clarity")).unwrap();
         std::fs::write(dir.join("todo.clarity"), format!("{module}\ncode MainView\n    handler memoShown\n        memo = \"x\"\n")).unwrap();
         let used = tools.call("remove_data", &json!({"page": "MainView", "name": "memo"}));
-        assert!(used.is_error && used.text.contains("the code uses memo") && used.text.contains("todo.clarity:"), "{}", used.text);
+        assert!(!used.is_error && used.text.contains("unknown name 'memo'") && used.text.contains("todo.clarity:"), "{}", used.text);
+        assert!(!view(&dir, "MainView").contains("name=\"memo\""), "{}", view(&dir, "MainView"));
 
         let placed = tools.call("place_field", &json!({"page": "MainView", "field": "task.title", "col": 1, "row": 1}));
         assert!(!placed.is_error, "{}", placed.text);

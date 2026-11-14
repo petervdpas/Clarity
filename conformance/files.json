@@ -1,5 +1,5 @@
 {
-  "about": "The files of a file store, alike in every runtime. Listing a store gives every file in it and in its folders, leaving out files and folders whose name starts with a dot, sorted by path (byte order), with '/' between folders whatever the system writes. A file has its path inside the store, its name, its extension in lower case without the dot (empty without one), its size in bytes and when it was last changed (UTC, to the second). Text is read and written as UTF-8. Writing takes a path inside the store, making its folders; a path that would leave the store is refused (refused). Bytes are read and written as they are, whatever they hold (bytes: written from base64, read back the same, with their size).",
+  "about": "The files of a file store, alike in every runtime. Listing a store gives every file in it and in its folders, leaving out files and folders whose name starts with a dot, sorted by path (byte order), with '/' between folders whatever the system writes. A file has its path inside the store, its name, its extension in lower case without the dot (empty without one), its size in bytes and when it was last changed (UTC, to the second). Text is read and written as UTF-8. Writing takes a path inside the store, making its folders; a path that would leave the store is refused (refused). Bytes are read and written as they are, whatever they hold (bytes: written from base64, read back the same, with their size). A folder that is no store (a folder field) is reached the same way through the store 'folder:' and its path; its extensions ('*.md', ignoring case, or '*.*' alone for any file; none: any file) and whether it shows hidden files and folders (hidden: a name starting with a dot) say which files it lists (folders: extensions, hidden, and the paths listed, from the same tree) and which it writes (folderWrites: extensions, hidden, a path, and whether it is written).",
   "tree": [
     {
       "path": "notes.txt",
@@ -74,6 +74,138 @@
       "path": "blobs/raw.bin",
       "base64": "AP8BAgM=",
       "size": 5
+    }
+  ],
+  "folders": [
+    {
+      "patterns": [],
+      "hidden": false,
+      "listed": [
+        "2024/Blue Train.JPG",
+        "2024/live/set.png",
+        "README",
+        "notes.txt"
+      ]
+    },
+    {
+      "patterns": [
+        "*.txt"
+      ],
+      "hidden": false,
+      "listed": [
+        "notes.txt"
+      ]
+    },
+    {
+      "patterns": [
+        "*.jpg",
+        "*.png"
+      ],
+      "hidden": false,
+      "listed": [
+        "2024/Blue Train.JPG",
+        "2024/live/set.png"
+      ]
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": false,
+      "listed": [
+        "2024/Blue Train.JPG",
+        "2024/live/set.png",
+        "README",
+        "notes.txt"
+      ]
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": true,
+      "listed": [
+        ".hidden",
+        "2024/.thumbs/a.jpg",
+        "2024/Blue Train.JPG",
+        "2024/live/set.png",
+        "README",
+        "notes.txt"
+      ]
+    },
+    {
+      "patterns": [
+        "*.jpg"
+      ],
+      "hidden": true,
+      "listed": [
+        "2024/.thumbs/a.jpg",
+        "2024/Blue Train.JPG"
+      ]
+    }
+  ],
+  "folderWrites": [
+    {
+      "patterns": [
+        "*.md"
+      ],
+      "hidden": false,
+      "path": "notes/a.md",
+      "written": true
+    },
+    {
+      "patterns": [
+        "*.md"
+      ],
+      "hidden": false,
+      "path": "notes/A.MD",
+      "written": true
+    },
+    {
+      "patterns": [
+        "*.md"
+      ],
+      "hidden": false,
+      "path": "a.csv",
+      "written": false
+    },
+    {
+      "patterns": [
+        "*.md"
+      ],
+      "hidden": false,
+      "path": "README",
+      "written": false
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": false,
+      "path": "README",
+      "written": true
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": false,
+      "path": ".env",
+      "written": false
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": true,
+      "path": ".env",
+      "written": true
+    },
+    {
+      "patterns": [],
+      "hidden": false,
+      "path": "data/x.bin",
+      "written": true
     }
   ]
 }

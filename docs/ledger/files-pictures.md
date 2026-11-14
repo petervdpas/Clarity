@@ -24,6 +24,7 @@ Progress: 90%
 - The folder picker on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:65; folder settings :64).
 - The file part runs no change handlers on open and save a copy: by design (`runtimes/rust-ui/src/parts/inputs/file.rs:1-9`).
 - The folder part has no picker in a browser; the path is typed (`parts/inputs/folder.rs:8`).
+- Folders that are no store: generated code for Go, C, C++ and C# is checked as text only (`crates/clarity-gen/tests/files.rs`), not yet built in an example; Rust is built through examples/maintenance. Open question: should the folder part and Clarity's file browser show a folder's files by its extensions? Open question: should a `filestore` line take `extensions` and `hidden` too?
 - A `video` field kept in a file store: NOT BUILT; see [video-camera](video-camera.md).
 - File stores on a server (`filestore shared sftp "sftp://..."`): NOT BUILT, noted only (APP-CAPABILITIES-PLAN.md step 3 "Later on the same line").
 - Encrypted file stores: NOT BUILT; see [encrypted-storage](encrypted-storage.md).
@@ -35,10 +36,12 @@ Progress: 90%
 ## Decisions
 - 2026-10-18: `image` kept in the database or, with `store name`, as a file in a file store named by the SHA-256 of its bytes; files in a store are never deleted (X2).
 - 2026-10-18: reading records never carries pictures; the screen fetches each on its own (X2).
-- 2026-10-18: code reaches files only in the project's file stores, written like `find`; a path leaving the store is refused (X2).
+- 2026-10-18: code reaches files only in the project's file stores, written like `find`; a path leaving the store is refused (X2). No reason was recorded; lifted 2026-11-14 for folders that are no store (below).
 - 2026-10-29: copying a picture or file between records works between the database and a store; a file of a store stays linked only in the same store (X2).
 - 2026-10-29: a store's folder chosen while the program runs is a setting of type `folder`, not a click target (X2); see [settings-secrets](settings-secrets.md).
 - 2026-11-12: a file store reads its folder setting as the running handler holds it; see [settings-secrets](settings-secrets.md).
+- 2026-11-14: an empty list of files is written as any empty list (`let found: list<file> = []`), on every stack (`crates/clarity-gen/tests/files.rs`). A table edits a folder cell: the path typed, and a button in the cell opens the folder picker (`CellKind::Folder`, `runtimes/rust-ui/tests/data/table_folder.rs`); every stack's field facts say `folder`.
+- 2026-11-14: a folder that is no store is just a folder code reads and writes: `files f in folder category.folder`, `write t to folder category.folder "a.md"`, reaching the runtime as the store `folder:` and its path. A `folder` field may be in any entity now (it was settings only). A folder field says its files with `extensions "*.md *.csv"` (`"*.*"` alone: any file) and whether hidden files count with `hidden`; code lists only those and writes no other (`crates/clarity-spec/src/files.rs`, conformance `folders`, `folderWrites`). The user's words on why stores exist: "That feature is designed to have one SPECIAL place to look for files in the app so a USER doesnt make MISTAKES. That was the only reason. calculated from the APPs working directory!!!", and "there is one other thing why you made the store a thing, and that is file types and file-extentions! a folder(filebrowser) does need a way to know which extentions is looked for, or are allowed to write!". On folders: "if a folder isnt marked as a store, it's just a folder where an app can read and right". On `*.*`: "if that is set, you cannot add other extentions"; hidden: "I rather have the hidden as a boolean option added". `filestore` stays as it is ("keep it filestore").
 
 ## Was
 - DESIGN roadmap X2 ("Pictures in records", "File access in code", "Copying a picture or a file", "Choosing a store's folder")

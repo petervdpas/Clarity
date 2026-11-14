@@ -51,9 +51,9 @@ pub const KEYWORDS: &[&str] = &[
     "module", "use", "source", "enum", "entity", "settings", "page", "app", "theme", "code", "function", "action", "engine", "handler", "project",
     "stack", "output", "datasource", "filestore", "language", "currency", "auth", "external", "readonly", "translation", "migration", "port", "keys", "editable", "ui",
     "baseline", "title", "main", "splash", "version", "data", "size", "grid", "columns", "label", "help", "column", "table", "key", "default", "format",
-    "pattern", "min", "max", "required", "unique", "owned", "computed", "search", "cascade", "store", "from", "uses", "says", "state", "per", "window",
+    "pattern", "min", "max", "required", "unique", "owned", "computed", "search", "cascade", "store", "extensions", "hidden", "from", "uses", "says", "state", "per", "window",
     "keep", "limit", "seconds", "MB", "open", "mode", "color", "font", "radius", "padding", "border", "shadow", "part", "style",
-    "background", "weight", "align", "dark", "light", "system", "x", "units", "add", "remove", "rename", "change", "map", "field",
+    "background", "weight", "align", "dark", "light", "system", "x", "units", "add", "remove", "rename", "change", "map", "field", "value",
     // Code.
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",

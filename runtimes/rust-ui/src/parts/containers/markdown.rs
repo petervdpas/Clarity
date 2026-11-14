@@ -1,8 +1,8 @@
 //! The markdown part: Markdown read into blocks the same way on every stack
 //! (`blocks`, conformance/markdown.json), shown as a page: headings by their
 //! level in the theme's heading font, paragraphs, list items, quotes set in
-//! with a bar, centred scene breaks and code, in a column of a reading width
-//! from its left with room around it, scrolling when longer than its place. Its text is a Markdown file of the application's resources
+//! with a bar, centred scene breaks and code, in a column as wide as the part
+//! (a reading width with `readingWidth`) from its left with room around it, scrolling when longer than its place. Its text is a Markdown file of the application's resources
 //! (its `source`, by name, as the host gives the file), the text a key gives
 //! in the language shown (its `caption`), or the text it binds. A link opens
 //! through the host, in the person's browser or mail program.
@@ -39,7 +39,7 @@ const GAP: f64 = 0.6;
 /// The room around the page.
 pub const PAD: f64 = 12.0;
 
-/// The widest the column of text gets, in the text's size: a reading width.
+/// The widest the column of text gets with `readingWidth`, in the text's size.
 const READING: f64 = 38.0;
 
 /// How far a quote is set in per depth, in the text's size.
@@ -238,17 +238,18 @@ impl Flow<'_> {
 }
 
 impl MarkdownLayout {
-    /// The blocks of `markdown` laid out to `width`, in the look's text size and fonts.
-    pub fn of(markdown: &str, width: f64, fonts: &Fonts, look: &ThemeLook) -> MarkdownLayout {
+    /// The blocks of `markdown` laid out to `width`, in the look's text size
+    /// and fonts; with `reading`, in a column no wider than a reading width.
+    pub fn of(markdown: &str, width: f64, fonts: &Fonts, look: &ThemeLook, reading: bool) -> MarkdownLayout {
         let mut runs = Vec::new();
         let mut code_boxes = Vec::new();
         let mut quote_bars = Vec::new();
         let mut rules = Vec::new();
         let size = look.size("text");
         let heading = look.size("heading");
-        // The column of text: a reading width at most, from the left, with room around it.
+        // The column of text: the whole width, with room around it; a reading width at most when the part asks.
         let room = (width - 2.0 * PAD).max(0.0);
-        let column = room.min(size * READING);
+        let column = if reading { room.min(size * READING) } else { room };
         let left = PAD;
         let right = left + column;
         let mut y = PAD;
@@ -441,7 +442,7 @@ impl MarkdownPart {
         let look: *const ThemeLook = cx.look();
         let same = self.laid_for.as_ref().is_some_and(|was| was.text == text && was.width == width && std::ptr::eq(was.look, look));
         if !same {
-            self.laid = MarkdownLayout::of(&text, width, cx.fonts(), cx.look());
+            self.laid = MarkdownLayout::of(&text, width, cx.fonts(), cx.look(), self.base.spec.flag("readingWidth"));
             self.laid_for = Some(LaidFor { text, width, look });
         }
     }

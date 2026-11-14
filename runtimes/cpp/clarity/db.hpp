@@ -27,6 +27,14 @@
 
 namespace clarity {
 
+/// The store of a folder that is no store: "folder:" and its path.
+inline const std::string folder_store = "folder:";
+
+/// Whether a file's name (`Notes.MD`, `.env`) is one a folder takes: by its
+/// extensions (`*.md`, ignoring case; none or `*.*`: any file), a hidden one
+/// (its name starting with a dot) only with `hidden` (conformance/files.json).
+bool folder_takes(const std::vector<std::string>& patterns, bool hidden, const std::string& name);
+
 class Db;
 /// A data source that is a file in a format (formats/file_source.hpp).
 struct FileSource;
@@ -396,6 +404,13 @@ public:
     Bytes read_bytes(const FileEntry& file);
     /// Writes `bytes` as they are as the file `path` of a store, making its folders.
     void write_bytes(const std::string& store, const std::string& path, const Bytes& bytes);
+    /// The files of a folder ("folder:" and its path) its extensions take, in
+    /// its folders too, sorted by path; hidden ones only with `hidden`.
+    std::vector<FileEntry> files_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden);
+    /// Writes `text` as the file `path` of a folder, when it takes the file.
+    void write_text_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden, const std::string& path, const std::string& text);
+    /// Writes `bytes` as the file `path` of a folder, when it takes the file.
+    void write_bytes_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden, const std::string& path, const Bytes& bytes);
     /// A file as the picture of a field kept in `field_store` (none: in the
     /// database): the file itself when it is in that store, else a copy.
     Picture picture_from(const FileEntry& file, const std::optional<std::string>& field_store);

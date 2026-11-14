@@ -604,18 +604,6 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        // A folder is the person's too, kept with their settings.
-        for (file, f) in files.iter().enumerate() {
-            for entity in f.entities.iter().filter(|e| !e.settings) {
-                for field in entity.fields.iter().filter(|f| f.ty == FieldType::Folder) {
-                    self.error(
-                        file,
-                        format!("a folder is a setting of the person, where a file store keeps its files; entity {} cannot keep '{}' as one", entity.name.name, field.name.name),
-                        field.span,
-                    );
-                }
-            }
-        }
         let blocks: Vec<(usize, &Entity)> = files.iter().enumerate().flat_map(|(i, f)| f.entities.iter().filter(|e| e.settings).map(move |e| (i, e))).collect();
         for (file, extra) in blocks.iter().skip(1) {
             self.error(*file, "a project has one 'settings' block", extra.name.span);
@@ -1099,12 +1087,21 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// A menu bar's or toolbar's width, when it has one, in the widths a bar may have.
+    fn check_bar_width(&mut self, file: usize, width: Option<u32>, what: &str, span: Span) {
+        let (least, most) = crate::model::BAR_WIDTHS;
+        if width.is_some_and(|w| !(least..=most).contains(&w)) {
+            self.error(file, format!("{what} is {least} to {most} pixels wide"), span);
+        }
+    }
+
     fn check_frame(&mut self, file: usize, context: &PageContext<'a>, frame: &'a Frame) {
         if let Some(menu) = &frame.menu {
             if menu.items.is_empty() {
                 self.warning(file, "the menu has no items yet", menu.span);
             }
             self.check_region_name(file, &menu.name, "the menu", menu.span);
+            self.check_bar_width(file, menu.width, "a menu bar", menu.span);
             self.check_commands(file, &menu.items);
         }
         if let Some(toolbar) = &frame.toolbar {
@@ -1112,6 +1109,7 @@ impl<'a> Checker<'a> {
                 self.warning(file, "the toolbar has no buttons yet", toolbar.span);
             }
             self.check_region_name(file, &toolbar.name, "the toolbar", toolbar.span);
+            self.check_bar_width(file, toolbar.width, "a toolbar", toolbar.span);
             self.check_commands(file, &toolbar.items);
         }
         if let Some(ribbon) = &frame.ribbon {
@@ -1775,6 +1773,21 @@ impl<'a> Checker<'a> {
                 if p.cards && p.show.is_empty() {
                     self.error(file, format!("{at}: 'cards' shows the fields of 'show': write 'show title, kind cards'"), widget.span);
                 }
+                if let Some(chip) = p.card_chip.as_ref().filter(|c| !p.show.contains(c)) {
+                    self.error(file, format!("{at}: the chip is one of the shown fields ({}), not '{chip}'", p.show.join(", ")), widget.span);
+                }
+                if let Some(field) = &p.card_color
+                    && !p.cards
+                {
+                    self.error(file, format!("{at}: 'colored by' colours a list's cards: write 'cards colored by {field}'"), widget.span);
+                }
+                if let Some(field) = &p.card_color {
+                    match entity.field(field) {
+                        None => self.error(file, format!("{at}: '{}' has no field '{field}'", entity.name.name), widget.span),
+                        Some(f) if f.ty != FieldType::Color => self.error(file, format!("{at}: '{field}' is {}; the cards are colored by a color field", widgets::field_type_tag(&f.ty)), widget.span),
+                        Some(_) => {}
+                    }
+                }
                 for field in p.columns.iter().chain(&p.show) {
                     match entity.field(field) {
                         None => self.error(
@@ -2188,7 +2201,7 @@ impl<'a> Checker<'a> {
                 self.error(
                     file,
                     format!(
-                        "{at}: '{field}' is {}; a table edits text, numbers, bool, dates, colors, enum and ref columns",
+                        "{at}: '{field}' is {}; a table edits text, numbers, bool, dates, colors, folders, enum and ref columns",
                         widgets::field_type_tag(&f.ty)
                     ),
                     widget.span,
@@ -2478,6 +2491,12 @@ impl<'a> Checker<'a> {
         }
         if m.store.is_some() && !matches!(field.ty, FieldType::Image | FieldType::File) {
             self.error(file, format!("only an image or a file field has a store ('{name}')"), field.span);
+        }
+        if !m.extensions.is_empty() && field.ty != FieldType::Folder {
+            self.error(file, format!("only a folder field has extensions ('{name}')"), field.span);
+        }
+        if m.hidden && field.ty != FieldType::Folder {
+            self.error(file, format!("only a folder field has hidden files ('{name}')"), field.span);
         }
         // A full-text index reads words: text, and lists of text.
         if m.search

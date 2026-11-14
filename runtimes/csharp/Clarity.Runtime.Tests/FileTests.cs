@@ -52,6 +52,38 @@ public sealed class FileTests : IDisposable
         Assert.Throws<StorageException>(() => db.Files("films"));
     }
 
+    /// <summary>
+    /// A folder that is no store, by its path after "folder:": it lists the files its
+    /// extensions take, hidden ones only when it shows them, and writes no other
+    /// (conformance/files.json, folders and folderWrites).
+    /// </summary>
+    [Fact]
+    public void AFolderListsAndWritesTheFilesOfItsExtensions()
+    {
+        var place = Db.FolderStore + root;
+        static string[] Strings(JsonElement e) => e.EnumerateArray().Select(p => p.GetString()!).ToArray();
+        foreach (var c in Cases().GetProperty("folders").EnumerateArray())
+        {
+            var listed = db.FilesIn(place, Strings(c.GetProperty("patterns")), c.GetProperty("hidden").GetBoolean()).Select(f => f.Path);
+            Assert.Equal(Strings(c.GetProperty("listed")), listed);
+        }
+        Assert.Equal("Hello\nworld\n", db.ReadText(db.FilesIn(place, ["*.txt"], false)[0]));
+        foreach (var c in Cases().GetProperty("folderWrites").EnumerateArray())
+        {
+            var written = true;
+            try
+            {
+                db.WriteTextIn(place, Strings(c.GetProperty("patterns")), c.GetProperty("hidden").GetBoolean(), c.GetProperty("path").GetString()!, "x");
+            }
+            catch (InvalidValueException)
+            {
+                written = false;
+            }
+            Assert.Equal(c.GetProperty("written").GetBoolean(), written);
+        }
+        Assert.Throws<StorageException>(() => db.FilesIn(Db.FolderStore, [], false));
+    }
+
     [Fact]
     public void BytesAreReadAndWrittenAsTheyAre()
     {

@@ -175,6 +175,8 @@
       format: null,
       column: null,
       store: null,
+      extensions: [],
+      hidden: false,
     };
     const typeText = newType.trim() || "text";
     onedit(settings || !entity ? { op: "addSetting", spec: { name, typeText, modifiers } } : { op: "addField", entity: entity.span.start, spec: { name, typeText, modifiers } });
@@ -345,6 +347,21 @@
                         ><input type="checkbox" checked={m.cascade} onchange={(e) => update(field, { modifiers: { cascade: e.currentTarget.checked } })} /> Cascade</label
                       >
                     {/if}
+                  {/if}
+                  {#if field.typeText.trim() === "folder" || m.extensions.length > 0 || m.hidden}
+                    <!-- A folder says the files it holds; code lists those and writes no other. -->
+                    <label title="The files it holds, as a file browser writes them: *.md *.csv, or *.* alone for any file; empty: any file"
+                      >Extensions <input
+                        class="mono"
+                        value={m.extensions.join(" ")}
+                        placeholder="any file"
+                        spellcheck="false"
+                        onchange={(e) => update(field, { modifiers: { extensions: e.currentTarget.value.split(/\s+/).filter((x) => x) } })}
+                      /></label
+                    >
+                    <label class="check" title="Its hidden files and folders, whose name starts with a dot, count too"
+                      ><input type="checkbox" checked={m.hidden} onchange={(e) => update(field, { modifiers: { hidden: e.currentTarget.checked } })} /> Hidden files</label
+                    >
                   {/if}
                 </div>
               </td>

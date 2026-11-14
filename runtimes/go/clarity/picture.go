@@ -267,6 +267,13 @@ func (db *Db) AddStoreSetting(name, program, setting, def string) error {
 }
 
 func (db *Db) storeFolder(name string) (string, error) {
+	// A folder that is no store, by its path: just a folder.
+	if path, ok := strings.CutPrefix(name, FolderStore); ok {
+		if path == "" {
+			return "", &StorageError{What: "no folder was chosen"}
+		}
+		return path, nil
+	}
 	if s, ok := db.storeSettings[name]; ok {
 		file, ok := SettingsFile(s.program)
 		if !ok {

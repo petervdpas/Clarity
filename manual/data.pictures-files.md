@@ -42,7 +42,7 @@ A markdown part shows a Markdown file of the resources: one file in every langua
 - A source that is no `.md` file is refused ("'rules.txt' is not a Markdown file; use a .md file"), and so is one that is not in the resources folder.
 - A markdown part can show a text instead, bound to a field or a plain value of the window. It shows one of the three: a key, a source or what it binds.
 - Every stack reads the same Markdown: headings (`#` to `######`), paragraphs, bullet and numbered items (indented two spaces per level), quotes (`> `, `>>` inside a quote), scene breaks (`***`, `---` or `___` alone on a line; a line of `---` under text is a break too, never an underlined heading), hard line breaks (two spaces or a backslash at a line's end), `**bold**`, `*italic*`, `***both***`, `` `code` ``, code blocks between three backticks, and links `[text](https://...)`. HTML is text. `conformance/markdown.json` gives each case.
-- It reads like a page: room around the text, a column no wider than a reading width, from the left, headings by their level in the theme's heading font and size with space above them, quotes set in with a bar, a scene break as a short line in the middle.
+- It reads like a page: room around the text, a column as wide as the part (a reading width with `readingWidth`), headings by their level in the theme's heading font and size with space above them, quotes set in with a bar, a scene break as a short line in the middle.
 - A link opens in the person's browser when it is an `http`, `https` or `mailto` address; with any other address only its text shows.
 - The part wraps its text and scrolls when it is longer than the part.
 
@@ -148,6 +148,36 @@ action exportCollection()
 - A file has `name` (`Blue Train.jpg`), `path` inside the store (`2024/Blue Train.jpg`, with `/` between folders), `extension` in lower case without the dot (`jpg`), `size` in bytes and `modified` (a date and time, in UTC). A list of files is `list<file>`, one file `file`.
 - `read text of f` gives the text a file holds, as UTF-8; `read bytes of f` its contents as they are, of type `bytes`.
 - `write t to exports "lists/albums.txt"` writes a file, making its folders, from text or from bytes. A path that would leave the store is refused.
+
+### Folders that are no store
+
+A store is the app's own place, named in the project file. Any other folder, one a record holds in a `folder` field or a folder setting, is just a folder, and code reaches it the same way with `folder` before it:
+
+```clarity
+entity Category
+    name: text(80), required
+    folder: folder, extensions "*.md", label @categoryFolderLabel
+
+action importNotes(category: Category) -> integer
+    effects db.write, files.read
+    let found = files f in folder category.folder order by f.path
+    for f in found
+        let note = new Note
+        note.text = read text of f
+        save note
+    return count(found)
+
+action exportNote(category: Category, name: text, text: text)
+    effects files.write
+    write text to folder category.folder name + ".md"
+```
+
+- `folder` names a folder field of a record or a setting (`folder category.folder`, `folder settings.exportFolder`); the checker refuses anything else, "the folder to list is a folder field, as in 'folder category.folder'".
+- The field says which files the folder holds: `extensions "*.md *.txt"` lists and writes only those, ignoring case; `extensions "*.*"` takes any file and stands alone. Without `extensions`, any file.
+- Hidden files and folders, whose name starts with a dot, count only when the field has `hidden`.
+- A write of a file the folder does not take is refused: by the checker when the path ends in written text ("category.folder holds *.md files, not 'notes.csv'"), and by the program otherwise.
+- A file found in a folder is read with `read text of f` and `read bytes of f`, and becomes a record's picture or file as a store's file does (a copy).
+- Every stack lists, reads and writes alike (`conformance/files.json`, `folders` and `folderWrites`).
 - `artist.photo = f` makes a file a record's picture. In the field's own store the column holds its path and nothing is copied, as a catalog of photos wants; anywhere else the picture is a copy. A file that is no picture is refused.
 
 ## Effects

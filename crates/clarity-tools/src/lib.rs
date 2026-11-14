@@ -72,6 +72,7 @@ work on the project that is open in Clarity, through your tools, while the perso
 changes. You design and generate; building and running is the person's.
 
 How you work:
+- Use the person's own words. Every entity, field, enum value, window, part, button and text you name comes from what the person said. A name you make up yourself (a field nobody asked for, another word for one they gave) you never put in silently: before you use it, in a diagram above all, list it under \"Open questions\" with what it is for, and use it only when the person agrees. Never take a word Clarity itself uses for something else (such as page, which is a window or view). When the person names a structure (Project, its Dossiers, each with a Review), keep exactly those things and that order.
 - Start a task by looking at the project (project_overview), and read a file before you change it.
 - README.md holds the project's goal: work toward it; update it when the goal or plan changes.
 - Take a request for an application, or a feature of one, in this order. Read the manual topics it touches. Find \
@@ -262,7 +263,7 @@ impl ProjectTools {
     /// Renames an entity, an enum or a field of an entity or record across
     /// the project, through the checked model; the step records the rename,
     /// so a stored table or column keeps its data.
-    fn rename(&mut self, input: &Value) -> Result<String, String> {
+    pub(crate) fn rename(&mut self, input: &Value) -> Result<String, String> {
         use clarity_spec::rename::{RenameKind, rename, rename_field};
         let (_, dir) = self.open()?.clone();
         let text = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
@@ -274,15 +275,23 @@ impl ProjectTools {
         let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
         let source = |path: &str| std::fs::read_to_string(at(path)).ok();
         let (changed, renamed, what) = match kind.as_str() {
-            "entity" => (rename(&project, source, RenameKind::Entity, &from, &to)?, Some(clarity_spec::migrate::Rename { entity: None, from: from.clone(), to: to.clone() }), format!("entity {from}")),
+            "entity" => (rename(&project, source, RenameKind::Entity, &from, &to)?, Some(clarity_spec::migrate::Rename { entity: None, from: from.clone(), to: to.clone(), value: false }), format!("entity {from}")),
             "enum" => (rename(&project, source, RenameKind::Enum, &from, &to)?, None, format!("enum {from}")),
             "field" => {
                 let entity = text("entity");
                 if entity.is_empty() {
                     return Err("a field is renamed in its entity: give entity, like Customer".into());
                 }
-                let renamed = Some(clarity_spec::migrate::Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone() });
+                let renamed = Some(clarity_spec::migrate::Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone(), value: false });
                 (rename_field(&project, source, &entity, &from, &to)?, renamed, format!("field {entity}.{from}"))
+            }
+            "value" => {
+                let enumeration = text("entity");
+                if enumeration.is_empty() {
+                    return Err("a value is renamed in its enum: give entity, like ItemKind".into());
+                }
+                let renamed = Some(clarity_spec::migrate::Rename::value(&enumeration, &from, &to));
+                (clarity_spec::value_rename::rename_value(&project, source, &enumeration, &from, &to)?, renamed, format!("value {enumeration}.{from}"))
             }
             "window" | "view" => {
                 let page = project.pages().find(|p| p.name.name == from).ok_or_else(|| format!("there is no window or view {from}"))?;
@@ -293,7 +302,7 @@ impl ProjectTools {
                 }
                 (rename(&project, source, RenameKind::Page, &from, &to)?, None, format!("{kind} {from}"))
             }
-            _ => return Err("kind is entity, enum, field, window or view".into()),
+            _ => return Err("kind is entity, enum, field, value, window or view".into()),
         };
         if changed.is_empty() {
             return Ok(format!("Nothing to rename: {what} is called {to} already."));
@@ -805,11 +814,11 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "rename",
-                "Renames an entity, an enum, a field of an entity or record, a window or a view, everywhere the project names it: modules, windows, views and translations; a window's or view's file takes the new name. The migration step records a data rename, so a stored table or column keeps its data. Rename with this tool, never by writing the new name over the old one.",
+                "Renames an entity, an enum, a field of an entity or record, a value of an enum, a window or a view, everywhere the project names it: modules, windows, views and translations; a window's or view's file takes the new name. The migration step records a data rename, so a stored table or column keeps its data and the records that keep a renamed value take its new name. Rename with this tool, never by writing the new name over the old one.",
                 schema(
                     json!({
-                        "kind": { "type": "string", "enum": ["entity", "enum", "field", "window", "view"], "description": "What is renamed; window covers dialogs and splash pages too." },
-                        "entity": { "type": "string", "description": "For a field: the entity or record it belongs to, like Customer." },
+                        "kind": { "type": "string", "enum": ["entity", "enum", "field", "value", "window", "view"], "description": "What is renamed; window covers dialogs and splash pages too." },
+                        "entity": { "type": "string", "description": "For a field: the entity or record it belongs to, like Customer; for a value: its enum, like ItemKind." },
                         "from": { "type": "string", "description": "The name now." },
                         "to": { "type": "string", "description": "The new name." }
                     }),
@@ -1050,6 +1059,77 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    /// A value of an enum renamed with the rename tool, or with change_enum_value:
+    /// everywhere it is named, and, once a database ran the steps, a step that
+    /// gives the records keeping it the new name.
+    #[test]
+    fn a_renamed_value_follows_everywhere_and_into_a_step() {
+        let (root, file, dir) = project("values");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let steps = || -> Vec<String> {
+            let mut names: Vec<String> = std::fs::read_dir(dir.join("migrations/main")).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+            names.sort();
+            names
+        };
+        let latest = || std::fs::read_to_string(dir.join("migrations/main").join(steps().last().unwrap())).unwrap();
+        let en = tools.call("read_file", &json!({"path": "translations/en.clarity"})).text;
+        let keys = format!("{}\n    taskTitle \"Title\"\n    taskKind \"Kind\"\n    kindPrivate \"Private\"\n    kindBusiness \"Business\"\n", en.trim_end());
+        assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": keys})).is_error);
+        let tasks = "module tasks\n\nenum Kind\n    Private label @kindPrivate\n    Business label @kindBusiness\n\nentity Task\n    title: text(120), label @taskTitle\n    kind: Kind, default Private, label @taskKind\n";
+        let wrote = tools.call("write_file", &json!({"path": "tasks.clarity", "text": tasks}));
+        assert!(!wrote.text.contains("error(s)"), "{}", wrote.text);
+        let settings = clarity_project::load(&file).settings.unwrap();
+        let db = clarity_project::sqlite_path(&dir, &settings.datasources[0]);
+        std::fs::create_dir_all(db.parent().unwrap()).unwrap();
+        rusqlite::Connection::open(&db).unwrap().execute_batch(&format!("CREATE TABLE clarity_schema (version INTEGER NOT NULL); INSERT INTO clarity_schema VALUES ({});", steps().len())).unwrap();
+        let renamed = tools.call("rename", &json!({"kind": "value", "entity": "Kind", "from": "Private", "to": "Personal"}));
+        assert!(!renamed.is_error, "{}", renamed.text);
+        let module = std::fs::read_to_string(dir.join("tasks.clarity")).unwrap();
+        assert!(module.contains("    Personal label @kindPrivate\n") && module.contains("default Personal"), "{module}");
+        assert!(latest().contains("rename value Kind.Private to Personal"), "{}", latest());
+        // change_enum_value with a new name is the same rename.
+        rusqlite::Connection::open(&db).unwrap().execute_batch(&format!("INSERT INTO clarity_schema VALUES ({});", steps().len())).unwrap();
+        let changed = tools.call("change_enum_value", &json!({"enum": "Kind", "value": "Personal", "name": "Own"}));
+        assert!(!changed.is_error, "{}", changed.text);
+        assert!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap().contains("default Own"));
+        assert!(latest().contains("rename value Kind.Personal to Own"), "{}", latest());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A step the migrate tool wrote under a title of its own is Clarity's
+    /// too: while no database has run it, the next change folds into it and
+    /// the title stays, so one task still leaves one step.
+    #[test]
+    fn a_titled_step_takes_the_next_change_while_no_database_ran_it() {
+        let (root, file, dir) = project("titled");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let steps = || -> Vec<String> {
+            let mut names: Vec<String> = std::fs::read_dir(dir.join("migrations/main")).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+            names.sort();
+            names
+        };
+        let latest = || std::fs::read_to_string(dir.join("migrations/main").join(steps().last().unwrap())).unwrap();
+        let en = tools.call("read_file", &json!({"path": "translations/en.clarity"})).text;
+        let keys = format!("{}\n    taskTitle \"Title\"\n    taskDone \"Done\"\n    fieldRequired \"{{field}} is required\"\n", en.trim_end());
+        assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": keys})).is_error);
+        // Written while the project is broken, the entity gets no step; migrate writes one, with its title.
+        let broken = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: nonsense\n"}));
+        assert!(broken.text.contains("error(s)"), "{}", broken.text);
+        assert!(!tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: text(120), label @taskTitle\n"})).is_error);
+        // Its steps thrown away with the database, the project starts them again with migrate.
+        std::fs::remove_dir_all(dir.join("migrations")).unwrap();
+        let migrated = tools.call("migrate", &json!({"title": "Tasks"}));
+        assert!(!migrated.is_error && migrated.text.contains("Wrote the step"), "{}", migrated.text);
+        let count = steps().len();
+        assert!(latest().contains("migration \"Tasks\"") && latest().contains("add entity Task"), "{}", latest());
+        // The next change folds into it and keeps its title.
+        let changed = tools.call("add_field", &json!({"entity": "Task", "name": "done", "type": "bool", "label": "@taskDone"}));
+        assert!(!changed.is_error && changed.text.contains("Folded into the step"), "{}", changed.text);
+        assert_eq!(steps().len(), count, "still one step");
+        assert!(latest().contains("done: bool") && latest().contains("migration \"Tasks\""), "{}", latest());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[test]
     fn the_tools_read_write_and_check_the_project() {
         let (root, file, dir) = project("tools");
@@ -1195,6 +1275,17 @@ mod tests {
             assert!(!text.contains(dash), "the instructions hold {dash:?}");
         }
         assert!(text.contains("em-dash") && text.contains("en-dash"), "the instructions name the rule");
+    }
+
+    /// Every agent of Clarity (its own, an ACP agent, an MCP client) is told
+    /// to use the person's own words and to name every word it made up as an
+    /// open question before using it, a diagram's above all.
+    #[test]
+    fn the_instructions_forbid_names_the_person_did_not_give() {
+        let text = instructions(&[]);
+        assert!(text.contains("Use the person's own words"), "{text}");
+        assert!(text.contains("Open questions"), "{text}");
+        assert!(text.contains("a word Clarity itself uses for something else"), "{text}");
     }
 
     #[test]

@@ -38,7 +38,6 @@ Progress: 90%
 - Part properties code can read (34): each generator's logic.rs (`rust/logic.rs:739`, `go/logic.rs:1558`, `cpp/logic.rs:1118`, `csharp/logic.rs:199`, c); equal, no test.
 - Layout constants: `crates/clarity-spec/src/layout.rs` against `runtimes/rust-ui/src/grid.rs:16-42`, `window/view.rs:28`, `window/messages.rs:20`, `parts/containers/popover.rs:39`, `runtimes/web/src/screen/grid.ts:9-55`; `crates/clarity-spec/tests/layout.rs` checks some, not GAP, CELL_HEIGHTS or the popover column.
 - Two versions: `runtimes/rust-ui/Cargo.toml` 0.25.0, `runtimes/rust-ui-ffi/Cargo.toml` 0.24.0; downloads follow the ffi version.
-- manual `stacks.rust.md:13` says every stack gets its own version of Clarity.UI; it is one Rust library behind `runtimes/rust-ui-ffi` for all five.
 - Conformance "about" texts name Avalonia: `forms.json`, `tables.json`, `display.json`, `custom-parts.json`, `table-order.json`, `themes.json`.
 
 ## Decisions

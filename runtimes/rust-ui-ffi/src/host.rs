@@ -127,6 +127,7 @@ fn field_of(value: &Value) -> FieldFacts {
         refers: text("refers"),
         parent: text("parent"),
         color: flag("color"),
+        folder: flag("folder"),
         help: text("help"),
     }
 }

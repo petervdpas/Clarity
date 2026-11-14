@@ -12,6 +12,8 @@ use crate::xml::XmlElement;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolbarSpec {
     pub name: Option<String>,
+    /// Its width beside a menu bar that has one (`width="400"`); none takes the rest of the row.
+    pub width: Option<f64>,
     pub items: Vec<CommandSpec>,
 }
 
@@ -100,7 +102,7 @@ impl FrameSpec {
         for region in regions {
             match region.name.as_str() {
                 "Menu" => frame.menu = Some(markup::menu_of(region)),
-                "Toolbar" => frame.toolbar = Some(ToolbarSpec { name: region.attribute("name").map(str::to_string), items: region.children.iter().map(markup::command_of).collect() }),
+                "Toolbar" => frame.toolbar = Some(ToolbarSpec { name: region.attribute("name").map(str::to_string), width: region.attribute("width").and_then(|w| w.parse().ok()), items: region.children.iter().map(markup::command_of).collect() }),
                 "Ribbon" => frame.ribbon = Some(ribbon_of(region)),
                 "Sidebar" => {
                     let sidebar = sidebar_of(region);

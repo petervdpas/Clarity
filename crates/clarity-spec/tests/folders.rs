@@ -55,10 +55,12 @@ fn a_folder_is_a_setting_a_folder_part_shows() {
     assert_eq!(widgets::widget_for(&FieldType::Folder), WidgetKind::Folder, "a settings window gets a folder part");
 }
 
+/// A record keeps a folder too, as a field: a folder that is no store, where
+/// its code lists and writes files (crates/clarity-spec/tests/files.rs).
 #[test]
-fn only_the_settings_keep_a_folder() {
+fn a_record_keeps_a_folder_as_a_field() {
     let entity = with("    photo: image, store photos\n", "    photo: image, store photos\n    place: folder\n");
-    assert_eq!(errors(&entity), ["a folder is a setting of the person, where a file store keeps its files; entity Album cannot keep 'place' as one"]);
+    assert_eq!(errors(&entity), Vec::<String>::new());
 }
 
 #[test]

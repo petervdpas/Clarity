@@ -157,6 +157,8 @@ impl CommandSpec {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MenuSpec {
     pub name: Option<String>,
+    /// A menu bar's width (`width="320"`): it shares its row with the toolbar.
+    pub width: Option<f64>,
     pub items: Vec<CommandSpec>,
 }
 
@@ -428,7 +430,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
 }
 
 pub fn menu_of(element: &XmlElement) -> MenuSpec {
-    MenuSpec { name: element.attribute("name").map(str::to_string), items: element.children.iter().map(command_of).collect() }
+    MenuSpec { name: element.attribute("name").map(str::to_string), width: element.attribute("width").and_then(|w| w.parse().ok()), items: element.children.iter().map(command_of).collect() }
 }
 
 pub fn command_of(element: &XmlElement) -> CommandSpec {

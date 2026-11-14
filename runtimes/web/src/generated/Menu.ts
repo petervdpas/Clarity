@@ -6,4 +6,10 @@ export type Menu = {
 /**
  * Its part name, as code hides or disables it: `mainMenu`.
  */
-name: string | null, items: Array<Command>, span: Span, };
+name: string | null, 
+/**
+ * The menu bar's width in pixels (`width 320`): it then leaves the rest
+ * of its row to the toolbar, which stands next to it. None: the whole
+ * width, the toolbar under it. A part's menu has none.
+ */
+width: number | null, items: Array<Command>, span: Span, };

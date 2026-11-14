@@ -121,7 +121,7 @@ code Tasks
 
 `edit` names the columns whose cells are inputs, so a row can be changed where it is shown (**Edited in the table** in the properties).
 
-- A `bool` column holds a checkbox, or a switch when it is written `as switch`: `edit title, done as switch`. An enum column is a dropdown of its values, and a `ref` column a dropdown of the records it can point at, as a dropdown in a form shows them. Dates are picked with a date picker, as in a date input. A moment (`datetime`) is a day from the date picker and a time typed on a 24-hour clock (`14:30`). Text and numbers are edited in place, like a text box or number input. A color column shows its swatch and is edited with a color input.
+- A `bool` column holds a checkbox, or a switch when it is written `as switch`: `edit title, done as switch`. An enum column is a dropdown of its values, and a `ref` column a dropdown of the records it can point at, as a dropdown in a form shows them. Dates are picked with a date picker, as in a date input. A moment (`datetime`) is a day from the date picker and a time typed on a 24-hour clock (`14:30`). Text and numbers are edited in place, like a text box or number input. A color column shows its swatch and is edited with a color input. A folder column (a `folder` field) is typed as a path, and a button in its cell opens the folder picker; in a browser, where nothing picks folders, the path is only typed.
 - An edited column is one of the `columns`, of one of these types: text, `email`, `url`, `color`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an enum or a `ref`. Pictures and durations are not edited in a cell.
 - Only a value that differs is an edit: a checkbox or dropdown when it changes, a text or number cell when it is left or Enter is pressed. An edit changes the row on screen. Then the row is selected and `on change` runs, so `grid.selected` is the changed record. Saving it is up to the handler, as with a form: `save grid.selected`. When the record breaks a rule, `save` refuses it as anywhere else.
 
@@ -161,7 +161,7 @@ The button says Clarity's word `addRow` ("Add") with the plus icon, and the tras
 
 The checker refuses:
 
-- an edited column that is not one of the columns, or of a type a cell cannot edit (its message says "a table edits text, numbers, bool, dates, colors, enum and ref columns"), and a switch on a column that is no `bool` or is not edited;
+- an edited column that is not one of the columns, or of a type a cell cannot edit (its message says "a table edits text, numbers, bool, dates, colors, folders, enum and ref columns"), and a switch on a column that is no `bool` or is not edited;
 - edits of a list of records, which are never stored ("edit them in parts bound to a record");
 - a link on a column the table does not show, and an `order by` on one;
 - `add` without `on add`, and `remove` without `on remove`;
@@ -174,7 +174,7 @@ A table that edits without `on change` is a warning: its edits are lost when the
 The rows of a list, one line each, or as small cards.
 
 ```xml
-<List name="name" at="col,row" span="n" rows="n" bind="list" show="field, field" cards="true" reorder="field" striped="true" frame="true" noUndo="true" onselect="handler" onopen="handler" onreorder="handler" />
+<List name="name" at="col,row" span="n" rows="n" bind="list" show="field, field" cards="true" cardColor="field" cardBand="true" cardChip="field" reorder="field" striped="true" frame="true" noUndo="true" onselect="handler" onopen="handler" onreorder="handler" />
 ```
 
 | Property | Type | Default | What it does |
@@ -182,6 +182,9 @@ The rows of a list, one line each, or as small cards.
 | `bind` | a list of records | none | The rows. |
 | `show` | fields | the record's text | The fields each row shows (**Shown fields**, in their order with Move up and Move down). |
 | `cards` | yes or no | no | Each row a small card: the first field of `show` its title, the others lines below it, in the theme's `part card` and `part card_line` looks (see [Themes](themes.md)). |
+| `cardColor` | a color field | none | **Colored by**: each card takes the colour of this field of its own record, so the cards of one list can each have another colour. A record without a colour keeps the card look. |
+| `cardChip` | a field of `show` | none | **Colored as** a chip: the colour is a pill around that line of the card, as wide as its text, the rest of the card in the card look. |
+| `cardBand` | yes or no | no | **Colored as** a band: the colour is a narrow band at the card's start. |
 | `reorder by` | an integer field | none | See Reordering rows. |
 | `striped`, `frame`, `no undo` | yes or no | no | See above. |
 
@@ -191,7 +194,13 @@ Events: `select`, `open`, `reorder`.
 <List name="taskList" at="1,1" span="4" rows="10" bind="tasks" show="title, kind" cards="true" onselect="taskPicked" />
 ```
 
-The checker refuses `cards` without `show` ("write 'show title, kind cards'") and a field of `show` the listed entity does not have.
+A card is coloured in one of three ways: a chip, a band, or, with neither, the whole card. A whole coloured card writes its text in black or white, whichever reads better on its colour, and shows it is chosen with the focus colour around it. In the Clarity language the colouring follows `cards`: `cards colored by paint`, `cards colored by paint band`, `cards colored by paint chip category`.
+
+```xml
+<List name="dossierList" at="1,1" span="6" rows="8" bind="dossierCards" show="name, category, done" cards="true" cardColor="categoryColor" cardChip="category" onselect="dossierPicked" />
+```
+
+The checker refuses `cards` without `show` ("write 'show title, kind cards'") and a field of `show` the listed entity does not have; colouring without `cards` ("'colored by' colours a list's cards"), a field that is no color ("the cards are colored by a color field"), a chip around a field it does not show, and `band` with `chip`.
 
 ### `tree`
 
@@ -535,7 +544,7 @@ The checker refuses a `max` that is not a number above 0, and an icon Clarity do
 | Chart | `chart` | collection | 6 x 6 | yes | `by`, `measure`, `points`, `max` | none |
 | Graph | `graph` | collection | 8 x 8 | yes | `edges`, `nodes`, `layout`, `looks`, `limit`, `show`, `lists`, `hops`, `legend` | `click`, `select`, `open` |
 | Trend | `trend` | field (integer, decimal, money, duration) | 6 x 4 | no | `points`, `max`, `every` | none |
-| List | `list` | collection | 4 x 5 | yes | `show`, `cards`, `striped`, `reorder`, `noUndo`, `frame` | `select`, `open`, `reorder` |
+| List | `list` | collection | 4 x 5 | yes | `show`, `cards`, `cardColor`, `striped`, `reorder`, `noUndo`, `frame` | `select`, `open`, `reorder` |
 | Progress | `progress` | field (integer, decimal) | 6 x 1 | no | `max` | none |
 | Busy | `busy` | nothing | 3 x 1 | no | none | none |
 | Status item | `statusItem` | field (integer, decimal) | 3 x 1 | no | `icon`, `max` | `click` |

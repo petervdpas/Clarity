@@ -124,6 +124,7 @@ A link to an `http`, `https` or `mailto` address opens in the browser. A link in
 ```
 
 - `caption` (a key), `source` (a file of the resources folder) or `bind` (a text field or plain value): what it shows, one of them.
+- `readingWidth` (true or false, false by default): the text keeps a column of a reading width from the left, as a book page reads; without it the text takes the part's whole width. **Reading width** in the properties.
 - Event: `link`.
 
 The checker refuses more than one of them: `a markdown shows a key, a file of the resources (source) or what it binds: one of them`.
@@ -148,6 +149,6 @@ The checker refuses more than one of them: `a markdown shows a key, a file of th
 | Badge | `badge` | field (text, integer, decimal, money, enum) | 1 x 1 | no | none | none |
 | Link | `link` | field (url, email, text) | 2 x 1 | no | `to`, `tabOrder` | `click` |
 | Text | `text` | field | 4 x 1 | no | none | none |
-| Markdown | `markdown` | field (text) | 6 x 4 | yes | `source` | `link` |
+| Markdown | `markdown` | field (text) | 6 x 4 | yes | `source`, `readingWidth` | `link` |
 
 <!-- /catalog -->

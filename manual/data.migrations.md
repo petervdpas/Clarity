@@ -32,6 +32,7 @@ migration "Phone and VAT"
 - `add field Entity.name: type, modifiers` adds a field. Existing records get its `default`, or the empty value of its type.
 - `remove field Entity.name` removes a field and its values.
 - `rename field Entity.old to new` renames a field; its values stay.
+- `rename value Enum.Old to New` renames a value of an enum: every record that keeps it, in a field of the enum or in a list of its values, takes the new name. Clarity writes it when a value is renamed; see [Entities](data.entities.md#enum).
 - `change field Entity.name: type` changes a field's type and converts the values.
 - `add unique Entity.name` and `remove unique Entity.name` make a field unique, or not.
 - `add version Entity` gives the table its version column, `row_version`, at 1 for the records already there, so a save never overwrites someone else's change (see [Entities](data.entities.md#a-save-never-overwrites-someone-elses-change)). A new entity gets it from its first step: a line `version` in its `add entity`, which Clarity writes itself.

@@ -92,6 +92,21 @@
   </label>
 {/snippet}
 
+{#snippet widthField(bar: { width: number | null; span: { start: number } }, hint: string)}
+  <label class="prop">
+    <span>Width in pixels</span>
+    <input
+      type="number"
+      min={NARROWEST}
+      max={WIDEST}
+      value={bar.width ?? ""}
+      placeholder="the whole width"
+      title={hint}
+      onchange={(e) => onedit({ op: "setBarWidth", item: bar.span.start, width: Math.round(Number(e.currentTarget.value)) || null })}
+    />
+  </label>
+{/snippet}
+
 {#if element.kind === "command"}
   {@const c = element.command}
   {@const p = c.props}
@@ -195,6 +210,7 @@
   <div class="kind">{REGION_NAMES[element.kind]}</div>
   {#if element.kind === "menu"}
     {@render nameField(element.menu)}
+    {@render widthField(element.menu, "With a width the menu bar leaves the rest of its row to the toolbar, which stands next to it; empty: the whole width")}
     <p class="hint">Code hides it with <code>{element.menu.name ?? "it"}.visible</code> and turns it off with <code>.enabled</code>.</p>
     <div class="actions">
       <button onclick={() => add(element.menu.span.start, "item")}>Add item</button>
@@ -203,6 +219,7 @@
     </div>
   {:else if element.kind === "toolbar"}
     {@render nameField(element.toolbar)}
+    {@render widthField(element.toolbar, "Beside a menu bar with a width: its own width; empty: the rest of the row")}
     <p class="hint">Code hides it with <code>{element.toolbar.name ?? "it"}.visible</code> and turns it off with <code>.enabled</code>.</p>
     <div class="actions">
       <button onclick={() => add(element.toolbar.span.start, "button")}>Add button</button>

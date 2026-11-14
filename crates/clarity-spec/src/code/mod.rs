@@ -234,7 +234,7 @@ pub enum StmtKind {
     /// of a file store, at a path inside it.
     Write {
         text: Expr,
-        store: Ident,
+        place: FilePlace,
         path: Expr,
     },
     /// `print value`, or `print list columns a, b` (a table): writes to
@@ -531,6 +531,17 @@ pub fn sets_splash_status(target: &Expr) -> bool {
     matches!(&target.kind, ExprKind::Member { object, member } if member.name == "status" && matches!(&object.kind, ExprKind::Name { name } if name == "splash"))
 }
 
+/// Where code lists and writes files: a file store by its name (`photos`),
+/// the app's own place the project file marks, or any other folder, given as
+/// text after `folder` (`folder category.folder`): just a folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", content = "at", rename_all = "camelCase")]
+#[ts(export)]
+pub enum FilePlace {
+    Store(Ident),
+    Folder(Box<Expr>),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
@@ -614,7 +625,7 @@ pub enum ExprKind {
     /// order. `var` names the file inside the condition and the order.
     Files {
         var: Ident,
-        store: Ident,
+        place: FilePlace,
         filter: Option<Box<Expr>>,
         order: Vec<OrderKey>,
     },
@@ -1252,8 +1263,11 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 }
                 args.iter().for_each(|a| each_expr(a, found));
             }
-            StmtKind::Write { text, path, .. } => {
+            StmtKind::Write { text, place, path } => {
                 each_expr(text, found);
+                if let FilePlace::Folder(folder) = place {
+                    each_expr(folder, found);
+                }
                 each_expr(path, found);
             }
             StmtKind::Print { value, .. } => each_expr(value, found),
@@ -1288,7 +1302,15 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         }
         ExprKind::Call { args, named, .. } => args.iter().chain(named.iter().map(|n| &n.value)).for_each(|a| each_expr(a, found)),
         ExprKind::EngineCall { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
-        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
+        ExprKind::Find { filter, .. } => {
+            if let Some(filter) = filter {
+                each_expr(filter, found);
+            }
+        }
+        ExprKind::Files { place, filter, .. } => {
+            if let FilePlace::Folder(folder) = place {
+                each_expr(folder, found);
+            }
             if let Some(filter) = filter {
                 each_expr(filter, found);
             }
@@ -1382,8 +1404,11 @@ pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
                 ask_exprs_mut(form, found);
                 args.iter_mut().for_each(|a| each_expr_mut(a, found));
             }
-            StmtKind::Write { text, path, .. } => {
+            StmtKind::Write { text, place, path } => {
                 each_expr_mut(text, found);
+                if let FilePlace::Folder(folder) = place {
+                    each_expr_mut(folder, found);
+                }
                 each_expr_mut(path, found);
             }
             StmtKind::Close | StmtKind::Reload { .. } => {}
@@ -1419,7 +1444,15 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
             named.iter_mut().for_each(|n| each_expr_mut(&mut n.value, found));
         }
         ExprKind::EngineCall { args, .. } | ExprKind::ListOf { items: args } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
-        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
+        ExprKind::Find { filter, .. } => {
+            if let Some(filter) = filter {
+                each_expr_mut(filter, found);
+            }
+        }
+        ExprKind::Files { place, filter, .. } => {
+            if let FilePlace::Folder(folder) = place {
+                each_expr_mut(folder, found);
+            }
             if let Some(filter) = filter {
                 each_expr_mut(filter, found);
             }

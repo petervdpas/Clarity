@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, HttpPair, MappingUse, MappingDecl, MappedField, MappedInside, MappedParent, MappingOption, MappingText, MappingValue, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
+use super::{FilePlace, AskForm, HttpPair, MappingUse, MappingDecl, MappedField, MappedInside, MappedParent, MappingOption, MappingText, MappingValue, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, ToastCorner, ToastDecl, ToastLevel, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -698,9 +698,11 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             if !cursor.eat_keyword("to") {
                 return Err(cursor.error_here("expected 'to', a file store and a path, as in 'write lines to photos \"list.txt\"'"));
             }
-            let store = cursor.expect_ident("a file store")?;
+            cursor.ranges = false;
+            let (place, _) = parse_file_place(&mut cursor, "a file store, or folder and the text that holds one")?;
+            cursor.ranges = true;
             let path = parse_expr(&mut cursor)?;
-            StmtKind::Write { text, store, path }
+            StmtKind::Write { text, place, path }
         }
         Some("delete") => {
             cursor.next();
@@ -1748,10 +1750,9 @@ fn parse_files(cursor: &mut Cursor) -> ParseResult<Expr> {
     let start = cursor.next().map(|t| t.span).unwrap_or_else(|| cursor.end_span());
     let var = cursor.expect_ident("a name for each file")?;
     if !cursor.eat_keyword("in") {
-        return Err(cursor.error_here("expected 'in' and a file store"));
+        return Err(cursor.error_here("expected 'in' and a file store or a folder"));
     }
-    let store = cursor.expect_ident("a file store")?;
-    let mut end = store.span;
+    let (place, mut end) = parse_file_place(cursor, "a file store, or folder and the text that holds one")?;
     let filter = if cursor.eat_keyword("where") {
         let condition = parse_expr(cursor)?;
         end = condition.span;
@@ -1762,7 +1763,7 @@ fn parse_files(cursor: &mut Cursor) -> ParseResult<Expr> {
     let order = parse_order(cursor, &mut end)?;
     Ok(Expr {
         span: join(start, end),
-        kind: ExprKind::Files { var, store, filter, order },
+        kind: ExprKind::Files { var, place, filter, order },
     })
 }
 
@@ -1992,4 +1993,17 @@ fn parse_format_options(cursor: &mut Cursor, format: &str, reading: bool, mut en
         options.push(crate::code::FormatOption { name: Ident { name: option.name.to_string(), span: token.span }, value });
     }
     Ok((options, end))
+}
+
+/// A file store by its name (`photos`), or `folder` and the text that holds
+/// a folder (`folder category.folder`); with where it ends.
+fn parse_file_place(cursor: &mut Cursor, what: &str) -> ParseResult<(FilePlace, Span)> {
+    if cursor.eat_keyword("folder") {
+        let folder = parse_expr(cursor)?;
+        let end = folder.span;
+        return Ok((FilePlace::Folder(Box::new(folder)), end));
+    }
+    let store = cursor.expect_ident(what)?;
+    let end = store.span;
+    Ok((FilePlace::Store(store), end))
 }

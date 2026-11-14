@@ -702,14 +702,62 @@
     {#if info.properties.includes("cards")}
       <label class="prop" title="Each row a small card: the first field shown is its title, the others lines below it">
         <span>Cards</span>
-        <input type="checkbox" checked={p.cards} onchange={(e) => update(e.currentTarget.checked ? { cards: true, striped: false } : { cards: false })} />
+        <input type="checkbox" checked={p.cards} onchange={(e) => update(e.currentTarget.checked ? { cards: true, striped: false } : { cards: false, cardColor: null, cardBand: false, cardChip: null })} />
       </label>
+    {/if}
+    {#if info.properties.includes("cardColor") && p.cards}
+      {@const rowsOf = (() => {
+        const decl = page.data.find((d) => d.name.name === p.bind);
+        return entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
+      })()}
+      {@const colors = (rowsOf?.fields ?? []).filter((f) => f.type.kind === "color").map((f) => f.name.name)}
+      <label class="prop" title="Each card takes the colour of this colour field of its record; empty: the cards keep the theme's card look">
+        <span>Colored by</span>
+        <select value={p.cardColor ?? ""} onchange={(e) => update(e.currentTarget.value ? { cardColor: e.currentTarget.value } : { cardColor: null, cardBand: false, cardChip: null })}>
+          <option value="">(none)</option>
+          {#each colors as color (color)}
+            <option value={color}>{color}</option>
+          {/each}
+        </select>
+      </label>
+      {#if p.cardColor}
+        <label class="prop" title="How a card shows its colour: a chip around one of its lines, a band at its start, or the whole card">
+          <span>Colored as</span>
+          <select
+            value={p.cardChip ? "chip" : p.cardBand ? "band" : "full"}
+            onchange={(e) => {
+              const as = e.currentTarget.value;
+              update(as === "chip" ? { cardBand: false, cardChip: p.show[1] ?? p.show[0] ?? null } : { cardBand: as === "band", cardChip: null });
+            }}
+          >
+            <option value="chip">A chip</option>
+            <option value="band">A band at its start</option>
+            <option value="full">The whole card</option>
+          </select>
+        </label>
+        {#if p.cardChip}
+          <label class="prop" title="The shown line the chip is around">
+            <span>Chip around</span>
+            <select value={p.cardChip} onchange={(e) => update({ cardChip: e.currentTarget.value })}>
+              {#each p.show as field (field)}
+                <option value={field}>{field}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+      {/if}
     {/if}
     <!-- Cards stand apart, so a list of cards has no stripes. -->
     {#if info.properties.includes("foldButtons")}
       <label class="prop" title="Expand all and Collapse all above the rows, which open and close every row; code sets it as {p.name ?? 'tree'}.foldButtons">
         <span>Expand and collapse all</span>
         <input type="checkbox" checked={p.foldButtons} onchange={(e) => update({ foldButtons: e.currentTarget.checked })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("readingWidth")}
+      <label class="prop" title="The Markdown keeps a column of a reading width from the left, as a book page reads; without it the text takes the whole width">
+        <span>Reading width</span>
+        <input type="checkbox" checked={p.readingWidth} onchange={(e) => update({ readingWidth: e.currentTarget.checked })} />
       </label>
     {/if}
     {#if info.properties.includes("striped") && !p.cards}

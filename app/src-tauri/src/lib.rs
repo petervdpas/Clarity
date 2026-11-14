@@ -505,6 +505,21 @@ fn rename_field(entity: String, name: String, new_name: String, state: State<Wat
     write_renamed(&dir, &before, renamed, &history)
 }
 
+/// Renames value `name` of enum `enumeration` and every place that names
+/// it, in all files: the enum editor's value cell asks for it. The next
+/// migration step gives the records that keep it the new name.
+#[tauri::command]
+fn rename_value(enumeration: String, name: String, new_name: String, state: State<WatchState>, history: State<HistoryState>, values: State<migrations::ValueRenames>) -> Result<Preview, String> {
+    let dir = open_dir_of(&state)?;
+    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
+    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
+    let renamed = clarity_spec::value_rename::rename_value(&before, source, &enumeration, &name, new_name.trim())?;
+    let preview = write_renamed(&dir, &before, renamed, &history)?;
+    values.add(clarity_spec::migrate::Rename::value(&enumeration, &name, new_name.trim()));
+    Ok(preview)
+}
+
 /// Writes a rename's files once the whole project checks with them in
 /// place, as one change for Undo. A path is the project's (relative to
 /// `dir`, such as `translations/en.clarity`) or absolute.
@@ -922,6 +937,7 @@ pub fn run() {
         .manage(splash::SplashState::default())
         .manage(WatchState::default())
         .manage(HistoryState::default())
+        .manage(migrations::ValueRenames::default())
         .manage(build::BuildState::default())
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
@@ -996,6 +1012,7 @@ pub fn run() {
             engines::build_engine,
             rename,
             rename_field,
+            rename_value,
             add_module,
             migrations::pending_migration,
             migrations::create_migration,

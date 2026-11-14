@@ -151,6 +151,55 @@ fn cards_show_each_row_in_the_card_look() {
     }
 }
 
+/// `cardColor` colours each card with a colour field of its record, the
+/// whole card or, with `cardBand`, a band at its start; a record without a
+/// colour keeps the card look.
+#[test]
+fn cards_take_the_colour_of_their_record_whole_or_as_a_band() {
+    let paint = clarity_ui::theme::parse_color("#2e6f9e").unwrap();
+    let painted = |fields: &str| {
+        let host = DataHost::new();
+        host.set("folders", json!([{ "id": 1, "name": "Folder 1", "position": 1, "paint": "#2e6f9e" }, { "id": 2, "name": "Folder 2", "position": 2, "paint": "" }]));
+        let markup = format!(r#"<List at="1,1" span="6" rows="5" name="folders" bind="folders" show="name, position" cards="true" {fields} />"#);
+        let mut screen = window_of(&markup, host);
+        let shot = laid(&mut screen, 800, 400);
+        (screen, shot)
+    };
+    let (screen, mut shot) = painted(r#"cardColor="paint""#);
+    let look = screen.look().clone();
+    let (first, second) = (row(&screen, 0), row(&screen, 1));
+    assert_eq!(paint, shot.pixel((first.right() - 10.0) as i32, first.y as i32 + 6), "the whole card");
+    assert_eq!(look.part("card", None).background.unwrap_or(look.color("raised")), shot.pixel((second.right() - 10.0) as i32, second.y as i32 + 6), "no colour: the card look");
+    let (screen, mut shot) = painted(r#"cardColor="paint" cardBand="true""#);
+    let first = row(&screen, 0);
+    assert_eq!(paint, shot.pixel(first.x as i32 + 3, (first.y + first.height / 2.0) as i32), "the band at its start");
+    assert_eq!(look.part("card", None).background.unwrap_or(look.color("raised")), shot.pixel((first.right() - 10.0) as i32, (first.y + first.height / 2.0) as i32), "the rest in the card look");
+    if let Some(path) = shot_path("data-list-card-band.png") {
+        shot.save(path).unwrap();
+    }
+}
+
+/// With `cardChip` the colour is a chip around that line of the card: the
+/// chip in the record's colour, the card around it in the card look.
+#[test]
+fn a_cards_colour_can_be_a_chip_around_one_of_its_lines() {
+    let paint = clarity_ui::theme::parse_color("#2e6f9e").unwrap();
+    let host = DataHost::new();
+    host.set("folders", json!([{ "id": 1, "name": "Folder 1", "position": 1, "paint": "#2e6f9e" }]));
+    let markup = r#"<List at="1,1" span="6" rows="5" name="folders" bind="folders" show="name, position" cards="true" cardColor="paint" cardChip="position" />"#;
+    let mut screen = window_of(markup, host);
+    let mut shot = laid(&mut screen, 800, 400);
+    let look = screen.look().clone();
+    let card = row(&screen, 0);
+    let chip = list(&screen).chip_box(0).expect("the chip of the first card");
+    assert!(chip.y > card.y + 20.0 && chip.width < 60.0, "the chip is around the second line, as wide as its text: {chip:?}");
+    assert_eq!(paint, shot.pixel((chip.x + 2.0) as i32, (chip.y + chip.height / 2.0) as i32), "the chip in the record's colour");
+    assert_eq!(look.part("card", None).background.unwrap_or(look.color("raised")), shot.pixel((card.right() - 10.0) as i32, (card.y + 6.0) as i32), "the card in the card look");
+    if let Some(path) = shot_path("data-list-card-chip.png") {
+        shot.save(path).unwrap();
+    }
+}
+
 #[test]
 fn a_long_lists_rows_leave_room_for_its_bar() {
     let (screen, _) = made(r#"cards="true""#, 40);

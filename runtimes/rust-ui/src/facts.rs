@@ -196,6 +196,7 @@ impl ModelFacts {
                 refers: if kind == "ref" { names.clone() } else { None },
                 parent: parent.clone(),
                 color: kind == "color",
+                folder: kind == "folder",
                 help: modifiers["help"].as_str().filter(|h| !h.is_empty()).map(str::to_string),
             };
             let store = modifiers["store"].as_str().map(str::to_string);

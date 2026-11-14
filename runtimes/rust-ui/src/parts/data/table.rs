@@ -54,7 +54,12 @@ pub enum CellKind {
     Moment,
     /// A color, "#rrggbb": a swatch of it beside its text, typed as text.
     Color,
+    /// A folder's path, typed, beside a button that opens the folder picker.
+    Folder,
 }
+
+/// The folder the picker chose for a cell, off the screen's thread: its row, its field and the folder.
+struct FolderPicked(usize, String, Option<String>);
 
 /// A column of a table: the field it shows, how, and whether its cells are edited.
 #[derive(Debug, Clone, PartialEq)]
@@ -448,6 +453,8 @@ impl TablePart {
         let seen = || self.rows.records.iter().map(|r| rows::value_of(r, field)).find(|v| !v.is_null()).and_then(|v| kind_of_value(&v));
         let (kind, integer) = if facts.as_ref().is_some_and(|f| f.color) {
             (CellKind::Color, false)
+        } else if facts.as_ref().is_some_and(|f| f.folder) {
+            (CellKind::Folder, false)
         } else if !choices.is_empty() {
             (CellKind::Choice, false)
         } else {
@@ -886,6 +893,24 @@ impl TablePart {
         let row = self.row_box(place)?;
         let (x, width) = self.lefts(row.x)[c];
         Some(Rect::new(x, row.y, width, row.height))
+    }
+
+    /// The button of a cell of an edited folder column, while it is in sight; none where nothing picks folders.
+    pub fn folder_button_box(&self, place: usize, field: &str) -> Option<Rect> {
+        let edited = self.columns.iter().any(|c| c.field == field && c.kind == CellKind::Folder && c.edit);
+        if !edited || !crate::files::system().picks_folders() {
+            return None;
+        }
+        self.rows.records.get(place)?;
+        self.cell_box(place, field).map(calendar_button)
+    }
+
+    /// Asks the system's folder picker for the folder of a cell, off the screen's thread.
+    fn choose_folder(&mut self, place: usize, field: &str, cx: &mut Cx) {
+        let picker = crate::files::system();
+        let title = crate::parts::inputs::folder::choose_name();
+        let field = field.to_string();
+        cx.later(self.base.node.id(), move || FolderPicked(place, field, picker.choose_folder(&title)));
     }
 
     /// The swatch of the color in a cell of a color column, while it is in sight; none for a cell without a color.
@@ -1398,6 +1423,17 @@ impl TablePart {
                 let button = calendar_button(cell);
                 chevron(p, button.x + button.width / 2.0, button.y + button.height / 2.0, "down", look.color("muted"));
             }
+            CellKind::Folder if column.edit && crate::files::system().picks_folders() => {
+                // A typed path beside the button that opens the folder picker.
+                self.draw_input(p, cell, "", place, &column.field, false, TextAlign::Left, 0.0);
+                let button = calendar_button(cell);
+                let text = Rect { width: (cell.width - CALENDAR_BUTTON - 3.0).max(0.0), ..cell };
+                self.draw_input(p, text, &self.shown(place, &column.field), place, &column.field, true, TextAlign::Left, 0.0);
+                let middle = button.y + button.height / 2.0;
+                for k in [-4.0, 0.0, 4.0] {
+                    p.fill(Rect::new(button.x + button.width / 2.0 + k - 1.0, middle - 1.0, 2.0, 2.0), look.color("muted"), 1.0);
+                }
+            }
             CellKind::Choice => {
                 self.draw_input(p, cell, &self.shown(place, &column.field), place, &column.field, false, TextAlign::Left, 0.0);
                 chevron(p, cell.right() - 14.0, cell.y + cell.height / 2.0, "down", look.color("muted"));
@@ -1516,6 +1552,10 @@ fn editor_box(column: &TableColumn, cell: Rect) -> Rect {
             let input = cell.inset(3.0);
             Rect { width: (cell.width - 6.0 - CALENDAR_BUTTON).max(0.0), ..input }
         }
+        CellKind::Folder if crate::files::system().picks_folders() => {
+            let input = cell.inset(3.0);
+            Rect { width: (cell.width - 6.0 - CALENDAR_BUTTON).max(0.0), ..input }
+        }
         _ => cell.inset(3.0),
     }
 }
@@ -1589,6 +1629,17 @@ fn draw_switch(p: &Painter, cell: Rect, on: bool, inert: bool) {
 
 impl Element for TablePart {
     part_element!();
+
+    /// A folder the picker chose for a cell is that cell's edit.
+    fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
+        if let Ok(picked) = done.downcast::<FolderPicked>() {
+            let FolderPicked(place, field, folder) = *picked;
+            if let Some(folder) = folder.filter(|f| !f.is_empty()) {
+                self.edit(place, &field, Value::String(folder));
+            }
+        }
+        cx.invalidate();
+    }
 
     fn on_wake(&mut self, _cx: &mut Cx) {
         if self.remove_said.replace(false) {
@@ -1803,7 +1854,12 @@ impl Element for TablePart {
                     self.open_calendar_of(place, c, cell, cx);
                     return;
                 }
-                CellKind::Text | CellKind::Number | CellKind::Color | CellKind::Date => {
+                CellKind::Folder if crate::files::system().picks_folders() && calendar_button(cell).contains(x, y) => {
+                    self.focused_cell = Some((place, column.field.clone()));
+                    self.choose_folder(place, &column.field, cx);
+                    return;
+                }
+                CellKind::Text | CellKind::Number | CellKind::Color | CellKind::Date | CellKind::Folder => {
                     if self.editing.is_none() {
                         self.begin_typing(place, c, cx);
                     }

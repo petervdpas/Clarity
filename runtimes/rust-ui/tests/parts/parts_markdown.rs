@@ -172,7 +172,7 @@ fn it_shows_headings_paragraphs_items_and_code() {
 
 /// A book's text reads like a page: room around it, headings by their
 /// level with space around them, quotes set in with a bar, a scene break
-/// centred, line breaks kept, and lines no longer than a reading width.
+/// centred, line breaks kept, and lines as wide as the part.
 #[test]
 fn it_reads_like_a_page() {
     let text = "# One\n\n## Two\n\n### Three\n\nA line,  \nand the next.\n\n> Quoted words.\n\n***\n\nAfter.";
@@ -195,16 +195,30 @@ fn it_reads_like_a_page() {
     assert!(rules[0].width < page / 2.0 && (centre - plain.place.x - (part(&screen).column_width()) / 2.0).abs() < 2.0, "a scene break is centred: {:?}", rules[0]);
     let mut shot = Shot::of(&mut screen, 800, 600, 1.0);
     keep(&mut shot, "markdown-page.png");
-    // Wide, the lines keep a reading width, from the left.
+    // Wide, the lines take the part's whole width, from the left.
     let words = vec!["squares"; 300].join(" ");
     let (screen, _) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!(words)), 2400, 600);
     let runs = part(&screen).runs();
     let left = runs.iter().map(|r| r.place.x).fold(f64::MAX, f64::min);
     let right = runs.iter().map(|r| r.place.right()).fold(0.0, f64::max);
     let width = part(&screen).node().bounds.width;
-    assert!(right - left < width * 0.7, "a reading width: {left}..{right} of {width}");
+    assert!(right > width * 0.9, "the whole width: {left}..{right} of {width}");
     assert!(left < 20.0, "from the left: {left}..{right} of {width}");
     let _ = BAR_ROOM;
+}
+
+/// `readingWidth`, the part's option: a wide part keeps its lines in a
+/// column of a reading width, from the left, as a book page reads.
+#[test]
+fn with_reading_width_the_lines_keep_a_reading_column() {
+    let words = vec!["squares"; 300].join(" ");
+    let (screen, _) = markdown(r#"bind="notes" readingWidth="true""#, |h| h.inner.set("notes", json!(words)), 2400, 600);
+    let runs = part(&screen).runs();
+    let left = runs.iter().map(|r| r.place.x).fold(f64::MAX, f64::min);
+    let right = runs.iter().map(|r| r.place.right()).fold(0.0, f64::max);
+    let width = part(&screen).node().bounds.width;
+    assert!(right - left < width * 0.7, "a reading width: {left}..{right} of {width}");
+    assert!(left < 20.0, "from the left: {left}..{right} of {width}");
 }
 
 #[test]

@@ -29,10 +29,12 @@ pub struct ListPart {
     pressed: Option<usize>,
     /// The sizes of the look it was last laid out in.
     look: Measures,
+    /// Where each card's chip was last drawn (`cardChip`), by the card's place.
+    chips: std::cell::RefCell<Vec<(usize, Rect)>>,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
-    let mut part = ListPart { base: PartBase::new(spec, host), rows: Rows::default(), choices: HashMap::new(), pressed: None, look: Measures::default() };
+    let mut part = ListPart { base: PartBase::new(spec, host), rows: Rows::default(), choices: HashMap::new(), pressed: None, look: Measures::default(), chips: Default::default() };
     part.sync();
     Box::new(part)
 }
@@ -200,14 +202,39 @@ impl ListPart {
         p.text(&fitted, text, shown.text.unwrap_or_else(|| look.color("text")), size, &font, shown.bold(), TextAlign::Left);
     }
 
-    fn draw_card(&self, p: &Painter, record: &Value, card: Rect, state: Option<&str>) {
+    /// The colour of a card's record when the list colours its cards (`cardColor`): none without one.
+    fn paint_of(&self, record: &Value) -> Option<skia_safe::Color> {
+        let field = self.base.spec.text("cardColor").filter(|f| !f.is_empty())?;
+        rows::value_of(record, &field).as_str().and_then(crate::theme::parse_color)
+    }
+
+    /// Where the chip of the card at `place` was last drawn: none for a card without one.
+    pub fn chip_box(&self, place: usize) -> Option<Rect> {
+        self.chips.borrow().iter().find(|(at, _)| *at == place).map(|(_, r)| *r)
+    }
+
+    fn draw_card(&self, p: &Painter, record: &Value, card: Rect, place: usize, state: Option<&str>) {
         let look = p.look;
         let shown = look.part("card", state);
         let radius = shown.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("panel"));
-        p.fill(card, shown.background.unwrap_or_else(|| look.color("raised")), radius);
+        let paint = self.paint_of(record);
+        let band = self.base.spec.flag("cardBand");
+        let chip = self.base.spec.text("cardChip").filter(|c| !c.is_empty()).and_then(|c| self.show().iter().position(|f| f == c));
+        // The whole card in its record's colour, its text black or white to read on it.
+        let whole = paint.filter(|_| !band && chip.is_none());
+        p.fill(card, whole.unwrap_or_else(|| shown.background.unwrap_or_else(|| look.color("raised"))), radius);
+        if let Some(paint) = paint.filter(|_| band) {
+            p.fill(Rect::new(card.x, card.y, CARD_BAND, card.height), paint, radius);
+            p.fill(Rect::new(card.x + CARD_BAND / 2.0, card.y, CARD_BAND / 2.0, card.height), paint, 0.0);
+        }
         if let Some(border) = shown.border {
             p.stroke(card, border, look.border(), radius);
         }
+        // A whole coloured card shows it is chosen by the focus colour around it.
+        if whole.is_some() && state == Some("selected") {
+            p.stroke(card, look.color("focus"), 2.0 * look.border(), radius);
+        }
+        let ink = whole.map(crate::parts::containers::container::readable_on);
         let line = look.part("card_line", state);
         let pad = look.padding();
         let x = card.x + pad * 2.5;
@@ -218,19 +245,31 @@ impl ListPart {
                 let height = Self::line_height(look.size("text"));
                 let size = shown.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));
                 let fitted = p.fit(text, width, size, "text", shown.bold());
-                p.text(&fitted, Rect::new(x, y, width, height), shown.text.unwrap_or_else(|| look.color("text")), size, "text", shown.bold(), TextAlign::Left);
+                p.text(&fitted, Rect::new(x, y, width, height), ink.or(shown.text).unwrap_or_else(|| look.color("text")), size, "text", shown.bold(), TextAlign::Left);
                 y += height;
             } else {
                 let height = Self::line_height(look.size("small"));
                 let size = look.size("small");
                 let fitted = p.fit(text, width, size, "text", line.bold());
-                let color = line.text.or(shown.text).unwrap_or_else(|| look.color("text"));
-                p.text(&fitted, Rect::new(x, y, width, height), color, size, "text", line.bold(), TextAlign::Left);
+                let color = ink.or(line.text).or(shown.text).unwrap_or_else(|| look.color("text"));
+                match paint.filter(|_| chip == Some(at) && !text.is_empty()) {
+                    // The chip: the line in a pill of its record's colour, as wide as its text.
+                    Some(paint) => {
+                        let pill = Rect::new(x - pad, y, (p.fonts.measure(&fitted, "text", size, line.bold()) + 2.0 * pad).min(width + pad), height);
+                        p.fill(pill, paint, height / 2.0);
+                        p.text(&fitted, Rect::new(x, y, width, height), crate::parts::containers::container::readable_on(paint), size, "text", line.bold(), TextAlign::Left);
+                        self.chips.borrow_mut().push((place, pill));
+                    }
+                    None => p.text(&fitted, Rect::new(x, y, width, height), color, size, "text", line.bold(), TextAlign::Left),
+                }
                 y += height;
             }
         }
     }
 }
+
+/// How wide the band at a card's start is when its colour is a band (`cardBand`).
+pub const CARD_BAND: f64 = 6.0;
 
 impl Element for ListPart {
     part_element!();
@@ -288,6 +327,7 @@ impl Element for ListPart {
             let striped = rows::striped(&self.base);
             let (height, gap) = self.row_size(&self.look);
             let (first, end) = self.rows.scroller.in_sight(height + gap, self.rows.records.len());
+            self.chips.borrow_mut().clear();
             for place in first..end {
                 let row = self.beside(self.rows.scroller.row_on_screen(place, height + gap, height));
                 let state = if Some(place) == chosen {
@@ -299,7 +339,7 @@ impl Element for ListPart {
                 };
                 let record = &self.rows.records[place];
                 if cards {
-                    self.draw_card(p, record, row, state);
+                    self.draw_card(p, record, row, place, state);
                 } else {
                     self.draw_row(p, record, row, state, striped && place % 2 == 1);
                 }

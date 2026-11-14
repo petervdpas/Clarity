@@ -1,66 +1,87 @@
 module maintenance
 
-// A project whose development ledger is reviewed: its name and the folder
-// of its ledger, which holds an index (README.md) and one Markdown file per
-// piece. Clarity is one of them.
+// A project whose dossiers are reviewed, by its name.
 entity Project
     name: text(80), required, unique, label @projectNameLabel
-    ledgerFolder: text(400), required, label @projectLedgerFolderLabel
 
-// Who reviewed an entry.
+// What a dossier is: Manual and Potentials to start with; more are added in
+// the Categories window. Each has the folder its dossiers' files are in
+// (Markdown files) and a color its dossiers' cards show.
+entity Category
+    name: text(80), required, unique, label @categoryNameLabel
+    folder: folder, label @categoryFolderLabel, extensions "*.md"
+    color: color, label @categoryColorLabel
+
+// One subject of a project under review, in a category, with its file in
+// the category's folder (`inFolder`, like parts.input.md), from which it is
+// read and to which it is saved; none for a dossier made by hand.
+entity Dossier
+    name: text(200), required, label @dossierNameLabel
+    category: ref Category, required, label @dossierCategoryLabel
+    inFolder: text(200), label @dossierFileLabel
+    project: ref Project, required, cascade, label @dossierProjectLabel
+
+// Who reviewed a dossier.
 enum Reviewer
     Peter label @reviewerPeter
     Claude label @reviewerClaude
 
-// The review of one entry of a project's ledger: kept in the app's own
-// database, never in the ledger.
+// The review of a dossier, one each: how much of it is done, counted from
+// its items, and its items. Kept in the app's own database, never in the
+// folder.
 entity Review
-    piece: text(120), required, label @reviewPieceLabel
+    dossier: ref Dossier, required, unique, cascade, label @reviewDossierLabel
     reviewed: bool, label @reviewedLabel
     reviewer: Reviewer, default Peter, label @reviewerLabel
     reviewedOn: date, label @reviewedOnLabel
     reviewedAt: datetime, label @reviewedAtLabel
     notes: text, label @notesLabel
-    ownReferences: text, label @ownReferencesLabel
-    project: ref Project, required, cascade, label @reviewProjectLabel
+    percentDone: integer, min 0, max 100, label @reviewPercentLabel
 
-// A row of the ledger's tree: a group of the index, or an entry under it.
-record Entry
-    key: text
-    parent: text
-    label: text
-    status: text
-    reviewed: text
-    body: text
-    progress: integer
-    changed: datetime
+// What a review item is: missing in the dossier for this category, new in
+// the dossier and category, a piece that differs from its origin, or wrong
+// in this dossier and category (to delete or move to another dossier).
+enum ItemKind
+    Missing label @itemKindMissing
+    New label @itemKindNew
+    Differs label @itemKindDiffers
+    Wrong label @itemKindWrong
+
+// One item of a review: a possible missing implementation, green when done
+// and red when not. Reviewing is adding, removing and marking them.
+entity ReviewItem
+    summary: text(400), required, label @reviewItemSummaryLabel
+    kind: ItemKind, default Missing, label @reviewItemKindLabel
+    notes: text, label @reviewItemNotesLabel
+    review: ref Review, required, cascade, label @reviewItemReviewLabel
+    done: bool, label @reviewItemDoneLabel
+
+// A card of the dossier list: the dossier's name, its category on the
+// second line and how much of it is done on the third.
+record DossierCard
+    name: text
+    category: text
+    done: text
+    categoryColor: color
+    dossierId: integer
     stale: bool
 
-// What the person sets for themselves: the ledger folder the picked project
-// points the ledger store at, the project picked last, and what AI agents
-// may do while the app is closed.
+// What the person sets for themselves: the project picked last, and what AI
+// agents may do while the app is closed.
 settings
     language
     theme
-    ledgerFolder: folder, label @ledgerFolderSetting
     lastProject: text, label @lastProjectSetting
     agentReadsWhileClosed
     agentChangesWhileClosed
 
-// The toasts the app shows: saving an entry and a review, each its own.
-toast entrySaved
-    text @entrySaved
+// The toasts the app shows, each its own.
+toast dossierSaved
+    text @dossierSaved
     lifespan 3000
     level success
     icon "check"
     corner bottomRight
-
-toast pickAnEntry
-    text @pickAnEntry
-    lifespan 4000
-    level warning
-    icon "triangle-alert"
-    corner topRight
 
 toast reviewSaved
     text @reviewSaved
@@ -69,18 +90,33 @@ toast reviewSaved
     icon "clipboard-check"
     corner bottomRight
 
-// The number of an entry's Progress line (`Progress: 60%`); -1 when it has none.
-function progressOf(body: text) -> integer
-    let line = lineAfter(body, "Progress: ")
-    if line == ""
-        return -1
-    let n = 0
-    for c in split(line, "")
-        let digit = indexOf("0123456789", c)
-        if digit == 0
-            return n
-        n = n * 10 + digit - 1
-    return n
+toast itemRemoved
+    text @itemRemoved
+    lifespan 3000
+    level info
+    icon "trash"
+    corner bottomRight
+
+toast dossiersImported
+    text @dossiersImported
+    lifespan 4000
+    level success
+    icon "check"
+    corner bottomRight
+
+toast noCategoryFolder
+    text @noCategoryFolder
+    lifespan 5000
+    level warning
+    icon "folder-x"
+    corner topRight
+
+toast pickADossier
+    text @pickADossier
+    lifespan 4000
+    level warning
+    icon "triangle-alert"
+    corner topRight
 
 // The rest of the first line that starts with `prefix`; empty when none does.
 function lineAfter(body: text, prefix: text) -> text
@@ -89,139 +125,136 @@ function lineAfter(body: text, prefix: text) -> text
             return trim(slice(line, length(prefix) + 1, length(line)))
     return ""
 
-// An entry's title, its first heading; the piece's name when it has none.
-function titleOf(body: text, piece: text) -> text
+// A dossier's name from its file: its first heading, or the file's name
+// when it has none.
+function titleOf(body: text, fileName: text) -> text
     let title = lineAfter(body, "# ")
     if title == ""
-        return piece
+        return fileName
     return title
 
-// What the tree shows of an entry: its Progress line as written (`60%`),
-// else the word of its status line (built, partial, not built, needs decision).
-function statusOf(body: text) -> text
-    let progress = lineAfter(body, "Progress: ")
-    if progress != ""
-        return progress
-    let line = lineAfter(body, "Status: ")
-    let stop = indexOf(line, ".")
-    if stop == 0
-        return line
-    return slice(line, 1, stop - 1)
+// How much of a review is done: its green items out of all of them, in
+// percent; 0 while it has no items.
+function percentOf(items: list<ReviewItem>) -> integer
+    let all = count(items)
+    if all == 0
+        return 0
+    let green = 0
+    for i in items
+        if i.done
+            green = green + 1
+    return green * 100 div all
 
-// The lines under a `## heading`, up to the next heading.
-function sectionOf(body: text, heading: text) -> text
-    let lines: list<text> = []
-    let inside = false
-    for line in split(body, "\n")
-        if startsWith(line, "## ")
-            inside = trim(slice(line, 4, length(line))) == heading
-        else
-            if inside
-                lines = lines + [line]
-    return trim(join(lines, "\n"))
+// Whether a dossier's file changed after the time it was reviewed. A review kept
+// before that time was recorded counts as changed since.
+function changedSince(modified: datetime, one: Review) -> bool
+    if one.reviewedAt == none
+        return true
+    return modified > one.reviewedAt
 
-// The other entries an entry links to, as `[name](name.md)`, each once.
-function linksOf(body: text) -> text
-    let names: list<text> = []
-    let pieces = split(body, "](")
-    for i in 2 to count(pieces)
-        let rest = pieces[i]
-        let stop = indexOf(rest, ".md)")
-        if stop > 1
-            let name = slice(rest, 1, stop - 1)
-            if indexOf(name, "/") == 0 and not (names contains name)
-                names = names + [name]
-    return join(names, ", ")
+// The card of a dossier: its name, its category and the category's color,
+// and how much of it is done as its review's items say.
+function cardOf(d: Dossier, reviews: list<Review>) -> DossierCard
+    let c = new DossierCard
+    c.name = d.name
+    c.category = d.category.name
+    c.categoryColor = d.category.color
+    c.dossierId = d.id
+    c.done = @progressPercent(percent = 0)
+    for r in reviews
+        if r.dossier.id == d.id
+            c.done = @progressPercent(percent = r.percentDone)
+    return c
 
-// The piece a ledger file is about: its name without `.md`.
-function pieceOf(fileName: text) -> text
-    return slice(fileName, 1, length(fileName) - 3)
+// Whether a dossier's file, changed at `modified`, changed after its review.
+function staleSince(modified: datetime, d: Dossier, reviews: list<Review>) -> bool
+    for r in reviews
+        if r.dossier.id == d.id and r.reviewed
+            return changedSince(modified, r)
+    return false
+
+// Whether a dossier has a file in a folder: a file named, and its category
+// a folder.
+function hasFile(d: Dossier) -> bool
+    return d.inFolder != "" and d.category.folder != ""
+
+// A dossier's file in its category's folder, for a dossier that has one:
+// none when the file is gone.
+action fileOf(d: Dossier) -> list<file>
+    effects files.read
+    return files f in folder d.category.folder where f.path == d.inFolder
 
 code Main
     handler windowOpened
         clearEntry()
+        ensureCategories()
         loadProjects()
 
-    // Projects may have been added, changed or removed.
+    // Projects and categories may have been added, changed or removed.
     handler windowReturned
         loadProjects()
+        loadEntries()
 
-    // The ledger is read again only when the picked project changed (another
-    // one, or its folder): coming back from a dialog keeps the entry shown,
-    // and what was typed in it and not saved yet.
+    // The two categories a new database starts with.
+    handler ensureCategories
+        let all = find c in Category
+        if count(all) == 0
+            let manual = new Category
+            manual.name = @categoryManual
+            manual.color = "#2e6f9e"
+            save manual
+            let potentials = new Category
+            potentials.name = @categoryPotentials
+            potentials.color = "#b7791f"
+            save potentials
+
     handler loadProjects
         projects = find p in Project order by p.name
+        categories = find c in Category order by c.name
         for p in projects
             if p.name == settings.lastProject
                 projectList.selected = p
-                if project.name != p.name or project.ledgerFolder != p.ledgerFolder
-                    showLedger(p)
+                if project.name != p.name
+                    showProject(p)
 
     handler projectPicked
-        showLedger(projectList.selected)
+        showProject(projectList.selected)
 
-    // Points the ledger store at the project's ledger and lists its entries.
-    handler showLedger(picked: Project)
-        settings.ledgerFolder = picked.ledgerFolder
+    // Lists the project's dossiers.
+    handler showProject(picked: Project)
         settings.lastProject = picked.name
         project = picked
+        clearEntry()
         loadEntries()
 
     handler reloadClicked
         loadEntries()
 
-    // The entries in the groups and order of the ledger's index, then the
-    // entries the index does not list yet.
+    // The dossiers of the project as cards, by name, each read against its
+    // file in its category's folder.
     handler loadEntries
-        let rows: list<Entry> = []
-        let reviews = find r in Review where r.project == project
-        let found = files f in ledger where f.extension == "md" order by f.path
-        let index = ""
-        for f in found
-            if f.path == "README.md"
-                index = read text of f
-        let listed: list<text> = []
-        let group = ""
-        for line in split(index, "\n")
-            if startsWith(line, "### ")
-                group = trim(slice(line, 5, length(line)))
-                let g = new Entry
-                g.key = "group:" + group
-                g.label = group
-                rows = rows + [g]
-            else
-                if startsWith(line, "| [")
-                    let listedPiece = slice(line, 4, indexOf(line, "]") - 4)
-                    listed = listed + [listedPiece]
-                    rows = rows + [entryOf(found, listedPiece, "group:" + group)]
-        let unlisted: list<Entry> = []
-        for f in found
-            let filePiece = pieceOf(f.name)
-            if indexOf(f.path, "/") == 0 and f.path != "README.md" and not (listed contains filePiece)
-                unlisted = unlisted + [entryOf(found, filePiece, "group:unlisted")]
-        if count(unlisted) > 0
-            let g = new Entry
-            g.key = "group:unlisted"
-            g.label = @notInIndexGroup
-            rows = rows + [g] + unlisted
-        entries = marked(rows, reviews)
-        checkReviews(reviews, found)
-        clearEntry()
-
-    // The reviews kept in the app's database against the ledger's files: a
-    // review whose entry has no file, and a review whose entry changed after it.
-    handler checkReviews(reviews: list<Review>, found: list<file>)
+        let dossiers = find d in Dossier where d.project == project order by d.name
+        let reviews = find r in Review
+        let cards: list<DossierCard> = []
         let missing = 0
         let changed = 0
-        for one in reviews
-            let there = false
-            for f in found
-                if f.path == one.piece + ".md"
-                    there = true
-                    if one.reviewed and changedSince(f.modified, one)
-                        changed = changed + 1
-            if not there
-                missing = missing + 1
+        for d in dossiers
+            let card = cardOf(d, reviews)
+            if hasFile(d)
+                let found = fileOf(d)
+                if count(found) == 0
+                    missing = missing + 1
+                for f in found
+                    card.stale = staleSince(f.modified, d, reviews)
+            if card.stale
+                changed = changed + 1
+            cards = cards + [card]
+        dossierCards = cards
+        showFolders(missing, changed)
+
+    // The footer's word on the folders: dossiers whose file is gone, and
+    // files that changed after their review.
+    handler showFolders(missing: integer, changed: integer)
         ledgerItem.checked = missing == 0 and changed == 0
         if missing == 0 and changed == 0
             ledgerItem.caption = @ledgerItemCaption
@@ -231,7 +264,8 @@ code Main
             ledgerItem.error = @ledgerOutOfStep(missing = missing, changed = changed)
 
     handler clearEntry
-        piece = ""
+        dossier = new Dossier
+        review = new Review
         entryBody = ""
         entryProgress = 0
         progressItem.caption = @progressItemCaption
@@ -239,19 +273,15 @@ code Main
         reviewItem.checked = false
         reviewItem.error = ""
 
-    // The footer for the entry picked: how much of it is implemented, as
-    // its Progress line says, and whether it is reviewed since it changed.
-    handler showFooter(e: Entry)
-        if e.progress < 0
-            entryProgress = 0
-            progressItem.caption = @noProgressLine
-        else
-            entryProgress = e.progress
-            progressItem.caption = @progressPercent(percent = e.progress)
+    // The footer for the dossier picked: how much of it is done, as its
+    // review's items say, and whether it is reviewed since its file changed.
+    handler showFooter(stale: bool)
+        entryProgress = review.percentDone
+        progressItem.caption = @progressPercent(percent = review.percentDone)
         reviewItem.checked = review.reviewed
         if review.reviewed
             reviewItem.caption = @reviewedOnCaption(day = review.reviewedOn)
-            if e.stale
+            if stale
                 reviewItem.error = @changedSinceReview
             else
                 reviewItem.error = ""
@@ -259,132 +289,146 @@ code Main
             reviewItem.caption = @reviewItemCaption
             reviewItem.error = ""
 
-    // Shows the entry picked, with its review from the app's database, or a
-    // new review when it has none yet.
-    handler entryPicked
-        let e = entryTree.selected
-        if e.parent == ""
+    // A dossier's card shows its file's text and its review.
+    handler dossierPicked
+        let c = dossierList.selected
+        showDossier(c.dossierId, c.stale)
+
+    handler showDossier(id: integer, stale: bool)
+        let kept = find d in Dossier where d.id == id
+        if count(kept) == 0
             return
-        piece = e.key
-        entryBody = e.body
-        related = linksOf(e.body)
-        codePaths = sectionOf(e.body, "Code") + "\n\n" + sectionOf(e.body, "Tests")
-        oldReferences = sectionOf(e.body, "Was")
-        let found = find r in Review where r.project == project and r.piece == piece
+        dossier = kept[1]
+        let found = find r in Review where r.dossier == dossier
         if count(found) > 0
             review = found[1]
         else
             let fresh = new Review
-            fresh.project = project
-            fresh.piece = piece
+            fresh.dossier = dossier
             review = fresh
-        showFooter(e)
+        reviewItems = find i in ReviewItem where i.review == review order by i.summary
+        entryBody = ""
+        if hasFile(dossier)
+            for f in fileOf(dossier)
+                entryBody = read text of f
+        showFooter(stale)
 
     handler reviewClicked
-        if piece == ""
-            toast pickAnEntry
+        if dossier.id == 0
+            toast pickADossier
             return
         reviewPanel.visible = true
 
-    // Writes the entry as edited back into its file in the ledger, and keeps
-    // the tree and the review's references in step with it.
-    handler saveEntryClicked
-        if piece == ""
-            toast pickAnEntry
-            return
-        write entryBody to ledger piece + ".md"
-        let rows: list<Entry> = []
-        let saved = new Entry
-        for e in entries
-            if e.key == piece
-                e.body = entryBody
-                e.label = titleOf(entryBody, piece)
-                e.status = statusOf(entryBody)
-                e.progress = progressOf(entryBody)
-                e.changed = now()
-                e.stale = review.reviewed
-                if review.reviewed
-                    e.reviewed = @changedMark
-                saved = e
-            rows = rows + [e]
-        entries = rows
-        showFooter(saved)
-        related = linksOf(entryBody)
-        codePaths = sectionOf(entryBody, "Code") + "\n\n" + sectionOf(entryBody, "Tests")
-        oldReferences = sectionOf(entryBody, "Was")
-        toast entrySaved(piece = piece)
+    // A new dossier: its name, then its category.
+    handler addDossierClicked
+        ask @dossierNameAsk for text then addDossierNamed
 
-    // Stores the review in the app's database and marks the entry in the tree.
-    handler saveReviewClicked
-        if piece == ""
+    handler addDossierNamed(name: text)
+        ask @dossierCategoryAsk for Category from categories then addDossier(name)
+
+    handler addDossier(name: text, category: Category)
+        let d = new Dossier
+        d.project = project
+        d.name = trim(name)
+        d.category = category
+        save d
+        let r = new Review
+        r.dossier = d
+        save r
+        loadEntries()
+        showDossier(d.id, false)
+
+    // Every file of a category's folder that is no dossier yet becomes one,
+    // named by its first heading.
+    handler importDossiersClicked
+        ask @importCategoryAsk for Category from categories then importDossiers
+
+    handler importDossiers(category: Category)
+        if category.folder == ""
+            toast noCategoryFolder(category = category.name)
             return
+        let found = files f in folder category.folder order by f.path
+        let existing = find d in Dossier where d.project == project and d.category == category
+        let taken: list<text> = []
+        for d in existing
+            taken = taken + [d.inFolder]
+        let added = 0
+        for f in found
+            if not (taken contains f.path)
+                taken = taken + [f.path]
+                let d = new Dossier
+                d.project = project
+                d.category = category
+                d.inFolder = f.path
+                d.name = titleOf(read text of f, f.name)
+                save d
+                let r = new Review
+                r.dossier = d
+                save r
+                added = added + 1
+        loadEntries()
+        toast dossiersImported(count = added)
+
+    // The review's items, edited in its table: a new one is red until it is
+    // done. Every change counts the review's percentage again.
+    handler itemAdded
+        if dossier.id == 0
+            toast pickADossier
+            return
+        if review.id == 0
+            review.dossier = dossier
+            save review
+        let one = new ReviewItem
+        one.review = review
+        one.summary = @newItemSummary
+        save one
+        countDone()
+
+    handler itemChanged
+        save itemTable.selected
+        countDone()
+
+    handler itemRemoved
+        delete itemTable.selected
+        countDone()
+        toast itemRemoved
+
+    // The review's percentage from its items, kept with the review, and the
+    // table, tree and footer showing it.
+    handler countDone
+        let items = find i in ReviewItem where i.review == review order by i.summary
+        review.percentDone = percentOf(items)
+        save review
+        reviewItems = items
+        loadEntries()
+        showFooter(false)
+
+    // Writes the dossier's text as edited back into its file in its
+    // category's folder.
+    handler saveDossierClicked
+        if dossier.inFolder == ""
+            toast pickADossier
+            return
+        if dossier.category.folder == ""
+            toast noCategoryFolder(category = dossier.category.name)
+            return
+        write entryBody to folder dossier.category.folder dossier.inFolder
+        loadEntries()
+        toast dossierSaved(dossier = dossier.name)
+
+    // Stores the review in the app's database.
+    handler saveReviewClicked
+        if dossier.id == 0
+            return
+        save dossier
+        review.dossier = dossier
         if review.reviewed
             review.reviewedOn = today()
             review.reviewedAt = now()
         save review
-        let rows: list<Entry> = []
-        let saved = new Entry
-        for e in entries
-            if e.key == piece
-                e.stale = false
-                if review.reviewed
-                    e.reviewed = @reviewedMark
-                else
-                    e.reviewed = ""
-                saved = e
-            rows = rows + [e]
-        entries = rows
-        showFooter(saved)
-        let reviews = find r in Review where r.project == project
-        let found = files f in ledger where f.extension == "md" order by f.path
-        checkReviews(reviews, found)
-        toast reviewSaved(piece = piece)
-
-// Whether a ledger file changed after the time it was reviewed. A review
-// kept before that time was recorded counts as changed since: reviewing it
-// again records it.
-function changedSince(modified: datetime, one: Review) -> bool
-    if one.reviewedAt == none
-        return true
-    return modified > one.reviewedAt
-
-// The rows with each entry's review marked: reviewed, or changed since.
-function marked(rows: list<Entry>, reviews: list<Review>) -> list<Entry>
-    let out: list<Entry> = []
-    for row in rows
-        let e = new Entry
-        e.key = row.key
-        e.parent = row.parent
-        e.label = row.label
-        e.status = row.status
-        e.body = row.body
-        e.progress = row.progress
-        e.changed = row.changed
-        for one in reviews
-            if one.piece == e.key and one.reviewed
-                e.stale = changedSince(e.changed, one)
-                if e.stale
-                    e.reviewed = @changedMark
-                else
-                    e.reviewed = @reviewedMark
-        out = out + [e]
-    return out
-
-// One row of the tree for the ledger file of `piece`.
-action entryOf(found: list<file>, piece: text, parent: text) -> Entry
-    effects files.read
-    let e = new Entry
-    e.key = piece
-    e.parent = parent
-    e.label = piece
-    for f in found
-        if f.path == piece + ".md"
-            e.body = read text of f
-            e.label = titleOf(e.body, piece)
-            e.status = statusOf(e.body)
-            e.progress = progressOf(e.body)
-            e.changed = f.modified
-    return e
+        loadEntries()
+        showFooter(false)
+        toast reviewSaved(dossier = dossier.name)
 
 code Projects
     handler projectsOpened
@@ -394,7 +438,6 @@ code ProjectsView
     handler projectAdded
         let p = new Project
         p.name = @newProjectName
-        p.ledgerFolder = @newProjectFolder
         save p
         projects = find x in Project order by x.name
 
@@ -405,49 +448,99 @@ code ProjectsView
         delete projectTable.selected
         projects = find x in Project order by x.name
 
+code Categories
+    handler categoriesOpened
+        categories = find c in Category order by c.name
+
+code CategoriesView
+    handler categoryAdded
+        let c = new Category
+        c.name = @newCategoryName
+        save c
+        categories = find x in Category order by x.name
+
+    handler categoryChanged
+        save categoryList.selected
+
+    handler categoryRemoved
+        delete categoryList.selected
+        categories = find x in Category order by x.name
+
+    handler categoryPicked
+        category = categoryList.selected
+
+    handler folderChosen
+        if category.id == 0
+            return
+        save category
+        categories = find x in Category order by x.name
+
 // The commands for AI agents, which the app serves itself (`maintenance mcp`):
-// the projects and their reviews, kept in the app's own database.
+// the projects, their dossiers, the dossiers' reviews and the reviews' items,
+// kept in the app's own database.
 command project list
     help @projectListHelp
     agent
     let found = find p in Project order by p.name
-    print found columns name, ledgerFolder
+    print found columns name
 
-command project add(name: text, folder: text)
+command project add(name: text)
     help @projectAddHelp
     agent
     let p = new Project
     p.name = name
-    p.ledgerFolder = folder
     save p
     print @projectAdded(name = p.name)
 
-command review list(project: text)
-    help @reviewListHelp
+command dossier list(project: text)
+    help @dossierListHelp
     agent
-    option all: bool, help @reviewListAllHelp
     let owners = find p in Project where p.name == project
     if count(owners) == 0
         refuse @noSuchProject(name = project)
-    let reviews = find r in Review where r.project == owners[1] and r.reviewed order by r.piece
-    if all
-        reviews = find r in Review where r.project == owners[1] order by r.piece
-    print reviews columns piece, reviewed, reviewer, reviewedOn
+    let found = find d in Dossier where d.project == owners[1] order by d.name
+    print found columns id, name, inFolder
 
-command review show(project: text, piece: text)
+command dossier add(project: text, category: text, name: text)
+    help @dossierAddHelp
+    agent
+    option inFolder: text, help @dossierAddPageHelp
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kinds = find c in Category where c.name == category
+    if count(kinds) == 0
+        refuse @noSuchCategory(name = category)
+    let d = new Dossier
+    d.project = owners[1]
+    d.category = kinds[1]
+    d.name = name
+    d.inFolder = inFolder
+    save d
+    let r = new Review
+    r.dossier = d
+    save r
+    print @dossierAdded(name = d.name)
+
+command review show(project: text, dossier: text)
     help @reviewShowHelp
     agent
     let owners = find p in Project where p.name == project
     if count(owners) == 0
         refuse @noSuchProject(name = project)
-    let kept = find r in Review where r.project == owners[1] and r.piece == piece
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
     if count(kept) == 0
-        refuse @noReviewYet(piece = piece)
-    print kept columns piece, reviewed, reviewer, reviewedOn
-    print kept[1].notes
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
+    print reviews columns reviewed, percentDone, reviewer, reviewedOn
+    for r in reviews
+        print r.notes
+        let items = find i in ReviewItem where i.review == r order by i.summary
+        print items columns id, done, kind, summary
 
-// Reviewed when --reviewed is given, else not; the notes stay as they were when none are given.
-command review set(project: text, piece: text)
+// Reviewed when --reviewed is given, else not; the notes stay as they were
+// when none are given. How much is done follows the review's items.
+command review set(project: text, dossier: text)
     help @reviewSetHelp
     agent
     option reviewed: bool, help @reviewSetReviewedHelp
@@ -456,13 +549,15 @@ command review set(project: text, piece: text)
     let owners = find p in Project where p.name == project
     if count(owners) == 0
         refuse @noSuchProject(name = project)
-    let kept = find r in Review where r.project == owners[1] and r.piece == piece
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
+    if count(kept) == 0
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
     let r = new Review
-    if count(kept) > 0
-        r = kept[1]
+    if count(reviews) > 0
+        r = reviews[1]
     else
-        r.project = owners[1]
-        r.piece = piece
+        r.dossier = kept[1]
     r.reviewed = reviewed
     r.reviewer = reviewer
     if notes != ""
@@ -471,4 +566,95 @@ command review set(project: text, piece: text)
         r.reviewedOn = today()
         r.reviewedAt = now()
     save r
-    print @reviewStored(piece = piece, project = project)
+    print @reviewStored(dossier = dossier, project = project)
+
+command item list(project: text, dossier: text)
+    help @itemListHelp
+    agent
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
+    if count(kept) == 0
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
+    for r in reviews
+        let items = find i in ReviewItem where i.review == r order by i.summary
+        print items columns id, done, kind, summary
+
+// Red unless --done is given.
+command item add(project: text, dossier: text, summary: text)
+    help @itemAddHelp
+    agent
+    option kind: ItemKind, default Missing, help @itemAddKindHelp
+    option done: bool, help @itemDoneHelp
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
+    if count(kept) == 0
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
+    let r = new Review
+    if count(reviews) > 0
+        r = reviews[1]
+    else
+        r.dossier = kept[1]
+        save r
+    let one = new ReviewItem
+    one.review = r
+    one.kind = kind
+    one.summary = summary
+    one.done = done
+    save one
+    recount(r)
+    print @itemAdded(id = one.id, dossier = dossier)
+
+command item remove(project: text, dossier: text, id: integer)
+    help @itemRemoveHelp
+    agent
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
+    if count(kept) == 0
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
+    if count(reviews) == 0
+        refuse @noSuchItem(id = id, dossier = dossier)
+    let found = find i in ReviewItem where i.id == id and i.review == reviews[1]
+    if count(found) == 0
+        refuse @noSuchItem(id = id, dossier = dossier)
+    delete found[1]
+    recount(reviews[1])
+    print @itemGone(id = id)
+
+// Green when --done is given, red when not.
+command item set(project: text, dossier: text, id: integer)
+    help @itemSetHelp
+    agent
+    option done: bool, help @itemDoneHelp
+    let owners = find p in Project where p.name == project
+    if count(owners) == 0
+        refuse @noSuchProject(name = project)
+    let kept = find d in Dossier where d.project == owners[1] and d.name == dossier
+    if count(kept) == 0
+        refuse @noSuchDossier(name = dossier, project = project)
+    let reviews = find r in Review where r.dossier == kept[1]
+    if count(reviews) == 0
+        refuse @noSuchItem(id = id, dossier = dossier)
+    let found = find i in ReviewItem where i.id == id and i.review == reviews[1]
+    if count(found) == 0
+        refuse @noSuchItem(id = id, dossier = dossier)
+    let one = found[1]
+    one.done = done
+    save one
+    recount(reviews[1])
+    print @itemStored(id = id)
+
+// A review's percentage again from its items.
+action recount(r: Review)
+    effects db.read, db.write
+    let items = find i in ReviewItem where i.review == r
+    r.percentDone = percentOf(items)
+    save r

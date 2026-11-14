@@ -8,6 +8,8 @@ mod canvas_host;
 #[allow(dead_code, unused_imports)]
 #[path = "../common/data_rows_host.rs"]
 mod data_rows_host;
+#[path = "../common/inputs_test_picker.rs"]
+mod inputs_test_picker;
 
 mod canvas_paint;
 mod canvas_shape;
@@ -26,6 +28,7 @@ mod looks_gallery;
 mod striped_rows;
 mod table_add_remove;
 mod table_edge;
+mod table_folder;
 mod table_key;
 mod table_row;
 mod table_sideways;

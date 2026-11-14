@@ -88,12 +88,12 @@ In the Parts tab, the Frame group holds the regions. Drag one onto an edge of th
 | Region | Docks | Holds |
 |---|---|---|
 | `<Menu>` | at the top | `<Item>` elements, which can hold items inside them (a submenu), and `<Item kind="separator" />` |
-| `<Toolbar>` | at the top, below the menu | `<Item kind="button">` and separators |
+| `<Toolbar>` | at the top, below the menu, or beside it when the menu has a width | `<Item kind="button">` and separators |
 | `<Ribbon>` | at the top | `<Tab>` elements with `<Group>` elements of buttons and separators |
 | `<Sidebar>` | at its `side`, left or right | parts, on a grid of its own |
 | `<Footer>` | at the bottom | an optional `status="@key"` and parts on a one-row grid |
 
-Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. The menu, the toolbar and the ribbon have their Name; a sidebar its own options; a footer its Status text.
+Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. The menu, the toolbar and the ribbon have their Name, the menu and the toolbar their Width in pixels; a sidebar its own options; a footer its Status text.
 
 A window can declare regions of its own, with the same elements in its own `.cxaml` file. A window's region replaces the app's region of that kind, and its sidebar replaces the app's sidebar on the same side; the other regions still come from the app. A dialog, a view and a sign-in window have no frame, and the checker refuses regions in them.
 
@@ -118,18 +118,22 @@ A window can declare regions of its own, with the same elements in its own `.cxa
 ### `Menu`
 
 ```xml
-<Menu name="mainMenu"> items </Menu>
+<Menu name="mainMenu" width="320"> items </Menu>
 ```
 
 A named part: `name` is camelCase, and a new menu gets `mainMenu`. Code hides it with `mainMenu.visible = false` and turns it off with `mainMenu.enabled = false`. Its items are [commands](#commands). A menu with no items gets a warning; a menu without a name is refused.
 
+`width` is optional, 100 to 1600 pixels. Without it the menu bar takes the whole width and the toolbar stands under it. With it the menu bar takes that width and leaves the rest of its row to the toolbar, which stands next to it; the row is as high as the higher of the two. An agent sets it with `change_menu`, and `null` takes it away.
+
 ### `Toolbar`
 
 ```xml
-<Toolbar name="mainToolbar"> buttons and separators </Toolbar>
+<Toolbar name="mainToolbar" width="400"> buttons and separators </Toolbar>
 ```
 
 A named part, as the menu is: a new one gets `mainToolbar`, and code sets its `visible` and `enabled`. Its items are `<Item kind="button">` and `<Item kind="separator" />`. A toolbar with no buttons gets a warning; one without a name is refused.
+
+`width` is optional, 100 to 1600 pixels, and counts beside a menu bar that has a width: the toolbar then takes that width, and without one the rest of the row. An agent sets it with `change_toolbar`.
 
 ### `Ribbon`
 

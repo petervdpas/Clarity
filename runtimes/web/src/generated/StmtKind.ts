@@ -3,6 +3,7 @@ import type { Arg } from "./Arg";
 import type { AskForm } from "./AskForm";
 import type { Branch } from "./Branch";
 import type { Expr } from "./Expr";
+import type { FilePlace } from "./FilePlace";
 import type { Ident } from "./Ident";
 import type { MessageLevel } from "./MessageLevel";
 import type { Stmt } from "./Stmt";
@@ -12,4 +13,4 @@ export type StmtKind = { "kind": "let", name: Ident, ty: TypeRef | null, value: 
 /**
  * None when a dialog window asks: its own title and parts say what.
  */
-question: Expr | null, form: AskForm, then: Ident, args: Array<Expr>, } | { "kind": "open", window: Ident, with: Array<Arg>, } | { "kind": "close" } | { "kind": "closeWith", value: Expr, } | { "kind": "save", value: Expr, anyway: boolean, } | { "kind": "reload", data: Ident, } | { "kind": "delete", value: Expr, } | { "kind": "refuse", text: Expr, } | { "kind": "write", text: Expr, store: Ident, path: Expr, } | { "kind": "print", value: Expr, columns: Array<Ident>, } | { "kind": "copy", text: Expr, } | { "kind": "exit", code: Expr, } | { "kind": "tell", tell: Ident, args: Array<Expr>, };
+question: Expr | null, form: AskForm, then: Ident, args: Array<Expr>, } | { "kind": "open", window: Ident, with: Array<Arg>, } | { "kind": "close" } | { "kind": "closeWith", value: Expr, } | { "kind": "save", value: Expr, anyway: boolean, } | { "kind": "reload", data: Ident, } | { "kind": "delete", value: Expr, } | { "kind": "refuse", text: Expr, } | { "kind": "write", text: Expr, place: FilePlace, path: Expr, } | { "kind": "print", value: Expr, columns: Array<Ident>, } | { "kind": "copy", text: Expr, } | { "kind": "exit", code: Expr, } | { "kind": "tell", tell: Ident, args: Array<Expr>, };

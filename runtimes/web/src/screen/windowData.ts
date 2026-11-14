@@ -102,6 +102,8 @@ export function valueField(decl: DataDecl): Field | null {
     format: null,
     column: null,
     store: null,
+    extensions: [],
+    hidden: false,
   };
   return { name: decl.name, type, typeText: typeText(decl.of.ty.kind), modifiers, label: decl.name.name, span: decl.span };
 }

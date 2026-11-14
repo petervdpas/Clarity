@@ -1,6 +1,7 @@
 <script lang="ts">
   // An enum of the data dictionary: its variants and their labels.
 
+  import { invoke } from "@tauri-apps/api/core";
   import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import TextField from "./TextField.svelte";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -27,6 +28,25 @@
     onrename: (newName: string) => void;
   } = $props();
 
+  /** Why the last rename was refused, shown above the variants. */
+  let error = $state<string | null>(null);
+
+  /** A variant's new name: renamed everywhere it is named, and in the records that keep it at the next step. */
+  async function renameVariant(input: HTMLInputElement, name: string) {
+    const newName = input.value.trim();
+    if (!newName || newName === name) {
+      input.value = name;
+      return;
+    }
+    try {
+      error = null;
+      onapplied(await invoke<Preview>("rename_value", { enumeration: decl.name.name, name, newName }));
+    } catch (err) {
+      error = String(err);
+      input.value = name;
+    }
+  }
+
   // A variant's line starts with its name, so the offset of the name
   // addresses the variant in edits.
   let newName = $state("");
@@ -49,6 +69,8 @@
     <button class="danger" onclick={ondelete}>Delete enum</button>
   </header>
 
+  {#if error}<p class="problem" role="alert">{error}</p>{/if}
+
   <div class="table-wrap">
     <table use:resizableColumns={"clarity.columns.enumValues"}>
       <thead>
@@ -62,7 +84,8 @@
               <input
                 class="mono"
                 value={v.name.name}
-                onchange={(e) => onedit({ op: "updateVariant", item, name: e.currentTarget.value.trim(), label: v.label })}
+                title="Renaming a variant renames it everywhere it is named"
+                onchange={(e) => renameVariant(e.currentTarget, v.name.name)}
               />
             </td>
             <td>
@@ -158,5 +181,9 @@
   .add {
     display: flex;
     gap: 8px;
+  }
+  .problem {
+    color: var(--error);
+    margin: 0;
   }
 </style>

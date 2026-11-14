@@ -487,6 +487,7 @@ pub(crate) fn facts_json(project: &Project) -> String {
                     "refers": refers,
                     "parent": parent,
                     "color": matches!(field.ty, FieldType::Color),
+                    "folder": matches!(field.ty, FieldType::Folder),
                 }),
             );
         }

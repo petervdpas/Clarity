@@ -312,6 +312,25 @@ impl Writer<'_> {
                 self.refer(entity, &column);
             }
             Op::RenameField { entity, from, to } => self.moved_column(&old(entity), &after(entity), from, to),
+            // Every record that keeps the value takes its new name: in a column of the enum, and inside a list of its values (JSON text).
+            Op::RenameValue { enumeration, from, to } => {
+                for table in self.schema.tables.clone() {
+                    for column in &table.columns {
+                        let (t, c) = (self.q(&table.table_name()), self.q(&column.stored()));
+                        match &column.ty {
+                            FieldType::Enum { name } if name.name == *enumeration => {
+                                self.push(format!("UPDATE {t} SET {c} = {} WHERE {c} = {};", self.sql.text(to), self.sql.text(from)));
+                            }
+                            // A step writes a list of an enum's values as `list<Kind>`, which only values fill in a column.
+                            FieldType::Values { item: clarity_spec::model::ListItem::Enum { name } } | FieldType::List { item: name } if name.name == *enumeration => {
+                                let (was, now) = (self.sql.text(&format!("\"{from}\"")), self.sql.text(&format!("\"{to}\"")));
+                                self.push(format!("UPDATE {t} SET {c} = REPLACE({c}, {was}, {now});"));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
             Op::MapColumn { entity, field, .. } => self.moved_column(&old(entity), &after(entity), field, field),
             Op::RemoveField { entity, .. } | Op::ChangeField { entity, .. } if self.sql == Sql::Sqlite => {
                 self.rebuild(&old(entity), &after(entity))

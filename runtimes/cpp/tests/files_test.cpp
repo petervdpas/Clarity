@@ -90,3 +90,30 @@ TEST(bytes_are_read_and_written_as_they_are) {
     }
     fs::remove_all(root);
 }
+
+// A folder that is no store, by its path after "folder:": it lists the
+// files its extensions take, hidden ones only when it shows them, and
+// writes no other (conformance/files.json, folders and folderWrites).
+TEST(a_folder_lists_and_writes_the_files_of_its_extensions) {
+    fs::path root = planted();
+    json cases = conformance("files.json");
+    Db db = Db::memory();
+    std::string place = folder_store + root.string();
+    for (const auto& c : cases["folders"]) {
+        json listed = json::array();
+        for (const auto& f : db.files_in(place, c["patterns"].get<std::vector<std::string>>(), c["hidden"].get<bool>())) listed.push_back(f.path);
+        CHECK_EQ(listed, c["listed"]);
+    }
+    CHECK_EQ(db.read_text(db.files_in(place, {"*.txt"}, false).at(0)), std::string("Hello\nworld\n"));
+    for (const auto& c : cases["folderWrites"]) {
+        bool written = true;
+        try {
+            db.write_text_in(place, c["patterns"].get<std::vector<std::string>>(), c["hidden"].get<bool>(), c["path"].get<std::string>(), "x");
+        } catch (const InvalidError&) {
+            written = false;
+        }
+        CHECK_EQ(written, c["written"].get<bool>());
+    }
+    CHECK_THROWS(StorageError, db.files_in(folder_store, {}, false));
+    fs::remove_all(root);
+}

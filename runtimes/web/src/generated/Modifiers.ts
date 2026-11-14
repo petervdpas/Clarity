@@ -23,6 +23,17 @@ column: string | null,
  */
 store: string | null, 
 /**
+ * `extensions "*.md *.csv"`, on a folder field: the files the folder
+ * holds, as a file browser writes them (`*.*` alone: any file); code
+ * lists only those and writes no other. None: any file.
+ */
+extensions: Array<string>, 
+/**
+ * `hidden`, on a folder field: its hidden files and folders, whose name
+ * starts with a dot, count too; without it code neither lists nor writes them.
+ */
+hidden: boolean, 
+/**
  * `hashed`, on a text field of a stored entity: assigning text stores
  * its hash (the hash of the sign-in strategy that names the field,
  * `Signin::hash_of`); code never reads it and no part shows it.

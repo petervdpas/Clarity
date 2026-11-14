@@ -188,7 +188,7 @@ export function itemText(preview: Preview, field: Field, item: Item): string {
 }
 
 /** The field types a table cell can edit, as the language allows them in `edit`. */
-const CELL_EDIT_KINDS = ["text", "email", "url", "color", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
+const CELL_EDIT_KINDS = ["text", "email", "url", "color", "folder", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
 
 export function cellEdits(field: Field): boolean {
   return CELL_EDIT_KINDS.includes(field.type.kind);

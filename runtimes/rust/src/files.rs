@@ -1,6 +1,8 @@
 //! The files of a file store, which code reaches through `files f in
-//! store`, `read text of f` and `write t to store "path"`: only folders the
-//! project settings name. A file found can become a record's picture: in
+//! store`, `read text of f` and `write t to store "path"`, and of any other
+//! folder (`files f in folder category.folder`), by its path after
+//! `folder:`, with the extensions of the files it holds and whether its
+//! hidden ones count. A file found can become a record's picture: in
 //! the field's own store by its path, elsewhere as a copy. The other
 //! runtimes do the same (conformance/files.json).
 
@@ -30,19 +32,41 @@ fn failed(what: &str, path: &Path, err: std::io::Error) -> Error {
     Error::Storage(format!("cannot {what} {}: {err}", path.display()))
 }
 
-/// The files under `folder`, whose path inside the store starts with `prefix`.
+/// The store of a folder that is no store: `folder:` and its path.
+pub const FOLDER: &str = "folder:";
+
+/// Whether a file's name (`Notes.MD`, `.env`) is one a folder takes: by its
+/// extensions (`*.md`, ignoring case; none or `*.*`: any file), a hidden one
+/// (its name starting with a dot) only with `hidden` (conformance/files.json).
+pub fn takes(patterns: &[String], hidden: bool, name: &str) -> bool {
+    if name.starts_with('.') && !hidden {
+        return false;
+    }
+    if patterns.is_empty() || patterns.iter().any(|p| p == "*.*") {
+        return true;
+    }
+    let extension = extension_of(name);
+    patterns.iter().any(|pattern| pattern.strip_prefix("*.").is_some_and(|ext| !extension.is_empty() && extension == ext.to_lowercase()))
+}
+
+/// The files under `folder`, whose path inside the store starts with `prefix`;
+/// hidden ones (a name starting with a dot) only with `hidden`.
 fn walk(store: &str, folder: &Path, prefix: &str, out: &mut Vec<FileEntry>) -> Result<()> {
+    walk_hidden(store, folder, prefix, false, out)
+}
+
+fn walk_hidden(store: &str, folder: &Path, prefix: &str, hidden: bool, out: &mut Vec<FileEntry>) -> Result<()> {
     for entry in std::fs::read_dir(folder).map_err(|e| failed("read", folder, e))? {
         let entry = entry.map_err(|e| failed("read", folder, e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        if name.starts_with('.') && !hidden {
             continue;
         }
         let path = entry.path();
         let inside = format!("{prefix}{name}");
         let meta = entry.metadata().map_err(|e| failed("read", &path, e))?;
         if meta.is_dir() {
-            walk(store, &path, &format!("{inside}/"), out)?;
+            walk_hidden(store, &path, &format!("{inside}/"), hidden, out)?;
         } else if meta.is_file() {
             let extension = extension_of(&name);
             let modified = meta.modified().ok().map(|t| DateTime::<Utc>::from(t).naive_utc().with_nanosecond(0).unwrap_or_default());
@@ -62,6 +86,32 @@ impl Db {
         walk(store, &root, "", &mut out)?;
         out.sort_by(|a, b| a.path.as_bytes().cmp(b.path.as_bytes()));
         Ok(out)
+    }
+
+    /// The files of a folder (`folder:` and its path) its extensions take,
+    /// in its folders too, sorted by path; hidden ones only with `hidden`.
+    pub fn files_in(&self, folder: &str, patterns: &[String], hidden: bool) -> Result<Vec<FileEntry>> {
+        let root = self.store_folder(folder)?;
+        let mut out = Vec::new();
+        walk_hidden(folder, &root, "", hidden, &mut out)?;
+        out.retain(|f| takes(patterns, hidden, &f.name));
+        out.sort_by(|a, b| a.path.as_bytes().cmp(b.path.as_bytes()));
+        Ok(out)
+    }
+
+    /// Writes `text` as the file `path` of a folder, when it takes the file.
+    pub fn write_text_in(&self, folder: &str, patterns: &[String], hidden: bool, path: &str, text: &str) -> Result<()> {
+        self.write_bytes_in(folder, patterns, hidden, path, text.as_bytes())
+    }
+
+    /// Writes `bytes` as the file `path` of a folder, when it takes the file.
+    pub fn write_bytes_in(&self, folder: &str, patterns: &[String], hidden: bool, path: &str, bytes: &[u8]) -> Result<()> {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        if !takes(patterns, hidden, name) {
+            let holds = if name.starts_with('.') && !hidden { "no hidden".to_string() } else { patterns.join(" ") };
+            return Err(Error::Invalid(format!("the folder holds {holds} files, not '{path}'")));
+        }
+        self.write_bytes(folder, path, bytes)
     }
 
     /// The bytes of the file `path` of a store: a picture linked from a file

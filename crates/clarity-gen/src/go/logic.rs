@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{
+use clarity_spec::code::{FilePlace, 
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -694,8 +694,16 @@ impl<'a> Emitter<'a> {
 
     /// `files f in store where ... order by ...`: the files of a store,
     /// filtered in a function of their own and sorted by the runtime.
-    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey], pre: &mut String) -> String {
-        let mut list = self.lift(format!("db.Files({})", string(store)), pre);
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey], pre: &mut String) -> String {
+        let listed = match place {
+            FilePlace::Store(store) => format!("db.Files({})", string(&store.name)),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = bare(self.value(folder, pre));
+                format!("db.FilesIn(clarity.FolderStore+{at}, {}, {hidden})", go_patterns(&patterns))
+            }
+        };
+        let mut list = self.lift(listed, pre);
         if let Some(filter) = filter {
             let mut inner = String::new();
             let cond = bare(self.value(filter, &mut inner));
@@ -998,9 +1006,19 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
-            StmtKind::Write { text, store, path } => {
+            StmtKind::Write { text, place, path } => {
                 // Bytes are written as they are, text as UTF-8.
                 let write = if self.types.type_of(text) == TypeInfo::Bytes { "WriteBytes" } else { "WriteText" };
+                // A folder that is no store: by its path, with the files it takes.
+                let folder = match place {
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = crate::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = bare(self.value(folder, &mut pre));
+                        let at = self.held_operand(format!("clarity.FolderStore + {at}"), &mut pre);
+                        Some((at, go_patterns(&patterns), hidden))
+                    }
+                    FilePlace::Store(_) => None,
+                };
                 let path = bare(self.value(path, &mut pre));
                 let text = bare(self.value(text, &mut pre));
                 // A sum among the arguments is held first, as gofmt writes a
@@ -1008,11 +1026,12 @@ impl<'a> Emitter<'a> {
                 let path = self.held_operand(path, &mut pre);
                 let text = self.held_operand(text, &mut pre);
                 out.push_str(&pre);
-                out.push_str(&format!(
-                    "if err := db.{write}({}, {path}, {text}); err != nil {{\n\t{}\n}}\n",
-                    string(&store.name),
-                    self.fail("err")
-                ));
+                let call = match (place, folder) {
+                    (_, Some((at, patterns, hidden))) => format!("db.{write}In({at}, {patterns}, {hidden}, {path}, {text})"),
+                    (FilePlace::Store(store), None) => format!("db.{write}({}, {path}, {text})", string(&store.name)),
+                    (FilePlace::Folder(_), None) => unreachable!("a folder has its call"),
+                };
+                out.push_str(&format!("if err := {call}; err != nil {{\n\t{}\n}}\n", self.fail("err")));
             }
             StmtKind::For { var, list, body } => {
                 if let TypeInfo::List(entity) = self.types.type_of(list) {
@@ -1776,7 +1795,7 @@ impl<'a> Emitter<'a> {
                 pre.push_str(&readable_list_check(self.project, &entity.name, &found, &fail));
                 found
             }
-            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order, pre),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order, pre),
             ExprKind::ReadText { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadText({file})"), pre)
@@ -2310,4 +2329,9 @@ mod tests {
         assert_eq!(unused_locals("total := 2\n"), "total := 2\n_ = total\n");
         assert_eq!(unused_locals("var n int64 = 1\nui.Show(n)\n"), "var n int64 = 1\nui.Show(n)\n", "a local that is read stays as written");
     }
+}
+
+/// A folder's extensions as the runtime takes them: `[]string{"*.md"}`.
+fn go_patterns(patterns: &[String]) -> String {
+    format!("[]string{{{}}}", patterns.iter().map(|p| string(p)).collect::<Vec<_>>().join(", "))
 }

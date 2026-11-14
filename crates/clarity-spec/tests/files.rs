@@ -2,7 +2,7 @@
 //! as text, and a file as a record's picture. Only the folders the project
 //! settings name as file stores are reached.
 
-use clarity_spec::code::{ExprKind, StmtKind};
+use clarity_spec::code::{ExprKind, FilePlace, StmtKind};
 use clarity_spec::parser::parse;
 use clarity_spec::{Project, Severity, load_converted};
 
@@ -76,7 +76,7 @@ fn parses_files_reading_writing_and_new_records() {
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let body = &file.functions[0].body;
     let StmtKind::Let { value, .. } = &body[0].kind else { panic!("{body:#?}") };
-    let ExprKind::Files { var, store, filter, order } = &value.kind else { panic!("{value:#?}") };
+    let ExprKind::Files { var, place: FilePlace::Store(store), filter, order } = &value.kind else { panic!("{value:#?}") };
     assert_eq!((var.name.as_str(), store.name.as_str()), ("f", "photos"));
     assert!(filter.is_some());
     assert_eq!(order[0].field.name, "path");
@@ -84,7 +84,7 @@ fn parses_files_reading_writing_and_new_records() {
     let StmtKind::Let { value, .. } = &inner[0].kind else { panic!() };
     assert!(matches!(&value.kind, ExprKind::New { entity } if entity.name == "Photo"), "{value:#?}");
     let export = &file.functions[1].body;
-    let StmtKind::Write { store, .. } = &export.last().unwrap().kind else { panic!("{export:#?}") };
+    let StmtKind::Write { place: FilePlace::Store(store), .. } = &export.last().unwrap().kind else { panic!("{export:#?}") };
     assert_eq!(store.name, "photos");
 }
 
@@ -156,4 +156,107 @@ fn bytes_are_read_written_and_measured() {
     let wrong = |source: &str| errors(&load(source, &["photos"]));
     assert!(wrong("module catalog\n\nfunction joined(b: bytes) -> text\n    return \"x\" + b\n").iter().any(|e| e.contains("bytes")));
     assert!(wrong("module catalog\n\npage Doc: window\n    data content: bytes\n").iter().any(|e| e.contains("bytes are no window data")));
+}
+
+/// A folder that is not a store is just a folder: code lists, reads and
+/// writes its files the same way, with `folder` before the text that holds
+/// it (a `folder` field, a folder setting, any text), and the effects of files.
+const FOLDERS: &str = "module notes
+
+entity Category
+    name: text(80)
+    folder: folder, extensions \"*.md *.txt\"
+
+action importNotes(category: Category) -> integer
+    effects files.read
+    let found = files f in folder category.folder where f.extension == \"md\" order by f.path
+    let n = 0
+    for f in found
+        let text = read text of f
+        n = n + 1
+    return n
+
+action exportNote(category: Category, name: text, text: text)
+    effects files.write
+    write text to folder category.folder name + \".md\"
+";
+
+#[test]
+fn a_folder_is_listed_read_and_written_like_a_store() {
+    let (file, diagnostics) = parse(FOLDERS, "notes.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let StmtKind::Let { value, .. } = &file.functions[0].body[0].kind else { panic!() };
+    assert!(matches!(&value.kind, ExprKind::Files { place: FilePlace::Folder(_), .. }), "{value:#?}");
+    let StmtKind::Write { place, .. } = &file.functions[1].body[0].kind else { panic!() };
+    assert!(matches!(place, FilePlace::Folder(_)), "{place:#?}");
+    // No store is named, so none needs to be in the settings.
+    assert_eq!(errors(&load(FOLDERS, &[])), Vec::<String>::new());
+    // Written back as it was read.
+    let printed = clarity_spec::code::print::expr(value);
+    assert_eq!(printed, "files f in folder category.folder where f.extension == \"md\" order by f.path");
+}
+
+#[test]
+fn a_folder_is_text_and_needs_the_effects_of_files() {
+    let not_text = FOLDERS.replace("files f in folder category.folder", "files f in folder 3");
+    assert!(errors(&load(&not_text, &[])).iter().any(|m| m.contains("the folder to list must be text, not integer")), "{:#?}", errors(&load(&not_text, &[])));
+    let no_effect = FOLDERS.replace("    effects files.write\n", "");
+    assert!(errors(&load(&no_effect, &[])).iter().any(|m| m.contains("writes a file, which needs 'effects files.write'")), "{:#?}", errors(&load(&no_effect, &[])));
+}
+
+/// A folder says which files it holds by their extensions; code reaches a
+/// folder through such a field, so it lists only those and writes no other.
+#[test]
+fn a_folder_field_names_its_extensions_and_code_keeps_to_them() {
+    let (file, _) = parse(FOLDERS, "notes.clarity");
+    let field = file.entities[0].fields.iter().find(|f| f.name.name == "folder").unwrap();
+    assert_eq!(field.modifiers.extensions, ["*.md", "*.txt"]);
+    let spec = clarity_spec::dictionary::FieldSpec { name: "folder".into(), type_text: "folder".into(), modifiers: field.modifiers.clone() };
+    let line = clarity_spec::dictionary::field_line(&spec);
+    assert!(line.ends_with("folder: folder, extensions \"*.md *.txt\""), "{line}");
+    let refused = |source: &str, says: &str| {
+        let found = errors(&load(source, &[]));
+        assert!(found.iter().any(|m| m.contains(says)), "{says}: {found:#?}");
+    };
+    refused(&FOLDERS.replace("name + \".md\"", "\"notes.csv\""), "category.folder holds *.md *.txt files, not 'notes.csv'");
+    refused(&FOLDERS.replace("folder: folder, extensions \"*.md *.txt\"", "folder: text(200), extensions \"*.md\""), "only a folder field has extensions ('folder')");
+    let (_, diagnostics) = parse(&FOLDERS.replace("extensions \"*.md *.txt\"", "extensions \"md\""), "notes.clarity");
+    assert!(diagnostics.iter().any(|d| d.message.contains("'md' is no extension of files")), "{diagnostics:#?}");
+    // Hidden files only with the folder's hidden option.
+    refused(&FOLDERS.replace("name + \".md\"", "\".notes.md\""), "category.folder holds no hidden files, not '.notes.md'");
+    let hidden = FOLDERS.replace("extensions \"*.md *.txt\"", "extensions \"*.md *.txt\", hidden").replace("name + \".md\"", "\".notes.md\"");
+    assert!(errors(&load(&hidden, &[])).is_empty(), "{:#?}", errors(&load(&hidden, &[])));
+    refused(&FOLDERS.replace("files f in folder category.folder", "files f in folder category.name"), "the folder to list is a folder field, as in 'folder category.folder'");
+}
+
+/// A folder setting is a folder too: `folder settings.exportFolder`.
+#[test]
+fn a_folder_setting_is_listed_like_a_folder_field() {
+    let source = "module notes
+
+settings
+    exportFolder: folder, extensions \"*.csv\"
+
+page Exports: window
+    title \"Exports\"
+
+code Exports
+    handler listExports
+        let found = files f in folder settings.exportFolder
+        let n = count(found)
+";
+    assert_eq!(errors(&load(source, &[])), Vec::<String>::new());
+}
+
+/// An empty list of files is written as any empty list is, with its type.
+#[test]
+fn an_empty_list_of_files_takes_its_type() {
+    let source = "module notes
+
+action none() -> list<file>
+    effects files.read
+    let found: list<file> = []
+    return found
+";
+    assert_eq!(errors(&load(source, &[])), Vec::<String>::new());
 }

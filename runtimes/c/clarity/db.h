@@ -200,6 +200,21 @@ bool clarity_write_text(ClarityDb* db, const char* store, const char* path, cons
 bool clarity_read_bytes(ClarityDb* db, const ClarityFile* file, ClarityBytes* out);
 /// Writes `bytes` as they are as the file `path` of a store, making its folders.
 bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, ClarityBytes bytes);
+
+/// The store of a folder that is no store: "folder:" and its path.
+#define CLARITY_FOLDER_STORE "folder:"
+/// Whether a file's name (`Notes.MD`, `.env`) is one a folder takes: by its
+/// extensions (`patterns`, written apart by spaces: `"*.md *.txt"`, ignoring
+/// case; empty or `"*.*"`: any file), a hidden one (its name starting with a
+/// dot) only with `hidden` (conformance/files.json).
+bool clarity_folder_takes(const char* patterns, bool hidden, const char* name);
+/// The files of a folder ("folder:" and its path) its extensions take, in
+/// its folders too, sorted by path; hidden ones only with `hidden`.
+bool clarity_files_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, ClarityFileList* out);
+/// Writes `text` as the file `path` of a folder, when it takes the file.
+bool clarity_write_text_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, const char* path, const char* text);
+/// Writes `bytes` as the file `path` of a folder, when it takes the file.
+bool clarity_write_bytes_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, const char* path, ClarityBytes bytes);
 /// A file as the picture of a field kept in `field_store` (NULL: in the
 /// database): the file itself when it is in that store, else a copy.
 bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityPicture** out);

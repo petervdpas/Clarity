@@ -146,6 +146,26 @@ fn the_windows_parts_sit_between_the_regions() {
     assert_eq!(view.parts()[0].node().bounds.y, tops + CONTENT_PADDING);
 }
 
+/// A menu bar with a width leaves the rest of its row to the toolbar, which
+/// stands next to it, at its own width or the rest; the window's parts start
+/// below that one row.
+#[test]
+fn a_menu_bar_with_a_width_shares_its_row_with_the_toolbar() {
+    let row = frame::menu_bar::HEIGHT.max(frame::toolbar::HEIGHT);
+    let side_by_side = APP.replace(r#"<Menu name="appMenu">"#, r#"<Menu name="appMenu" width="300">"#).replace(r#"<Toolbar name="appTools">"#, r#"<Toolbar name="appTools" width="400">"#);
+    let (mut screen, _) = window(r#"<Button name="save" at="1,1" span="3" caption="Save" />"#, Some(&side_by_side));
+    draw(&mut screen);
+    let shown = view(&screen);
+    assert_eq!(shown.menu_bar().unwrap().node().bounds, Rect::new(0.0, 0.0, 300.0, row));
+    assert_eq!(shown.toolbar().unwrap().node().bounds, Rect::new(300.0, 0.0, 400.0, row));
+    assert_eq!(shown.body_place().y, row, "the parts start below the one row");
+    // Without its own width the toolbar takes the rest of the row.
+    let rest = APP.replace(r#"<Menu name="appMenu">"#, r#"<Menu name="appMenu" width="300">"#);
+    let (mut screen, _) = window(r#"<Button name="save" at="1,1" span="3" caption="Save" />"#, Some(&rest));
+    draw(&mut screen);
+    assert_eq!(view(&screen).toolbar().unwrap().node().bounds, Rect::new(300.0, 0.0, 700.0, row));
+}
+
 #[test]
 fn a_window_without_a_frame_keeps_its_whole_place() {
     let (mut screen, _) = window(r#"<Button name="save" at="1,1" span="3" caption="Save" />"#, None);

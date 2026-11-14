@@ -14,4 +14,5 @@ namespace Clarity.Runtime;
 /// <param name="Refers">The entity a reference points at (<c>Person</c>); none for any other field.</param>
 /// <param name="Parent">For an entity whose records make a tree: the field that names a record's parent; none otherwise.</param>
 /// <param name="Color">Whether it holds a color (<c>#3b82f6</c>), which a table or list shows with a swatch beside it.</param>
-public sealed record FieldFacts(string Label, FieldFormat? Format = null, bool Required = false, string? Min = null, string? Max = null, string? Refers = null, string? Parent = null, bool Color = false);
+/// <param name="Folder">Whether it holds a folder's path, whose table cell has a button that opens the folder picker.</param>
+public sealed record FieldFacts(string Label, FieldFormat? Format = null, bool Required = false, string? Min = null, string? Max = null, string? Refers = null, string? Parent = null, bool Color = false, bool Folder = false);

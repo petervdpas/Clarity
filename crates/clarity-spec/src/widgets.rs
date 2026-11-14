@@ -417,6 +417,8 @@ pub enum WidgetProperty {
     Striped,
     /// `fold buttons`: a tree or tree table shows Expand all and Collapse all buttons above its rows.
     FoldButtons,
+    /// `reading width`: a markdown part's or memo's Markdown keeps a column of a reading width.
+    ReadingWidth,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
     /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
@@ -447,6 +449,8 @@ pub enum WidgetProperty {
     Typed,
     /// `cards`: a list's rows as small cards, the first field of `show` their title.
     Cards,
+    /// `colored by paint [band]`: each card takes a colour field of its record, whole or as a band at its start.
+    CardColor,
     /// `frame`: a list, table or tree shows its own border inside a container.
     Frame,
     /// `search`: a dropdown of a reference whose records filter as it is typed.
@@ -596,7 +600,7 @@ const TYPED: &[WidgetProperty] = &[
 /// A text box: typed in, and with `copy` a button that copies its text.
 const TEXT_BOX: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 /// A memo: a text box of lines, which can color its text as code.
-const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Markdown, WidgetProperty::Toolbox, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Markdown, WidgetProperty::ReadingWidth, WidgetProperty::Toolbox, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// The languages a memo colors as code (`code csharp`), as conformance/code-languages.json lists them for every renderer.
 pub const CODE_LANGUAGES: [&str; 19] = [
@@ -703,7 +707,7 @@ const ENTRIES: &[Entry] = &[
     Entry {
         field_types: &["text"],
         events: &[Event::Link],
-        ..text_part(WidgetKind::Markdown, "markdown", "Markdown", (6, 4), None, BindTarget::Field, &[WidgetProperty::Source])
+        ..text_part(WidgetKind::Markdown, "markdown", "Markdown", (6, 4), None, BindTarget::Field, &[WidgetProperty::Source, WidgetProperty::ReadingWidth])
     },
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TEXT_BOX),
     input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], MEMO_EVENTS, MEMO),
@@ -1206,7 +1210,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::CardColor, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::Progress,
@@ -1642,6 +1646,7 @@ pub fn cell_edits(ty: &FieldType) -> bool {
             | FieldType::Email
             | FieldType::Url
             | FieldType::Color
+            | FieldType::Folder
             | FieldType::Integer
             | FieldType::Decimal { .. }
             | FieldType::Money
@@ -1706,6 +1711,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         confirm: false,
         striped: false,
         fold_buttons: false,
+        reading_width: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -1746,6 +1752,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         step: None,
         split: false,
         cards: false,
+        card_color: None,
+        card_band: false,
+        card_chip: None,
         frame: false,
         typed: false,
         page: None,
@@ -2083,6 +2092,13 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.cards {
         parts.push("cards".to_string());
     }
+    if let Some(field) = &props.card_color {
+        parts.push(match (&props.card_chip, props.card_band) {
+            (Some(chip), _) => format!("colored by {field} chip {chip}"),
+            (None, true) => format!("colored by {field} band"),
+            (None, false) => format!("colored by {field}"),
+        });
+    }
     if let Some(surface) = props.surface {
         parts.push(format!("surface {}", surface_keyword(surface)));
     }
@@ -2130,6 +2146,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if props.fold_buttons {
         parts.push("fold buttons".to_string());
+    }
+    if props.reading_width {
+        parts.push("reading width".to_string());
     }
     if props.frame {
         parts.push("frame".to_string());
@@ -2329,6 +2348,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Remove, props.remove, "remove"),
         (WidgetProperty::Striped, props.striped, "striped"),
         (WidgetProperty::FoldButtons, props.fold_buttons, "fold buttons"),
+        (WidgetProperty::ReadingWidth, props.reading_width, "reading width"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
         (WidgetProperty::Mode, props.mode.is_some(), "mode"),
@@ -2346,6 +2366,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
         (WidgetProperty::Typed, props.typed, "typed"),
         (WidgetProperty::Cards, props.cards, "cards"),
+        (WidgetProperty::CardColor, props.card_color.is_some(), "colored"),
         (WidgetProperty::Frame, props.frame, "frame"),
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
@@ -2394,6 +2415,20 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     }
     if props.cards && props.show.is_empty() {
         return Err("'cards' shows the fields of 'show': write 'show title, kind cards'".to_string());
+    }
+    if let Some(field) = &props.card_color
+        && !props.cards
+    {
+        return Err(format!("'colored by' colours a list's cards: write 'cards colored by {field}'"));
+    }
+    if (props.card_band || props.card_chip.is_some()) && props.card_color.is_none() {
+        return Err("'band' and 'chip' are how a card is coloured: write 'colored by paint band'".to_string());
+    }
+    if props.card_band && props.card_chip.is_some() {
+        return Err("a card is coloured as a chip, a band or whole: not 'band' and 'chip' both".to_string());
+    }
+    if let Some(chip) = props.card_chip.as_ref().filter(|c| !props.show.contains(c)) {
+        return Err(format!("the chip is one of the shown fields ({}), not '{chip}'", props.show.join(", ")));
     }
     if props.digits.is_some_and(|d| !(1..=MAX_DIGITS).contains(&d)) {
         return Err(format!("a display has 1 to {MAX_DIGITS} digits"));

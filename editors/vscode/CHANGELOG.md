@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.39
+
+- Colors the new words of a part's line: `colored`, `band` and `chip`, how a list colors its cards.
+- Colors a folder field's `extensions` and `hidden`, and `value` in a migration step's `rename value`.
+
 ## 0.1.38
 
 - Opens a window's or view's `.cxaml` file (in a project's `design` folder) as XML, colored and folded as VS Code colors XML.

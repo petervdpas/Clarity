@@ -490,6 +490,15 @@ pub struct Modifiers {
     /// `store photos`: an image field keeps its pictures as files in this
     /// file store of the project settings, not in the database.
     pub store: Option<String>,
+    /// `extensions "*.md *.csv"`, on a folder field: the files the folder
+    /// holds, as a file browser writes them (`*.*` alone: any file); code
+    /// lists only those and writes no other. None: any file.
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    /// `hidden`, on a folder field: its hidden files and folders, whose name
+    /// starts with a dot, count too; without it code neither lists nor writes them.
+    #[serde(default)]
+    pub hidden: bool,
     /// `hashed`, on a text field of a stored entity: assigning text stores
     /// its hash (the hash of the sign-in strategy that names the field,
     /// `Signin::hash_of`); code never reads it and no part shows it.
@@ -921,6 +930,11 @@ pub struct WidgetProps {
     /// all buttons above its rows; code sets it as `tree.foldButtons`.
     #[serde(default)]
     pub fold_buttons: bool,
+    /// `reading width`: a markdown part, or a memo's Markdown preview, keeps
+    /// its text in a column of a reading width from the left, as a book page
+    /// reads; without it the text takes the whole width.
+    #[serde(default)]
+    pub reading_width: bool,
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,
@@ -1058,6 +1072,16 @@ pub struct WidgetProps {
     /// card's title and the others lines below it.
     #[serde(default)]
     pub cards: bool,
+    /// `colored by paint`: each card takes the colour of this colour field of
+    /// its record; none: the cards keep the theme's `card` look.
+    #[serde(default)]
+    pub card_color: Option<String>,
+    /// `band`: the colour is a small band at the start of the card, not the whole card.
+    #[serde(default)]
+    pub card_band: bool,
+    /// `chip category`: the colour is a chip around this shown line of the card, not the whole card.
+    #[serde(default)]
+    pub card_chip: Option<String>,
     /// `frame`: a list, table or tree shows its own border inside a
     /// container (a tab page, a pane, a panel), which otherwise frames it alone.
     #[serde(default)]
@@ -1306,6 +1330,10 @@ impl Frame {
 pub struct Menu {
     /// Its part name, as code hides or disables it: `mainMenu`.
     pub name: Option<String>,
+    /// The menu bar's width in pixels (`width 320`): it then leaves the rest
+    /// of its row to the toolbar, which stands next to it. None: the whole
+    /// width, the toolbar under it. A part's menu has none.
+    pub width: Option<u32>,
     pub items: Vec<Command>,
     pub span: Span,
 }
@@ -1315,6 +1343,9 @@ pub struct Menu {
 pub struct Toolbar {
     /// Its part name, as code hides or disables it: `mainToolbar`.
     pub name: Option<String>,
+    /// Its width in pixels (`width 400`) beside a menu bar that has one;
+    /// none takes the rest of the row.
+    pub width: Option<u32>,
     pub items: Vec<Command>,
     pub span: Span,
 }
@@ -1433,6 +1464,8 @@ pub const DEFAULT_SIDEBAR_WIDTH: u32 = 240;
 pub const DEFAULT_SIDEBAR_COLUMNS: u32 = 3;
 /// The widths a sidebar may have, in pixels.
 pub const SIDEBAR_WIDTHS: (u32, u32) = (100, 1600);
+/// The widths a menu bar or toolbar may be given, in pixels.
+pub const BAR_WIDTHS: (u32, u32) = (100, 1600);
 
 /// A one-row grid at the bottom of the window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

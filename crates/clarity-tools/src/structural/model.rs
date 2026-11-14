@@ -27,6 +27,7 @@ const FLAGS: &[(&str, &str)] = &[
     ("computed", "Worked out, not entered."),
     ("search", "In the record's full-text index."),
     ("cascade", "On a ref: deleting the record it refers to deletes this one first."),
+    ("hidden", "On a folder: its hidden files and folders, whose name starts with a dot, count too."),
 ];
 
 /// The modifiers that hold a value: a number, a text, true or false, or an enum's value.
@@ -40,6 +41,7 @@ const TEXTS: &[(&str, &str)] = &[
     ("format", "How the value is shown, a format name."),
     ("column", "The existing column of an external entity the field is stored in."),
     ("store", "An image field's file store, from the project settings."),
+    ("extensions", "On a folder: the files it holds, as a file browser writes them, like \"*.md *.csv\", or \"*.*\" alone for any file."),
 ];
 
 pub fn definitions() -> Vec<ToolDef> {
@@ -188,20 +190,44 @@ fn add_enum(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
         return Err("give values: the enum's values, at least one".into());
     };
     let made = edits::apply(&dir, &file, &Edit::AddEnum { name: name.clone() })?;
+    // The key the starting value's label made, which the values asked for leave unused.
+    let mut placeholder_key = String::new();
     let valued = places::model_project(&dir).and_then(|project| {
         let (_, decl) = places::enum_decl(&project, &name)?;
         let placeholder = decl.variants.first().ok_or("the new enum has no value")?;
+        placeholder_key = placeholder.label.trim_start_matches('@').to_string();
         let mut batch = vec![Edit::UpdateVariant { item: placeholder.name.span.start, name: first.clone(), label: None }];
         batch.extend(rest.iter().map(|value| Edit::AddVariant { owner: decl.span.start, name: value.clone(), label: None }));
         edits::apply(&dir, &file, &Edit::Batch { edits: batch })
     });
-    match valued {
+    match valued.and_then(|valued| Ok(merged(valued, without_key(&dir, &placeholder_key)?))) {
         Ok(valued) => tools.applied(&format!("Added enum {name} with {}", crate::listed(&values.iter().map(String::as_str).collect::<Vec<_>>())), merged(made, valued)),
         Err(why) => {
             undo(&made)?;
             Err(why)
         }
     }
+}
+
+/// Takes the line of `key` out of every language file of the project in
+/// `dir`; what it wrote, as one change.
+fn without_key(dir: &std::path::Path, key: &str) -> Result<Applied, String> {
+    let mut changes = Vec::new();
+    let folder = dir.join("translations");
+    let Ok(entries) = std::fs::read_dir(&folder) else {
+        return Ok(Applied { changes, focus: None });
+    };
+    let mut files: Vec<std::path::PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "clarity")).collect();
+    files.sort();
+    for path in files {
+        let before = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let after: String = before.split_inclusive('\n').filter(|line| line.split_whitespace().next() != Some(key) || key.is_empty()).collect();
+        if after != before {
+            FileChange { file: path.clone(), before: Some(before.clone()), after: Some(after.clone()) }.make()?;
+            changes.push(FileChange { file: path, before: Some(before), after: Some(after) });
+        }
+    }
+    Ok(Applied { changes, focus: None })
 }
 
 /// `a` then `b`, as one change: each file once, from before `a` to after `b`.
@@ -339,6 +365,7 @@ fn set_modifiers(project: &Project, input: &Value, type_text: &str, modifiers: &
             "owned" => &mut modifiers.owned,
             "computed" => &mut modifiers.computed,
             "search" => &mut modifiers.search,
+            "hidden" => &mut modifiers.hidden,
             _ => &mut modifiers.cascade,
         };
         *flag = on;
@@ -377,6 +404,15 @@ fn set_modifiers(project: &Project, input: &Value, type_text: &str, modifiers: &
             "pattern" => modifiers.pattern = value,
             "format" => modifiers.format = value,
             "column" => modifiers.column = value,
+            "extensions" => {
+                let found: Vec<String> = value.unwrap_or_default().split_whitespace().map(str::to_string).collect();
+                if !found.is_empty()
+                    && let Some(problem) = clarity_spec::files::patterns_problem(&found)
+                {
+                    return Err(problem);
+                }
+                modifiers.extensions = found;
+            }
             _ => modifiers.store = value,
         }
     }
@@ -393,9 +429,19 @@ fn add_enum_value(tools: &mut ProjectTools, input: &Value) -> Result<String, Str
 }
 
 fn change_enum_value(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
+    // A new name is a rename everywhere the value is named, and of the records that keep it.
+    let renamed_to = Some(text(input, "name")).filter(|n| !n.is_empty() && *n != text(input, "value"));
+    let mut said = String::new();
+    if let Some(to) = &renamed_to {
+        said = tools.rename(&serde_json::json!({"kind": "value", "entity": needed(input, "enum")?, "from": needed(input, "value")?, "to": to}))?;
+        if input.get("label").is_none() {
+            return Ok(said);
+        }
+    }
     let (dir, project) = opened(tools)?;
     let (file, decl) = places::enum_decl(&project, &needed(input, "enum")?)?;
-    let variant = places::variant(decl, &needed(input, "value")?)?;
+    let value = renamed_to.clone().map_or_else(|| needed(input, "value"), Ok)?;
+    let variant = places::variant(decl, &value)?;
     let name = Some(text(input, "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| variant.name.name.clone());
     // The label as written: one made from the name was not written.
     let written = Some(variant.label.clone()).filter(|l| *l != default_label(&variant.name.name));
@@ -406,7 +452,8 @@ fn change_enum_value(tools: &mut ProjectTools, input: &Value) -> Result<String, 
         Some(_) => return Err("label is a text".into()),
     };
     let applied = edits::apply(&dir, &file, &Edit::UpdateVariant { item: variant.name.span.start, name, label })?;
-    tools.applied(&format!("Changed value {} of {}", variant.name.name, decl.name.name), applied)
+    let done = tools.applied(&format!("Changed value {} of {}", variant.name.name, decl.name.name), applied)?;
+    Ok(if said.is_empty() { done } else { format!("{said}\n{done}") })
 }
 
 fn set_uses(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
@@ -501,6 +548,9 @@ mod tests {
         assert!(module().contains("    email: email, required"), "{}", module());
         ok(&mut tools, "add_field", json!({"entity": "Customer", "name": "limit", "type": "decimal", "precision": 10, "scale": 2, "min": 0}));
         assert!(module().contains("    limit: decimal(10, 2), min 0"), "{}", module());
+        ok(&mut tools, "add_field", json!({"entity": "Customer", "name": "notes", "type": "folder", "extensions": "*.md *.txt", "hidden": true}));
+        assert!(module().contains("    notes: folder, hidden, extensions \"*.md *.txt\""), "{}", module());
+        assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "notes", "extensions": "md"})).contains("'md' is no extension of files"));
         assert!(refused(&mut tools, "add_field", json!({"entity": "Client", "name": "x", "type": "text"})).contains("there is no entity Client; the entities are Customer"));
         assert!(refused(&mut tools, "add_field", json!({"entity": "Customer", "name": "x", "type": "texts"})).contains("there is no type texts; the types are text, integer"));
         assert!(refused(&mut tools, "add_field", json!({"entity": "Customer", "name": "boss", "type": "ref", "of": "Person"})).contains("there is no Person for a ref field; the entities are Customer"));
@@ -517,7 +567,7 @@ mod tests {
         ok(&mut tools, "change_field", json!({"entity": "Customer", "field": "limit", "scale": 4}));
         assert!(module().contains("    limit: decimal(10, 4), min 0"), "{}", module());
         assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "email", "length": 40})).contains("length"));
-        assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "mail", "unique": true})).contains("there is no field mail in Customer; the fields of Customer are name, email, limit and referrer"));
+        assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "mail", "unique": true})).contains("there is no field mail in Customer; the fields of Customer are name, email, limit, notes and referrer"));
 
         assert!(refused(&mut tools, "remove_model_item", json!({"kind": "field", "entity": "Customer", "name": "phone"})).contains("fields of Customer are"));
         ok(&mut tools, "remove_model_item", json!({"kind": "field", "entity": "Customer", "name": "limit"}));
@@ -535,6 +585,9 @@ mod tests {
 
         ok(&mut tools, "add_enum", json!({"module": "todo", "name": "Status", "values": ["Open", "Closed"]}));
         assert!(module().contains("enum Status\n    Open label @statusOpen\n    Closed label @statusClosed\n"), "{}", module());
+        // The value the enum starts with before the values asked for leaves no key behind.
+        let english = std::fs::read_to_string(dir.join("translations/en.clarity")).unwrap();
+        assert!(!english.contains("statusFirst"), "{english}");
         // One change for Undo.
         assert_eq!(tools.written.iter().filter(|w| w.file == dir.join("todo.clarity")).count(), 1);
         assert!(refused(&mut tools, "add_enum_value", json!({"enum": "State", "name": "Done"})).contains("there is no enum State; the enums are Status"));

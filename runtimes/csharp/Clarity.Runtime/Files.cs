@@ -1,6 +1,7 @@
 // The files of a file store, which code reaches through `files f in store`,
-// `read text of f` and `write t to store "path"`: only folders the project
-// settings name. A file found can become a record's picture: in the
+// `read text of f` and `write t to store "path"`, and of any other folder
+// (`files f in folder category.folder`), by its path after "folder:", with
+// the extensions of the files it holds and whether its hidden ones count. A file found can become a record's picture: in the
 // field's own store by its path, elsewhere as a copy. The other runtimes do
 // the same (conformance/files.json).
 
@@ -23,20 +24,65 @@ public sealed partial class Db
         return found;
     }
 
-    static void Walk(string store, string folder, string prefix, List<FileEntry> found)
+    /// <summary>The store of a folder that is no store: "folder:" and its path.</summary>
+    public const string FolderStore = "folder:";
+
+    /// <summary>
+    /// Whether a file's name (Notes.MD, .env) is one a folder takes: by its extensions
+    /// ("*.md", ignoring case; none or "*.*": any file), a hidden one (its name starting
+    /// with a dot) only with <paramref name="hidden"/> (conformance/files.json).
+    /// </summary>
+    public static bool Takes(IReadOnlyList<string> patterns, bool hidden, string name)
+    {
+        if (name.StartsWith('.') && !hidden)
+            return false;
+        if (patterns.Count == 0 || patterns.Contains("*.*"))
+            return true;
+        var extension = System.IO.Path.GetExtension(name).TrimStart('.').ToLowerInvariant();
+        return patterns.Any(p => p.StartsWith("*.", StringComparison.Ordinal) && extension.Length > 0 && extension == p[2..].ToLowerInvariant());
+    }
+
+    /// <summary>The files of a folder ("folder:" and its path) its extensions take, in its folders too, sorted by path; hidden ones only with <paramref name="hidden"/>.</summary>
+    public List<FileEntry> FilesIn(string folder, IReadOnlyList<string> patterns, bool hidden)
+    {
+        var root = StoreFolder(folder);
+        var found = new List<FileEntry>();
+        Walk(folder, root, "", found, hidden);
+        found.RemoveAll(f => !Takes(patterns, hidden, f.Name));
+        found.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
+        return found;
+    }
+
+    /// <summary>Writes the text as the file <paramref name="path"/> of a folder, when it takes the file.</summary>
+    public void WriteTextIn(string folder, IReadOnlyList<string> patterns, bool hidden, string path, string text) =>
+        WriteBytesIn(folder, patterns, hidden, path, new UTF8Encoding(false).GetBytes(text));
+
+    /// <summary>Writes the bytes as the file <paramref name="path"/> of a folder, when it takes the file.</summary>
+    public void WriteBytesIn(string folder, IReadOnlyList<string> patterns, bool hidden, string path, byte[] bytes)
+    {
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        if (!Takes(patterns, hidden, name))
+        {
+            var holds = name.StartsWith('.') && !hidden ? "no hidden" : string.Join(" ", patterns);
+            throw new InvalidValueException($"the folder holds {holds} files, not '{path}'");
+        }
+        WriteBytes(folder, path, bytes);
+    }
+
+    static void Walk(string store, string folder, string prefix, List<FileEntry> found, bool hidden = false)
     {
         try
         {
             foreach (var dir in Directory.EnumerateDirectories(folder))
             {
                 var name = System.IO.Path.GetFileName(dir);
-                if (!name.StartsWith('.'))
-                    Walk(store, dir, $"{prefix}{name}/", found);
+                if (!name.StartsWith('.') || hidden)
+                    Walk(store, dir, $"{prefix}{name}/", found, hidden);
             }
             foreach (var file in Directory.EnumerateFiles(folder))
             {
                 var name = System.IO.Path.GetFileName(file);
-                if (name.StartsWith('.'))
+                if (name.StartsWith('.') && !hidden)
                     continue;
                 var info = new FileInfo(file);
                 var extension = System.IO.Path.GetExtension(name).TrimStart('.').ToLowerInvariant();

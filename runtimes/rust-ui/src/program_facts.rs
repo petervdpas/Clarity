@@ -52,6 +52,7 @@ fn field_facts(value: &Value) -> FieldFacts {
         refers: named("refers"),
         parent: named("parent"),
         color: value.get("color").and_then(Value::as_bool).unwrap_or(false),
+        folder: value.get("folder").and_then(Value::as_bool).unwrap_or(false),
         help: None,
     }
 }

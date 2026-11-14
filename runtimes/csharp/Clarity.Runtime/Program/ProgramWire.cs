@@ -998,6 +998,7 @@ internal sealed class ProgramWire : IDesktop
                 ["refers"] = facts.Refers,
                 ["parent"] = facts.Parent,
                 ["color"] = facts.Color,
+                ["folder"] = facts.Folder,
             };
         return new JsonObject { ["fields"] = fields };
     }

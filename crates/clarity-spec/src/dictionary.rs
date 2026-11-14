@@ -91,6 +91,7 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (m.search, "search"),
         (m.cascade, "cascade"),
         (m.hashed, "hashed"),
+        (m.hidden, "hidden"),
     ] {
         if on {
             parts.push(word.to_string());
@@ -118,6 +119,9 @@ pub fn field_line(spec: &FieldSpec) -> String {
     }
     if let Some(store) = &m.store {
         parts.push(format!("store {store}"));
+    }
+    if !m.extensions.is_empty() {
+        parts.push(format!("extensions {}", quote(&m.extensions.join(" "))));
     }
     parts.join(", ")
 }

@@ -113,7 +113,7 @@ pub fn is_design_edit(edit: &Edit) -> bool {
         Batch { edits } => edits.iter().all(is_design_edit),
         Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageTell { .. } | SetViewTell { .. } | SetPageColor { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
         | AddData { .. } | SetGrid { .. } | SetSize { .. } | SetPageStyle { .. } | SetPageAllow { .. } | PlaceField { .. } | NameParts | SetMain { .. } | SetSplash { .. } | SetOwnerEvent { .. } | AddRegion { .. }
-        | UpdateSidebar { .. } | UpdateSidebars | UpdateRibbon { .. } | SetName { .. } | AddFrameItem { .. } | UpdateCommand { .. } | MoveSibling { .. } => true,
+        | UpdateSidebar { .. } | UpdateSidebars | UpdateRibbon { .. } | SetBarWidth { .. } | SetName { .. } | AddFrameItem { .. } | UpdateCommand { .. } | MoveSibling { .. } => true,
         _ => false,
     }
 }
@@ -725,6 +725,21 @@ impl Editor<'_> {
                 ribbon.collapsed = *collapsible && *collapsed;
                 Ok(Some(*item))
             }
+            Edit::SetBarWidth { item, width } => {
+                let (least, most) = crate::model::BAR_WIDTHS;
+                if let Some(w) = width.filter(|w| !(least..=most).contains(w)) {
+                    return fail(format!("a menu bar or toolbar is {least} to {most} pixels wide, not {w}"));
+                }
+                let frame = designed.frame();
+                if let Some(menu) = frame.menu.as_mut().filter(|m| m.span.start == *item) {
+                    menu.width = *width;
+                } else if let Some(toolbar) = frame.toolbar.as_mut().filter(|t| t.span.start == *item) {
+                    toolbar.width = *width;
+                } else {
+                    return fail("there is no menu bar or toolbar there");
+                }
+                Ok(Some(*item))
+            }
             Edit::SetName { item, name } => {
                 if !crate::names::is_camel_case(name) {
                     return fail(crate::names::camel_case_problem("part", name));
@@ -974,7 +989,7 @@ impl Editor<'_> {
         props.name = Some(name);
         let first = self.command(props);
         let at = first.span.start;
-        let menu = Menu { name: None, items: vec![first], span: self.fresh() };
+        let menu = Menu { name: None, width: None, items: vec![first], span: self.fresh() };
         let Some(widget) = designed.all_widgets().into_iter().find_map(|list| find_widget(list, item)) else { return fail("there is no part there") };
         if widget.menu.is_some() {
             return fail("the part has a menu already");
@@ -1157,11 +1172,11 @@ impl Editor<'_> {
                 let mut quit = named(CommandKind::Item, "Quit");
                 quit.on_click = Some("quit".into());
                 file.items.push(self.command(quit));
-                designed.frame().menu = Some(Menu { name: Some(free_in(&used, "mainMenu")), items: vec![file], span });
+                designed.frame().menu = Some(Menu { name: Some(free_in(&used, "mainMenu")), width: None, items: vec![file], span });
             }
             RegionKind::Toolbar => {
                 let button = self.command(named(CommandKind::Button, "Button"));
-                designed.frame().toolbar = Some(Toolbar { name: Some(free_in(&used, "mainToolbar")), items: vec![button], span });
+                designed.frame().toolbar = Some(Toolbar { name: Some(free_in(&used, "mainToolbar")), width: None, items: vec![button], span });
             }
             RegionKind::Ribbon => {
                 let button = self.command(named(CommandKind::Button, "Button"));

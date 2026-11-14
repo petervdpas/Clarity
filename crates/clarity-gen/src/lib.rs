@@ -361,6 +361,21 @@ pub(crate) fn held_setting<'p>(
     entity.field(&member.name).filter(|f| f.ty == clarity_spec::model::FieldType::Folder).map(|f| f.name.name.as_str())
 }
 
+/// The extensions and the `hidden` option of the folder field code lists or
+/// writes (`files f in folder category.folder`): what the runtime keeps to.
+pub(crate) fn folder_rules(
+    project: &Project,
+    type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
+    folder: &clarity_spec::code::Expr,
+) -> (Vec<String>, bool) {
+    let clarity_spec::code::ExprKind::Member { object, member } = &folder.kind else { return (Vec::new(), false) };
+    let clarity_spec::code::check::TypeInfo::Record(entity) = type_of(object) else { return (Vec::new(), false) };
+    match project.entity(&entity).and_then(|e| e.field(&member.name)) {
+        Some(field) => (field.modifiers.extensions.clone(), field.modifiers.hidden),
+        None => (Vec::new(), false),
+    }
+}
+
 /// Whether the running handler holds the settings: a file store reads a
 /// folder setting, so the settings the call began with come first.
 pub(crate) fn holds_settings(project: &Project) -> bool {

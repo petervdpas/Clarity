@@ -238,9 +238,13 @@ fn name_attribute(name: &Option<String>) -> String {
     name.as_ref().map(|n| attribute("name", &Value::String(n.clone()))).unwrap_or_default()
 }
 
+fn width_attribute(width: Option<u32>) -> String {
+    width.map(|w| attribute("width", &Value::String(w.to_string()))).unwrap_or_default()
+}
+
 fn toolbar_element(toolbar: &Toolbar, depth: usize, out: &mut String, marks: &Marks) {
     let pad = "  ".repeat(depth);
-    let _ = writeln!(out, "{pad}<Toolbar{}>", name_attribute(&toolbar.name));
+    let _ = writeln!(out, "{pad}<Toolbar{}{}>", name_attribute(&toolbar.name), width_attribute(toolbar.width));
     for item in &toolbar.items {
         command_element(item, depth + 1, out, marks);
     }
@@ -387,7 +391,7 @@ fn level_element(level: &TreeLevel, depth: usize, out: &mut String) {
 /// A part's menu (DESIGN 5.16): `<Menu>` with an `<Item>` per command.
 pub fn menu_element(menu: &Menu, depth: usize, out: &mut String, marks: &Marks) {
     let pad = "  ".repeat(depth);
-    let _ = writeln!(out, "{pad}<Menu{}>", name_attribute(&menu.name));
+    let _ = writeln!(out, "{pad}<Menu{}{}>", name_attribute(&menu.name), width_attribute(menu.width));
     for item in &menu.items {
         command_element(item, depth + 1, out, marks);
     }
@@ -675,7 +679,7 @@ impl Reading {
             match child.name.as_str() {
                 "Data" | "Tells" => {}
                 "Menu" => page.frame.menu = Some(self.menu(child)),
-                "Toolbar" => page.frame.toolbar = Some(Toolbar { name: child.get("name").map(str::to_string), items: self.commands(&child.children), span: child.span }),
+                "Toolbar" => page.frame.toolbar = Some(Toolbar { name: child.get("name").map(str::to_string), width: self.width(child), items: self.commands(&child.children), span: child.span }),
                 "Ribbon" => page.frame.ribbon = Some(self.ribbon(child)),
                 "Sidebar" => {
                     if let Some(sidebar) = self.sidebar(child) {
@@ -738,7 +742,7 @@ impl Reading {
             match child.name.as_str() {
                 "Data" => {}
                 "Menu" => app.frame.menu = Some(self.menu(child)),
-                "Toolbar" => app.frame.toolbar = Some(Toolbar { name: child.get("name").map(str::to_string), items: self.commands(&child.children), span: child.span }),
+                "Toolbar" => app.frame.toolbar = Some(Toolbar { name: child.get("name").map(str::to_string), width: self.width(child), items: self.commands(&child.children), span: child.span }),
                 "Ribbon" => app.frame.ribbon = Some(self.ribbon(child)),
                 "Sidebar" => {
                     if let Some(sidebar) = self.sidebar(child) {
@@ -819,7 +823,19 @@ impl Reading {
     }
 
     fn menu(&mut self, element: &Element) -> Menu {
-        Menu { name: element.get("name").map(str::to_string), items: self.commands(&element.children), span: element.span }
+        Menu { name: element.get("name").map(str::to_string), width: self.width(element), items: self.commands(&element.children), span: element.span }
+    }
+
+    /// A menu bar's or toolbar's `width`, a whole number of pixels.
+    fn width(&mut self, element: &Element) -> Option<u32> {
+        let text = element.get("width")?;
+        match text.parse() {
+            Ok(width) => Some(width),
+            Err(_) => {
+                self.error(format!("width is a whole number of pixels, not '{text}'"), element.span);
+                None
+            }
+        }
     }
 
     fn commands(&mut self, elements: &[Element]) -> Vec<Command> {
@@ -1331,11 +1347,9 @@ pub fn apply(project: Option<&crate::Project>, markup: &str, edit: &crate::edit:
         let default = crate::translations::default_language(project);
         let existing = project.translations.get(&default).cloned().unwrap_or_default();
         let mut keyed = read(&written)?;
-        let made = crate::keyed::key_designed(&mut keyed, &default, &existing);
-        if !made.is_empty() {
-            written = written_again(&written, &keyed);
-            keys = made;
-        }
+        // A text whose key the project has already becomes that key too, with no new key made.
+        keys = crate::keyed::key_designed(&mut keyed, &default, &existing);
+        written = written_again(&written, &keyed);
     }
     let focus = match focus_key {
         Some(key) => keys_of(&read(&written)?).into_iter().find(|(_, k)| *k == key).map(|(start, _)| start),

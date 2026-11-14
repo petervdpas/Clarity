@@ -177,6 +177,10 @@ pub enum Op {
     AddField { entity: String, column: Column },
     RemoveField { entity: String, field: String },
     RenameField { entity: String, from: String, to: String },
+    /// `rename value Kind.Private to Personal`: every record that keeps the
+    /// value, in a column of the enum or in a list of its values, takes the
+    /// new name; asked for by a rename, never guessed.
+    RenameValue { enumeration: String, from: String, to: String },
     ChangeField { entity: String, field: String, ty: FieldType, store: Option<String> },
     AddUnique { entity: String, field: String },
     RemoveUnique { entity: String, field: String },
@@ -211,6 +215,7 @@ impl Op {
         match self {
             Op::AddEntity { name, .. } | Op::RemoveEntity { name } => name,
             Op::RenameEntity { to, .. } => to,
+            Op::RenameValue { enumeration, .. } => enumeration,
             Op::AddField { entity, .. }
             | Op::RemoveField { entity, .. }
             | Op::RenameField { entity, .. }
@@ -309,6 +314,16 @@ impl Schema {
                     return Err(format!("{entity} already has a field '{to}'"));
                 }
                 table.column_mut(from)?.name = to.clone();
+            }
+            // No table changes: a default of the value takes its new name.
+            Op::RenameValue { enumeration, from, to } => {
+                for table in &mut self.tables {
+                    for column in &mut table.columns {
+                        if matches!(&column.ty, FieldType::Enum { name } if name.name == *enumeration) && column.default == Some(Literal::Ident(from.clone())) {
+                            column.default = Some(Literal::Ident(to.clone()));
+                        }
+                    }
+                }
             }
             Op::ChangeField { entity, field, ty, store } => {
                 let column = self.table_mut(entity)?.column_mut(field)?;
@@ -478,6 +493,12 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
                 to: expect_to(&mut cursor)?,
             }
         }
+        ("rename", "value") => {
+            let enumeration = cursor.expect_ident("an enum, as in Kind.Private")?.name;
+            cursor.expect(TokenKind::Dot, "'.' and a value, as in Kind.Private")?;
+            let from = cursor.expect_ident("a value")?.name;
+            Op::RenameValue { enumeration, from, to: expect_to(&mut cursor)? }
+        }
         ("change", "field") => {
             let (entity, field) = field_path(&mut cursor)?;
             cursor.expect(TokenKind::Colon, "':' and the new type")?;
@@ -573,15 +594,25 @@ fn replay(migrations: &[Migration]) -> (Schema, Vec<Diagnostic>) {
     (schema, errors)
 }
 
-/// A rename the developer confirmed: of an entity (`entity` is None) or of
-/// a field of `entity`. Without it, a name that went and a name that came
-/// are a removal and an addition.
+/// A rename the developer confirmed: of an entity (`entity` is None), of
+/// a field of `entity`, or with `value` of a value of the enum `entity`.
+/// Without it, a name that went and a name that came are a removal and an addition.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Rename {
     pub entity: Option<String>,
     pub from: String,
     pub to: String,
+    /// `entity` is an enum and `from` one of its values.
+    #[serde(default)]
+    pub value: bool,
+}
+
+impl Rename {
+    /// A value `from` of the enum `enumeration` renamed to `to`.
+    pub fn value(enumeration: &str, from: &str, to: &str) -> Rename {
+        Rename { entity: Some(enumeration.to_string()), from: from.to_string(), to: to.to_string(), value: true }
+    }
 }
 
 fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
@@ -605,6 +636,18 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
         }
     };
 
+    // A value renamed: the records that keep it follow, where a table stores the enum.
+    for rename in renames.iter().filter(|r| r.value) {
+        let Some(enumeration) = &rename.entity else { continue };
+        let stored = schema.tables.iter().flat_map(|t| &t.columns).any(|c| match &c.ty {
+            FieldType::Enum { name } | FieldType::List { item: name } => name.name == *enumeration,
+            FieldType::Values { item: crate::model::ListItem::Enum { name } } => name.name == *enumeration,
+            _ => false,
+        });
+        if stored {
+            take(&mut schema, Op::RenameValue { enumeration: enumeration.clone(), from: rename.from.clone(), to: rename.to.clone() }, &mut ops);
+        }
+    }
     for rename in renames.iter().filter(|r| r.entity.is_none()) {
         if schema.table(&rename.from).is_some() && in_dictionary(&rename.to) && !in_dictionary(&rename.from) {
             let op = Op::RenameEntity {
@@ -628,7 +671,7 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
             take(&mut schema, op, &mut ops);
             continue;
         }
-        for rename in renames.iter().filter(|r| r.entity.as_deref() == Some(name)) {
+        for rename in renames.iter().filter(|r| !r.value && r.entity.as_deref() == Some(name)) {
             let table = schema.table(name).expect("checked above");
             if table.column(&rename.from).is_some() && entity.field(&rename.to).is_some() && entity.field(&rename.from).is_none() {
                 let op = Op::RenameField {
@@ -738,6 +781,7 @@ pub fn proposed_renames(project: &Project, source: &str) -> Vec<Rename> {
                 entity: None,
                 from: table.name.clone(),
                 to: entity.name.name.clone(),
+                value: false,
             };
             let _ = schema.apply(&Op::RenameEntity {
                 from: rename.from.clone(),
@@ -761,6 +805,7 @@ pub fn proposed_renames(project: &Project, source: &str) -> Vec<Rename> {
                     entity: Some(entity.name.name.clone()),
                     from: gone.name.clone(),
                     to: new.name.clone(),
+                    value: false,
                 });
             }
         }
@@ -817,6 +862,7 @@ pub fn op_text(op: &Op) -> String {
         Op::AddField { entity, column } => format!("add field {entity}.{}", column_text(column)),
         Op::RemoveField { entity, field } => format!("remove field {entity}.{field}"),
         Op::RenameField { entity, from, to } => format!("rename field {entity}.{from} to {to}"),
+        Op::RenameValue { enumeration, from, to } => format!("rename value {enumeration}.{from} to {to}"),
         Op::ChangeField { entity, field, ty, store } => {
             let store = store.as_ref().map(|s| format!(", store {s}")).unwrap_or_default();
             format!("change field {entity}.{field}: {}{store}", type_text(ty))

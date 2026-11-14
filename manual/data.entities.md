@@ -39,6 +39,7 @@ enum CustomerKind
 
 - Each value is a PascalCase name with its label by key. People read the label, so a value without one is an error: "Private of CustomerKind shows a text without a key; give it one: label @customerKindPrivate".
 - An enum has at least one value ("enum 'CustomerKind' has no variants"), and each value once ("duplicate variant 'Private'").
+- Renaming a value (its name in the enum editor, or the agent's `rename` with kind `value`) renames it everywhere it is named: the defaults of fields, settings and command options, code that names it bare or as `CustomerKind.Private`, a window's data default and a value a part's event gives a handler. The next migration step says `rename value CustomerKind.Private to Personal`, so the records that keep it, in a column or in a list of the enum's values, take the new name. A value written over by hand is no rename: the records keep the old name.
 
 ### `entity`
 
@@ -97,7 +98,7 @@ The checker refuses an entity without fields ("entity 'Customer' has no fields")
 | `list<Entity>` | the records of another entity that belong to this one; in an entity of a web API, held inside it |
 | `list<text>`, `list<integer>`, `list<decimal>`, `list<date>`, `list<Enum>` | a list of values, kept in one column; see [Lists in records](#lists-in-records) |
 
-`secret` and `folder` are types of a setting only; an entity's field of either is an error. See [Settings](data.settings.md).
+`secret` is a type of a setting only; an entity's field of it is an error. See [Settings](data.settings.md). A `folder` field holds the path of a folder, such as the folder of a category's files: code lists, reads and writes the files in it (see [Files in code](data.pictures-files.md#files-in-code)), and a folder part in a window chooses it.
 
 In an entity of a web API, code reads a record and a list held inside as any record and list: `order.owner.name`, `for line in order.lines`. A record never holds itself; a list may. See [Calling web APIs](code.web-apis.md).
 
@@ -120,10 +121,12 @@ In an entity of a web API, code reads a record and a list held inside as any rec
 | `computed` | flag | The value is worked out, not entered. Clarity accepts it; the generated application does not compute it. |
 | `column "Name"` | text | The column the field is stored in, when it is not the field's name in snake case; see [External databases](data.sources.md#external-databases). |
 | `store name` | a file store | For an `image` or a `file`: kept as files in that file store of the project file, not in the database. |
+| `extensions "*.md *.csv"` | the files it holds | For a `folder`: the files code lists in it and writes to it, as a file browser writes them; `"*.*"` alone takes any file and stands without other extensions. Without it, any file. |
+| `hidden` | flag | For a `folder`: its hidden files and folders, whose name starts with a dot, count too. Without it code neither lists nor writes them. |
 
 Each modifier appears at most once per field ("duplicate modifier 'required'"), and an unknown one is an error. The checker also refuses:
 
-- `owned` on anything but a list, `cascade` on anything but a `ref`, `store` on anything but an image or a file, `search` on anything but text and lists of text, `pattern` on anything but text;
+- `owned` on anything but a list, `cascade` on anything but a `ref`, `store` on anything but an image or a file, `extensions` and `hidden` on anything but a folder, an extension that is no `*.md` (`'md' is no extension of files`), `"*.*"` beside other extensions, `search` on anything but text and lists of text, `pattern` on anything but text;
 - `unique` or `default` on a picture, a file or a list;
 - a `min` or `max` that is no number on a number or no date on a date, and `min` greater than `max`;
 - a default that does not fit the type ("default value does not match the field type ('active')"), a default that is not one of the enum's values ("'Gold' is not a variant of 'CustomerKind' ('kind')"), a date or color written another way;

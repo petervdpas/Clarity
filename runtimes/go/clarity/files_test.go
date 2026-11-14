@@ -23,7 +23,18 @@ type fileCases struct {
 		Size                            int64
 	}
 	Refused []string
-	Bytes   []struct {
+	Folders []struct {
+		Patterns []string
+		Hidden   bool
+		Listed   []string
+	}
+	FolderWrites []struct {
+		Patterns []string
+		Hidden   bool
+		Path     string
+		Written  bool
+	} `json:"folderWrites"`
+	Bytes []struct {
 		Path   string
 		Base64 string
 		Size   int64
@@ -182,5 +193,41 @@ func TestBytesAreReadAndWrittenAsTheyAre(t *testing.T) {
 			return
 		}
 		t.Fatalf("%s is not listed", c.Path)
+	}
+}
+
+// A folder that is no store, by its path after "folder:": it lists the
+// files its extensions take, hidden ones only when it shows them, and
+// writes no other (conformance/files.json, folders and folderWrites).
+func TestAFolderListsAndWritesTheFilesOfItsExtensions(t *testing.T) {
+	_, root, cases := planted(t)
+	db, err := Memory()
+	must(t, err)
+	t.Cleanup(func() { db.Close() })
+	place := "folder:" + root
+	for _, c := range cases.Folders {
+		files, err := db.FilesIn(place, c.Patterns, c.Hidden)
+		must(t, err)
+		listed := []string{}
+		for _, f := range files {
+			listed = append(listed, f.Path)
+		}
+		want := c.Listed
+		if want == nil {
+			want = []string{}
+		}
+		equal(t, listed, want)
+	}
+	notes, err := db.FilesIn(place, []string{"*.txt"}, false)
+	must(t, err)
+	text, err := db.ReadText(notes[0])
+	must(t, err)
+	equal(t, text, "Hello\nworld\n")
+	for _, c := range cases.FolderWrites {
+		err := db.WriteTextIn(place, c.Patterns, c.Hidden, c.Path, "x")
+		equal(t, err == nil, c.Written)
+	}
+	if _, err := db.FilesIn("folder:", nil, false); err == nil {
+		t.Fatal("a folder that was never chosen was listed")
 	}
 }

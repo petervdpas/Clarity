@@ -112,6 +112,7 @@ pub fn rename(
             }
         }
         if kind == RenameKind::Entity {
+            spans.extend(type_uses(file, old, &text).into_iter().map(|(start, end)| (start, end, old.to_string(), new.to_string())));
             let (was, now) = (crate::code::record_name(old), crate::code::record_name(new));
             spans.extend(
                 record_uses(file, old)
@@ -170,6 +171,104 @@ fn renamed_in_data(designed: &mut crate::design_edit::Designed, old: &str, new: 
         }
     }
     changed
+}
+
+/// Where the code of a file names the entity `name` as a type, as places in
+/// `text`: what `find` and `new` make, the types of parameters, results,
+/// typed locals, constants and command options, what `ask` asks for, and the
+/// fields of records.
+fn type_uses(file: &SpecFile, name: &str, text: &str) -> Vec<(usize, usize)> {
+    use crate::code::{AskForm, TypeRef, TypeRefKind};
+    let mut types: Vec<&TypeRef> = Vec::new();
+    let mut idents: Vec<&Ident> = Vec::new();
+    let mut bodies: Vec<&[Stmt]> = Vec::new();
+    for record in &file.records {
+        for field in &record.fields {
+            match &field.ty {
+                FieldType::Ref { entity } => idents.push(entity),
+                FieldType::List { item } => idents.push(item),
+                _ => {}
+            }
+        }
+    }
+    for block in &file.code {
+        for handler in &block.handlers {
+            types.extend(handler.params.iter().map(|p| &p.ty));
+            bodies.push(&handler.body);
+        }
+        bodies.extend(block.events.iter().map(|e| e.body.as_slice()));
+    }
+    for function in &file.functions {
+        types.extend(function.params.iter().map(|p| &p.ty));
+        types.extend(function.returns.iter());
+        bodies.push(&function.body);
+    }
+    for command in &file.commands {
+        types.extend(command.params.iter().map(|p| &p.ty));
+        types.extend(command.options.iter().map(|o| &o.ty));
+        bodies.push(&command.body);
+    }
+    types.extend(file.consts.iter().filter_map(|c| c.ty.as_ref()));
+    // Typed locals and `ask` statements, in nested blocks too.
+    fn in_statements<'a>(body: &'a [Stmt], types: &mut Vec<&'a TypeRef>) {
+        for stmt in body {
+            match &stmt.kind {
+                StmtKind::Let { ty: Some(ty), .. } => types.push(ty),
+                StmtKind::Ask { form, .. } => {
+                    if let AskForm::Value { ty, .. } = form.as_ref() {
+                        types.push(ty);
+                    }
+                }
+                StmtKind::If { branches, otherwise } => {
+                    for branch in branches {
+                        in_statements(&branch.body, types);
+                    }
+                    if let Some(body) = otherwise {
+                        in_statements(body, types);
+                    }
+                }
+                StmtKind::For { body, .. } => in_statements(body, types),
+                _ => {}
+            }
+        }
+    }
+    // What expressions make or read, kept as places: an expression is lent only while it is looked at.
+    let mut made: Vec<Span> = Vec::new();
+    let mut typed: Vec<TypeRef> = Vec::new();
+    for body in &bodies {
+        in_statements(body, &mut types);
+        crate::code::each_expr_in(body, &mut |e: &Expr| match &e.kind {
+            ExprKind::Find { entity, .. } | ExprKind::New { entity } if entity.name == name => made.push(entity.span),
+            ExprKind::ReadFormat { ty, .. } => typed.push(ty.clone()),
+            ExprKind::Ask { form, .. } => {
+                if let AskForm::Value { ty, .. } = form.as_ref() {
+                    typed.push(ty.clone());
+                }
+            }
+            _ => {}
+        });
+    }
+    let mut out: Vec<(usize, usize)> = idents.iter().filter(|i| i.name == name).map(|i| (i.span.start as usize, i.span.end as usize)).collect();
+    out.extend(made.iter().map(|s| (s.start as usize, s.end as usize)));
+    // A type's place covers what is written (`list<Review>`): the name is found inside it.
+    for ty in types.into_iter().chain(typed.iter()) {
+        let named = match &ty.kind {
+            TypeRefKind::Named { name: n } | TypeRefKind::List { item: n } => n == name,
+            _ => false,
+        };
+        let (start, end) = (ty.span.start as usize, ty.span.end as usize);
+        if let (true, Some(written)) = (named, text.get(start..end)) {
+            let at = written.char_indices().map(|(i, _)| i).find(|&i| {
+                written[i..].starts_with(name)
+                    && !written[..i].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    && !written[i + name.len()..].chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_')
+            });
+            if let Some(at) = at {
+                out.push((start + at, start + at + name.len()));
+            }
+        }
+    }
+    out
 }
 
 /// The identifiers in a file that name the entity or enum `name`.
@@ -279,8 +378,11 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
             StmtKind::Save { value, .. } | StmtKind::Delete { value } | StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => {
                 expr(value, name, found)
             }
-            StmtKind::Write { text, path, .. } => {
+            StmtKind::Write { text, place, path } => {
                 expr(text, name, found);
+                if let crate::code::FilePlace::Folder(folder) = place {
+                    expr(folder, name, found);
+                }
                 expr(path, name, found);
             }
             StmtKind::Close | StmtKind::Reload { .. } => {}
@@ -313,7 +415,15 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(arg, name, found);
             }
         }
-        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
+        ExprKind::Find { filter, .. } => {
+            if let Some(filter) = filter {
+                expr(filter, name, found);
+            }
+        }
+        ExprKind::Files { place, filter, .. } => {
+            if let crate::code::FilePlace::Folder(folder) = place {
+                expr(folder, name, found);
+            }
             if let Some(filter) = filter {
                 expr(filter, name, found);
             }

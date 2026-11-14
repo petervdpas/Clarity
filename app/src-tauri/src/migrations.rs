@@ -38,6 +38,29 @@ pub struct PendingMigration {
     pub blocked: Option<String>,
 }
 
+/// The values of enums renamed in the IDE since the last step: the records
+/// that keep them follow in the next step, which nothing could propose.
+#[derive(Default)]
+pub struct ValueRenames(pub std::sync::Mutex<Vec<Rename>>);
+
+impl ValueRenames {
+    /// A value renamed: renamed again, one rename from its first name to its last.
+    pub fn add(&self, next: Rename) {
+        let Ok(mut kept) = self.0.lock() else { return };
+        match kept.iter().position(|r| r.entity == next.entity && r.to == next.from) {
+            Some(i) if kept[i].from == next.to => {
+                kept.remove(i);
+            }
+            Some(i) => kept[i].to = next.to,
+            None => kept.push(next),
+        }
+    }
+
+    fn all(&self) -> Vec<Rename> {
+        self.0.lock().map(|k| k.clone()).unwrap_or_default()
+    }
+}
+
 fn blocked(project: &clarity_spec::Project) -> Option<String> {
     project
         .diagnostics
@@ -53,11 +76,13 @@ pub fn pending_migration(
     source: String,
     renames: Option<Vec<Rename>>,
     state: State<WatchState>,
+    values: State<ValueRenames>,
 ) -> Result<PendingMigration, String> {
     let (_, dir) = open_project_of(&state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let proposed = migrate::proposed_renames(&project, &source);
-    let renames = renames.unwrap_or_else(|| proposed.clone());
+    let mut renames = renames.unwrap_or_else(|| proposed.clone());
+    renames.extend(values.all());
     let changes = migrate::pending(&project, &source, &renames)
         .iter()
         .map(|op| PendingChange {
@@ -84,7 +109,10 @@ pub fn create_migration(
     app: AppHandle,
     state: State<WatchState>,
     history: State<HistoryState>,
+    values: State<ValueRenames>,
 ) -> Result<Preview, String> {
+    let mut renames = renames;
+    renames.extend(values.all());
     let (file, dir) = open_project_of(&state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     if let Some(reason) = blocked(&project) {
@@ -99,6 +127,10 @@ pub fn create_migration(
     let path = clarity_spec::write_step(&dir, &source, title, &ops).map_err(|err| format!("cannot write the step: {err}"))?;
     let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
     record(&history, vec![FileChange { file: path, before: None, after: Some(text) }])?;
+    // The step holds them now.
+    if let Ok(mut kept) = values.0.lock() {
+        kept.clear();
+    }
     // The folder is new: watch it from now on, like the modules.
     if !had_folder {
         let watcher = watch(&file, &dir, app)?;

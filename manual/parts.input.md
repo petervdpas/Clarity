@@ -50,6 +50,7 @@ Text over several lines, bound to a text field. Enter starts a new line, and the
 
 - `code` (one of `clarity`, `csharp`, `rust`, `go`, `c`, `cpp`, `java`, `javascript`, `typescript`, `python`, `sql`, `json`, `xml`, `html`, `css`, `yaml`, `markdown`, `shell`, `diff`; none by default): the text is code, in the mono font, its comments, texts, numbers, keywords and type names in the theme's colors (`code_keyword`, `code_type`, `code_text`, `code_number`, `code_comment`); a `diff` colors its added and removed lines with `code_added` and `code_removed`. Read-only, it takes the theme's `code` part look, its own background (`code_background`) and a quieter border. **Code** in the properties.
 - `markdown` (true or false, false by default): a Markdown editor with a preview: Write and Preview on its top, the text colored as Markdown while it is written, Ctrl+B and Ctrl+I making the selection bold and italic. In the preview a link into the application (`clarity:fragment/412`) runs its `link` event, and the handler reads where it pointed as `manuscriptBox.link`. **Markdown** in the properties, off while **Code** names a language.
+- `readingWidth` (true or false, false by default): the Markdown preview keeps a column of a reading width from the left, as a book page reads; without it the preview takes the memo's whole width. **Reading width** in the properties.
 - `toolbox` and `toolboxPage`: a toolbox page of coded tools that work on the text where the person is (`toolboxPage="WritingTools"`). It comes at the caret (`toolbox="caret"`: Ctrl+Space calls it up under the caret, a right-click where it was pressed, with the memo's Cut, Copy and Paste as its last row), floats over the window (`popup`), or lies against the memo's edge (`slideout`). See [Toolbox parts](parts.toolbox.md).
 - `copy`, `placeholder`, `readonly`, `noUndo`, `taborder`: as a text box's.
 - Events: `change`, `enter`, `leave`, `link`.
@@ -310,7 +311,7 @@ The checker refuses a second default or cancel button in a window (`more than on
 | Part | Line | Binds | Size | Grows | Properties | Events |
 |---|---|---|---|---|---|---|
 | Text box | `textbox` | field (text, email, url) | 4 x 1 | no | `placeholder`, `copy`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave` |
-| Memo | `memo` | field (text) | 6 x 3 | yes | `placeholder`, `code`, `markdown`, `toolbox`, `copy`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave`, `link` |
+| Memo | `memo` | field (text) | 6 x 3 | yes | `placeholder`, `code`, `markdown`, `readingWidth`, `toolbox`, `copy`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave`, `link` |
 | Password | `password` | field (text, secret) | 4 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave` |
 | Sign-in | `signin` | nothing | 8 x 6 | no | none | none |
 | Number | `number` | field (integer, decimal, money, id, duration) | 3 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave` |

@@ -294,6 +294,7 @@ migration "Phone and VAT"
 | `add field Entity.name: type, modifiers` | adds a field; existing records get its `default`, or the empty value of its type |
 | `remove field Entity.name` | removes a field and its values |
 | `rename field Entity.old to new` | renames a field; its values stay |
+| `rename value Enum.Old to New` | renames a value of an enum in every record that keeps it |
 | `change field Entity.name: type` | changes a field's type, converting the values |
 | `add unique Entity.name`, `remove unique Entity.name` | makes a field unique, or not |
 | `add search Entity.name`, `remove search Entity.name` | puts a field in its entity's full-text index, or takes it out |

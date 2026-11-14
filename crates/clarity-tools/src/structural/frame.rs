@@ -126,6 +126,16 @@ pub fn definitions() -> Vec<ToolDef> {
             ),
         ),
         tool(
+            "change_menu",
+            "Changes the menu bar of a window or the app: its width in pixels (100 to 1600). A menu bar with a width leaves the rest of its row to the toolbar, which then stands next to it; null gives it the whole width again, the toolbar under it.",
+            schema(json!({ "window": owner, "width": { "type": ["integer", "null"] } }), &["window", "width"]),
+        ),
+        tool(
+            "change_toolbar",
+            "Changes the toolbar of a window or the app: its width in pixels (100 to 1600) beside a menu bar that has one; null takes the rest of the row.",
+            schema(json!({ "window": owner, "width": { "type": ["integer", "null"] } }), &["window", "width"]),
+        ),
+        tool(
             "change_ribbon",
             "Changes the ribbon of a window or the app: its name, whether the person folds it to its tabs, and whether it starts folded. What is left out stays.",
             schema(
@@ -246,6 +256,8 @@ pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Resul
         "change_command" => change_command(tools, input),
         "change_sidebar" => change_sidebar(tools, input),
         "change_ribbon" => change_ribbon(tools, input),
+        "change_menu" => change_bar(tools, input, true),
+        "change_toolbar" => change_bar(tools, input, false),
         "rename_frame_part" => rename_frame_part(tools, input),
         "set_frame_title" => set_frame_title(tools, input),
         "move_frame_part" => move_frame_part(tools, input),
@@ -574,6 +586,18 @@ fn change_ribbon(tools: &mut ProjectTools, input: &Value) -> Result<String, Stri
     let collapsed = flag(input, "collapsed").unwrap_or(ribbon.collapsed);
     let edit = Edit::UpdateRibbon { item: ribbon.span.start, name, collapsible, collapsed };
     apply(tools, &format!("Changed the ribbon of {}", owner.name), &owner.file.clone(), &edit)
+}
+
+/// Sets or takes away the width of the menu bar (`menu`) or the toolbar.
+fn change_bar(tools: &mut ProjectTools, input: &Value, menu: bool) -> Result<String, String> {
+    let (dir, project) = loaded(tools)?;
+    let owner = places::frame_owner(&project, &dir, &required(input, "window")?)?;
+    let (what, item) = if menu { ("menu", owner.frame().menu.as_ref().map(|m| m.span.start)) } else { ("toolbar", owner.frame().toolbar.as_ref().map(|t| t.span.start)) };
+    let Some(item) = item else {
+        return Err(format!("{} has no {what}; add one with add_region", owner.name));
+    };
+    let width = number(input, "width")?;
+    apply(tools, &format!("Changed the width of the {what} of {}", owner.name), &owner.file.clone(), &Edit::SetBarWidth { item, width })
 }
 
 fn rename_frame_part(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
@@ -994,6 +1018,23 @@ mod tests {
         let sidebar = refused(&mut tools, "change_sidebar", json!({"window": "Main", "sidebar": "leftSidebar", "width": 300}));
         assert!(sidebar.contains("there is no sidebar leftSidebar in Main; the sidebars of Main are rightSidebar"), "{sidebar}");
 
+        // The menu bar and the toolbar take a width, and side by side share a row; null takes it away.
+        let no_menu = refused(&mut tools, "change_menu", json!({"window": "Main", "width": 320}));
+        assert!(no_menu.contains("Main has no menu"), "{no_menu}");
+        ok(&mut tools, "change_menu", json!({"window": "app", "width": 320}));
+        let app = read(&dir, "design/Todo.cxaml");
+        assert!(app.contains("width=\"320\""), "{app}");
+        let no_toolbar = refused(&mut tools, "change_toolbar", json!({"window": "Main", "width": 400}));
+        assert!(no_toolbar.contains("Main has no toolbar"), "{no_toolbar}");
+        let narrow = refused(&mut tools, "change_menu", json!({"window": "app", "width": 20}));
+        assert!(narrow.contains("100 to 1600"), "{narrow}");
+        ok(&mut tools, "change_menu", json!({"window": "app", "width": null}));
+        assert!(!read(&dir, "design/Todo.cxaml").contains("width=\"320\""), "{}", read(&dir, "design/Todo.cxaml"));
+        // A second starter menu says "File" with the key the first one made.
+        ok(&mut tools, "add_region", json!({"window": "Main", "region": "menu"}));
+        let main = read(&dir, "design/Main.cxaml");
+        assert!(main.contains("caption=\"@fileItem\""), "{main}");
+
         let none = refused(&mut tools, "change_ribbon", json!({"window": "Main", "collapsible": true}));
         assert!(none.contains("Main has no ribbon"), "{none}");
         ok(&mut tools, "add_region", json!({"window": "Main", "region": "ribbon"}));
@@ -1011,7 +1052,7 @@ mod tests {
         ok(&mut tools, "remove_frame_part", json!({"window": "Main", "part": "rightSidebar"}));
         assert!(!read(&dir, "design/Main.cxaml").contains("rightSidebar"));
         let gone = refused(&mut tools, "remove_frame_part", json!({"window": "Main", "part": "rightSidebar"}));
-        assert!(gone.contains("there is no frame part rightSidebar in Main; there are mainRibbon"), "{gone}");
+        assert!(gone.contains("there is no frame part rightSidebar in Main; there are mainMenu, mainRibbon"), "{gone}");
         let _ = std::fs::remove_dir_all(root);
     }
 

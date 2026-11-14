@@ -599,6 +599,13 @@ impl Db {
 
     /// The folder of the file store `name`, made when it is not there yet.
     fn store_folder(&self, name: &str) -> Result<std::path::PathBuf> {
+        // A folder that is no store, by its path: just a folder.
+        if let Some(path) = name.strip_prefix(files::FOLDER) {
+            if path.is_empty() {
+                return Err(Error::Storage("no folder was chosen".into()));
+            }
+            return Ok(std::path::PathBuf::from(path));
+        }
         let place = self.stores.iter().find(|(n, _)| n == name).map(|(_, p)| p).ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))?;
         match place {
             StorePlace::Folder(folder) => Ok(folder.clone()),

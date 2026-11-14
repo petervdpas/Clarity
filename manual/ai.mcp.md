@@ -16,7 +16,7 @@ It designs and generates; building and running stay with you.
 
 - Look at the project: its project file, its modules, its README and its problems.
 - Read the project file, the modules, the windows and views in `design/`, and the Markdown files of the resources; write the project file, code and texts. Every write is checked at once.
-- Change the data model, windows, views, parts, the app and its frame with structural tools that take names, each a checked change as the designer makes it. Windows and views (`.cxaml`) change only through these tools.
+- Change the data model, windows, views, parts, the app and its frame with structural tools that take names, each a checked change as the designer makes it: one that breaks what it edits is refused, and what it leaves broken elsewhere is made and reported. Windows and views (`.cxaml`) change only through these tools.
 - Look up the parts a window can hold, and read the pages of this manual.
 - Pick what the application uses of a web API.
 - Put every change of your entities into a migration step at once, and rename an entity, an enum or a field so that the step keeps its data; the same as for [Clarity's own agent](ai.agent.md).

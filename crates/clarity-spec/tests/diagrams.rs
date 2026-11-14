@@ -133,3 +133,11 @@ fn other_kinds_are_only_drawn() {
     assert_eq!(diagram.kind, None);
     assert!(problems.is_empty());
 }
+
+/// A record's folder is a field like any other, so a diagram draws it.
+#[test]
+fn a_folder_field_is_read_from_an_erd() {
+    let (diagram, problems) = diagrams::parse("erDiagram\n    Category {\n        text(80) name\n        folder folder\n    }\n");
+    assert_eq!(errors(&problems), Vec::<String>::new());
+    assert_eq!(diagram.entities[0].fields[1].type_text, "folder");
+}

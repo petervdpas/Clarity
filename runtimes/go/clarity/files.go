@@ -1,6 +1,7 @@
 // The files of a file store, which code reaches through `files f in store`,
-// `read text of f` and `write t to store "path"`: only folders the project
-// settings name. A file found can become a record's picture: in the field's
+// `read text of f` and `write t to store "path"`, and of any other folder
+// (`files f in folder category.folder`), by its path after "folder:", with
+// the extensions of the files it holds and whether its hidden ones count. A file found can become a record's picture: in the field's
 // own store by its path, elsewhere as a copy. The other runtimes do the
 // same (conformance/files.json).
 
@@ -43,19 +44,85 @@ func (db *Db) Files(store string) ([]FileEntry, error) {
 	return found, nil
 }
 
+// FolderStore is the store of a folder that is no store: "folder:" and its path.
+const FolderStore = "folder:"
+
+// Takes is whether a file's name (Notes.MD, .env) is one a folder takes: by
+// its extensions ("*.md", ignoring case; none or "*.*": any file), a hidden
+// one (its name starting with a dot) only with hidden (conformance/files.json).
+func Takes(patterns []string, hidden bool, name string) bool {
+	if strings.HasPrefix(name, ".") && !hidden {
+		return false
+	}
+	if len(patterns) == 0 || slices.Contains(patterns, "*.*") {
+		return true
+	}
+	extension := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
+	for _, p := range patterns {
+		if ext, ok := strings.CutPrefix(p, "*."); ok && extension != "" && extension == strings.ToLower(ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// FilesIn is the files of a folder ("folder:" and its path) its extensions
+// take, in its folders too, sorted by path; hidden ones only with hidden.
+func (db *Db) FilesIn(folder string, patterns []string, hidden bool) ([]FileEntry, error) {
+	root, err := db.storeFolder(folder)
+	if err != nil {
+		return nil, err
+	}
+	var found []FileEntry
+	if err := walkFolder(folder, root, "", hidden, &found); err != nil {
+		return nil, err
+	}
+	kept := []FileEntry{}
+	for _, f := range found {
+		if Takes(patterns, hidden, f.Name) {
+			kept = append(kept, f)
+		}
+	}
+	sort.Slice(kept, func(i, j int) bool { return kept[i].Path < kept[j].Path })
+	return kept, nil
+}
+
+// WriteTextIn writes text as the file path of a folder, when it takes the file.
+func (db *Db) WriteTextIn(folder string, patterns []string, hidden bool, path, text string) error {
+	return db.WriteBytesIn(folder, patterns, hidden, path, []byte(text))
+}
+
+// WriteBytesIn writes bytes as the file path of a folder, when it takes the file.
+func (db *Db) WriteBytesIn(folder string, patterns []string, hidden bool, path string, bytes []byte) error {
+	name := path[strings.LastIndex(path, "/")+1:]
+	if !Takes(patterns, hidden, name) {
+		holds := strings.Join(patterns, " ")
+		if strings.HasPrefix(name, ".") && !hidden {
+			holds = "no hidden"
+		}
+		return &InvalidError{"the folder holds " + holds + " files, not '" + path + "'"}
+	}
+	return db.WriteBytes(folder, path, bytes)
+}
+
 func walkStore(store, folder, prefix string, found *[]FileEntry) error {
+	return walkFolder(store, folder, prefix, false, found)
+}
+
+// walkFolder finds the files under folder; hidden ones only with hidden.
+func walkFolder(store, folder, prefix string, hidden bool, found *[]FileEntry) error {
 	entries, err := os.ReadDir(folder)
 	if err != nil {
 		return &StorageError{What: "cannot read " + folder + ": " + err.Error(), Err: err}
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasPrefix(name, ".") {
+		if strings.HasPrefix(name, ".") && !hidden {
 			continue
 		}
 		path := filepath.Join(folder, name)
 		if e.IsDir() {
-			if err := walkStore(store, path, prefix+name+"/", found); err != nil {
+			if err := walkFolder(store, path, prefix+name+"/", hidden, found); err != nil {
 				return err
 			}
 			continue

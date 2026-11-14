@@ -299,11 +299,29 @@ impl WindowFrame {
     /// of what is left; a sidebar that fills the window takes the middle.
     pub fn arrange(&self, children: &mut [Box<dyn Element>], area: Rect, cx: &mut Cx) -> Rect {
         let mut top = area.y;
+        // A menu bar with a width and the toolbar share the first row: the menu bar at its width, the toolbar beside it.
+        let shared = shared_row(children);
+        if let Some(row) = &shared {
+            let menu_wide = row.menu.min(area.width);
+            let rest = (area.width - menu_wide).max(0.0);
+            for child in children.iter_mut().filter(|c| c.is_shown()) {
+                let any = child.as_any();
+                if any.is::<FrameMenuBar>() {
+                    child.arrange(Rect::new(area.x, top, menu_wide, row.height), cx);
+                } else if any.is::<FrameToolbar>() {
+                    child.arrange(Rect::new(area.x + menu_wide, top, row.toolbar.map_or(rest, |w| w.min(rest)), row.height), cx);
+                }
+            }
+            top += row.height;
+        }
         for child in children.iter_mut() {
             let wanted = match region_of(child.as_ref()) {
                 Some(Region::Top(wanted)) if child.is_shown() => wanted,
                 _ => continue,
             };
+            if shared.is_some() && (child.as_any().is::<FrameMenuBar>() || child.as_any().is::<FrameToolbar>()) {
+                continue;
+            }
             child.arrange(Rect::new(area.x, top, area.width, wanted), cx);
             top += wanted;
         }
@@ -343,7 +361,14 @@ impl WindowFrame {
     /// How high its regions at the top and bottom want to be now, and how wide its sidebars.
     pub fn room(&self, children: &[Box<dyn Element>]) -> (f64, f64) {
         let (mut high, mut wide) = (0.0, 0.0);
+        let shared = shared_row(children);
+        if let Some(row) = &shared {
+            high += row.height;
+        }
         for child in children.iter().filter(|c| c.is_shown()) {
+            if shared.is_some() && (child.as_any().is::<FrameMenuBar>() || child.as_any().is::<FrameToolbar>()) {
+                continue;
+            }
             match region_of(child.as_ref()) {
                 Some(Region::Top(w)) | Some(Region::Bottom(w)) => high += w,
                 Some(Region::Side(_, w)) => wide += w,
@@ -389,6 +414,24 @@ pub fn regions(frame: &Rc<WindowFrame>) -> Vec<Box<dyn Element>> {
         out.push(Box::new(FrameFooter::new(frame.clone())));
     }
     out
+}
+
+/// The first row a menu bar with a width shares with the toolbar: the menu
+/// bar's width, the toolbar's own width if it has one, and the row's height,
+/// the higher of the two.
+struct SharedRow {
+    menu: f64,
+    toolbar: Option<f64>,
+    height: f64,
+}
+
+fn shared_row(children: &[Box<dyn Element>]) -> Option<SharedRow> {
+    let shown = || children.iter().filter(|c| c.is_shown());
+    let bar = shown().find_map(|c| c.as_any().downcast_ref::<FrameMenuBar>())?;
+    let menu = bar.menu().width?;
+    let toolbar = shown().find_map(|c| c.as_any().downcast_ref::<FrameToolbar>());
+    let height = toolbar.map_or(bar.wanted(), |t| bar.wanted().max(t.wanted()));
+    Some(SharedRow { menu, toolbar: toolbar.and_then(|t| t.toolbar().width), height })
 }
 
 /// Where a region lies and the room it wants: its height at the top or bottom, its width at a side.

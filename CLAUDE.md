@@ -25,6 +25,7 @@ Clarity is one language and a designer-first IDE whose projects are transpiled t
 - Never work from half-remembered notes. Before acting on a tool, workflow, format or API, read its real source (its README, code, docs or workflow file); when a note and the source disagree, the source wins.
 - Before building something new, restate the goal in a line or two and ask; a remark is not a request to build.
 - Plans and design notes quote the user's words; anything added goes under open questions.
+- **Use the user's words for every name.** An entity, field, enum value, window, part, button or text named in a design comes from what the user said. A name made up (a field nobody asked for, another word for one they gave) is listed under open questions, with what it is for, before it is used, in a diagram above all, and used only once the user agrees. Never use a word Clarity already means something else by (`page` is a window or view). A structure the user names (Project -> Dossier -> Review -> Items) is kept exactly. Every agent of Clarity is told the same (`clarity_tools::instructions`).
 
 ## Tests and builds
 

@@ -36,6 +36,12 @@ void Db::hold_settings(const nlohmann::json& settings) { held_settings_ = settin
 void Db::hold_setting(const std::string& setting, const std::string& value) { held_settings_[setting] = value; }
 
 fs::path Db::store_folder(const std::string& name) {
+    // A folder that is no store, by its path: just a folder.
+    if (name.starts_with(folder_store)) {
+        std::string path = name.substr(folder_store.size());
+        if (path.empty()) throw StorageError("no folder was chosen");
+        return fs::path(path);
+    }
     if (auto setting = store_settings_.find(name); setting != store_settings_.end()) {
         auto file = settings_file(setting->second.program);
         if (!file) throw StorageError("this system names no folder for application settings");
@@ -68,13 +74,13 @@ static DateTime utc(fs::file_time_type at) {
                     int(time.minutes().count()), int(time.seconds().count())};
 }
 
-static void walk(const std::string& store, const fs::path& folder, const std::string& prefix, std::vector<FileEntry>& out) {
+static void walk(const std::string& store, const fs::path& folder, const std::string& prefix, std::vector<FileEntry>& out, bool hidden = false) {
     std::error_code error;
     for (const auto& entry : fs::directory_iterator(folder, error)) {
         std::string name = entry.path().filename().string();
-        if (name.starts_with(".")) continue;
+        if (name.starts_with(".") && !hidden) continue;
         if (entry.is_directory()) {
-            walk(store, entry.path(), prefix + name + "/", out);
+            walk(store, entry.path(), prefix + name + "/", out, hidden);
         } else if (entry.is_regular_file()) {
             std::string extension = entry.path().extension().string();
             if (!extension.empty()) extension.erase(0, 1);
@@ -90,6 +96,49 @@ std::vector<FileEntry> Db::files(const std::string& store) {
     walk(store, store_folder(store), "", out);
     std::sort(out.begin(), out.end(), [](const FileEntry& a, const FileEntry& b) { return a.path < b.path; });
     return out;
+}
+
+static std::string lower(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return text;
+}
+
+bool folder_takes(const std::vector<std::string>& patterns, bool hidden, const std::string& name) {
+    if (name.starts_with(".") && !hidden) return false;
+    if (patterns.empty() || std::find(patterns.begin(), patterns.end(), "*.*") != patterns.end()) return true;
+    // `.env` has no extension, `.notes.md` has md.
+    std::string extension = fs::path(name).extension().string();
+    if (!extension.empty()) extension.erase(0, 1);
+    extension = lower(extension);
+    for (const auto& p : patterns)
+        if (p.starts_with("*.") && !extension.empty() && extension == lower(p.substr(2))) return true;
+    return false;
+}
+
+std::vector<FileEntry> Db::files_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden) {
+    std::vector<FileEntry> out;
+    walk(folder, store_folder(folder), "", out, hidden);
+    std::erase_if(out, [&](const FileEntry& f) { return !folder_takes(patterns, hidden, f.name); });
+    std::sort(out.begin(), out.end(), [](const FileEntry& a, const FileEntry& b) { return a.path < b.path; });
+    return out;
+}
+
+void Db::write_text_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden, const std::string& path, const std::string& text) {
+    write_bytes_in(folder, patterns, hidden, path, Bytes(text.begin(), text.end()));
+}
+
+void Db::write_bytes_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden, const std::string& path, const Bytes& bytes) {
+    std::string name = path.substr(path.rfind('/') == std::string::npos ? 0 : path.rfind('/') + 1);
+    if (!folder_takes(patterns, hidden, name)) {
+        std::string holds;
+        if (name.starts_with(".") && !hidden) {
+            holds = "no hidden";
+        } else {
+            for (const auto& p : patterns) holds += (holds.empty() ? "" : " ") + p;
+        }
+        throw InvalidError("the folder holds " + holds + " files, not '" + path + "'");
+    }
+    write_bytes(folder, path, bytes);
 }
 
 /// Whether text is UTF-8.

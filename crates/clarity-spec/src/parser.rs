@@ -830,6 +830,7 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "search" => flag(&mut modifiers.search, duplicate),
         "cascade" => flag(&mut modifiers.cascade, duplicate),
         "hashed" => flag(&mut modifiers.hashed, duplicate),
+        "hidden" => flag(&mut modifiers.hidden, duplicate),
         "min" => set(&mut modifiers.min, parse_literal(cursor)?, duplicate),
         "max" => set(&mut modifiers.max, parse_literal(cursor)?, duplicate),
         "default" => set(&mut modifiers.default, parse_literal(cursor)?, duplicate),
@@ -858,6 +859,16 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
             cursor.expect_string("a column name")?,
             duplicate,
         ),
+        "extensions" => {
+            let at = cursor.peek().map(|t| t.span).unwrap_or(keyword.span);
+            let written = cursor.expect_string("the files it holds as patterns, as in 'extensions \"*.md *.csv\"'")?;
+            let found: Vec<String> = written.split_whitespace().map(str::to_string).collect();
+            if let Some(problem) = crate::files::patterns_problem(&found) {
+                return Err(Diagnostic::error(problem, at));
+            }
+            modifiers.extensions = found;
+            Ok(())
+        }
         "store" => set(
             &mut modifiers.store,
             cursor.expect_ident("a file store, as in 'store photos'")?.name,
@@ -1380,7 +1391,7 @@ fn parse_region(
     let duplicate = || Diagnostic::error(format!("duplicate '{}'", keyword.name), keyword.span);
     match region {
         RegionKind::Menu => {
-            let name = region_name(&mut cursor, "menu")?;
+            let (name, width) = region_head(&mut cursor, "menu", true)?;
             if frame.menu.is_some() {
                 return Err(duplicate());
             }
@@ -1391,12 +1402,13 @@ fn parse_region(
             );
             frame.menu = Some(Menu {
                 name,
+                width,
                 items,
                 span: node.span(),
             });
         }
         RegionKind::Toolbar => {
-            let name = region_name(&mut cursor, "toolbar")?;
+            let (name, width) = region_head(&mut cursor, "toolbar", true)?;
             if frame.toolbar.is_some() {
                 return Err(duplicate());
             }
@@ -1407,6 +1419,7 @@ fn parse_region(
             );
             frame.toolbar = Some(Toolbar {
                 name,
+                width,
                 items,
                 span: node.span(),
             });
@@ -1591,18 +1604,22 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
 
 /// An optional `name x` at the end of a line, as tabs and groups of a ribbon have.
 /// The name on a menu's or toolbar's line: `menu name mainMenu`.
-fn region_name(cursor: &mut Cursor, what: &str) -> ParseResult<Option<String>> {
-    let mut name = None;
+/// The rest of a region's line: its name, and its width where it may have
+/// one (the menu bar and the toolbar of a frame).
+fn region_head(cursor: &mut Cursor, what: &str, wide: bool) -> ParseResult<(Option<String>, Option<u32>)> {
+    let (mut name, mut width) = (None, None);
     while let Some(word) = cursor.peek().map(|t| t.text.clone()) {
         let clause = cursor.expect_ident(&format!("a {what} property"))?;
         match word.as_str() {
             "name" => name = Some(cursor.expect_ident("a part name")?.name),
+            "width" if wide => width = Some(cursor.expect_number("a width in pixels, as in width 320")?),
             other => {
-                return Err(Diagnostic::error(format!("unknown {what} property '{other}'; a {what} has a name"), clause.span));
+                let has = if wide { "a name and a width" } else { "a name" };
+                return Err(Diagnostic::error(format!("unknown {what} property '{other}'; a {what} has {has}"), clause.span));
             }
         }
     }
-    Ok(name)
+    Ok((name, width))
 }
 
 fn part_name(cursor: &mut Cursor) -> ParseResult<Option<String>> {
@@ -1778,10 +1795,10 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
         }
         let mut cursor = Cursor::new(menu.line);
         cursor.eat_keyword("menu");
-        match region_name(&mut cursor, "menu") {
-            Ok(name) => {
+        match region_head(&mut cursor, "menu", false) {
+            Ok((name, _)) => {
                 let items = parse_commands(&menu.children, &[CommandKind::Item, CommandKind::Separator], diagnostics);
-                widget.menu = Some(Menu { name, items, span: menu.span() });
+                widget.menu = Some(Menu { name, width: None, items, span: menu.span() });
             }
             Err(diag) => diagnostics.push(diag),
         }
@@ -1968,10 +1985,10 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 86] = [
-    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "fold", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
+pub const LINE_WORDS: [&str; 90] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "fold", "reading", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
-    "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
+    "children", "page", "typed", "cards", "colored", "band", "chip", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows",
 ];
 
@@ -2017,6 +2034,7 @@ fn parse_widget_props(
         confirm: false,
         striped: false,
         fold_buttons: false,
+        reading_width: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -2055,6 +2073,9 @@ fn parse_widget_props(
         step: None,
         split: false,
         cards: false,
+        card_color: None,
+        card_band: false,
+        card_chip: None,
         frame: false,
         typed: false,
         page: None,
@@ -2419,6 +2440,15 @@ fn parse_widget_props(
                 }
                 props.fold_buttons = true;
             }
+            // `reading width`: Markdown in a column of a reading width.
+            "reading" => {
+                applies(WidgetProperty::ReadingWidth)?;
+                let word = cursor.expect_ident("width, as in reading width")?;
+                if word.name != "width" {
+                    return Err(Diagnostic::error(format!("expected width after reading, as in reading width, not '{}'", word.name), word.span));
+                }
+                props.reading_width = true;
+            }
             "striped" => {
                 applies(WidgetProperty::Striped)?;
                 props.striped = true;
@@ -2678,6 +2708,18 @@ fn parse_widget_props(
             "cards" => {
                 applies(WidgetProperty::Cards)?;
                 props.cards = true;
+            }
+            "colored" => {
+                applies(WidgetProperty::CardColor)?;
+                if !cursor.eat_keyword("by") {
+                    return Err(cursor.error_here("expected 'by', as in 'colored by paint'".to_string()));
+                }
+                props.card_color = Some(cursor.expect_ident("the color field each card takes")?.name);
+                if cursor.eat_keyword("band") {
+                    props.card_band = true;
+                } else if cursor.eat_keyword("chip") {
+                    props.card_chip = Some(cursor.expect_ident("the shown field the chip is around, as in 'chip category'")?.name);
+                }
             }
             "frame" => {
                 applies(WidgetProperty::Frame)?;

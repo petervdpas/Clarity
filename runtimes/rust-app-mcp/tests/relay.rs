@@ -115,13 +115,20 @@ fn an_app_serves_at_most_so_many_agents_at_once() {
     let _ = second.read();
     assert_eq!(*turned_away.lock().unwrap(), vec![Some("Codex".to_string())]);
     drop(second);
+    // The request each try below asks: one turned away answers it with the
+    // refusal (it answers no plain line), so a try never waits for nothing.
+    let ask = r#"{"jsonrpc":"2.0","id":9,"method":"tools/list"}"#;
+    let mut early = relay::connect(&file).expect("the app answers");
+    early.write(ask);
+    assert!(early.read().is_some_and(|l| l.contains("Shop serves 1 agent at once already.")), "turned away, a request is answered");
+    drop(early);
     drop(first);
-    // The first left: a new one is served.
+    // The first left: a new one is served once the app has seen it go.
     let mut third = None;
     for _ in 0..50 {
         let mut lines = relay::connect(&file).expect("the app answers");
-        lines.write("ping");
-        if lines.read().as_deref() == Some("heard ping") {
+        lines.write(ask);
+        if lines.read() == Some(format!("heard {ask}")) {
             third = Some(lines);
             break;
         }

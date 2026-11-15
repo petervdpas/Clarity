@@ -16,6 +16,8 @@
   import type { BrowseShow } from "@clarity/ui/generated/BrowseShow.ts";
   import logo from "../../src-tauri/icons/icon.svg";
   import Modal from "./Modal.svelte";
+  import Splitter from "@clarity/ui/parts/Splitter.svelte";
+  import { layout } from "./layout.svelte";
   import { fileBrowser, type BrowseRequest } from "./fileBrowserStore.svelte";
   import { chosen } from "./fileBrowser";
 
@@ -127,7 +129,7 @@
 </script>
 
 {#if request}
-  <Modal title={request.title} width={760} onclose={() => fileBrowser.answer(null)}>
+  <Modal title={request.title} width={960} onclose={() => fileBrowser.answer(null)}>
     <div class="browser">
       <div class="bar">
         <button type="button" class="icon-button" onclick={() => listing?.up && go(listing.up)} disabled={!listing?.up} title="Up to the folder above" aria-label="Up"><IdeIcon name="up" /></button>
@@ -143,7 +145,7 @@
       </div>
       {#if listing?.problem}<p class="error">{listing.problem}</p>{/if}
 
-      <div class="body">
+      <div class="body" style:grid-template-columns="{layout.sizes.browserPlaces}px auto minmax(0, 1fr)">
         <nav class="places" aria-label="Places">
           {#if places?.home}<button type="button" onclick={() => places?.home && go(places.home)}>Home</button>{/if}
           {#if places?.projects}<button type="button" onclick={() => places?.projects && go(places.projects)} title={places.projects}>Projects folder</button>{/if}
@@ -159,6 +161,7 @@
             {/each}
           {/if}
         </nav>
+        <Splitter axis="x" label="Width of the places and recent projects" onmove={(d) => layout.resize("browserPlaces", d)} />
 
         <div class="content">
         {#if cards.length > 0}
@@ -260,8 +263,7 @@
   }
   .body {
     display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 8px;
+    gap: 4px;
     height: 380px;
   }
   .places {
@@ -271,6 +273,10 @@
     overflow: auto;
     border-right: 1px solid var(--border);
     padding-right: 6px;
+  }
+  /* Rows keep their height; a long list scrolls instead of squeezing them. */
+  .places > * {
+    flex: none;
   }
   .places button {
     text-align: left;

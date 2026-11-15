@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 use clarity_project::{Backend, Ui};
 
 pub mod environment;
+pub mod devtools;
 
 /// How Clarity looks at the machine: where a program is, and what it says.
 pub trait Probe {
@@ -66,7 +67,7 @@ pub fn installers_path() -> OsString {
 
 /// The variables a build gets from the person's choices: the chosen C and
 /// C++ compilers for CMake, and CLARITY_RUNTIME for a C# build when a folder
-/// is chosen for the NuGet packages (Clarity settings > Libraries).
+/// is chosen for the NuGet packages (Clarity settings > DevTools).
 pub fn tool_env() -> Vec<(String, String)> {
     let mut vars = environment::compilers(&environment::Environment::current());
     if let Some(folder) = environment::library_in_use(environment::Choosable::NugetPackages) {
@@ -440,7 +441,7 @@ fn clarity_ui_library(probe: &dyn Probe, found: &mut Vec<String>, missing: &mut 
         Library::Named(folder) if folder.join("include").join("clarity_ui.h").is_file() => found.push(format!("Clarity.UI's library in {} (CLARITY_UI)", folder.display())),
         Library::Named(folder) => missing.push((format!("Clarity.UI's library: the folder CLARITY_UI names ({}) has no include/clarity_ui.h", folder.display()), NATIVE_GUIDE)),
         Library::Chosen(folder) if folder.join("include").join("clarity_ui.h").is_file() => found.push(format!("Clarity.UI's library in {} (chosen in Clarity settings)", folder.display())),
-        Library::Chosen(folder) => missing.push((format!("Clarity.UI's library: the folder chosen in Clarity settings > Libraries ({}) has no include/clarity_ui.h", folder.display()), NATIVE_GUIDE)),
+        Library::Chosen(folder) => missing.push((format!("Clarity.UI's library: the folder chosen in Clarity settings > DevTools ({}) has no include/clarity_ui.h", folder.display()), NATIVE_GUIDE)),
         Library::Bundled(_) => found.push(format!("Clarity.UI's library {}, carried by Clarity", crate::clarity_ui::version())),
         Library::Fetched(_) => found.push(format!("Clarity.UI's library {}", crate::clarity_ui::version())),
         Library::ToFetch { version, .. } => found.push(format!("Clarity.UI's library {version}, fetched on first build")),

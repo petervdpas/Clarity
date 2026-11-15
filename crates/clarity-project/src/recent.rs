@@ -1,6 +1,7 @@
 //! The file browser's memory: the projects
 //! opened last, newest first, and the folder each use of the browser was
-//! left in. The user: "10 recent, remember last folder". Kept in
+//! left in. The user: "10 recent, remember last folder", later "only 8 last
+//! opened". Kept in
 //! `recent.json` in Clarity's own folder, beside `ide.json`, and changed key
 //! by key: what else the file holds stays, and a file that is not JSON is
 //! refused, never overwritten.
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value};
 
 /// How many projects the list keeps.
-pub const KEPT: usize = 10;
+pub const KEPT: usize = 8;
 
 const PROJECTS: &str = "projects";
 const FOLDERS: &str = "lastFolders";
@@ -27,10 +28,10 @@ pub fn recent() -> Vec<PathBuf> {
 
 pub fn recent_in(file: &Path) -> Vec<PathBuf> {
     let Ok(Value::Object(settings)) = read(file) else { return Vec::new() };
-    settings.get(PROJECTS).and_then(Value::as_array).map(|list| list.iter().filter_map(Value::as_str).map(PathBuf::from).filter(|p| p.is_file()).collect()).unwrap_or_default()
+    settings.get(PROJECTS).and_then(Value::as_array).map(|list| list.iter().filter_map(Value::as_str).map(PathBuf::from).filter(|p| p.is_file()).take(KEPT).collect()).unwrap_or_default()
 }
 
-/// Puts `project` at the top of the list, once, keeping the last 10.
+/// Puts `project` at the top of the list, once, keeping the last [`KEPT`].
 pub fn remember_project(project: &Path) -> Result<(), String> {
     remember_project_in(&file(), project)
 }

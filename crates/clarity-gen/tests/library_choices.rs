@@ -1,4 +1,4 @@
-//! Clarity settings > Libraries: the folder each library or package set a
+//! Clarity settings > DevTools: the folder each library or package set a
 //! build uses may be chosen by the person (Clarity.UI's library, its browser
 //! files, the Rust crates, the NuGet packages), kept in environment.json
 //! beside the tools, and a factory reset forgets every choice so builds take
@@ -43,11 +43,11 @@ fn browser_folder(name: &str) -> PathBuf {
 
 #[test]
 fn every_choice_has_a_written_out_camel_case_key() {
-    assert_eq!(Choosable::ALL.map(Choosable::key), ["clarityUi", "clarityUiBrowser", "rustCrates", "nugetPackages"]);
+    assert_eq!(Choosable::ALL.map(Choosable::key), ["clarityUi", "clarityUiBrowser", "rustCrates", "nugetPackages", "goModule"]);
     for which in Choosable::ALL {
         assert_eq!(Choosable::from_key(which.key()), Some(which));
     }
-    assert_eq!(Choosable::from_key("goModule"), None);
+    assert_eq!(Choosable::from_key("nativeRuntime"), None);
 }
 
 #[test]
@@ -136,6 +136,8 @@ fn handed_choices_reach_the_builds() {
     env.choose_library(Choosable::ClarityUiBrowser, Some(browser.clone()));
     env.choose_library(Choosable::NugetPackages, Some(csharp.clone()));
     env.choose_library(Choosable::RustCrates, Some(rust.clone()));
+    let go = repo().join("runtimes").join("go");
+    env.choose_library(Choosable::GoModule, Some(go.clone()));
     environment::use_libraries(&env);
     assert_eq!(environment::library_in_use(Choosable::ClarityUi), Some(library.clone()));
     assert_eq!(clarity_ui::library(), Library::Chosen(library.clone()));
@@ -151,10 +153,18 @@ fn handed_choices_reach_the_builds() {
     let files = clarity_gen::generate(&project, &settings).unwrap();
     let patch = files.iter().find(|f| f.path == ".cargo/config.toml").expect("the patch is written");
     assert_eq!(patch.text, clarity_gen::rust_local_patch(&rust).unwrap());
+    // A Go project takes the runtime module from the chosen folder: a replace line in its go.mod.
+    let mut go_settings = settings.clone();
+    go_settings.stack.backend = clarity_project::Backend::Go;
+    let files = clarity_gen::generate(&project, &go_settings).unwrap();
+    let module = &files.iter().find(|f| f.path == "go.mod").unwrap().text;
+    assert!(module.contains(&format!("replace github.com/petervdpas/Clarity/runtimes/go => {}\n", clarity_project::slashed(&go))), "{module}");
     // A factory reset: Clarity's own again, and nothing of the choices stays in a build.
     environment::use_libraries(&Environment::default());
     assert_eq!(environment::library_in_use(Choosable::ClarityUi), None);
     assert!(!matches!(clarity_ui::library(), Library::Chosen(_)));
+    let files = clarity_gen::generate(&project, &go_settings).unwrap();
+    assert!(!files.iter().find(|f| f.path == "go.mod").unwrap().text.contains("replace github.com/petervdpas/Clarity/runtimes/go"));
     assert!(!clarity_gen::tools::tool_env().iter().any(|(k, v)| k == "CLARITY_RUNTIME" && v == &clarity_project::slashed(&csharp)));
     // CLARITY_RUNTIME of the environment (as dev.sh sets it) still counts after a reset: it is not set in this binary.
     if std::env::var_os("CLARITY_RUNTIME").is_none() {

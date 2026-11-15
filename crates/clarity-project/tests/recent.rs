@@ -1,6 +1,6 @@
-//! The file browser's memory: the 10
+//! The file browser's memory: the 8
 //! projects opened last, newest first, and the folder each use was left in
-//! ("10 recent, remember last folder"). Kept in `recent.json` in Clarity's
+//! ("10 recent, remember last folder", then "only 8 last opened"). Kept in `recent.json` in Clarity's
 //! own folder, changed key by key.
 
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ fn file(name: &str) -> PathBuf {
 }
 
 #[test]
-fn the_newest_project_comes_first_once_and_ten_are_kept() {
+fn the_newest_project_comes_first_once_and_eight_are_kept() {
     let file = file("projects");
     let dir = file.parent().unwrap().to_path_buf();
     let project = |n: usize| {
@@ -28,8 +28,8 @@ fn the_newest_project_comes_first_once_and_ten_are_kept() {
     }
     remember_project_in(&file, &project(5)).unwrap();
     let recent = recent_in(&file);
-    assert_eq!(KEPT, 10);
-    assert_eq!(recent.len(), 10);
+    assert_eq!(KEPT, 8);
+    assert_eq!(recent.len(), 8);
     assert_eq!(recent[0], project(5), "opened again: first, and once");
     assert_eq!(recent.iter().filter(|p| **p == project(5)).count(), 1);
     assert_eq!(recent[1], project(11));
@@ -37,6 +37,24 @@ fn the_newest_project_comes_first_once_and_ten_are_kept() {
     std::fs::remove_file(project(11)).unwrap();
     assert!(!recent_in(&file).contains(&project(11)));
     assert!(std::fs::read_to_string(&file).unwrap().contains("p11.clarity"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_longer_list_from_before_shows_only_eight() {
+    let file = file("longer");
+    let dir = file.parent().unwrap().to_path_buf();
+    let projects: Vec<String> = (0..10)
+        .map(|n| {
+            let p = dir.join(format!("p{n}.clarity"));
+            std::fs::write(&p, "project P\n").unwrap();
+            p.display().to_string()
+        })
+        .collect();
+    std::fs::write(&file, serde_json::json!({ "projects": projects }).to_string()).unwrap();
+    let recent = recent_in(&file);
+    assert_eq!(recent.len(), 8);
+    assert_eq!(recent[0], PathBuf::from(&projects[0]));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

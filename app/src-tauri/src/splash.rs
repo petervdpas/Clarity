@@ -24,12 +24,7 @@ const LOGO: &str = include_str!("../icons/icon.svg");
 #[derive(Default)]
 pub struct SplashState {
     opened: Mutex<Option<Instant>>,
-    /// A rebuild's lines so far, the last LINES_KEPT: each line sends them all, so none is lost while the page loads.
-    lines: Mutex<Vec<String>>,
 }
-
-/// The most lines of a build the splash keeps.
-const LINES_KEPT: usize = 200;
 
 /// What the splash page shows before anything is loaded.
 #[derive(Serialize)]
@@ -49,29 +44,9 @@ fn handed(title: &str, version: &str) -> String {
 
 /// Opens the splash screen; `title` is Clarity's name and version, as its window's title says them, and `version` the version alone.
 pub fn open(app: &AppHandle, title: &str, version: &str) {
-    open_sized(app, title, version, 560.0, 240.0, "");
-}
-
-/// Opens the splash screen for a rebuild in development (dev_rebuild.rs):
-/// larger, with the build's lines under the name, one by one as they come (`line`).
-pub fn open_building(app: &AppHandle, title: &str, version: &str) {
-    open_sized(app, title, version, 760.0, 460.0, "window.__clarity_splash_building = true;");
-}
-
-fn open_sized(app: &AppHandle, title: &str, version: &str, width: f64, height: f64, more: &str) {
-    if let Ok(mut lines) = app.state::<SplashState>().lines.lock() {
-        lines.clear();
-    }
-    // Open already (a rebuild while the IDE runs never meets one; kept safe): it becomes this one.
-    if let Some(open) = app.get_webview_window(LABEL) {
-        let _ = open.set_size(tauri::LogicalSize::new(width, height));
-        let _ = open.center();
-        if !more.is_empty() {
-            let _ = open.eval("window.__clarity_splash_build && window.__clarity_splash_build()");
-        }
-        if let Ok(mut opened) = app.state::<SplashState>().opened.lock() {
-            opened.get_or_insert_with(Instant::now);
-        }
+    let (width, height) = (560.0, 240.0);
+    // Open already (kept safe): it stays as it is.
+    if app.get_webview_window(LABEL).is_some() {
         return;
     }
     let built = tauri::WebviewWindowBuilder::new(app, LABEL, tauri::WebviewUrl::App("splash.html".into()))
@@ -85,7 +60,7 @@ fn open_sized(app: &AppHandle, title: &str, version: &str, width: f64, height: f
         .focused(false)
         .devtools(false)
         .background_color(tauri::window::Color(0x15, 0x18, 0x1e, 0xff))
-        .initialization_script(format!("{}{more}", handed(title, version)))
+        .initialization_script(handed(title, version))
         .build();
     if built.is_ok()
         && let Ok(mut opened) = app.state::<SplashState>().opened.lock()
@@ -100,21 +75,6 @@ pub fn status(app: &AppHandle, text: &str) {
     if let Some(window) = app.get_webview_window(LABEL) {
         let text = serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into());
         let _ = window.eval(format!("window.__clarity_splash_status && window.__clarity_splash_status({text})"));
-    }
-}
-
-/// Adds a line of a build to the splash screen opened by `open_building`.
-pub fn line(app: &AppHandle, text: &str) {
-    let state = app.state::<SplashState>();
-    let Ok(mut lines) = state.lines.lock() else { return };
-    lines.push(text.to_string());
-    if lines.len() > LINES_KEPT {
-        let over = lines.len() - LINES_KEPT;
-        lines.drain(..over);
-    }
-    if let Some(window) = app.get_webview_window(LABEL) {
-        let all = serde_json::to_string(&*lines).unwrap_or_else(|_| "[]".into());
-        let _ = window.eval(format!("window.__clarity_splash_lines && window.__clarity_splash_lines({all})"));
     }
 }
 
@@ -136,8 +96,23 @@ pub fn done(app: &AppHandle) {
 /// Clarity's window has drawn itself and shows: the splash screen goes.
 #[tauri::command]
 pub fn splash_done(app: AppHandle) {
-    if crate::dev_rebuild::building(&app) {
-        return;
+    done(&app);
+}
+
+/// Shows `window` a while after the start, if its page has not shown it by
+/// then, so a page that fails to load still leaves a window to see.
+pub fn show_later(window: tauri::WebviewWindow) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let _ = window.show();
+    });
+}
+
+/// The IDE's page has drawn itself: its window shows and the splash goes.
+#[tauri::command]
+pub fn main_drawn(app: AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
     }
     done(&app);
 }

@@ -633,6 +633,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         go_mod_text.push_str(&format!("\nrequire (\n{lines})\n\nreplace {path} => ./{}\n", parts::out_folder(folder)));
         part_sums.push_str(&parts::sums_of(project, &part.name.name));
     }
+    // A cDdev's own runtime module in place of the published one (DevTools).
+    if let Some(folder) = crate::tools::environment::library_in_use(crate::tools::environment::Choosable::GoModule) {
+        go_mod_text.push_str(&format!("\nreplace {RUNTIME_MODULE} => {}\n", clarity_project::slashed(&folder)));
+    }
     files.push(text("go.mod", go_mod_text));
     files.push(text("go.sum", go_sum(&groups) + &part_sums + &library_sums));
     // The program file's icon and version on Windows: a .syso per processor, which go build links for its own.

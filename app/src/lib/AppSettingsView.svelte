@@ -2,16 +2,16 @@
   // Clarity's own settings, kept for the person rather than in a project: a
   // view in the main window with its sections in a sidebar, Display (the
   // theme), Keys (Clarity's shortcut keys), Folders (where projects and apps go), Environment (where each
-  // stack's build tools are), Libraries (the folders of Clarity's libraries and packages builds use), Agent (what it may run), Logging (a log of what it does) and System (the
-  // computer's load, loaded only when it is opened). A choice shows at once.
+  // stack's build tools are), Agent (what it may run), Logging (a log of what it does), System (the
+  // computer's load, loaded only when it is opened) and, in a Clarity run from its repository, DevTools
+  // (each piece's release or own build, with Build, and the release planning). A choice shows at once.
 
   import { RUNS_CHOICES } from "./agent";
   import EnvironmentSettings from "./EnvironmentSettings.svelte";
   import FoldersSettings from "./FoldersSettings.svelte";
   import KeysSettings from "./KeysSettings.svelte";
-  import LibrariesSettings from "./LibrariesSettings.svelte";
-  import DevRebuildSettings from "./DevRebuildSettings.svelte";
-  import { devRebuild } from "./devRebuildStore.svelte";
+  import DevToolsSettings from "./DevToolsSettings.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import LoggingSettings from "./LoggingSettings.svelte";
   import OutsideAgentsSettings from "./OutsideAgentsSettings.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
@@ -23,22 +23,25 @@
 
   type Section = AppSettingsSection;
 
-  /** The sections, in the sidebar's order; Rebuild only in a Clarity run from its repository. */
+  /** The sections, in the sidebar's order; DevTools only in a Clarity run from its repository. */
   const ALL_SECTIONS: { key: Section; name: string; note: string }[] = [
     { key: "display", name: "Display", note: "Clarity's theme and its colors" },
     { key: "keys", name: "Keys", note: "Clarity's shortcut keys, as you want them" },
     { key: "folders", name: "Folders", note: "Where projects and their apps go" },
     { key: "environment", name: "Environment", note: "Where each stack's build tools are" },
-    { key: "libraries", name: "Libraries", note: "Which of Clarity's libraries builds use" },
     { key: "agent", name: "Agent", note: "What agents may run, and what outside agents did" },
     { key: "logging", name: "Logging", note: "A log of what Clarity does" },
     { key: "system", name: "System", note: "How busy the computer is" },
-    { key: "rebuild", name: "Rebuild", note: "Build Clarity's own pieces again from its source" },
+    { key: "devTools", name: "DevTools", note: "Your own builds of Clarity's pieces, and the release planning" },
   ];
-  const SECTIONS = $derived(ALL_SECTIONS.filter((s) => s.key !== "rebuild" || devRebuild.view));
+  /** Whether this Clarity runs from its repository: only there is there DevTools. */
+  let fromRepository = $state(false);
+  const SECTIONS = $derived(ALL_SECTIONS.filter((s) => s.key !== "devTools" || fromRepository));
 
   $effect(() => {
-    void devRebuild.load();
+    invoke<unknown>("devtools_view")
+      .then((view) => (fromRepository = view !== null))
+      .catch(() => (fromRepository = false));
   });
 
   // The section shown, kept while Clarity runs, so the settings open where they were left.
@@ -106,10 +109,8 @@
       {/await}
     {:else if section === "environment"}
       <EnvironmentSettings />
-    {:else if section === "libraries"}
-      <LibrariesSettings />
-    {:else if section === "rebuild"}
-      <DevRebuildSettings />
+    {:else if section === "devTools"}
+      <DevToolsSettings />
     {:else}
       <fieldset>
         <legend>Running and building</legend>

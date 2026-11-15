@@ -11,7 +11,7 @@ mod diagrams;
 mod resources;
 mod engines;
 mod environment;
-mod libraries;
+mod devtools;
 mod folders;
 mod system;
 mod parts;
@@ -27,7 +27,6 @@ mod agent;
 mod manual;
 mod migrations;
 mod splash;
-mod dev_rebuild;
 mod backups;
 mod resource_urls;
 mod own_build;
@@ -619,8 +618,8 @@ fn preview_server(app: AppHandle) -> PreviewServer {
         let (file, dir) = open_project_of(&app.state::<WatchState>())?;
         clarity_gen::preview::load(&file, &dir)
     });
-    let repository = cfg!(debug_assertions).then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")));
-    let library: clarity_gen::preview::Library = std::sync::Arc::new(move || clarity_gen::web_browser::local_folder(repository.as_deref()));
+    // The release's browser files, fetched when not here yet; a cDdev's own when swapped (swap.rs).
+    let library: clarity_gen::preview::Library = std::sync::Arc::new(build::browser_folder);
     PreviewServer(clarity_gen::preview::Server::start(loader, library, &clarity_gen::preview::secret()).ok())
 }
 
@@ -644,16 +643,10 @@ struct BrowserFilesState {
 #[tauri::command]
 fn browser_files() -> BrowserFilesState {
     let repo = repository();
-    BrowserFilesState { state: clarity_gen::clarity_ui::browser_files(repo.as_deref()), repository: repo.is_some() }
+    // Never behind its source here: a cDdev's own build signals in DevTools.
+    BrowserFilesState { state: clarity_gen::clarity_ui::browser_files(None), repository: repo.is_some() }
 }
 
-/// Builds Clarity.UI's browser files again from the repository's source, in the Output panel.
-#[tauri::command]
-fn rebuild_browser_files(app: AppHandle) -> Result<(), String> {
-    let repo = repository().ok_or("only a Clarity run from its repository builds Clarity.UI's browser files")?;
-    let steps = vec![vec!["bash".to_string(), "runtimes/rust-ui-browser/build.sh".to_string()]];
-    build::start_part(app, "Clarity.UI's browser files".to_string(), repo, steps, vec![("CARGO_BUILD_JOBS".to_string(), "2".to_string())])
-}
 
 #[tauri::command]
 fn preview_server_address(server: State<PreviewServer>) -> Result<String, String> {
@@ -863,10 +856,7 @@ pub fn run() {
             let title = window_title(&info.name, &info.version.to_string(), dev_release);
             // The version alone, as the title says it after the name (which may be more than one word).
             let version = title.strip_prefix(info.name.as_str()).unwrap_or(&title).trim().to_string();
-            // Pieces ticked in Clarity settings > Rebuild (a Clarity run from its repository) build first,
-            // the splash showing the build line for line; else the usual splash.
-            app.manage(dev_rebuild::Building::default());
-            if !dev_rebuild::at_start(app.handle(), &title, &version) {
+            {
                 splash::open(app.handle(), &title, &version);
             }
             // The log first, when logging is on, so it holds the rest of the start.
@@ -875,42 +865,33 @@ pub fn run() {
             fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
             system::start(app.handle().clone());
-            // Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9): the folder the
-            // installer carries; in a debug build, the one the repository built.
+            // Clarity.UI's library and browser files (DESIGN 7.9): the release's, which the installer
+            // carries or a build fetches. A run from the repository fetches them too, unless the cDdev
+            // swapped in their own builds (swap.rs): only there do the swaps count.
             let os = std::env::consts::OS;
-            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui")).filter(|dir| clarity_gen::clarity_ui::complete(dir, os));
-            let repository = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_library(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")), os)).flatten();
-            if let Some(folder) = carried.or_else(repository) {
+            if let Some(folder) = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui")).filter(|dir| clarity_gen::clarity_ui::complete(dir, os)) {
                 clarity_gen::clarity_ui::set_bundled(folder);
             }
-            // The folders chosen in Clarity settings > Libraries, which every build and the preview use first.
-            clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
-            // Its browser files for web programs (round B): carried by the installer; in a debug build, the repository's.
-            // Named whether or not they are there now: each use checks the folder again, so files deleted
-            // or built again while the IDE runs count (browser_files).
-            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser"));
-            let complete = carried.as_deref().is_some_and(clarity_gen::clarity_ui::browser_complete);
-            let folder = match repository() {
-                Some(repo) if !complete => Some(clarity_gen::clarity_ui::repository_browser_folder(&repo)),
-                _ => carried,
-            };
-            if let Some(folder) = folder {
+            if let Some(folder) = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir)) {
                 clarity_gen::clarity_ui::set_bundled_browser(folder);
+            }
+            if repository().is_some() {
+                clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
             }
             // The preview and the design canvas draw with the same browser files (DESIGN 8.1).
             splash::status(app.handle(), "Starting the preview");
             app.manage(preview_server(app.handle().clone()));
+            // DevTools' builds, and the agents' asks to press a Build (a Clarity run from its repository).
+            app.manage(devtools::DevJobs::default());
+            devtools::watch_asks(app.handle().clone());
             splash::status(app.handle(), "Loading the designer");
             if let Some(window) = app.get_webview_window("main") {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
                 browser_keys::turn_off(&window);
                 // Hidden until its page has drawn itself (main.ts); see show_later. The splash goes when it shows, or with it then.
-                dev_rebuild::show_later(app.handle().clone(), window.clone());
+                splash::show_later(window.clone());
                 let later = app.handle().clone();
                 std::thread::spawn(move || {
-                    while dev_rebuild::building(&later) {
-                        std::thread::sleep(std::time::Duration::from_millis(200));
-                    }
                     std::thread::sleep(std::time::Duration::from_secs(4));
                     splash::done(&later);
                 });
@@ -949,11 +930,17 @@ pub fn run() {
             logging::log_line,
             preview_server_address,
             browser_files,
-            rebuild_browser_files,
-            dev_rebuild::dev_rebuild,
-            dev_rebuild::set_dev_rebuild,
-            dev_rebuild::dev_restart,
-            dev_rebuild::main_drawn,
+            devtools::devtools_view,
+            devtools::devtools_swap,
+            devtools::devtools_add_tab,
+            devtools::devtools_close_tab,
+            devtools::devtools_build,
+            devtools::devtools_refuse,
+            devtools::release::release_view,
+            devtools::release::release_bump,
+            devtools::release::release_run,
+            devtools::release::release_write_plan,
+            splash::main_drawn,
             splash::splash_done,
             splash::splash_status,
             manual::manual_topics,
@@ -995,9 +982,6 @@ pub fn run() {
             parts::build_part,
             environment::environment_view,
             environment::choose_tool,
-            libraries::libraries_view,
-            libraries::choose_library,
-            libraries::reset_libraries,
             folders::folders_view,
             folders::set_folder,
             folders::new_project_file,

@@ -241,8 +241,11 @@ fn main() -> ExitCode {
         clarity_gen::clarity_ui::set_bundled(resources.join("clarity-ui"));
         clarity_gen::clarity_ui::set_bundled_browser(resources.join("clarity-ui-browser"));
     }
-    // The folders chosen in Clarity settings > Libraries, which the IDE's builds use too.
-    clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
+    // A cDdev's swaps (Clarity settings, a run from the repository), which the IDE's builds use too.
+    // An installed Clarity always builds with the release.
+    if cfg!(debug_assertions) {
+        clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
+    }
     match cli.command {
         Command::Spec { command } => match command {
             SpecCommand::Check { dir } => check(&dir),

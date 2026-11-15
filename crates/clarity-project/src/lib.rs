@@ -5,6 +5,7 @@
 
 pub mod activity;
 pub mod browse;
+pub mod dev_asks;
 pub mod engines;
 mod file;
 mod file_import;

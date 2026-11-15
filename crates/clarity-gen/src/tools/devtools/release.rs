@@ -1,0 +1,529 @@
+//! DevTools' release planning: Clarity's releases, read from the
+//! repository as it is (its tags, the files changed since each, the
+//! versions in source), the bumps, the checks a release needs first, and
+//! the plan the Release Helper follows (~/Projects/ReleaseHelper/README.md),
+//! written into releases/<YYYY-MM-DD-HHMM>.json. Git is only read here; the
+//! person commits, pushes and tags.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use serde::Serialize;
+use serde_json::{Value, json};
+
+use super::jobs::Runnable;
+
+/// Where a release's version is written in the repository.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionAt {
+    /// The `[package]` version of a Cargo.toml; the crates naming it follow a bump.
+    Cargo(&'static str),
+    /// The `<Version>` of a props file.
+    Props(&'static str),
+    /// `const Version = "v0.64.0"` of a Go file.
+    GoConst(&'static str),
+    /// The `"version"` of a package.json.
+    PackageJson(&'static str),
+}
+
+/// How the Release Helper sees a release is out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Out {
+    /// crates.io has the crate's version.
+    Crates,
+    /// nuget.org has the version of every package (runtimes/csharp's packable projects).
+    Nuget,
+    /// The GitHub release of the tag has every asset the last one had, at the new version.
+    GithubRelease,
+    /// proxy.golang.org knows the version of this module.
+    GoProxy(&'static str),
+}
+
+/// A release of Clarity: a tag that starts a workflow publishing it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unit {
+    pub key: &'static str,
+    pub name: &'static str,
+    /// The tag before its version: `runtimes/rust/v`.
+    pub tag: &'static str,
+    pub workflow: Option<&'static str>,
+    /// Where its version is; none when the tag alone names it (the IDE).
+    pub version: Option<VersionAt>,
+    /// The crate it publishes, for a crate.
+    pub crate_name: Option<&'static str>,
+    /// What it is made from: a file changed under one since its tag asks for a release.
+    pub sources: &'static [&'static str],
+    pub out: Out,
+    /// The next release may go once its workflow passed (nuget.org lists slowly).
+    pub next_after_workflow: bool,
+}
+
+/// A crate released to crates.io from `folder`, by the tag `<folder>/v`.
+const fn krate(key: &'static str, name: &'static str, tag: &'static str, workflow: &'static str, manifest: &'static str, sources: &'static [&'static str]) -> Unit {
+    Unit { key, name, tag, workflow: Some(workflow), version: Some(VersionAt::Cargo(manifest)), crate_name: Some(name), sources, out: Out::Crates, next_after_workflow: false }
+}
+
+/// The Go runtime's module.
+pub const GO_MODULE: &str = "github.com/petervdpas/Clarity/runtimes/go";
+
+/// Clarity's releases, in the order they go: a crate after the crates it
+/// names (tested against their Cargo.toml), the library before what
+/// fetches it, the Go sums after the Go tag, the IDE last.
+pub const UNITS: [Unit; 15] = [
+    krate("clarityFormats", "clarity-formats", "runtimes/rust-formats/v", "release-rust-formats.yml", "runtimes/rust-formats/Cargo.toml", &["runtimes/rust-formats"]),
+    krate("clarityImage", "clarity-image", "runtimes/rust-image/v", "release-rust-image.yml", "runtimes/rust-image/Cargo.toml", &["runtimes/rust-image"]),
+    krate("clarityAuth", "clarity-auth", "runtimes/rust-auth/v", "release-rust-auth.yml", "runtimes/rust-auth/Cargo.toml", &["runtimes/rust-auth"]),
+    krate("clarityAppMcp", "clarity-app-mcp", "runtimes/rust-app-mcp/v", "release-rust-app-mcp.yml", "runtimes/rust-app-mcp/Cargo.toml", &["runtimes/rust-app-mcp"]),
+    krate("clarityEngine", "clarity-engine", "runtimes/rust-engine/v", "release-rust-engine.yml", "runtimes/rust-engine/Cargo.toml", &["runtimes/rust-engine"]),
+    krate("clarityRuntime", "clarity-runtime", "runtimes/rust/v", "release-rust-runtime.yml", "runtimes/rust/Cargo.toml", &["runtimes/rust"]),
+    krate("clarityAudio", "clarity-audio", "runtimes/rust-audio/v", "release-rust-audio.yml", "runtimes/rust-audio/Cargo.toml", &["runtimes/rust-audio"]),
+    krate("clarityVideo", "clarity-video", "runtimes/rust-video/v", "release-rust-video.yml", "runtimes/rust-video/Cargo.toml", &["runtimes/rust-video"]),
+    krate("clarityGraph", "clarity-graph", "runtimes/rust-graph/v", "release-rust-graph.yml", "runtimes/rust-graph/Cargo.toml", &["runtimes/rust-graph"]),
+    krate("clarityUi", "clarity-ui", "runtimes/rust-ui/v", "release-rust-ui.yml", "runtimes/rust-ui/Cargo.toml", &["runtimes/rust-ui"]),
+    Unit {
+        key: "clarityUiLibrary",
+        name: "Clarity.UI library",
+        tag: "runtimes/rust-ui-ffi/v",
+        workflow: Some("release-clarity-ui.yml"),
+        version: Some(VersionAt::Cargo("runtimes/rust-ui-ffi/Cargo.toml")),
+        crate_name: None,
+        // Its archives hold every native library and the browser files (release-clarity-ui.yml).
+        sources: &["runtimes/rust", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi"],
+        out: Out::GithubRelease,
+        next_after_workflow: false,
+    },
+    Unit { key: "csharpRuntime", name: "C# runtime", tag: "runtimes/csharp/v", workflow: Some("release-csharp-runtime.yml"), version: Some(VersionAt::Props("runtimes/csharp/Directory.Build.props")), crate_name: None, sources: &["runtimes/csharp"], out: Out::Nuget, next_after_workflow: true },
+    Unit { key: "goRuntime", name: "Go runtime", tag: "runtimes/go/v", workflow: None, version: Some(VersionAt::GoConst("runtimes/go/clarity/version.go")), crate_name: None, sources: &["runtimes/go"], out: Out::GoProxy(GO_MODULE), next_after_workflow: false },
+    Unit { key: "vscode", name: "VS Code extension", tag: "editors/vscode/v", workflow: Some("release-vscode.yml"), version: Some(VersionAt::PackageJson("editors/vscode/package.json")), crate_name: None, sources: &["editors/vscode"], out: Out::GithubRelease, next_after_workflow: false },
+    Unit { key: "ide", name: "Clarity IDE", tag: "v", workflow: Some("release.yml"), version: None, crate_name: None, sources: &["."], out: Out::GithubRelease, next_after_workflow: false },
+];
+
+/// The releases, in their order.
+pub fn units() -> impl Iterator<Item = &'static Unit> {
+    UNITS.iter()
+}
+
+/// The release kept under `key`.
+pub fn unit(key: &str) -> Option<&'static Unit> {
+    units().find(|u| u.key == key)
+}
+
+fn position(key: &str) -> Option<usize> {
+    UNITS.iter().position(|u| u.key == key)
+}
+
+/// A version's numbers: `0.61.0` and `v0.61.0` give [0, 61, 0].
+pub fn parse(version: &str) -> Option<Vec<u64>> {
+    let digits = version.strip_prefix('v').unwrap_or(version);
+    let numbers: Option<Vec<u64>> = digits.split('.').map(|n| n.parse().ok()).collect();
+    numbers.filter(|n| n.len() == 3)
+}
+
+/// The next minor version: `1.1.0` gives `1.2.0` (the runtimes stay 0.x past .99).
+pub fn next_minor(version: &str) -> Option<String> {
+    let n = parse(version)?;
+    Some(format!("{}.{}.0", n[0], n[1] + 1))
+}
+
+/// The newest of `tags` that start with `prefix` and end in a version.
+pub fn newest(tags: &[String], prefix: &str) -> Option<String> {
+    tags.iter().filter_map(|t| Some((parse(t.strip_prefix(prefix)?)?, t))).max_by(|a, b| a.0.cmp(&b.0)).map(|(_, t)| t.clone())
+}
+
+fn read(repo: &Path, file: &str) -> Result<String, String> {
+    std::fs::read_to_string(repo.join(file)).map_err(|e| format!("cannot read {file}: {e}"))
+}
+
+/// The text after `start` up to the next `end`, and where it starts.
+fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<(usize, &'a str)> {
+    let at = text.find(start)? + start.len();
+    let len = text[at..].find(end)?;
+    Some((at, &text[at..at + len]))
+}
+
+fn version_in(text: &str, at: VersionAt) -> Option<(usize, String)> {
+    let (pos, v) = match at {
+        VersionAt::Cargo(_) => between(text, "\nversion = \"", "\"")?,
+        VersionAt::Props(_) => between(text, "<Version>", "</Version>")?,
+        VersionAt::GoConst(_) => between(text, "const Version = \"", "\"")?,
+        VersionAt::PackageJson(_) => between(text, "\"version\": \"", "\"")?,
+    };
+    Some((pos, v.to_string()))
+}
+
+fn file_of(at: VersionAt) -> &'static str {
+    match at {
+        VersionAt::Cargo(f) | VersionAt::Props(f) | VersionAt::GoConst(f) | VersionAt::PackageJson(f) => f,
+    }
+}
+
+/// The version in source of `unit`, without a leading `v`.
+pub fn source_version(repo: &Path, unit: &Unit) -> Result<String, String> {
+    let at = unit.version.ok_or_else(|| format!("{}'s version is its tag alone", unit.name))?;
+    let text = read(repo, file_of(at))?;
+    let (_, v) = version_in(&text, at).ok_or_else(|| format!("{} names no version", file_of(at)))?;
+    let v = v.strip_prefix('v').unwrap_or(&v).to_string();
+    parse(&v).map(|_| v.clone()).ok_or_else(|| format!("{}: {v} is no version", file_of(at)))
+}
+
+/// The workspace's members, from the repository's Cargo.toml.
+pub fn members(repo: &Path) -> Vec<String> {
+    let text = read(repo, "Cargo.toml").unwrap_or_default();
+    let Some((_, list)) = between(&text, "members = [", "]") else { return Vec::new() };
+    list.split(',').map(|m| m.trim().trim_matches('"').to_string()).filter(|m| !m.is_empty()).collect()
+}
+
+/// The clarity-* crates `unit`'s Cargo.toml names with a version, which crates.io must have first.
+pub fn needs(repo: &Path, unit: &Unit) -> Vec<String> {
+    let Some(VersionAt::Cargo(manifest)) = unit.version else { return Vec::new() };
+    let Some(own) = unit.crate_name else { return Vec::new() };
+    let text = read(repo, manifest).unwrap_or_default();
+    let mut needed: Vec<String> = text
+        .lines()
+        .filter_map(|line| {
+            let (name, rest) = line.split_once(" = {")?;
+            let name = name.trim();
+            (name.starts_with("clarity-") && name != own && rest.contains("version = \"")).then(|| name.to_string())
+        })
+        .collect();
+    needed.sort();
+    needed.dedup();
+    needed
+}
+
+/// Bumps `unit` to its next minor version, and the crates that name it
+/// with the old one: the new version.
+pub fn bump(repo: &Path, unit: &Unit) -> Result<String, String> {
+    let at = unit.version.ok_or_else(|| format!("{}'s version is its tag alone: type it in the plan", unit.name))?;
+    let file = file_of(at);
+    let text = read(repo, file)?;
+    let (pos, old) = version_in(&text, at).ok_or_else(|| format!("{file} names no version"))?;
+    let v = if old.starts_with('v') { format!("v{}", next_minor(&old).ok_or_else(|| format!("{old} is no version"))?) } else { next_minor(&old).ok_or_else(|| format!("{old} is no version"))? };
+    let bumped = format!("{}{}{}", &text[..pos], v, &text[pos + old.len()..]);
+    std::fs::write(repo.join(file), bumped).map_err(|e| format!("cannot write {file}: {e}"))?;
+    if let (VersionAt::Cargo(_), Some(name)) = (at, unit.crate_name) {
+        let start = format!("{name} = {{");
+        for member in members(repo) {
+            let manifest = repo.join(&member).join("Cargo.toml");
+            let Ok(text) = std::fs::read_to_string(&manifest) else { continue };
+            let mut changed = false;
+            let lines: Vec<String> = text
+                .split('\n')
+                .map(|line| {
+                    if line.trim_start().starts_with(&start) && line.contains(&format!("version = \"{old}\"")) {
+                        changed = true;
+                        line.replace(&format!("version = \"{old}\""), &format!("version = \"{v}\""))
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect();
+            if changed {
+                std::fs::write(&manifest, lines.join("\n")).map_err(|e| format!("cannot write {}: {e}", manifest.display()))?;
+            }
+        }
+    }
+    Ok(v.strip_prefix('v').unwrap_or(&v).to_string())
+}
+
+fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git").args(args).current_dir(repo).output().map_err(|e| format!("cannot run git: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// The repository's tags.
+pub fn tags(repo: &Path) -> Result<Vec<String>, String> {
+    Ok(git(repo, &["tag", "-l"])?.lines().map(str::to_string).collect())
+}
+
+/// The files under `sources` that differ from `tag` (committed since, or
+/// not committed yet), and the new files git does not ignore.
+pub fn changed_since(repo: &Path, tag: &str, sources: &[&str]) -> Result<Vec<String>, String> {
+    let mut args = vec!["diff", "--name-only", tag, "--"];
+    args.extend(sources);
+    let mut files: Vec<String> = git(repo, &args)?.lines().map(str::to_string).collect();
+    let mut others = vec!["ls-files", "--others", "--exclude-standard", "--"];
+    others.extend(sources);
+    files.extend(git(repo, &others)?.lines().map(str::to_string));
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
+/// How a release stands now.
+#[derive(Debug, Clone, Serialize)]
+pub struct Standing {
+    pub key: String,
+    pub name: String,
+    /// Its newest tag, and the version that released.
+    pub tag: Option<String>,
+    pub released: Option<String>,
+    /// The version in source; none when the tag alone names it.
+    pub source: Option<String>,
+    /// The files changed since its tag.
+    pub changed: Vec<String>,
+    /// The version it would release: the source's when it is past the
+    /// released one, else the next minor one.
+    pub next: String,
+    /// The version in source is past the released one.
+    pub bumped: bool,
+    /// It has a version in source to bump.
+    pub bumpable: bool,
+}
+
+/// How every release stands.
+pub fn standing(repo: &Path) -> Result<Vec<Standing>, String> {
+    let tags = tags(repo)?;
+    units()
+        .map(|unit| {
+            let tag = newest(&tags, unit.tag);
+            let released = tag.as_deref().and_then(|t| t.strip_prefix(unit.tag)).map(|v| v.strip_prefix('v').unwrap_or(v).to_string());
+            let source = unit.version.map(|_| source_version(repo, unit)).transpose()?;
+            let changed = match &tag {
+                Some(t) => changed_since(repo, t, unit.sources)?,
+                None => vec![format!("{} was never released", unit.name)],
+            };
+            let bumped = match (&source, &released) {
+                (Some(s), Some(r)) => parse(s) > parse(r),
+                (Some(_), None) => true,
+                _ => false,
+            };
+            let next = match (&source, &released) {
+                (Some(s), _) if bumped => s.clone(),
+                (_, Some(r)) => next_minor(r).unwrap_or_default(),
+                (Some(s), None) => s.clone(),
+                (None, None) => "0.1.0".to_string(),
+            };
+            Ok(Standing { key: unit.key.into(), name: unit.name.into(), tag, released, source, changed, next, bumped, bumpable: unit.version.is_some() })
+        })
+        .collect()
+}
+
+/// A generated-file guard: its test writes the file again with the
+/// variable set; without, it fails when the file is behind (CLAUDE.md).
+#[derive(Debug, Clone, Copy)]
+pub struct Guard {
+    pub variable: &'static str,
+    pub package: &'static str,
+    /// The test target; none for the package's lib tests.
+    pub test: Option<&'static str>,
+    pub writes: &'static str,
+}
+
+/// Every guard, in CLAUDE.md's order; a variable without a name writes as it tests (ts-rs).
+pub const GUARDS: [Guard; 9] = [
+    Guard { variable: "CLARITY_WRITE_GRAMMAR", package: "clarity-spec", test: Some("highlight"), writes: "the VS Code grammar" },
+    Guard { variable: "CLARITY_WRITE_DEFAULTS", package: "clarity-gen", test: Some("web_windows"), writes: "the Clarity.UI catalog" },
+    Guard { variable: "", package: "clarity-spec", test: None, writes: "the TypeScript types" },
+    Guard { variable: "", package: "clarity-preview", test: None, writes: "the IDE's TypeScript types" },
+    Guard { variable: "CLARITY_WRITE_DIAGRAMS", package: "clarity-spec", test: Some("diagram_views"), writes: "the examples' diagrams" },
+    Guard { variable: "CLARITY_WRITE_CONFORMANCE", package: "clarity-gen", test: Some("servers"), writes: "conformance/migrations.json" },
+    Guard { variable: "CLARITY_WRITE_DEFAULTS", package: "clarity-spec", test: Some("clarity_ui_theme"), writes: "the Clarity.UI themes" },
+    Guard { variable: "CLARITY_WRITE_PICTURES", package: "clarity-image", test: Some("pictures"), writes: "the picture cases" },
+    Guard { variable: "CLARITY_WRITE_MANUAL", package: "clarity-spec", test: Some("manual_catalog"), writes: "the parts pages' catalog tables" },
+];
+
+/// The examples every release checks (crates/clarity-gen/tests/examples_build.rs builds each on its own stack).
+pub const EXAMPLES: [&str; 21] = ["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
+
+/// A check a release needs first, run as a build.
+#[derive(Debug, Clone)]
+pub struct Check {
+    pub key: String,
+    pub title: String,
+    pub run: Runnable,
+}
+
+fn cargo_test(repo: &Path, package: &str, test: Option<&str>) -> Runnable {
+    let mut args = vec!["test", "-p", package];
+    match test {
+        Some(t) => args.extend(["--test", t]),
+        None => args.push("--lib"),
+    }
+    Runnable::new("cargo", &args, repo).with_env("CARGO_BUILD_JOBS", "2")
+}
+
+fn node_tool(name: &str) -> String {
+    if cfg!(windows) { format!("{name}.cmd") } else { name.to_string() }
+}
+
+/// The checks before a plan, with `changed` the files changed since the
+/// last IDE release: every guard written and tested, the test targets of
+/// every crate changed, the IDE page's checks when app/ or a model type
+/// changed, every example spec checked and each changed one built.
+pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
+    let mut checks = Vec::new();
+    for g in &GUARDS {
+        let target = g.test.map(|t| format!("--test {t}")).unwrap_or_else(|| "--lib".into());
+        if !g.variable.is_empty() {
+            checks.push(Check { key: format!("guard:write:{}:{target}", g.package), title: format!("Write {}", g.writes), run: cargo_test(repo, g.package, g.test).with_env(g.variable, "1") });
+        }
+        checks.push(Check { key: format!("guard:test:{}:{target}", g.package), title: format!("Check {}", g.writes), run: cargo_test(repo, g.package, g.test) });
+    }
+    let under = |folder: &str| changed.iter().any(|f| f == folder || f.starts_with(&format!("{folder}/")));
+    for member in members(repo) {
+        if !under(&member) {
+            continue;
+        }
+        let Ok(manifest) = std::fs::read_to_string(repo.join(&member).join("Cargo.toml")) else { continue };
+        let Some((_, package)) = between(&manifest, "name = \"", "\"") else { continue };
+        if repo.join(&member).join("src/lib.rs").is_file() {
+            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: cargo_test(repo, package, None) });
+        }
+        let mut tests: Vec<String> = std::fs::read_dir(repo.join(&member).join("tests"))
+            .map(|d| d.flatten().filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".rs").map(str::to_string)).collect())
+            .unwrap_or_default();
+        tests.sort();
+        for test in tests {
+            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: cargo_test(repo, package, Some(&test)) });
+        }
+    }
+    if under("app") || under("runtimes/web/src/generated") {
+        let app = repo.join("app");
+        checks.push(Check { key: "app:svelte-check".into(), title: "The IDE's pages: svelte-check".into(), run: Runnable::new(&node_tool("npx"), &["svelte-check", "--threshold", "warning"], &app) });
+        checks.push(Check { key: "app:test".into(), title: "The IDE's pages: tests".into(), run: Runnable::new(&node_tool("npm"), &["test"], &app) });
+    }
+    for example in EXAMPLES {
+        let folder = format!("examples/{example}");
+        checks.push(Check {
+            key: format!("spec:{example}"),
+            title: format!("{example}: spec check"),
+            run: Runnable::new("cargo", &["run", "-q", "-p", "clarity-cli", "--", "spec", "check", &folder], repo).with_env("CARGO_BUILD_JOBS", "2"),
+        });
+    }
+    for example in EXAMPLES.iter().filter(|e| under(&format!("examples/{e}"))) {
+        let exact = format!("the_{example}_example_builds_without_warnings");
+        checks.push(Check {
+            key: format!("build:{example}"),
+            title: format!("{example}: builds on its stack"),
+            run: Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2"),
+        });
+    }
+    checks
+}
+
+/// The names of the last release's assets at the new version.
+pub fn assets_for(previous: &[String], old: &str, new: &str) -> Vec<String> {
+    previous.iter().map(|a| a.replace(old, new)).collect()
+}
+
+/// The assets of the GitHub release of `tag`, as gh reads them.
+pub fn release_assets(repo: &Path, tag: &str) -> Result<Vec<String>, String> {
+    let out = Command::new("gh").args(["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"]).current_dir(repo).output().map_err(|e| format!("cannot run gh: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("gh cannot read the release {tag}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).filter(|l| !l.is_empty()).collect())
+}
+
+/// The NuGet packages of the C# runtime: its projects with a package id or packed.
+pub fn nuget_packages(repo: &Path) -> Vec<String> {
+    let mut packages: Vec<String> = std::fs::read_dir(repo.join("runtimes/csharp"))
+        .map(|d| d.flatten().filter(|e| e.path().is_dir()).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|folder| {
+            let name = folder.file_name().to_string_lossy().to_string();
+            let text = std::fs::read_to_string(folder.path().join(format!("{name}.csproj"))).ok()?;
+            let id = between(&text, "<PackageId>", "</PackageId>").map(|(_, id)| id.trim().to_string());
+            (id.is_some() || text.contains("<IsPackable>true")).then(|| id.unwrap_or(name))
+        })
+        .collect();
+    packages.sort();
+    packages
+}
+
+/// A release in a plan, as the person settled it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub struct Planned {
+    pub key: String,
+    pub version: String,
+    /// The tag it follows: `runtimes/rust/v0.61.0`.
+    pub from: Option<String>,
+    pub note: String,
+    /// For a GitHub release: the assets it must have.
+    #[serde(default)]
+    pub assets: Vec<String>,
+    /// For the NuGet packages: their names.
+    #[serde(default)]
+    pub packages: Vec<String>,
+}
+
+/// The Release Helper's plan for `planned`, in the table's order: the
+/// checks on main first, then a step per release, the Go sums after the Go tag.
+pub fn plan(title: &str, commit_message: &str, planned: &[Planned]) -> Result<Value, String> {
+    let mut steps = vec![json!({ "title": "Checks on main", "workflow": "checks.yml" })];
+    let mut last = None;
+    for p in planned {
+        let at = position(&p.key).ok_or_else(|| format!("there is no release {}", p.key))?;
+        if last.is_some_and(|l| l >= at) {
+            return Err(format!("{} goes before the release above it", UNITS[at].name));
+        }
+        last = Some(at);
+        let unit = &UNITS[at];
+        parse(&p.version).ok_or_else(|| format!("{}: {} is no version", unit.name, p.version))?;
+        let tag = format!("{}{}", unit.tag, p.version.trim_start_matches('v'));
+        let check = match unit.out {
+            Out::Crates => json!({ "crates": { "name": unit.crate_name.unwrap_or_default(), "version": p.version } }),
+            Out::Nuget => {
+                if p.packages.is_empty() {
+                    return Err(format!("{}: no NuGet packages found", unit.name));
+                }
+                json!({ "nuget": { "packages": p.packages, "version": p.version } })
+            }
+            Out::GithubRelease => {
+                if p.assets.is_empty() {
+                    return Err(format!("{}: the assets of its release are not known", unit.name));
+                }
+                json!({ "github_release": { "assets": p.assets } })
+            }
+            Out::GoProxy(module) => json!({ "go_proxy": { "module": module, "version": format!("v{}", p.version.trim_start_matches('v')) } }),
+        };
+        let mut step = json!({ "title": format!("{} {}", unit.name, p.version), "tag": tag, "check": check });
+        if let Some(from) = &p.from {
+            step["from"] = json!(from);
+        }
+        if let Some(w) = unit.workflow {
+            step["workflow"] = json!(w);
+        }
+        if unit.next_after_workflow {
+            step["next_after"] = json!("workflow");
+        }
+        if !p.note.trim().is_empty() {
+            step["note"] = json!(p.note.trim());
+        }
+        steps.push(step);
+        if matches!(unit.out, Out::GoProxy(_)) {
+            let v = format!("v{}", p.version.trim_start_matches('v'));
+            steps.push(json!({
+                "title": "Go sums",
+                "manual": format!("Tell Claude to record the Go sums of {v} in crates/clarity-gen/src/go/runtime.sum, then commit and push main."),
+                "commit_message": format!("Go runtime {v} sums"),
+            }));
+        }
+    }
+    if steps.len() == 1 {
+        return Err("the plan releases nothing".into());
+    }
+    Ok(json!({ "title": title, "remote": "origin", "branch": "main", "check_timeout_minutes": 30, "commit_message": commit_message, "steps": steps }))
+}
+
+/// Writes `plan` as releases/<stamp>.json (`2026-11-15-0015`); the file written.
+pub fn write_plan(repo: &Path, stamp: &str, plan: &Value) -> Result<PathBuf, String> {
+    let ok = stamp.len() == 15 && stamp.char_indices().all(|(i, c)| if [4, 7, 10].contains(&i) { c == '-' } else { c.is_ascii_digit() });
+    if !ok {
+        return Err(format!("{stamp} is no YYYY-MM-DD-HHMM"));
+    }
+    let dir = repo.join("releases");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
+    let file = dir.join(format!("{stamp}.json"));
+    if file.exists() {
+        return Err(format!("{} is there already", file.display()));
+    }
+    let text = serde_json::to_string_pretty(plan).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))?;
+    Ok(file)
+}

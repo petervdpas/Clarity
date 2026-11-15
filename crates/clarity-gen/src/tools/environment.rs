@@ -52,13 +52,16 @@ fn names(program: &str) -> &'static [&'static str] {
 }
 
 /// The tools the person chose, by program, and the folders chosen for
-/// Clarity's libraries and packages (Clarity settings > Libraries), by key.
+/// Clarity's libraries and packages (Clarity settings > DevTools), by key.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Environment {
     #[serde(default)]
     tools: BTreeMap<String, PathBuf>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     libraries: BTreeMap<String, PathBuf>,
+    /// The cDdev's swaps (a Clarity run from its repository), which give the library choices.
+    #[serde(default)]
+    swaps: super::devtools::swap::Swaps,
 }
 
 impl Environment {
@@ -109,6 +112,17 @@ impl Environment {
     pub fn reset_libraries(&mut self) {
         self.libraries.clear();
     }
+
+    /// The cDdev's swaps.
+    pub fn swaps(&self) -> &super::devtools::swap::Swaps {
+        &self.swaps
+    }
+
+    /// Takes the cDdev's swaps and the library choices they give, in place of the ones kept.
+    pub fn set_swaps(&mut self, swaps: super::devtools::swap::Swaps, choices: BTreeMap<String, PathBuf>) {
+        self.swaps = swaps;
+        self.libraries = choices;
+    }
 }
 
 /// What a build uses of Clarity whose folder the person may choose, in
@@ -125,10 +139,12 @@ pub enum Choosable {
     RustCrates,
     /// The NuGet packages, as the runtime's own projects: `<Clarity>/runtimes/csharp`.
     NugetPackages,
+    /// The Go module, as the runtime's own source: `<Clarity>/runtimes/go`.
+    GoModule,
 }
 
 impl Choosable {
-    pub const ALL: [Choosable; 4] = [Choosable::ClarityUi, Choosable::ClarityUiBrowser, Choosable::RustCrates, Choosable::NugetPackages];
+    pub const ALL: [Choosable; 5] = [Choosable::ClarityUi, Choosable::ClarityUiBrowser, Choosable::RustCrates, Choosable::NugetPackages, Choosable::GoModule];
 
     /// The key the choice is kept under, and the IDE names it by.
     pub fn key(self) -> &'static str {
@@ -137,6 +153,7 @@ impl Choosable {
             Choosable::ClarityUiBrowser => "clarityUiBrowser",
             Choosable::RustCrates => "rustCrates",
             Choosable::NugetPackages => "nugetPackages",
+            Choosable::GoModule => "goModule",
         }
     }
 
@@ -167,6 +184,8 @@ impl Choosable {
                 .ok_or_else(|| format!("{shown} does not hold Clarity's Rust crates: choose <Clarity>/runtimes/rust, which holds clarity-runtime")),
             Choosable::NugetPackages => runtime_in(picked, "csharp", &|f| f.join("Clarity.Ui").join("Clarity.Ui.csproj").is_file())
                 .ok_or_else(|| format!("{shown} does not hold the projects of Clarity's NuGet packages: choose <Clarity>/runtimes/csharp, which holds Clarity.Ui")),
+            Choosable::GoModule => runtime_in(picked, "go", &|f| std::fs::read_to_string(f.join("go.mod")).is_ok_and(|m| m.lines().any(|l| l.trim() == format!("module {}", crate::go::RUNTIME_MODULE))))
+                .ok_or_else(|| format!("{shown} does not hold Clarity's Go module: choose <Clarity>/runtimes/go")),
         }?;
         Ok(found.canonicalize().map(|f| PathBuf::from(clarity_project::slashed(&f))).unwrap_or(found))
     }

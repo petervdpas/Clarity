@@ -97,7 +97,7 @@
     };
   });
 
-  // The browser files were built again: the canvas loads them again, by itself.
+  // The browser files in use changed (swapped): the canvas loads them again, by itself.
   let generation = browserFiles.generation;
   $effect(() => {
     const now = browserFiles.generation;
@@ -141,12 +141,6 @@
   {#if notice}
     <div class="notice" role="alert">
       <p>{notice.text}</p>
-      {#if browserFiles.failure}
-        <p class="failure">{browserFiles.failure}</p>
-      {/if}
-      {#if notice.rebuild}
-        <button type="button" disabled={browserFiles.rebuilding} onclick={() => void browserFiles.offer(notice!)}>{browserFiles.rebuilding ? "Rebuilding..." : "Rebuild"}</button>
-      {/if}
     </div>
   {:else if problem}
     <p class="problem" role="alert">{problem}</p>
@@ -184,11 +178,6 @@
     margin: 0;
     max-width: 480px;
     font-size: 13px;
-  }
-
-  .notice .failure {
-    color: var(--error);
-    font-size: 12px;
   }
 
   .problem {

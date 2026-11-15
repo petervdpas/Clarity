@@ -59,12 +59,12 @@ pub fn local_patch(named: &std::path::Path) -> Result<String, String> {
     let runtime = runtime.canonicalize().map_err(|_| wrong())?;
     let path = runtime.display().to_string().replace('\\', "/");
     Ok(format!(
-        "# Written by Clarity because {RUNTIME_VARIABLE} (or Clarity settings > Libraries) named the\n# Rust runtime in Clarity's repository when it generated this project: the program\n# builds on the crate there instead of the published one. Clarity removes this file\n# when neither names it any more; remove it yourself to build on crates.io now.\n\n[patch.crates-io]\nclarity-runtime = {{ path = \"{path}\" }}\n"
+        "# Written by Clarity because {RUNTIME_VARIABLE} (or Clarity settings > DevTools) named the\n# Rust runtime in Clarity's repository when it generated this project: the program\n# builds on the crate there instead of the published one. Clarity removes this file\n# when neither names it any more; remove it yourself to build on crates.io now.\n\n[patch.crates-io]\nclarity-runtime = {{ path = \"{path}\" }}\n"
     ))
 }
 
 /// The patch file when a folder is chosen for the Rust crates in Clarity
-/// settings > Libraries, else when the environment's CLARITY_RUNTIME names
+/// settings > DevTools, else when the environment's CLARITY_RUNTIME names
 /// the runtime (`local_patch`); none when neither does.
 pub(crate) fn local_patch_file() -> Result<Option<OutFile>, Vec<String>> {
     let chosen = crate::tools::environment::library_in_use(crate::tools::environment::Choosable::RustCrates);

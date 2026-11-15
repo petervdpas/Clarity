@@ -89,6 +89,7 @@ Plain ASCII, no em-dashes, short lines.
 | [web-target](web-target.md) | built | untried in Edge and on Windows |
 | [cli-target](cli-target.md) | built | picture functions refused on Go, C, C++ |
 | [build-tools](build-tools.md) | partial | library check on Windows and macOS |
+| [devtools](devtools.md) | built | Release planning lists partial notes |
 | [offline](offline.md) | not built | `clarity prepare`, `clarity vendor` |
 | [release-ci](release-ci.md) | partial | a Windows job in checks.yml |
 | [examples](examples.md) | built | maintenance ReviewView |

@@ -1166,7 +1166,7 @@ fn write_out_listed(dir: &std::path::Path, files: &[OutFile], keep: &[&str], don
 
 /// The Rust patch Clarity wrote (`.cargo/config.toml`, starting with its own
 /// line) goes when it is no longer generated: nothing names the runtime's
-/// folder any more (Clarity settings > Libraries reset, CLARITY_RUNTIME
+/// folder any more (Clarity settings > DevTools back to the release, CLARITY_RUNTIME
 /// unset), so the program builds on the published crates. One written by
 /// hand stays, as the rest of `.cargo` does.
 fn remove_stale_patch(dir: &std::path::Path, files: &[OutFile], done: &mut Written) -> std::io::Result<()> {

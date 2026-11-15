@@ -9,6 +9,7 @@ license.workspace = true
 clarity-agent.workspace = true
 clarity-spec.workspace = true
 clarity-project.workspace = true
+clarity-gen = { path = "../clarity-gen" }
 clarity-tools.workspace = true
 serde_json.workspace = true
 # Clarity's icon, embedded in the server's info as data URIs.

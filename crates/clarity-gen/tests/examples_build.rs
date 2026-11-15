@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 21] = ["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
+const EXAMPLES: [&str; 21] = clarity_gen::tools::devtools::release::EXAMPLES;
 
 #[test]
 #[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]

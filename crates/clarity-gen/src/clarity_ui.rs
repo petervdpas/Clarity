@@ -256,7 +256,7 @@ pub fn unpack(archive: &[u8], version: &str, rid: &str, into: &Path) -> Result<(
 /// Where a build takes Clarity.UI's library from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Library {
-    /// The folder the person chose in Clarity settings > Libraries, which wins.
+    /// The folder the person chose in Clarity settings > DevTools, which wins.
     Chosen(PathBuf),
     /// The folder the person named with CLARITY_UI, which wins over all but a choice.
     Named(PathBuf),
@@ -285,7 +285,7 @@ pub fn browser_library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: 
     found_in(named, bundled, cache, Some(BROWSER), version, &browser_complete)
 }
 
-/// The folder `chosen` in Clarity settings > Libraries, when there is one;
+/// The folder `chosen` in Clarity settings > DevTools, when there is one;
 /// else what Clarity `found`.
 pub fn chosen_or(chosen: Option<PathBuf>, found: Library) -> Library {
     chosen.map_or(found, Library::Chosen)
@@ -362,7 +362,7 @@ pub fn repository_browser(repo: &Path) -> Option<PathBuf> {
 }
 
 /// The newest change of the files a source folder holds, inside it however deep.
-fn newest_in(folder: &Path) -> Option<std::time::SystemTime> {
+pub(crate) fn newest_in(folder: &Path) -> Option<std::time::SystemTime> {
     let mut newest = None;
     let Ok(entries) = std::fs::read_dir(folder) else { return None };
     for entry in entries.flatten() {
@@ -378,17 +378,14 @@ fn newest_in(folder: &Path) -> Option<std::time::SystemTime> {
 /// The sources Clarity.UI's browser files are built from, in Clarity's repository.
 pub const BROWSER_SOURCES: [&str; 5] = ["runtimes/rust-ui/src", "runtimes/rust-ui/catalog", "runtimes/rust-ui-browser/src", "runtimes/rust-ui-browser/js", "runtimes/rust/src"];
 
-/// Why the browser files Clarity's repository built are behind its source:
-/// what changed in Clarity.UI since they were built does not show in the
-/// IDE's design and preview until they are built again. None while they are
-/// as new as the source (or are not built, which `repository_browser` says).
+/// Why the browser files Clarity's repository built are behind its source,
+/// with what to run: the DevTools signal for the browser files
+/// (tools::devtools::swap::behind). None while they are as new as the source, or are
+/// not built, which `repository_browser` says.
 pub fn stale_browser(repo: &Path) -> Option<String> {
-    let built = repo.join("target").join("clarity-ui-browser").join("clarity-ui.wasm");
-    let built_at = std::fs::metadata(&built).and_then(|m| m.modified()).ok()?;
-    let newest = BROWSER_SOURCES.iter().filter_map(|s| newest_in(&repo.join(s))).max()?;
-    (newest > built_at).then(|| {
-        "Clarity.UI's browser files are older than its source, so the design and preview do not show what changed since. Rebuild them (runtimes/rust-ui-browser/build.sh)?".to_string()
-    })
+    let piece = crate::tools::devtools::swap::piece("clarityUiBrowser")?;
+    crate::tools::devtools::swap::built_at(repo, piece, std::env::consts::OS)?;
+    crate::tools::devtools::swap::behind(repo, piece, std::env::consts::OS)
 }
 
 /// Where Clarity's repository builds its browser files, built or not.

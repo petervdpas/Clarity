@@ -105,7 +105,9 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     assert!(info.instructions.as_deref().unwrap_or_default().contains("Clarity"));
 
     let names: Vec<String> = client.list_all_tools().await.unwrap().into_iter().map(|t| t.name.to_string()).collect();
-    let offered: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
+    let mut offered: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
+    // Built from the repository (the tests are), the server also offers the cDdev's DevTools Build.
+    offered.push(clarity_mcp::BUILD_PIECE.to_string());
     assert_eq!(names, offered);
 
     let result = client.call_tool(CallToolRequestParams::new("project_overview")).await.unwrap();
@@ -129,7 +131,9 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
 fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
     let dir = scratch("turn-tools");
     let plain = ClarityServer::with_ide_file(dir.join("ide.json"));
-    assert_eq!(plain.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), ClarityServer::offered().into_iter().map(|t| t.name).collect::<Vec<_>>());
+    let mut plain_tools: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
+    plain_tools.push(clarity_mcp::BUILD_PIECE.to_string());
+    assert_eq!(plain.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), plain_tools);
     let turn = plain.for_turn(dir.join("shown.jsonl"));
     let mut expected: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     expected.extend(TURN_TOOLS.iter().map(|t| t.to_string()));
@@ -249,4 +253,39 @@ fn the_server_tells_clarity_s_icon() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src-tauri/icons");
     assert_eq!(embedded("image/png"), (std::fs::read(root.join("128x128.png")).unwrap(), Some(vec!["128x128".to_string()])));
     assert_eq!(embedded("image/svg+xml"), (std::fs::read(root.join("icon.svg")).unwrap(), Some(vec!["any".to_string()])));
+}
+
+/// build_piece presses a DevTools tab's Build in a Clarity run from its
+/// repository: the IDE takes the ask, builds in the tab and answers.
+#[test]
+fn build_piece_asks_the_ide_and_gives_its_answer() {
+    use clarity_project::dev_asks;
+    let dir = scratch("build-piece");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
+    assert!(server.tools().iter().any(|t| t.name == "build_piece"), "offered by a server run from the repository");
+    let unknown = server.call_from("Claude Code", "build_piece", &json!({ "piece": "nothing" }));
+    assert!(unknown.is_error && unknown.text.contains("clarityUi"), "{}", unknown.text);
+    // Nobody takes it: no Clarity from the repository runs.
+    let alone = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
+    assert!(alone.is_error && alone.text.contains("./dev.sh"), "{}", alone.text);
+    assert!(dev_asks::pending(&server.asks()).is_empty(), "an ask nobody took is taken back");
+    // The IDE takes it and answers.
+    let asks = server.asks();
+    let ide = std::thread::spawn(move || {
+        for _ in 0..100 {
+            if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
+                assert_eq!((ask.key.as_str(), ask.by.as_str()), ("clarityUi", "Claude Code"));
+                assert!(dev_asks::take(&asks, &ask.id));
+                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: true, text: "Finished release".into() }).unwrap();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no ask came");
+    });
+    let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
+    ide.join().unwrap();
+    assert!(!built.is_error && built.text.contains("Finished release"), "{}", built.text);
 }

@@ -6,6 +6,60 @@ A development environment that keeps humans in control of AI-assisted codebases.
 
 Five stacks are generated: Rust, C#, Go, C and C++. Every desktop program draws its windows with Clarity.UI, Clarity's own UI framework, and each stack can also serve the same windows to a browser, where Clarity.UI draws them as WebAssembly. Each window, view and the app is a `.cxaml` file in the project's `design` folder; entities, themes, code, functions and actions are Clarity text in the project's modules. What is built and what is open is in the [development ledger](docs/ledger/README.md).
 
+![The dashboard example on the Design tab: the parts palette on the left, the window's six content squares on the canvas, each drawn with its own view](docs/images/designer.png)
+
+## Install
+
+Download the installer for your system from the [latest release](https://github.com/petervdpas/Clarity/releases/latest):
+
+| System | File |
+| --- | --- |
+| Windows | `Clarity-windows-amd64-setup.exe` |
+| Debian, Ubuntu | `Clarity-linux-amd64.deb`, `Clarity-linux-arm64.deb` |
+| Fedora 43, 44 | `Clarity-fedora43-amd64.rpm`, `Clarity-fedora44-amd64.rpm` |
+| Other Linux | `Clarity-linux-amd64.tar.gz`, `Clarity-linux-arm64.tar.gz` |
+
+The installer brings the IDE, the `clarity` command and Clarity.UI's library. The build tools of a stack (Cargo, Go, the .NET SDK, CMake and a compiler) you install yourself: Clarity settings > Environment shows which ones are missing, and **How to install** beside each opens the manual at the commands for your system. Building Clarity itself from source is under [Requirements](#requirements) and [Commands](#commands).
+
+## What you write, what you get
+
+Part of the dashboard above, a sale and the handler that fills the window when it opens, in Clarity:
+
+```text
+entity Sale
+    product: text(80), required, label @saleProductLabel
+    amount: decimal(10, 2), label @saleAmountLabel
+    sold: date, label @saleSoldLabel
+
+code Board
+    handler boardOpened
+        sales = find s in Sale order by s.sold desc
+        low = find p in Product where p.stock < 10 order by p.stock
+        total = 0
+        for s in sales
+            total = total + s.amount
+```
+
+`clarity gen` turns it into a plain Cargo project on the `clarity-runtime` crate (or a Go module, a .NET solution, a CMake project, as the project file says). The same lines of the handler become:
+
+```rust
+pub fn board__board_opened(db: &Db, w: &mut BoardWindow, ui: &mut Ui) -> Result<()> {
+    w.sales = db.find::<Sale>(&Query::new().order("sold", true))?;
+    ui.deselect("salesGrid");
+    w.low = db.find::<Product>(&Query::new().filter(Cond::compare("stock", Op::Lt, sql::integer(10i64))).order("stock", false))?;
+    ui.deselect("lowList");
+    w.total = Decimal::from(0i64);
+    for s in w.sales.iter() {
+        w.total = (w.total + s.amount);
+    }
+    Ok(())
+}
+```
+
+The generated project builds and runs without Clarity installed. In the IDE, **Generate** on the Preview tab writes it and lists every file:
+
+![The Preview tab running the dashboard, with the Output panel listing the files Generate wrote](docs/images/preview.png)
+
 ## Layout
 
 ```text
@@ -124,9 +178,13 @@ On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity
 
 An agent working in this repository uses this checkout's Clarity: `.mcp.json` names `./mcp.sh`, which builds the `clarity` command when it is behind its source and serves `clarity mcp` from it. Claude Code offers it when started here; an installed Clarity added for every folder (`--scope user`) stays in use elsewhere.
 
-In an IDE started with `./dev.sh`, Clarity settings > **Rebuild** builds Clarity's own pieces again from the source: tick what changed (Clarity.UI's library, its browser files, the other libraries) and **Restart**, or start the IDE with them ticked; the splash shows the build line for line and the IDE comes back with it. An agent that changed a piece ticks it in `target/dev-rebuild.json`. An installed Clarity has no such section.
+In an IDE started with `./dev.sh`, Clarity settings > **DevTools** has a tab per piece of Clarity that apps use, choosing between the release and your own build from the repository, with **Build** to make your own (shown in the tab while it builds, one build at a time). The core pieces (Clarity.UI's library and browser files, the Rust crates, the NuGet packages, the Go module) always have a tab; add one for another piece you changed. Its **Release planning** tab reads each release's tag, changes and version, bumps versions, runs the checks a release needs and writes the Release Helper's plan. An agent presses a Build through Clarity's MCP server (`build_piece`). An installed Clarity has no DevTools and always uses the release.
 
-A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last eight opened, and makes a new project in the folder you are in; see [Opening a project](manual/start.overview.md#opening-a-project).
+
+![Clarity's own project browser: the examples folder as cards with stack and README lines, recent projects on the left](docs/images/open-project.png)
+
+Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 
 How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](manual/start.overview.md).
 

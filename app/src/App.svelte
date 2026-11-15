@@ -17,8 +17,6 @@
   import NewAppDialog from "./lib/NewAppDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import ClarityWindow from "./lib/ClarityWindow.svelte";
-  import { browserFilesNotice } from "./lib/browserFiles";
-  import { browserFiles } from "./lib/browserFilesStore.svelte";
   import { chosenOf } from "./lib/clarityWindow";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
@@ -94,6 +92,7 @@
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import DialogHost from "./lib/DialogHost.svelte";
   import { dialogs } from "./lib/dialogStore.svelte";
+  import { devtools } from "./lib/devtoolsStore.svelte";
   import { firstCommand, programs, stackLabel } from "./lib/commandLine";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
@@ -1443,16 +1442,8 @@
 
   // An error nothing caught shows in the error bar, and so does a panic in the backend.
   onMount(() => catchUncaught((text) => (actionError = text)));
-  // Run from its repository, Clarity says when Clarity.UI's browser files are missing or behind its
-  // source and offers to build them again: the design and preview draw with them. Each canvas asks
-  // again when it cannot draw, and says so in its place (ClarityWindow.svelte).
-  onMount(() => {
-    void (async () => {
-      const notice = browserFilesNotice(await browserFiles.check());
-      if (notice) await browserFiles.offer(notice);
-      if (browserFiles.failure) actionError = browserFiles.failure;
-    })();
-  });
+  // DevTools' builds and an agent's ask to press a Build are heard wherever the IDE is (a run from its repository).
+  onMount(() => devtools.init());
   onMount(() => {
     const stop = listen<string>("clarity-panic", (event) => (actionError = event.payload));
     return () => void stop.then((unlisten) => unlisten());

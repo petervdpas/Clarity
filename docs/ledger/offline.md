@@ -6,7 +6,7 @@ Progress: 5%
 
 ## Code
 - Spec: none
-- Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); a folder chosen in Clarity settings > Libraries replaces downloads of Clarity's Rust crates, NuGets and the Clarity.UI library and browser files (`environment::use_libraries`; see [build-tools](build-tools.md)); the Clarity.UI library and browser files can come from the installed copy or `CLARITY_UI` (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))
+- Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); in a dev IDE, a piece swapped to the cDdev's own build in Clarity settings > DevTools replaces downloads of it (`environment::use_libraries`; see [devtools](devtools.md)); the Clarity.UI library and browser files can come from the installed copy or `CLARITY_UI` (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))
 - Runtimes: R from crates.io, C# from nuget.org, Go modules through the proxy: all download on first build
 - Clarity.UI: none
 - IDE: none (no offline sign beside Build)

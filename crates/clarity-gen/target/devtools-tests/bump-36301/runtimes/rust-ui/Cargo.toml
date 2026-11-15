@@ -1,7 +1,0 @@
-[package]
-name = "clarity-ui"
-version = "0.27.0"
-
-[dependencies]
-clarity-runtime = { path = "../rust", version = "0.62.0", default-features = false }
-other = { version = "0.61.0" }

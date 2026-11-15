@@ -10,7 +10,7 @@ use clarity_gen::tools::devtools::release::{self, Check, Planned, UNITS};
 use clarity_gen::tools::devtools::swap;
 
 fn temp(name: &str) -> PathBuf {
-    let dir = std::env::current_dir().unwrap().join("target").join("devtools-tests").join(format!("{name}-{}", std::process::id()));
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("devtools-tests").join(format!("{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -235,11 +235,13 @@ fn an_agents_ask_to_build_is_answered_through_the_file() {
 #[test]
 fn the_repository_says_how_every_release_stands() {
     let repo = repo();
+    // A checkout without tags (the checks' shallow one) has no release: each row's tag is the newest of its own the checkout has.
+    let tags = release::tags(&repo).unwrap();
     let rows = release::standing(&repo).unwrap();
     assert_eq!(rows.len(), UNITS.len());
-    for row in &rows {
+    for (row, unit) in rows.iter().zip(UNITS.iter()) {
         assert!(release::parse(&row.next).is_some(), "{}: {}", row.name, row.next);
-        assert!(row.tag.is_some(), "{} has been released", row.name);
+        assert_eq!(row.tag, release::newest(&tags, unit.tag), "{}", row.name);
     }
     let ide = rows.iter().find(|r| r.key == "ide").unwrap();
     assert!(!ide.bumpable && ide.source.is_none(), "the IDE's version is its tag alone");

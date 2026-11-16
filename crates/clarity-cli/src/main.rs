@@ -136,6 +136,16 @@ enum ReleaseCommand {
     FreshCheckout,
     /// Fail when the checks left files in the tree since the fresh checkout.
     CleanTree,
+    /// Build every test of the fresh checkout once, as the checks on GitHub
+    /// do, and note each test program.
+    BuildTests,
+    /// Run a test program that build made: `<package>:<target>` (`--lib`
+    /// for a library's own tests), its arguments after `--`.
+    RunTest {
+        key: String,
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -353,6 +363,16 @@ fn main() -> ExitCode {
             let done = match command {
                 ReleaseCommand::FreshCheckout => clarity_gen::tools::devtools::release::fresh_checkout(&repo, &dir).map(|()| format!("a fresh checkout in {}", dir.display())),
                 ReleaseCommand::CleanTree => clarity_gen::tools::devtools::release::clean_tree(&repo, &dir).map(|()| "the checks left the tree clean".to_string()),
+                ReleaseCommand::BuildTests => clarity_gen::tools::devtools::release::build_tests(&repo),
+                ReleaseCommand::RunTest { key, args } => {
+                    return match clarity_gen::tools::devtools::release::run_test(&repo, &key, &args) {
+                        Ok(code) => ExitCode::from(code.clamp(0, 255) as u8),
+                        Err(e) => {
+                            eprintln!("clarity: {e}");
+                            ExitCode::from(1)
+                        }
+                    };
+                }
             };
             match done {
                 Ok(said) => {

@@ -169,10 +169,10 @@ fn the_checks_cover_guards_tests_of_changed_crates_and_examples() {
     let checks: Vec<Check> = release::checks(&repo, &changed);
     let shown: Vec<String> = checks.iter().map(|c| c.run.shown()).collect();
     assert!(shown.iter().any(|s| s.contains("cargo test -p clarity-spec --test highlight")), "a guard: {shown:?}");
-    assert!(shown.iter().any(|s| s == "cargo test -p clarity-spec --lib"), "the changed crate's lib tests");
-    assert!(shown.iter().any(|s| s == "cargo test -p clarity-spec --test cxaml"), "each of its test targets");
-    assert!(!shown.iter().any(|s| s.contains("-p clarity-db")), "an unchanged crate is not tested");
-    assert!(shown.iter().any(|s| s.ends_with("spec check examples/maintenance")), "every example is spec checked");
+    assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:--lib")), "the changed crate's lib tests");
+    assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:cxaml")), "each of its test targets");
+    assert!(!shown.iter().any(|s| s.contains("clarity-db")), "an unchanged crate is not tested");
+    assert!(shown.iter().any(|s| s.contains("spec check ") && s.ends_with("fresh-checkout/examples/maintenance")), "every example is spec checked");
     assert!(shown.iter().any(|s| s.contains("the_todo_example_builds_without_warnings")), "a changed example builds");
     assert!(!shown.iter().any(|s| s.contains("the_shop_example_builds")), "an unchanged one does not");
     assert!(shown.iter().any(|s| s.contains("svelte-check")), "app/ changed: svelte-check and the app's tests");
@@ -236,48 +236,92 @@ fn a_build_names_its_folder_plainly() {
 
 #[test]
 fn the_checks_run_in_a_fresh_checkout_between_the_guards_and_a_clean_tree() {
-    // As on GitHub: the tests, spec checks and example builds run in a fresh checkout (no tags, no history, nothing git ignores);
-    // the guards write in the tree first, and the tree is checked clean last.
+    // As on GitHub: the tests, spec checks and example builds run on a fresh checkout (no tags, no history, nothing git ignores),
+    // built once; the guards write in the tree first, and the tree is checked clean last.
     let repo = repo();
     let fresh = release::fresh_checkout_dir(&repo);
     let checks = release::checks(&repo, &["crates/clarity-spec/src/check.rs".to_string(), "examples/todo/todo.clarity".to_string()]);
     let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
     assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| c.run.dir == repo), "the guards write in the tree");
     assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| at(&c.key) < at("freshCheckout")));
+    assert!(at("freshCheckout") < at("buildTests"), "the tests are built once, after the checkout");
     for key in ["test:clarity-spec:--lib", "spec:todo", "build:todo"] {
         let check = &checks[at(key)];
-        assert_eq!(check.run.dir, fresh, "{key} runs in the fresh checkout");
-        assert!(check.run.env.iter().any(|(n, v)| n == "CARGO_TARGET_DIR" && Path::new(v) == release::fresh_target_dir(&repo)), "{key} builds in a folder of its own");
-        assert_ne!(release::fresh_target_dir(&repo), repo.join("target"), "never the tree's: cargo would take one's builds for the other's");
-        assert!(at("freshCheckout") < at(key));
+        assert!(check.fresh, "{key} counts on the checkout");
+        assert!(check.run.shown().contains(&fresh.to_string_lossy().to_string()) || check.run.shown().contains("release run-test"), "{key} runs on the fresh checkout: {}", check.run.shown());
+        assert!(at("buildTests") < at(key));
     }
+    assert_ne!(release::fresh_target_dir(&repo), repo.join("target"), "never the tree's: cargo would take one's builds for the other's");
     assert_eq!(checks.last().unwrap().key, "cleanTree", "the tree is checked last");
 }
 
 #[test]
 fn the_checks_in_the_checkout_run_as_on_github() {
-    // The IDE's own settings (dev.sh's CLARITY_RUNTIME, a chosen library) stay out, a test target gets the features it
-    // declares (GitHub tests the whole workspace, which turns them on), the library the C header's test links is built
-    // first, and a path through .. is read as the folder it is.
+    // The IDE's own settings (dev.sh's CLARITY_RUNTIME, a chosen library) stay out; each test runs the program the one
+    // build made, without cargo; the build has no debug info, no incremental cache and stripped symbols.
     let repo = repo();
     let changed = vec!["runtimes/rust-auth/src/lib.rs".to_string(), "runtimes/rust-ui-ffi/src/lib.rs".to_string(), "examples/orbs/orbs.clarity".to_string()];
     let checks = release::checks(&repo.join("app").join(".."), &changed);
     let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
     let env = |c: &Check, name: &str| c.run.env.iter().rev().find(|(n, _)| n == name).map(|(_, v)| v.clone());
     for c in checks.iter().filter(|c| c.fresh) {
-        assert_eq!(c.run.dir, release::fresh_checkout_dir(&repo), "{}: the folder itself", c.key);
+        assert_eq!(c.run.dir, repo, "{}: started from the tree, the folder itself", c.key);
         assert_eq!(env(c, "CLARITY_RUNTIME").as_deref(), Some(""), "{}: the published runtimes, as on GitHub", c.key);
         assert_eq!(env(c, "CLARITY_UI_BROWSER").as_deref(), Some(""), "{}", c.key);
-        assert_eq!(env(c, "CARGO_PROFILE_DEV_DEBUG").as_deref(), Some("0"), "{}: no debug info, which made each test target a program of 90 MB", c.key);
+        assert!(c.run.program != "cargo", "{}: no cargo per check, which built crates again for each package's features", c.key);
     }
-    assert!(checks[at("test:clarity-auth:openid")].run.shown().ends_with("--test openid --features openid"), "{}", checks[at("test:clarity-auth:openid")].run.shown());
-    assert!(!checks[at("test:clarity-auth:--lib")].run.shown().contains("--features"));
-    let library = &checks[at("library:clarity-ui-ffi")];
-    assert_eq!(library.run.shown(), "cargo build -p clarity-ui-ffi");
-    assert!(library.fresh && at("freshCheckout") < at("library:clarity-ui-ffi") && at("library:clarity-ui-ffi") < at("test:clarity-ui-ffi:c_header"));
+    assert!(checks[at("test:clarity-auth:openid")].run.shown().ends_with("release run-test clarity-auth:openid"), "{}", checks[at("test:clarity-auth:openid")].run.shown());
+    assert!(checks[at("build:orbs")].run.shown().ends_with("release run-test clarity-gen:examples_build -- --ignored --exact the_orbs_example_builds_without_warnings"));
+    assert!(!checks.iter().any(|c| c.key.starts_with("library:")), "the library its tests link is part of the one build");
     assert!(!checks[at("guard:test:clarity-spec:--lib")].fresh);
-    let none = release::checks(&repo, &["runtimes/rust-auth/src/lib.rs".to_string()]);
-    assert!(!none.iter().any(|c| c.key == "library:clarity-ui-ffi"), "built only for the library's own tests");
+    let build: std::collections::BTreeMap<String, String> = release::build_env(&repo).into_iter().collect();
+    assert_eq!(build.get("CARGO_TARGET_DIR").map(PathBuf::from), Some(release::fresh_target_dir(&repo)));
+    assert_eq!(build.get("CARGO_PROFILE_DEV_DEBUG").map(String::as_str), Some("0"), "no debug info, which made each test target a program of 90 MB");
+    assert_eq!(build.get("CARGO_INCREMENTAL").map(String::as_str), Some("0"), "no incremental cache: the kept checkout already builds only what changed");
+    assert_eq!(build.get("CARGO_PROFILE_DEV_STRIP").map(String::as_str), Some("symbols"));
+    assert_eq!(build.get("CLARITY_RUNTIME").map(String::as_str), Some(""));
+}
+
+#[test]
+fn the_one_build_names_each_test_program_and_what_it_made() {
+    // cargo's messages (--message-format=json): each test program by package and target, every file it made (kept),
+    // and its warnings as cargo shows them.
+    let repo = repo();
+    let manifest = repo.join("crates/clarity-spec/Cargo.toml");
+    let m = manifest.to_string_lossy().replace('\\', "/");
+    let lines = format!(
+        "{{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"lib\"],\"name\":\"clarity_spec\"}},\"profile\":{{\"test\":true}},\"filenames\":[\"/t/debug/deps/clarity_spec-1\"],\"executable\":\"/t/debug/deps/clarity_spec-1\",\"fresh\":true}}\n\
+         {{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"test\"],\"name\":\"cxaml\"}},\"profile\":{{\"test\":true}},\"filenames\":[\"/t/debug/deps/cxaml-2\"],\"executable\":\"/t/debug/deps/cxaml-2\",\"fresh\":false}}\n\
+         {{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"lib\"],\"name\":\"clarity_spec\"}},\"profile\":{{\"test\":false}},\"filenames\":[\"/t/debug/deps/libclarity_spec-3.rlib\",\"/t/debug/deps/libclarity_spec-3.rmeta\"],\"executable\":null,\"fresh\":true}}\n\
+         {{\"reason\":\"compiler-message\",\"message\":{{\"rendered\":\"warning: unused\\n\"}}}}\n\
+         not json\n"
+    );
+    let built = release::test_programs(&lines);
+    assert_eq!(built.programs.get("clarity-spec:--lib").map(|p| p.program.clone()), Some(PathBuf::from("/t/debug/deps/clarity_spec-1")));
+    assert_eq!(built.programs.get("clarity-spec:cxaml").map(|p| p.folder.clone()), Some(repo.join("crates/clarity-spec")), "run in its crate's folder, as cargo test does");
+    assert_eq!(built.programs.len(), 2, "a library is not a test program");
+    assert!(built.made.contains(&PathBuf::from("/t/debug/deps/libclarity_spec-3.rmeta")), "every file it made, kept when the rest is removed");
+    assert_eq!(built.messages, ["warning: unused\n"]);
+}
+
+#[test]
+fn a_kept_checkout_writes_only_what_changed_and_drops_what_tests_left() {
+    // Kept between runs: an unchanged file keeps its time, so cargo builds nothing again for it; a file a test left in
+    // the checkout is gone, as in a fresh one.
+    let repo = repo();
+    let dir = temp("kept").join("checkout");
+    release::fresh_checkout(&repo, &dir).unwrap();
+    let file = dir.join("crates/clarity-spec/src/lib.rs");
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::options().write(true).open(&file).unwrap().set_modified(old).unwrap();
+    std::fs::create_dir_all(dir.join("examples/todo/out")).unwrap();
+    std::fs::write(dir.join("examples/todo/out/left.txt"), "a test left this").unwrap();
+    std::fs::write(dir.join("crates/clarity-spec/Cargo.toml"), "changed in the checkout").unwrap();
+    release::fresh_checkout(&repo, &dir).unwrap();
+    assert_eq!(std::fs::metadata(&file).unwrap().modified().unwrap(), old, "an unchanged file is not written again");
+    assert!(!dir.join("examples/todo/out").exists(), "what a test left is gone");
+    assert_eq!(std::fs::read(dir.join("crates/clarity-spec/Cargo.toml")).unwrap(), std::fs::read(repo.join("crates/clarity-spec/Cargo.toml")).unwrap(), "a file that differs is the tree's again");
+    assert_eq!(release::checkout_state(&dir).unwrap(), release::tree_state(&repo).unwrap());
 }
 
 #[test]

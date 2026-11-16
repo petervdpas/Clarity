@@ -466,7 +466,7 @@
   }
 
   .status.ok {
-    border-color: color-mix(in srgb, var(--ok, #2e8b57) 60%, transparent);
+    border-color: color-mix(in srgb, var(--success) 60%, transparent);
   }
 
   .status.warn {

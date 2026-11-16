@@ -172,7 +172,8 @@ pub fn release_run(jobs: Vec<String>, app: AppHandle, builds: State<DevJobs>) ->
             refused.push(format!("there is no check {key}"));
             continue;
         };
-        if counts(check) {
+        // The checkout, the one build and the clean tree always run: they are cheap when nothing changed.
+        if check.inputs != release::Inputs::Whole && counts(check) {
             continue;
         }
         if let Err(why) = builds.0.start(&key, &check.title, check.run.clone(), Some(recording(&app, repo.clone(), check.clone()))) {

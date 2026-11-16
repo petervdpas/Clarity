@@ -190,7 +190,7 @@
     border-radius: 8px;
   }
   .ok {
-    background: color-mix(in srgb, var(--success, #2e8b57) 25%, transparent);
+    background: color-mix(in srgb, var(--success) 25%, transparent);
   }
   .missing {
     background: color-mix(in srgb, var(--error) 25%, transparent);

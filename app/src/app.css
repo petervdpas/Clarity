@@ -9,11 +9,15 @@
   --text-muted: #5d6677;
   --accent: #1f5fbf;
   --accent-soft: #e3ecfa;
+  /* Text on an accent background. */
+  --accent-text: #ffffff;
   --titlebar: #20242c;
   --titlebar-text: #f2f4f7;
   --brand: #f5c400;
   --error: #c4312b;
   --error-soft: #fbe9e8;
+  /* What went well: a passed check, a tool found. */
+  --success: #2e7d4f;
   --warning: #9a6700;
   /* What pulses while Clarity generates or builds: orange, dark orange on a dark scheme. */
   --busy: #f97316;
@@ -44,10 +48,12 @@
   --text-muted: #9aa3b5;
   --accent: #6fa3f2;
   --accent-soft: #233552;
+  --accent-text: #0d1a2e;
   --titlebar: #0d0f13;
   --titlebar-text: #e6e9ef;
   --error: #f0736c;
   --error-soft: #3a1f1f;
+  --success: #5cc48a;
   --warning: #e3b341;
   --busy: #c2410c;
   --warning-soft: #3a3020;
@@ -75,10 +81,12 @@
   --text-muted: #6f6b5e;
   --accent: #2e6b3a;
   --accent-soft: #e2ecd9;
+  --accent-text: #fbf8ee;
   --titlebar: #23402b;
   --titlebar-text: #fbf8ee;
   --error: #a62b1f;
   --error-soft: #f6e3dc;
+  --success: #2e6b3a;
   --warning: #b45309;
   --busy: #ea7317;
   --warning-soft: #f8ecd2;

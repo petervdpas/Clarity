@@ -281,13 +281,13 @@
     border: 1px solid var(--border);
     border-bottom: none;
     border-radius: 6px 6px 0 0;
-    background: var(--surface-2, transparent);
+    background: var(--panel-alt);
   }
   .tab.fixed button {
     font-weight: 600;
   }
   .tab.active {
-    background: var(--surface, #fff);
+    background: var(--panel);
     font-weight: 600;
   }
   .tab button {

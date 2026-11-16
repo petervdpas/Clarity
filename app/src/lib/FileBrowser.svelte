@@ -391,7 +391,7 @@
   }
   .list li.selected {
     background: var(--accent);
-    color: var(--accent-text, #fff);
+    color: var(--accent-text);
   }
   .list li.selected .muted {
     color: inherit;

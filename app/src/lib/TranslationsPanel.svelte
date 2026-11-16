@@ -240,7 +240,7 @@
   }
 
   .language span.done {
-    color: var(--success, var(--text-muted));
+    color: var(--success);
   }
 
   .bar {
@@ -315,7 +315,7 @@
 
   td.status {
     padding-top: 8px;
-    color: var(--success, var(--text-muted));
+    color: var(--success);
   }
 
   td.status.missing {

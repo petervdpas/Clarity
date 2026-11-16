@@ -91,7 +91,8 @@ Gives how it ended and what it freed. Folders: {}.",
 releases/<stamp>.json, `stamp` as YYYY-MM-DD-HHMM; its steps begin with the checks on main (a watch step of checks.yml) and an existing \
 plan is never overwritten. After a failed release, `fix` (a plan's stamp) with `commit_message` only changes that plan's commit message. \
 Either is refused while a release check (release_state) has failed, not run, or ran on another tree than the one now: the person runs \
-them in Clarity settings > DevTools > Release planning (Run release checks). It is the only way a plan is written."
+them in Clarity settings > DevTools > Release planning (Run release checks). Only the fix routine's one line, `Fix the failed Clarity \
+<version> release`, is written all the same. It is the only way a plan is written."
                 .into(),
             input_schema: json!({
                 "type": "object",
@@ -235,7 +236,8 @@ fn release_state(repo: &std::path::Path) -> Result<Value, String> {
     }))
 }
 
-/// Writes a release plan, or a fixed one's commit message, while no release check holds it back.
+/// Writes a release plan, or a fixed one's commit message, while no release check holds it back
+/// (the fix routine's one line is never held back).
 fn write_release_plan(input: &Value) -> ToolResult {
     let repo = match repo() {
         Ok(repo) => repo,
@@ -246,7 +248,10 @@ fn write_release_plan(input: &Value) -> ToolResult {
     if fix.is_none() && new.is_none() {
         return failed("give a new plan (stamp and plan), or fix (a plan's stamp) with commit_message");
     }
+    // The fix routine's one line changes nothing the checks look at, so it is never held back.
+    let routine_fix = fix.is_some() && input.get("commit_message").and_then(Value::as_str).is_some_and(release::is_fix_line);
     match release::held_back(&repo) {
+        Ok(_) if routine_fix => {}
         Ok(held) if !held.is_empty() => {
             let shown: Vec<String> = held.iter().take(15).cloned().collect();
             let more = if held.len() > shown.len() { format!(" and {} more", held.len() - shown.len()) } else { String::new() };
@@ -268,6 +273,7 @@ fn write_release_plan(input: &Value) -> ToolResult {
         (None, None) => unreachable!(),
     };
     match written {
+        Ok(file) if routine_fix => ToolResult { text: format!("Written: {}.", file.display()), is_error: false },
         Ok(file) => ToolResult { text: format!("Written: {}. Every release check passed on this tree.", file.display()), is_error: false },
         Err(why) => failed(why),
     }

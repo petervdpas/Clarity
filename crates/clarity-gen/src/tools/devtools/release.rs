@@ -423,31 +423,78 @@ fn file_url(repo: &Path) -> Result<String, String> {
 /// the last commit alone, without tags or history, with the tree's changes
 /// not committed yet over it (changed, new and deleted files) and nothing
 /// git ignores. Notes how the tree stands, for [`clean_tree`] after the checks.
+/// Kept between runs: it moves to the tree's commit and writes only the
+/// files whose content differs, so an unchanged file keeps its time and
+/// cargo builds nothing again for it; a file the checks left in it goes.
 /// Reads `repo` only; needs no network.
 pub fn fresh_checkout(repo: &Path, dir: &Path) -> Result<(), String> {
-    if dir.exists() {
-        std::fs::remove_dir_all(dir).map_err(|e| format!("cannot remove the old {}: {e}", dir.display()))?;
-    }
-    if let Some(parent) = dir.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
-    }
     let url = file_url(repo)?;
-    let target = dir.to_string_lossy().to_string();
-    git(repo, &["clone", "--quiet", "--depth", "1", "--no-tags", &url, &target])?;
-    let mut files: Vec<String> = git(repo, &["diff", "--name-only", "HEAD"])?.lines().map(str::to_string).collect();
-    files.extend(git(repo, &["ls-files", "--others", "--exclude-standard"])?.lines().map(str::to_string));
-    for file in files.iter().filter(|f| !f.is_empty()) {
+    if dir.join(".git").is_dir() {
+        git(dir, &["fetch", "--quiet", "--depth", "1", "--no-tags", &url, "HEAD"])?;
+        // Mixed: the commit and its index, the files left as they are (mirror writes them).
+        git(dir, &["reset", "--quiet", "FETCH_HEAD"])?;
+    } else {
+        if dir.exists() {
+            std::fs::remove_dir_all(dir).map_err(|e| format!("cannot remove the old {}: {e}", dir.display()))?;
+        }
+        if let Some(parent) = dir.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+        }
+        let target = dir.to_string_lossy().to_string();
+        git(repo, &["clone", "--quiet", "--depth", "1", "--no-tags", &url, &target])?;
+    }
+    mirror(repo, dir)?;
+    std::fs::write(snapshot_file(dir), snapshot(repo)?).map_err(|e| format!("cannot write how the tree stands: {e}"))
+}
+
+/// Makes the files of `dir` (but its .git) those of the tree `repo`, committed
+/// or not, without what git ignores: a file is written only when its content
+/// differs, and a file the tree does not have is removed.
+fn mirror(repo: &Path, dir: &Path) -> Result<(), String> {
+    let listed = git(repo, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"])?;
+    let wanted: std::collections::BTreeSet<String> = listed.split('\0').filter(|f| !f.is_empty() && repo.join(f).is_file()).map(str::to_string).collect();
+    for file in &wanted {
         let (from, to) = (repo.join(file), dir.join(file));
-        if from.is_file() {
-            if let Some(parent) = to.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+        let same = match (std::fs::metadata(&from), std::fs::metadata(&to)) {
+            (Ok(a), Ok(b)) if b.is_file() && a.len() == b.len() => std::fs::read(&from).ok() == std::fs::read(&to).ok(),
+            _ => false,
+        };
+        if same {
+            continue;
+        }
+        if to.is_dir() {
+            std::fs::remove_dir_all(&to).map_err(|e| format!("cannot remove {}: {e}", to.display()))?;
+        }
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+        }
+        std::fs::copy(&from, &to).map_err(|e| format!("cannot copy {file}: {e}"))?;
+    }
+    let mut folders = Vec::new();
+    let mut next = vec![dir.to_path_buf()];
+    while let Some(folder) = next.pop() {
+        for entry in std::fs::read_dir(&folder).map_err(|e| format!("cannot read {}: {e}", folder.display()))?.flatten() {
+            let path = entry.path();
+            if path == dir.join(".git") {
+                continue;
             }
-            std::fs::copy(&from, &to).map_err(|e| format!("cannot copy {file}: {e}"))?;
-        } else if to.is_file() {
-            std::fs::remove_file(&to).map_err(|e| format!("cannot remove {file}: {e}"))?;
+            if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                folders.push(path.clone());
+                next.push(path);
+                continue;
+            }
+            let relative = path.strip_prefix(dir).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            if !wanted.contains(&relative) {
+                std::fs::remove_file(&path).map_err(|e| format!("cannot remove {}: {e}", path.display()))?;
+            }
         }
     }
-    std::fs::write(snapshot_file(dir), snapshot(repo)?).map_err(|e| format!("cannot write how the tree stands: {e}"))
+    // Deepest first; a folder that still holds files stays.
+    folders.sort_by_key(|f| std::cmp::Reverse(f.components().count()));
+    for folder in folders {
+        let _ = std::fs::remove_dir(&folder);
+    }
+    Ok(())
 }
 
 /// The tree's changes as `git status` lists them, each with a hash of its
@@ -746,6 +793,18 @@ pub fn held_back(repo: &Path) -> Result<Vec<String>, String> {
     Ok(held_back_of(checks, &check_records(repo)))
 }
 
+/// Whether `message` is the fix routine's commit message after a failed
+/// release: `Fix the failed Clarity <version> release`, the version as `1.4.0`.
+pub fn is_fix_line(message: &str) -> bool {
+    message
+        .strip_prefix("Fix the failed Clarity ")
+        .and_then(|rest| rest.strip_suffix(" release"))
+        .is_some_and(|version| {
+            let parts: Vec<&str> = version.split('.').collect();
+            parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        })
+}
+
 /// Whether `stamp` is a plan's name: `YYYY-MM-DD-HHMM`.
 fn plan_stamp(stamp: &str) -> bool {
     let b = stamp.as_bytes();
@@ -867,6 +926,202 @@ fn clarity_cli(repo: &Path, args: &[&str]) -> Runnable {
     Runnable::new("cargo", &all, repo).with_env("CARGO_BUILD_JOBS", "2")
 }
 
+/// Clarity's CLI as `cargo run -p clarity-cli` builds it in the tree (the
+/// fresh checkout's check runs it so first).
+fn clarity_program(repo: &Path) -> String {
+    repo.join("target").join("debug").join(format!("clarity{}", std::env::consts::EXE_SUFFIX)).to_string_lossy().to_string()
+}
+
+/// Where the one build notes each test program it made.
+fn tests_file(repo: &Path) -> PathBuf {
+    fresh_target_dir(repo).join("tests.json")
+}
+
+/// The environment the fresh checkout builds in: a folder of its own, no
+/// debug info (with it every test program took 90 MB; a failure still
+/// names its file and line), no incremental cache (the kept checkout
+/// already builds only what changed), stripped symbols, and none of the
+/// IDE's own settings.
+pub fn build_env(repo: &Path) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = [
+        ("CARGO_TARGET_DIR", fresh_target_dir(repo).to_string_lossy().to_string()),
+        ("CARGO_BUILD_JOBS", "2".into()),
+        ("CARGO_PROFILE_DEV_DEBUG", "0".into()),
+        ("CARGO_PROFILE_TEST_DEBUG", "0".into()),
+        ("CARGO_INCREMENTAL", "0".into()),
+        ("CARGO_PROFILE_DEV_STRIP", "symbols".into()),
+        ("CARGO_PROFILE_TEST_STRIP", "symbols".into()),
+    ]
+    .into_iter()
+    .map(|(n, v)| (n.to_string(), v))
+    .collect();
+    env.extend(IDE_ONLY.iter().map(|n| (n.to_string(), String::new())));
+    env
+}
+
+/// A test program the one build made, and the folder of its crate (where
+/// cargo test runs it).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestProgram {
+    pub program: PathBuf,
+    pub folder: PathBuf,
+}
+
+/// What cargo's messages (`--message-format=json-render-diagnostics`) say a
+/// build made: each test program by `<package>:<target>` (`--lib` for a
+/// library's own tests), every file made, and the warnings as cargo shows them.
+#[derive(Debug, Default)]
+pub struct BuiltTests {
+    pub programs: BTreeMap<String, TestProgram>,
+    pub made: std::collections::BTreeSet<PathBuf>,
+    pub messages: Vec<String>,
+}
+
+pub fn test_programs(lines: &str) -> BuiltTests {
+    let mut built = BuiltTests::default();
+    for line in lines.lines() {
+        let Ok(message) = serde_json::from_str::<Value>(line) else { continue };
+        match message["reason"].as_str() {
+            Some("compiler-message") => built.messages.extend(message["message"]["rendered"].as_str().map(str::to_string)),
+            Some("compiler-artifact") => {
+                built.made.extend(message["filenames"].as_array().into_iter().flatten().filter_map(Value::as_str).map(PathBuf::from));
+                let Some(program) = message["executable"].as_str() else { continue };
+                built.made.insert(PathBuf::from(program));
+                if message["profile"]["test"].as_bool() != Some(true) {
+                    continue;
+                }
+                let manifest = PathBuf::from(message["manifest_path"].as_str().unwrap_or_default());
+                let folder = manifest.parent().map(Path::to_path_buf).unwrap_or_default();
+                let text = std::fs::read_to_string(&manifest).unwrap_or_default();
+                let package = between(&text, "name = \"", "\"").map(|(_, n)| n.to_string()).unwrap_or_else(|| folder.file_name().unwrap_or_default().to_string_lossy().to_string());
+                let kinds: Vec<&str> = message["target"]["kind"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+                let name = message["target"]["name"].as_str().unwrap_or_default();
+                let target = if kinds.contains(&"test") {
+                    name.to_string()
+                } else if kinds.contains(&"bin") {
+                    format!("--bin {name}")
+                } else {
+                    "--lib".to_string()
+                };
+                built.programs.insert(format!("{package}:{target}"), TestProgram { program: PathBuf::from(program), folder });
+            }
+            _ => {}
+        }
+    }
+    built
+}
+
+/// Builds every test of the fresh checkout once, as checks.yml does: the
+/// library the C header's test links, `cargo test --workspace --no-run`,
+/// and each test target that needs features of its own with them; notes
+/// each test program, and removes the older builds of a crate the build
+/// did not make again, so the folder does not keep growing.
+pub fn build_tests(repo: &Path) -> Result<String, String> {
+    use std::io::BufRead;
+    let dir = fresh_checkout_dir(repo);
+    let mut runs: Vec<Vec<String>> = vec![
+        vec!["build".into(), "-p".into(), "clarity-ui-ffi".into()],
+        vec!["test".into(), "--workspace".into(), "--no-run".into()],
+    ];
+    for member in members(repo) {
+        let Ok(manifest) = std::fs::read_to_string(dir.join(&member).join("Cargo.toml")) else { continue };
+        let Some((_, package)) = between(&manifest, "name = \"", "\"") else { continue };
+        for block in manifest.split("[[test]]").skip(1) {
+            let Some((_, test)) = between(block, "name = \"", "\"") else { continue };
+            let features = required_features(&manifest, test);
+            if !features.is_empty() {
+                runs.push(vec!["test".into(), "-p".into(), package.to_string(), "--test".into(), test.to_string(), "--features".into(), features.join(","), "--no-run".into()]);
+            }
+        }
+    }
+    let mut all = BuiltTests::default();
+    for args in &runs {
+        let mut command = Command::new("cargo");
+        command.args(args).arg("--message-format=json-render-diagnostics").current_dir(&dir).stdout(std::process::Stdio::piped());
+        for (name, value) in build_env(repo) {
+            command.env(name, value);
+        }
+        let mut child = command.spawn().map_err(|e| format!("cannot run cargo: {e}"))?;
+        let mut text = String::new();
+        if let Some(out) = child.stdout.take() {
+            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                test_programs(&line).messages.iter().for_each(|m| print!("{m}"));
+                text.push_str(&line);
+                text.push('\n');
+            }
+        }
+        let status = child.wait().map_err(|e| format!("cannot run cargo: {e}"))?;
+        if !status.success() {
+            return Err(format!("cargo {} ended with {status}", args.join(" ")));
+        }
+        let built = test_programs(&text);
+        all.programs.extend(built.programs);
+        all.made.extend(built.made);
+    }
+    let file = tests_file(repo);
+    let text = serde_json::to_string_pretty(&all.programs).map_err(|e| e.to_string())?;
+    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))?;
+    let removed = remove_older_builds(&fresh_target_dir(repo).join("debug"), &all.made);
+    Ok(format!("{} test programs built; {removed} older files removed", all.programs.len()))
+}
+
+/// A build file's crate and hash: `libclarity_spec-0a1b2c3d4e5f6a7b.rlib` is
+/// (`libclarity_spec`, `0a1b2c3d4e5f6a7b`); none for a file without one.
+fn crate_and_hash(path: &Path) -> Option<(String, String)> {
+    let name = path.file_name()?.to_string_lossy();
+    let stem = name.split('.').next()?;
+    let (krate, hash) = stem.rsplit_once('-')?;
+    (hash.len() == 16 && hash.bytes().all(|b| b.is_ascii_hexdigit())).then(|| (krate.to_string(), hash.to_string()))
+}
+
+/// Removes from `debug/deps` the builds of a crate the build made again with
+/// another hash (another feature set, an older version), and the incremental
+/// cache; a crate the build did not make is left alone. Gives how many files went.
+fn remove_older_builds(debug: &Path, made: &std::collections::BTreeSet<PathBuf>) -> usize {
+    let _ = std::fs::remove_dir_all(debug.join("incremental"));
+    let mut kept: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
+    for (krate, hash) in made.iter().filter_map(|p| crate_and_hash(p)) {
+        kept.entry(krate).or_default().insert(hash);
+    }
+    let mut removed = 0;
+    for entry in std::fs::read_dir(debug.join("deps")).into_iter().flatten().flatten() {
+        let path = entry.path();
+        let Some((krate, hash)) = crate_and_hash(&path) else { continue };
+        if kept.get(&krate).is_some_and(|hashes| !hashes.contains(&hash)) && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// Runs the test program `key` (`<package>:<target>`) the one build made,
+/// with `args`, in its crate's folder of the fresh checkout, as cargo test
+/// runs it; gives its exit code.
+pub fn run_test(repo: &Path, key: &str, args: &[String]) -> Result<i32, String> {
+    let text = std::fs::read_to_string(tests_file(repo)).map_err(|_| "the tests are not built: run the release checks again (Every test built once)".to_string())?;
+    let programs: BTreeMap<String, TestProgram> = serde_json::from_str(&text).map_err(|e| format!("cannot read {}: {e}", tests_file(repo).display()))?;
+    let test = programs.get(key).ok_or_else(|| format!("the one build made no test program {key}"))?;
+    let debug = fresh_target_dir(repo).join("debug");
+    let variable = if cfg!(windows) {
+        "PATH"
+    } else if cfg!(target_os = "macos") {
+        "DYLD_FALLBACK_LIBRARY_PATH"
+    } else {
+        "LD_LIBRARY_PATH"
+    };
+    let old = std::env::var_os(variable).unwrap_or_default();
+    let paths = std::env::join_paths([debug.join("deps"), debug.clone()].into_iter().chain(std::env::split_paths(&old))).map_err(|e| e.to_string())?;
+    let status = Command::new(&test.program)
+        .args(args)
+        .current_dir(&test.folder)
+        .env("CARGO_MANIFEST_DIR", &test.folder)
+        .env("CARGO_TARGET_DIR", fresh_target_dir(repo))
+        .env(variable, paths)
+        .status()
+        .map_err(|e| format!("cannot run {}: {e}", test.program.display()))?;
+    Ok(status.code().unwrap_or(1))
+}
+
 /// The checks before a plan, with `changed` the files changed since the
 /// last IDE release: every guard written and tested in the tree; then a
 /// fresh checkout as the checks on GitHub have it, where the test targets
@@ -878,12 +1133,10 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
     let canonical = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
     let repo = canonical.as_path();
     let fresh = fresh_checkout_dir(repo);
-    let own = fresh_target_dir(repo).to_string_lossy().to_string();
-    // Without debug info: every test target is a program of its own, and with it they took 35 GB; a failure still names its file and line.
-    let in_fresh = |run: Runnable| {
-        let run = Runnable { dir: fresh.clone(), ..run }.with_env("CARGO_TARGET_DIR", &own).with_env("CARGO_PROFILE_DEV_DEBUG", "0").with_env("CARGO_PROFILE_TEST_DEBUG", "0");
-        IDE_ONLY.iter().fold(run, |run, name| run.with_env(name, ""))
-    };
+    // Clarity's CLI as the fresh checkout's check built it, without the IDE's own settings: it builds the tests once
+    // and runs each program that build made, with no cargo per check.
+    let cli = clarity_program(repo);
+    let on_fresh = |args: &[&str]| IDE_ONLY.iter().fold(Runnable::new(&cli, args, repo), |run, name| run.with_env(name, ""));
     let mut checks = Vec::new();
     for g in &GUARDS {
         let target = g.test.map(|t| format!("--test {t}")).unwrap_or_else(|| "--lib".into());
@@ -893,6 +1146,7 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         checks.push(Check { key: format!("guard:test:{}:{target}", g.package), title: format!("Check {}", g.writes), run: cargo_test(repo, g.package, g.test, &[]), fresh: false, inputs: Inputs::Crate(g.package.to_string()) });
     }
     checks.push(Check { key: "freshCheckout".into(), title: "A fresh checkout, as on GitHub".into(), run: clarity_cli(repo, &["release", "fresh-checkout"]), fresh: false, inputs: Inputs::Whole });
+    checks.push(Check { key: "buildTests".into(), title: "Every test built once, as on GitHub".into(), run: on_fresh(&["release", "build-tests"]), fresh: true, inputs: Inputs::Whole });
     let under = |folder: &str| changed.iter().any(|f| f == folder || f.starts_with(&format!("{folder}/")));
     for member in members(repo) {
         if !under(&member) {
@@ -900,20 +1154,17 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         }
         let Ok(manifest) = std::fs::read_to_string(repo.join(&member).join("Cargo.toml")) else { continue };
         let Some((_, package)) = between(&manifest, "name = \"", "\"") else { continue };
-        if package == "clarity-ui-ffi" {
-            // The C header's test links the library, which cargo test does not build (as checks.yml does first).
-            let run = in_fresh(Runnable::new("cargo", &["build", "-p", package], repo).with_env("CARGO_BUILD_JOBS", "2"));
-            checks.push(Check { key: format!("library:{package}"), title: format!("{package}: the library its tests link"), run, fresh: true, inputs: Inputs::Crate(package.to_string()) });
-        }
         if repo.join(&member).join("src/lib.rs").is_file() {
-            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: in_fresh(cargo_test(repo, package, None, &[])), fresh: true, inputs: Inputs::Crate(package.to_string()) });
+            let program = format!("{package}:--lib");
+            checks.push(Check { key: format!("test:{program}"), title: format!("{package}: lib tests"), run: on_fresh(&["release", "run-test", &program]), fresh: true, inputs: Inputs::Crate(package.to_string()) });
         }
         let mut tests: Vec<String> = std::fs::read_dir(repo.join(&member).join("tests"))
             .map(|d| d.flatten().filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".rs").map(str::to_string)).collect())
             .unwrap_or_default();
         tests.sort();
         for test in tests {
-            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: in_fresh(cargo_test(repo, package, Some(&test), &required_features(&manifest, &test))), fresh: true, inputs: Inputs::Crate(package.to_string()) });
+            let program = format!("{package}:{test}");
+            checks.push(Check { key: format!("test:{program}"), title: format!("{package}: {test}"), run: on_fresh(&["release", "run-test", &program]), fresh: true, inputs: Inputs::Crate(package.to_string()) });
         }
     }
     if under("app") || under("runtimes/web/src/generated") {
@@ -926,7 +1177,7 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         checks.push(Check {
             key: format!("spec:{example}"),
             title: format!("{example}: spec check"),
-            run: in_fresh(clarity_cli(repo, &["spec", "check", &folder])),
+            run: on_fresh(&["spec", "check", &fresh.join(&folder).to_string_lossy()]),
             fresh: true,
             inputs: Inputs::Crate("clarity-cli".into()),
         });
@@ -938,7 +1189,7 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         checks.push(Check {
             key: format!("build:{example}"),
             title: format!("{example}: builds on its stack"),
-            run: in_fresh(Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2")).with_env("CLARITY_UI", &library),
+            run: on_fresh(&["release", "run-test", "clarity-gen:examples_build", "--", "--ignored", "--exact", &exact]).with_env("CLARITY_UI", &library),
             fresh: true,
             inputs: Inputs::Crate("clarity-gen".into()),
         });

@@ -912,7 +912,7 @@
     position: fixed;
     pointer-events: none;
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-text);
     padding: 3px 10px;
     border-radius: var(--radius);
     font-size: 12px;

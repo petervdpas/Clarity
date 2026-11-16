@@ -28,6 +28,15 @@ ts-rs = { version = "12", features = ["serde-json-impl"] }
 [profile.dev]
 debug = "line-tables-only"
 
+# Debug info only for Clarity's own crates: the crates it uses carry none.
+[profile.dev.package."*"]
+debug = false
+
+# Release builds: symbols stripped, optimised across all crates at once.
+[profile.release]
+strip = true
+lto = true
+
 # The vault's key derivation is slow on purpose; unoptimised it takes many
 # seconds, so its crates are built optimised in debug builds too.
 [profile.dev.package.argon2]

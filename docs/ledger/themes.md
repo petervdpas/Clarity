@@ -38,3 +38,4 @@ Progress: 100%
 - DESIGN 1.5 (Themes, T1 rows of the stack table)
 - Roadmap: T1, G2c (themes part), G3c (themes part)
 - memory: looks-in-clarity.md
+- 2026-11-16: every color the IDE's pages use is defined in each of its themes (app/src/lib/themeColors.test.ts); DevTools' tabs used --surface, which no theme had, so the open tab was white on the dark theme; --success and --accent-text added to every theme. User: "after the release you need to look into tabs again!! both ide and parts... not picking up the theme properly!".

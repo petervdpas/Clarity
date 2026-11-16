@@ -736,6 +736,9 @@ pub struct WidgetPage {
     /// keeps the theme's look.
     #[serde(default)]
     pub color: Option<String>,
+    /// `tab "Overview" permanent`: a tab of tabs that close that has no x.
+    #[serde(default)]
+    pub permanent: bool,
     pub children: Vec<Widget>,
     pub span: Span,
 }
@@ -1051,6 +1054,15 @@ pub struct WidgetProps {
     /// A graph shows its kinds as chips that hide and show them.
     #[serde(default)]
     pub legend: bool,
+    /// Tabs the person closes with each tab's x (`closing`).
+    #[serde(default)]
+    pub closing: bool,
+    /// Tabs that do not fit are gone through with two sideways triangles after them (`cycling`).
+    #[serde(default)]
+    pub cycling: bool,
+    /// A dropdown of the closed tabs, which brings one back (`available`).
+    #[serde(default)]
+    pub available: bool,
     /// What a graph of the data model knows of the model, worked out when
     /// the project loads (`make_graph_models`); it is never written back.
     #[serde(default)]

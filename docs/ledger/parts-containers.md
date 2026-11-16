@@ -22,6 +22,7 @@ Progress: 95%
 - IDE `app/src/lib/viewTells.test.ts`, `designLayer.test.ts` (splitter divider)
 
 ## Open
+- Tabs options show in the IDE's canvas and preview only with own browser files (DevTools > Clarity.UI's browser files > Build, swapped) until a Clarity.UI release; built apps draw them once they use a Clarity.UI with them: UNRELEASED
 - The menu key and Shift+F10 open a part's context menu: PARTIAL. Only a right press does (`runtimes/rust-ui/src/element.rs:337`, `context_menu_at`; F10 goes to the menu bar only, `window/view.rs:438`; DESIGN.md:1122).
 - A view that brings its own ribbon tab and menu items: see [frame-keys](frame-keys.md).
 
@@ -30,6 +31,7 @@ Progress: 95%
 - C# carries `PartState.cs` copies for accordions, folding, steps that no test runs against the conformance files.
 
 ## Decisions
+- 2026-11-16: tabs options, off by default, as DevTools' tabs: `closing` (an x per tab, the last showing never closes, `close` event), `<Tab permanent>`, `cycling` (two sideways triangles after the tabs when they do not fit), `available` (dropdown "+ Add a tab", key `tabsAddCaption`, needs closing); `customerTabs.reopen(n)` is rewritten to `customerTabs.tab = n` (views.rs `reopened`), and opening a closed tab brings it back; closed tabs stay closed while the window is open. Spec: model/widgets/parser/cxaml/check/edit `SetPagePermanent`, change_tab `permanent`; Clarity.UI `parts/containers/tabs.rs` (CycleButton, AvailableBox), painter `side_triangle`; IDE PageProperties. Tests: `crates/clarity-spec/tests/tab_options.rs`, `runtimes/rust-ui/tests/parts/parts_tabs.rs`, clarity-tools structural. Used in novel ChaptersPart and modelling ObjectEditor (built). User: "the things we did in the ide for tabs are to be default for the tabs part... the tab closing, permanent tabs, tab cycling (same sideways triangles), dropdown of available tabs... These are optional settings in ide properties (and .cxaml)".
 - 2026-10-22: a wizard is a container part, `steps`; Next runs `on next` on the step shown and stays on a refusal, Back runs nothing, Finish runs `on finish`.
 - 2026-10-22: a context menu is a `menu` block under any part; a right press on a table or list row chooses it first.
 - 2026-10-22: a popover is a container with no place in the grid, opened next to the part `for` names, closed by a click outside or Escape.

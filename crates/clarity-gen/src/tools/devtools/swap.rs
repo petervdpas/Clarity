@@ -71,7 +71,9 @@ pub fn piece(key: &str) -> Option<&'static Piece> {
 }
 
 /// The cDdev's swaps: the pieces added as tabs, and those that use the
-/// cDdev's own build. Kept in environment.json.
+/// cDdev's own build. Kept in environment.json. A tab shown by itself
+/// (marked with a signal) and closed stays away only while Clarity runs;
+/// the IDE keeps that.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Swaps {
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
@@ -81,9 +83,30 @@ pub struct Swaps {
 }
 
 impl Swaps {
-    /// The tabs in order: the core pieces, then those added.
+    /// The tabs kept open, in the pieces' order: those added, and those swapped to the cDdev's own build.
     pub fn tabs(&self) -> Vec<&'static str> {
-        PIECES.iter().filter(|p| p.core || self.added.contains(p.key)).map(|p| p.key).collect()
+        PIECES.iter().filter(|p| self.open(p)).map(|p| p.key).collect()
+    }
+
+    fn open(&self, p: &Piece) -> bool {
+        self.added.contains(p.key) || self.mine.contains(p.key)
+    }
+
+    /// The tabs that show, in the pieces' order: those kept open, and those
+    /// marked with a signal (`behind`: the own build is behind its source),
+    /// which show by themselves while it is; each with whether it shows only
+    /// for that.
+    pub fn shown(&self, behind: impl Fn(&Piece) -> bool) -> Vec<(&'static Piece, bool)> {
+        PIECES
+            .iter()
+            .filter_map(|p| {
+                if self.open(p) {
+                    Some((p, false))
+                } else {
+                    behind(p).then_some((p, true))
+                }
+            })
+            .collect()
     }
 
     /// Whether `key` uses the cDdev's own build.
@@ -91,35 +114,25 @@ impl Swaps {
         self.mine.contains(key)
     }
 
-    /// Adds the tab of a piece that is not core.
+    /// Adds a piece's tab.
     pub fn add(&mut self, key: &str) -> Result<(), String> {
-        match piece(key) {
-            None => Err(format!("there is no piece {key}")),
-            Some(p) if p.core => Err(format!("{} always has its tab", p.name)),
-            Some(p) => {
-                self.added.insert(p.key.to_string());
-                Ok(())
-            }
-        }
+        let p = piece(key).ok_or_else(|| format!("there is no piece {key}"))?;
+        self.added.insert(p.key.to_string());
+        Ok(())
     }
 
-    /// Closes an added tab: its piece is the release again.
+    /// Closes a piece's tab: its piece is the release again.
     pub fn close(&mut self, key: &str) -> Result<(), String> {
-        match piece(key) {
-            None => Err(format!("there is no piece {key}")),
-            Some(p) if p.core => Err(format!("{} always has its tab", p.name)),
-            Some(p) => {
-                self.added.remove(p.key);
-                self.mine.remove(p.key);
-                Ok(())
-            }
-        }
+        let p = piece(key).ok_or_else(|| format!("there is no piece {key}"))?;
+        self.added.remove(p.key);
+        self.mine.remove(p.key);
+        Ok(())
     }
 
     /// Swaps a piece of an open tab to the cDdev's own build (`mine`) or back to the release.
     pub fn swap(&mut self, key: &str, mine: bool) -> Result<(), String> {
         let piece = piece(key).ok_or_else(|| format!("there is no piece {key}"))?;
-        if !self.tabs().contains(&piece.key) {
+        if !self.open(piece) {
             return Err(format!("{} has no tab: add it first", piece.name));
         }
         if mine {

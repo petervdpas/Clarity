@@ -127,6 +127,7 @@ translation nl
     researchLinkLabel "Bron"
     researchTextLabel "Tekst"
     researchSection "Onderzoek"
+    tabsAddCaption "+ Tab toevoegen"
     researchPlaceholder "Wat je uitzocht"
     newResearch "Nieuw onderzoek"
     bookDailyGoalLabel "Dagdoel in woorden"

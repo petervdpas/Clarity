@@ -1300,6 +1300,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sysinfo",
  "tar",
 ]
 
@@ -1441,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -1475,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui-ffi"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-audio-ffi",

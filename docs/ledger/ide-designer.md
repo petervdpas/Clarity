@@ -40,6 +40,8 @@ Progress: 75%
 - manual/code.handlers.md:140: Code is an inspector tab, not a button in the Window group
 
 ## Decisions
+- 2026-11-16: a slide-out is designed on a canvas of its own: listed under Views (marked slideout, with its window), `pageDesigner.slideout`, the canvas asks `files.json?...&slideout=name` and the preview draws its parts as a window of their own keeping their keys (`preview::files_json_slideout`), so edits go to the window's file. User: "impossible to see the tabs properties.... slideouts need to have their own view!", "or slideouts under views"; the language and the 12 example slide-outs stay as they are. Also: `PreviewProgram::new` found a view shown on its own by position; it finds it by name now (`the_designer_opens_the_slideout_picked_in_a_view`).
+- 2026-11-16: a slide-out (or popover) picked in a view designed in its own .cxaml never opened on the canvas: `PreviewProgram::new` paired the project's files with the placed ones by position, and placing folds a view's .cxaml into its module, so the view was never put back and its parts not found. It now finds the view by name. Guard: `the_designer_opens_the_slideout_picked_in_a_view` (novel's ChaptersPart, `crates/clarity-gen/tests/web_windows.rs`). User: "THE SLIDEOUT IN THE IDE!!!"
 - 2026-10-18: the designer shows windows at the size they open (1100 x 760), and example windows use the full width. User: "not really wysiwyg"
 - 2026-11-04: canvas and preview draw with Clarity.UI's browser build from the program's markup (DESIGN 8.1)
 - 2026-11-09: `.cxaml` is the source of windows and views. User: "1, cxaml is the source, make it!!! and the .cxaml is used to derive the clarity code!!!!"

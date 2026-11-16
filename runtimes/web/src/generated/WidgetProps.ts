@@ -316,6 +316,18 @@ hops: number | null,
  */
 legend: boolean, 
 /**
+ * Tabs the person closes with each tab's x (`closing`).
+ */
+closing: boolean, 
+/**
+ * Tabs that do not fit are gone through with two sideways triangles after them (`cycling`).
+ */
+cycling: boolean, 
+/**
+ * A dropdown of the closed tabs, which brings one back (`available`).
+ */
+available: boolean, 
+/**
  * What a graph of the data model knows of the model, worked out when
  * the project loads (`make_graph_models`); it is never written back.
  */

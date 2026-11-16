@@ -101,7 +101,25 @@ pub fn shown_in<'a>(files: &'a [SpecFile], page: &'a Page) -> Vec<&'a Page> {
 /// draws a view on its own from the project as written.
 pub fn placed(project: &Project) -> Project {
     // A tree of several kinds of records is a tree of its rows once its window holds what its views show.
-    crate::trees::lowered(&placed_views(&crate::cxaml::folded(project)))
+    crate::trees::lowered(&reopened(&placed_views(&crate::cxaml::folded(project))))
+}
+
+/// Each `customerTabs.reopen(2)` in the code as `customerTabs.tab = 2`:
+/// opening a tab brings it back when the person closed it.
+fn reopened(project: &Project) -> Project {
+    let mut out = project.clone();
+    for file in &mut out.files {
+        let tabs: Vec<String> = file.pages.iter().flat_map(|p| tabs_names(&p.widgets)).collect();
+        if tabs.is_empty() {
+            continue;
+        }
+        for code in &mut file.code {
+            for handler in &mut code.handlers {
+                reopen_as_tab(&mut handler.body, &tabs);
+            }
+        }
+    }
+    out
 }
 
 /// Where the places of the copies of views' code begin. A view's code joins
@@ -205,6 +223,48 @@ fn content_views(widgets: &[Widget]) -> Vec<(String, Vec<String>)> {
         }
     }
     out
+}
+
+/// The names of the tabs parts among `widgets`, inside containers too.
+fn tabs_names(widgets: &[Widget]) -> Vec<String> {
+    let mut out = Vec::new();
+    for w in widgets {
+        if w.props.kind == WidgetKind::Tabs
+            && let Some(name) = &w.props.name
+        {
+            out.push(name.clone());
+        }
+        out.extend(tabs_names(&w.children));
+        for page in &w.pages {
+            out.extend(tabs_names(&page.children));
+        }
+    }
+    out
+}
+
+/// Each `customerTabs.reopen(n)` in `body` as `customerTabs.tab = n`.
+fn reopen_as_tab(body: &mut [Stmt], tabs: &[String]) {
+    for stmt in body {
+        match &mut stmt.kind {
+            StmtKind::Draw { canvas, shape, args } if shape.name == "reopen" && args.len() == 1 && tabs.contains(&canvas.name) => {
+                let span = stmt.span;
+                let part = crate::code::Expr { kind: ExprKind::Name { name: canvas.name.clone() }, span: canvas.span };
+                let target = crate::code::Expr { kind: ExprKind::Member { object: Box::new(part), member: crate::model::Ident { name: "tab".to_string(), span: shape.span } }, span };
+                let value = args.remove(0);
+                stmt.kind = StmtKind::Assign { target, value };
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    reopen_as_tab(&mut branch.body, tabs);
+                }
+                if let Some(otherwise) = otherwise {
+                    reopen_as_tab(otherwise, tabs);
+                }
+            }
+            StmtKind::For { body, .. } => reopen_as_tab(body, tabs),
+            _ => {}
+        }
+    }
 }
 
 /// Each `main.swap(X)` in `body` as `main.tab = n`, n the place of X in the views main lists, from 1.

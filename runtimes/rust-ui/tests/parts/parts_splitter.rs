@@ -31,7 +31,7 @@ fn splitter(screen: &Screen) -> &SplitterPart {
 }
 
 fn page(columns: Option<i64>) -> PageSpec {
-    PageSpec { kind: "pane".to_string(), title: None, columns, grid: None, color: None, children: Vec::new(), item: None, view: None }
+    PageSpec { kind: "pane".to_string(), title: None, columns, grid: None, color: None, children: Vec::new(), item: None, view: None, permanent: false }
 }
 
 fn keep(shot: &mut Shot, name: &str) {

@@ -1,15 +1,17 @@
 //! DevTools' release planning: Clarity's releases, read from the
-//! repository as it is (its tags, the files changed since each, the
-//! versions in source), the bumps, the checks a release needs first, and
-//! the plan the Release Helper follows (~/Projects/ReleaseHelper/README.md),
-//! written into releases/<YYYY-MM-DD-HHMM>.json. Git is only read here; the
+//! repository as it is (its tags, the files changed since each sorted by
+//! kind, the versions in source), the chain of steps a release would start,
+//! the checks a release needs first and how each last ended. The IDE shows
+//! it for review; the agent reads it through MCP (`release_state`) and
+//! writes the Release Helper's plan itself. Git is only read here; the
 //! person commits, pushes and tags.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde::Serialize;
-use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 
 use super::jobs::Runnable;
 
@@ -112,6 +114,63 @@ fn position(key: &str) -> Option<usize> {
     UNITS.iter().position(|u| u.key == key)
 }
 
+/// A step a release starts: the checks on main, a tag with its workflow and
+/// where it shows, or a step done by hand (the Go sums).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub title: String,
+    pub tag: Option<String>,
+    pub workflow: Option<String>,
+    /// Where the release shows once its workflow passed: `crates.io: clarity-runtime`.
+    pub shows: Option<String>,
+    /// The steps before it that it needs: the checks, the crates it names, the Go tag.
+    pub waits_for: Vec<String>,
+    /// The next step may go once this one's workflow passed (nuget.org lists slowly).
+    pub next_after_workflow: bool,
+}
+
+/// Where a release shows once its workflow passed.
+fn shows(unit: &Unit) -> String {
+    match unit.out {
+        Out::Crates => format!("crates.io: {}", unit.crate_name.unwrap_or(unit.name)),
+        Out::Nuget => "nuget.org: the C# runtime's packages".to_string(),
+        Out::GithubRelease => format!("a GitHub release with its files: {}", unit.name),
+        Out::GoProxy(module) => format!("the Go proxy: {module}"),
+    }
+}
+
+/// The steps releasing `picked` (each with its new version) start, in the
+/// table's order: the checks on main, then each release's tag waiting for
+/// the crates it names (`needs`) or else the step before it, the Go sums
+/// after the Go tag.
+pub fn chain_of(picked: &[(&Unit, String)], needs: impl Fn(&Unit) -> Vec<String>) -> Vec<Event> {
+    let checks = "Checks on main".to_string();
+    let mut events = vec![Event { title: checks.clone(), tag: None, workflow: Some("checks.yml".into()), shows: None, waits_for: vec![], next_after_workflow: false }];
+    let mut ordered: Vec<&(&Unit, String)> = picked.iter().collect();
+    ordered.sort_by_key(|(u, _)| position(u.key));
+    let mut crates: Vec<(String, String)> = Vec::new();
+    for (unit, version) in ordered {
+        let title = format!("{} {version}", unit.name);
+        let named: Vec<String> = needs(unit).iter().filter_map(|c| crates.iter().find(|(name, _)| name == c).map(|(_, t)| t.clone())).collect();
+        let waits_for = if named.is_empty() { vec![events.last().map(|e| e.title.clone()).unwrap_or(checks.clone())] } else { named };
+        events.push(Event { title: title.clone(), tag: Some(format!("{}{version}", unit.tag)), workflow: unit.workflow.map(str::to_string), shows: Some(shows(unit)), waits_for, next_after_workflow: unit.next_after_workflow });
+        if let Some(name) = unit.crate_name {
+            crates.push((name.to_string(), title.clone()));
+        }
+        if matches!(unit.out, Out::GoProxy(_)) {
+            events.push(Event { title: "Go sums".into(), tag: None, workflow: None, shows: Some("the examples' go.sum, committed by hand".into()), waits_for: vec![title], next_after_workflow: false });
+        }
+    }
+    events
+}
+
+/// The steps releasing every release whose code changed since its tag, at the version it would release.
+pub fn chain(repo: &Path, standing: &[Standing]) -> Vec<Event> {
+    let picked: Vec<(&Unit, String)> = standing.iter().filter(|s| !s.changes.code.is_empty()).filter_map(|s| Some((unit(&s.key)?, s.next.clone()))).collect();
+    chain_of(&picked, |u| needs(repo, u))
+}
+
 /// A version's numbers: `0.61.0` and `v0.61.0` give [0, 61, 0].
 pub fn parse(version: &str) -> Option<Vec<u64>> {
     let digits = version.strip_prefix('v').unwrap_or(version);
@@ -191,40 +250,6 @@ pub fn needs(repo: &Path, unit: &Unit) -> Vec<String> {
     needed
 }
 
-/// Bumps `unit` to its next minor version, and the crates that name it
-/// with the old one: the new version.
-pub fn bump(repo: &Path, unit: &Unit) -> Result<String, String> {
-    let at = unit.version.ok_or_else(|| format!("{}'s version is its tag alone: type it in the plan", unit.name))?;
-    let file = file_of(at);
-    let text = read(repo, file)?;
-    let (pos, old) = version_in(&text, at).ok_or_else(|| format!("{file} names no version"))?;
-    let v = if old.starts_with('v') { format!("v{}", next_minor(&old).ok_or_else(|| format!("{old} is no version"))?) } else { next_minor(&old).ok_or_else(|| format!("{old} is no version"))? };
-    let bumped = format!("{}{}{}", &text[..pos], v, &text[pos + old.len()..]);
-    std::fs::write(repo.join(file), bumped).map_err(|e| format!("cannot write {file}: {e}"))?;
-    if let (VersionAt::Cargo(_), Some(name)) = (at, unit.crate_name) {
-        let start = format!("{name} = {{");
-        for member in members(repo) {
-            let manifest = repo.join(&member).join("Cargo.toml");
-            let Ok(text) = std::fs::read_to_string(&manifest) else { continue };
-            let mut changed = false;
-            let lines: Vec<String> = text
-                .split('\n')
-                .map(|line| {
-                    if line.trim_start().starts_with(&start) && line.contains(&format!("version = \"{old}\"")) {
-                        changed = true;
-                        line.replace(&format!("version = \"{old}\""), &format!("version = \"{v}\""))
-                    } else {
-                        line.to_string()
-                    }
-                })
-                .collect();
-            if changed {
-                std::fs::write(&manifest, lines.join("\n")).map_err(|e| format!("cannot write {}: {e}", manifest.display()))?;
-            }
-        }
-    }
-    Ok(v.strip_prefix('v').unwrap_or(&v).to_string())
-}
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git").args(args).current_dir(repo).output().map_err(|e| format!("cannot run git: {e}"))?;
@@ -253,6 +278,41 @@ pub fn changed_since(repo: &Path, tag: &str, sources: &[&str]) -> Result<Vec<Str
     Ok(files)
 }
 
+/// A release's changed files by kind: a manifest, a test or a text alone is
+/// no reason to release it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Changes {
+    pub code: Vec<String>,
+    /// Cargo.toml, package.json, .csproj, .props, go.mod and their locks.
+    pub manifest: Vec<String>,
+    /// Under a tests/ folder or a *.Tests project, *_test.go, *.test.ts.
+    pub tests: Vec<String>,
+    /// Markdown and licences.
+    pub docs: Vec<String>,
+}
+
+const MANIFESTS: [&str; 6] = ["Cargo.toml", "Cargo.lock", "package.json", "package-lock.json", "go.mod", "go.sum"];
+
+/// `files` sorted by kind, each kind in the order given.
+pub fn changes(files: &[String]) -> Changes {
+    let mut c = Changes::default();
+    for file in files {
+        let mut parts: Vec<&str> = file.split('/').collect();
+        let name = parts.pop().unwrap_or_default();
+        let kind = if MANIFESTS.contains(&name) || name.ends_with(".csproj") || name.ends_with(".props") {
+            &mut c.manifest
+        } else if parts.iter().any(|d| *d == "tests" || d.ends_with(".Tests")) || name.ends_with("_test.go") || name.contains(".test.") {
+            &mut c.tests
+        } else if name.ends_with(".md") || name.starts_with("LICENSE") {
+            &mut c.docs
+        } else {
+            &mut c.code
+        };
+        kind.push(file.clone());
+    }
+    c
+}
+
 /// How a release stands now.
 #[derive(Debug, Clone, Serialize)]
 pub struct Standing {
@@ -265,6 +325,8 @@ pub struct Standing {
     pub source: Option<String>,
     /// The files changed since its tag.
     pub changed: Vec<String>,
+    /// Those files by kind.
+    pub changes: Changes,
     /// The version it would release: the source's when it is past the
     /// released one, else the next minor one.
     pub next: String,
@@ -297,7 +359,8 @@ pub fn standing(repo: &Path) -> Result<Vec<Standing>, String> {
                 (Some(s), None) => s.clone(),
                 (None, None) => "0.1.0".to_string(),
             };
-            Ok(Standing { key: unit.key.into(), name: unit.name.into(), tag, released, source, changed, next, bumped, bumpable: unit.version.is_some() })
+            let changes = if tag.is_some() { changes(&changed) } else { Changes::default() };
+            Ok(Standing { key: unit.key.into(), name: unit.name.into(), tag, released, source, changed, changes, next, bumped, bumpable: unit.version.is_some() })
         })
         .collect()
 }
@@ -329,6 +392,150 @@ pub const GUARDS: [Guard; 9] = [
 /// The examples every release checks (crates/clarity-gen/tests/examples_build.rs builds each on its own stack).
 pub const EXAMPLES: [&str; 21] = ["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
 
+/// Where the checks run: a fresh checkout of the repository, as the checks
+/// on GitHub have it, in the tree's ignored target/.
+pub fn fresh_checkout_dir(repo: &Path) -> PathBuf {
+    repo.join("target").join("fresh-checkout")
+}
+
+/// Where the fresh checkout builds: a folder of its own, never the tree's
+/// target/. Cargo names a workspace crate's build alike in both folders, so
+/// a shared one let the tree's builds take the checkout's as up to date.
+pub fn fresh_target_dir(repo: &Path) -> PathBuf {
+    repo.join("target").join("fresh-target")
+}
+
+/// How the tree stood when the fresh checkout was made, beside it.
+fn snapshot_file(dir: &Path) -> PathBuf {
+    dir.with_extension("status")
+}
+
+/// A local repository as a git URL, on every system.
+fn file_url(repo: &Path) -> Result<String, String> {
+    let path = repo.canonicalize().map_err(|e| format!("cannot find {}: {e}", repo.display()))?;
+    let text = path.to_string_lossy().replace('\\', "/");
+    let text = text.strip_prefix("//?/").unwrap_or(&text).to_string();
+    Ok(if text.starts_with('/') { format!("file://{text}") } else { format!("file:///{text}") })
+}
+
+/// Makes `dir` a fresh checkout of `repo` as the checks on GitHub have it:
+/// the last commit alone, without tags or history, with the tree's changes
+/// not committed yet over it (changed, new and deleted files) and nothing
+/// git ignores. Notes how the tree stands, for [`clean_tree`] after the checks.
+/// Reads `repo` only; needs no network.
+pub fn fresh_checkout(repo: &Path, dir: &Path) -> Result<(), String> {
+    if dir.exists() {
+        std::fs::remove_dir_all(dir).map_err(|e| format!("cannot remove the old {}: {e}", dir.display()))?;
+    }
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+    }
+    let url = file_url(repo)?;
+    let target = dir.to_string_lossy().to_string();
+    git(repo, &["clone", "--quiet", "--depth", "1", "--no-tags", &url, &target])?;
+    let mut files: Vec<String> = git(repo, &["diff", "--name-only", "HEAD"])?.lines().map(str::to_string).collect();
+    files.extend(git(repo, &["ls-files", "--others", "--exclude-standard"])?.lines().map(str::to_string));
+    for file in files.iter().filter(|f| !f.is_empty()) {
+        let (from, to) = (repo.join(file), dir.join(file));
+        if from.is_file() {
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+            }
+            std::fs::copy(&from, &to).map_err(|e| format!("cannot copy {file}: {e}"))?;
+        } else if to.is_file() {
+            std::fs::remove_file(&to).map_err(|e| format!("cannot remove {file}: {e}"))?;
+        }
+    }
+    std::fs::write(snapshot_file(dir), snapshot(repo)?).map_err(|e| format!("cannot write how the tree stands: {e}"))
+}
+
+/// The tree's changes as `git status` lists them, each with a hash of its
+/// file, so a file changed again shows too.
+fn snapshot(repo: &Path) -> Result<String, String> {
+    let status = git(repo, &["status", "--porcelain", "--untracked-files=all"])?;
+    Ok(status
+        .lines()
+        .filter(|l| l.len() > 3)
+        .map(|line| {
+            let hash = std::fs::read(repo.join(&line[3..])).map(|bytes| bytes.iter().fold(0xcbf29ce484222325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3))).unwrap_or(0);
+            format!("{line}\t{hash:x}\n")
+        })
+        .collect())
+}
+
+/// The files in `now` that were not in `before` as they are: new ones and
+/// ones changed again (two [`snapshot`]s).
+pub fn left_behind(before: &str, now: &str) -> Vec<String> {
+    let was: std::collections::BTreeSet<&str> = before.lines().collect();
+    now.lines().filter(|l| !was.contains(l)).filter_map(|l| l.split('\t').next()).filter(|l| l.len() > 3).map(|l| l[3..].to_string()).collect()
+}
+
+/// Whether the checks left the tree as the fresh checkout `dir` found it:
+/// a test writing into the tree would put its files in the release commit.
+pub fn clean_tree(repo: &Path, dir: &Path) -> Result<(), String> {
+    let before = std::fs::read_to_string(snapshot_file(dir)).map_err(|_| "run the fresh checkout first: it notes how the tree stands before the checks".to_string())?;
+    let left = left_behind(&before, &snapshot(repo)?);
+    if left.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("the checks left {} files in the tree: {}", left.len(), left.join(", ")))
+    }
+}
+
+/// The files changed since the IDE's last release (its newest `v` tag), and
+/// that tag: what the checks count from.
+pub fn since_ide_release(repo: &Path) -> Result<(Vec<String>, Option<String>), String> {
+    let since = newest(&tags(repo)?, "v");
+    let files = match &since {
+        Some(tag) => changed_since(repo, tag, &["."])?,
+        None => Vec::new(),
+    };
+    Ok((files, since))
+}
+
+/// How a check ended the last time it ran, kept for the agent that writes
+/// the plan (MCP `release_state`): the IDE runs the checks, the agent reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckRecord {
+    pub key: String,
+    pub title: String,
+    pub passed: bool,
+    pub why: Option<String>,
+    /// When it ended, in milliseconds since 1970.
+    pub ended: u64,
+    /// The commit it ran on (the tree may have had changes over it).
+    pub head: String,
+    /// The last lines of a failed one.
+    pub lines: Vec<String>,
+}
+
+/// Where the checks' results are kept, in the tree's ignored target/.
+pub fn checks_file(repo: &Path) -> PathBuf {
+    repo.join("target").join("release-checks.json")
+}
+
+/// The last result of every check run, by its key; none when nothing ran.
+pub fn check_records(repo: &Path) -> BTreeMap<String, CheckRecord> {
+    std::fs::read_to_string(checks_file(repo)).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+}
+
+/// Keeps how a check ended, over its earlier run.
+pub fn record_check(repo: &Path, record: &CheckRecord) -> Result<(), String> {
+    let mut all = check_records(repo);
+    all.insert(record.key.clone(), record.clone());
+    let file = checks_file(repo);
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+    }
+    let text = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
+    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
+}
+
+/// The commit the tree is on.
+pub fn head(repo: &Path) -> Result<String, String> {
+    Ok(git(repo, &["rev-parse", "HEAD"])?.trim().to_string())
+}
+
 /// A check a release needs first, run as a build.
 #[derive(Debug, Clone)]
 pub struct Check {
@@ -350,11 +557,24 @@ fn node_tool(name: &str) -> String {
     if cfg!(windows) { format!("{name}.cmd") } else { name.to_string() }
 }
 
+/// A command of Clarity's own CLI, run in the tree.
+fn clarity_cli(repo: &Path, args: &[&str]) -> Runnable {
+    let mut all = vec!["run", "-q", "-p", "clarity-cli", "--"];
+    all.extend(args);
+    Runnable::new("cargo", &all, repo).with_env("CARGO_BUILD_JOBS", "2")
+}
+
 /// The checks before a plan, with `changed` the files changed since the
-/// last IDE release: every guard written and tested, the test targets of
-/// every crate changed, the IDE page's checks when app/ or a model type
-/// changed, every example spec checked and each changed one built.
+/// last IDE release: every guard written and tested in the tree; then a
+/// fresh checkout as the checks on GitHub have it, where the test targets
+/// of every crate changed, every example's spec check and each changed
+/// example's build run (building in a folder of its own); the IDE page's checks
+/// when app/ or a model type changed (in the tree, which has its
+/// node_modules); and last, that the checks left the tree clean.
 pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
+    let fresh = fresh_checkout_dir(repo);
+    let own = fresh_target_dir(repo).to_string_lossy().to_string();
+    let in_fresh = |run: Runnable| Runnable { dir: fresh.clone(), ..run }.with_env("CARGO_TARGET_DIR", &own);
     let mut checks = Vec::new();
     for g in &GUARDS {
         let target = g.test.map(|t| format!("--test {t}")).unwrap_or_else(|| "--lib".into());
@@ -363,6 +583,7 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         }
         checks.push(Check { key: format!("guard:test:{}:{target}", g.package), title: format!("Check {}", g.writes), run: cargo_test(repo, g.package, g.test) });
     }
+    checks.push(Check { key: "freshCheckout".into(), title: "A fresh checkout, as on GitHub".into(), run: clarity_cli(repo, &["release", "fresh-checkout"]) });
     let under = |folder: &str| changed.iter().any(|f| f == folder || f.starts_with(&format!("{folder}/")));
     for member in members(repo) {
         if !under(&member) {
@@ -371,14 +592,14 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         let Ok(manifest) = std::fs::read_to_string(repo.join(&member).join("Cargo.toml")) else { continue };
         let Some((_, package)) = between(&manifest, "name = \"", "\"") else { continue };
         if repo.join(&member).join("src/lib.rs").is_file() {
-            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: cargo_test(repo, package, None) });
+            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: in_fresh(cargo_test(repo, package, None)) });
         }
         let mut tests: Vec<String> = std::fs::read_dir(repo.join(&member).join("tests"))
             .map(|d| d.flatten().filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".rs").map(str::to_string)).collect())
             .unwrap_or_default();
         tests.sort();
         for test in tests {
-            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: cargo_test(repo, package, Some(&test)) });
+            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: in_fresh(cargo_test(repo, package, Some(&test))) });
         }
     }
     if under("app") || under("runtimes/web/src/generated") {
@@ -391,7 +612,7 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         checks.push(Check {
             key: format!("spec:{example}"),
             title: format!("{example}: spec check"),
-            run: Runnable::new("cargo", &["run", "-q", "-p", "clarity-cli", "--", "spec", "check", &folder], repo).with_env("CARGO_BUILD_JOBS", "2"),
+            run: in_fresh(clarity_cli(repo, &["spec", "check", &folder])),
         });
     }
     for example in EXAMPLES.iter().filter(|e| under(&format!("examples/{e}"))) {
@@ -399,131 +620,9 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         checks.push(Check {
             key: format!("build:{example}"),
             title: format!("{example}: builds on its stack"),
-            run: Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2"),
+            run: in_fresh(Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2")),
         });
     }
+    checks.push(Check { key: "cleanTree".into(), title: "The checks left the tree clean".into(), run: clarity_cli(repo, &["release", "clean-tree"]) });
     checks
-}
-
-/// The names of the last release's assets at the new version.
-pub fn assets_for(previous: &[String], old: &str, new: &str) -> Vec<String> {
-    previous.iter().map(|a| a.replace(old, new)).collect()
-}
-
-/// The assets of the GitHub release of `tag`, as gh reads them.
-pub fn release_assets(repo: &Path, tag: &str) -> Result<Vec<String>, String> {
-    let out = Command::new("gh").args(["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"]).current_dir(repo).output().map_err(|e| format!("cannot run gh: {e}"))?;
-    if !out.status.success() {
-        return Err(format!("gh cannot read the release {tag}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).filter(|l| !l.is_empty()).collect())
-}
-
-/// The NuGet packages of the C# runtime: its projects with a package id or packed.
-pub fn nuget_packages(repo: &Path) -> Vec<String> {
-    let mut packages: Vec<String> = std::fs::read_dir(repo.join("runtimes/csharp"))
-        .map(|d| d.flatten().filter(|e| e.path().is_dir()).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|folder| {
-            let name = folder.file_name().to_string_lossy().to_string();
-            let text = std::fs::read_to_string(folder.path().join(format!("{name}.csproj"))).ok()?;
-            let id = between(&text, "<PackageId>", "</PackageId>").map(|(_, id)| id.trim().to_string());
-            (id.is_some() || text.contains("<IsPackable>true")).then(|| id.unwrap_or(name))
-        })
-        .collect();
-    packages.sort();
-    packages
-}
-
-/// A release in a plan, as the person settled it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
-pub struct Planned {
-    pub key: String,
-    pub version: String,
-    /// The tag it follows: `runtimes/rust/v0.61.0`.
-    pub from: Option<String>,
-    pub note: String,
-    /// For a GitHub release: the assets it must have.
-    #[serde(default)]
-    pub assets: Vec<String>,
-    /// For the NuGet packages: their names.
-    #[serde(default)]
-    pub packages: Vec<String>,
-}
-
-/// The Release Helper's plan for `planned`, in the table's order: the
-/// checks on main first, then a step per release, the Go sums after the Go tag.
-pub fn plan(title: &str, commit_message: &str, planned: &[Planned]) -> Result<Value, String> {
-    let mut steps = vec![json!({ "title": "Checks on main", "workflow": "checks.yml" })];
-    let mut last = None;
-    for p in planned {
-        let at = position(&p.key).ok_or_else(|| format!("there is no release {}", p.key))?;
-        if last.is_some_and(|l| l >= at) {
-            return Err(format!("{} goes before the release above it", UNITS[at].name));
-        }
-        last = Some(at);
-        let unit = &UNITS[at];
-        parse(&p.version).ok_or_else(|| format!("{}: {} is no version", unit.name, p.version))?;
-        let tag = format!("{}{}", unit.tag, p.version.trim_start_matches('v'));
-        let check = match unit.out {
-            Out::Crates => json!({ "crates": { "name": unit.crate_name.unwrap_or_default(), "version": p.version } }),
-            Out::Nuget => {
-                if p.packages.is_empty() {
-                    return Err(format!("{}: no NuGet packages found", unit.name));
-                }
-                json!({ "nuget": { "packages": p.packages, "version": p.version } })
-            }
-            Out::GithubRelease => {
-                if p.assets.is_empty() {
-                    return Err(format!("{}: the assets of its release are not known", unit.name));
-                }
-                json!({ "github_release": { "assets": p.assets } })
-            }
-            Out::GoProxy(module) => json!({ "go_proxy": { "module": module, "version": format!("v{}", p.version.trim_start_matches('v')) } }),
-        };
-        let mut step = json!({ "title": format!("{} {}", unit.name, p.version), "tag": tag, "check": check });
-        if let Some(from) = &p.from {
-            step["from"] = json!(from);
-        }
-        if let Some(w) = unit.workflow {
-            step["workflow"] = json!(w);
-        }
-        if unit.next_after_workflow {
-            step["next_after"] = json!("workflow");
-        }
-        if !p.note.trim().is_empty() {
-            step["note"] = json!(p.note.trim());
-        }
-        steps.push(step);
-        if matches!(unit.out, Out::GoProxy(_)) {
-            let v = format!("v{}", p.version.trim_start_matches('v'));
-            steps.push(json!({
-                "title": "Go sums",
-                "manual": format!("Tell Claude to record the Go sums of {v} in crates/clarity-gen/src/go/runtime.sum, then commit and push main."),
-                "commit_message": format!("Go runtime {v} sums"),
-            }));
-        }
-    }
-    if steps.len() == 1 {
-        return Err("the plan releases nothing".into());
-    }
-    Ok(json!({ "title": title, "remote": "origin", "branch": "main", "check_timeout_minutes": 30, "commit_message": commit_message, "steps": steps }))
-}
-
-/// Writes `plan` as releases/<stamp>.json (`2026-11-15-0015`); the file written.
-pub fn write_plan(repo: &Path, stamp: &str, plan: &Value) -> Result<PathBuf, String> {
-    let ok = stamp.len() == 15 && stamp.char_indices().all(|(i, c)| if [4, 7, 10].contains(&i) { c == '-' } else { c.is_ascii_digit() });
-    if !ok {
-        return Err(format!("{stamp} is no YYYY-MM-DD-HHMM"));
-    }
-    let dir = repo.join("releases");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
-    let file = dir.join(format!("{stamp}.json"));
-    if file.exists() {
-        return Err(format!("{} is there already", file.display()));
-    }
-    let text = serde_json::to_string_pretty(plan).map_err(|e| e.to_string())? + "\n";
-    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))?;
-    Ok(file)
 }

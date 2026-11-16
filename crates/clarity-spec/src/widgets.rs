@@ -511,6 +511,12 @@ pub enum WidgetProperty {
     Hops,
     /// `legend`: a graph's kinds as chips that hide and show them.
     Legend,
+    /// `closing`: tabs the person closes with each tab's x.
+    Closing,
+    /// `cycling`: tabs that do not fit are gone through with two sideways triangles.
+    Cycling,
+    /// `available`: a dropdown of the closed tabs, which brings one back.
+    Available,
 }
 
 /// The most hops a graph may be given.
@@ -868,8 +874,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: Some(ContainerKind::Tabs),
         clickable: false,
-        events: &[Event::Change],
-        properties: &[],
+        events: &[Event::Change, Event::Close],
+        properties: &[WidgetProperty::Closing, WidgetProperty::Cycling, WidgetProperty::Available],
     },
     // One view at a time, the one code picks.
     Entry {
@@ -1781,6 +1787,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         picked_id: None,
         hops: None,
         legend: false,
+        closing: false,
+        cycling: false,
+        available: false,
         graph_model: None,
         search: false,
         labels: None,
@@ -1888,6 +1897,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.split {
         parts.push("split".to_string());
     }
+    // Tabs the person closes, goes through, and brings back.
+    for (on, word) in [(props.closing, "closing"), (props.cycling, "cycling"), (props.available, "available")] {
+        if on {
+            parts.push(word.to_string());
+        }
+    }
     // A popover has no place in the window's grid: it opens next to its part.
     if props.kind == WidgetKind::Popover {
         if let Some(target) = &props.for_part {
@@ -1910,6 +1925,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
         if props.pinnable {
             parts.push("pinnable".to_string());
         }
+
         if let Some(view) = &props.view {
             parts.push(format!("view {view}"));
         }
@@ -2397,6 +2413,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Lists, !props.lists.is_empty() || props.picked_kind.is_some() || props.picked_id.is_some(), "lists"),
         (WidgetProperty::Hops, props.hops.is_some(), "hops"),
         (WidgetProperty::Legend, props.legend, "legend"),
+        (WidgetProperty::Closing, props.closing, "closing"),
+        (WidgetProperty::Cycling, props.cycling, "cycling"),
+        (WidgetProperty::Available, props.available, "available"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -2406,6 +2425,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     dropdown_options(props)?;
     if props.page.is_some_and(|p| !PAGE_SIZES.contains(&p)) {
         return Err(PAGE_PROBLEM.to_string());
+    }
+    if props.available && !props.closing {
+        return Err("'available' lists the closed tabs: write 'closing'".to_string());
     }
     if props.folded && !props.foldable {
         return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());

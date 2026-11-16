@@ -2626,6 +2626,26 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             return;
         }
+        // `customerTabs.reopen(2)`: tabs bring a closed tab back, opened, as `customerTabs.tab = 2` does.
+        if let Some((_, Part::Widget(p))) = self.part(&canvas.name)
+            && p.kind == crate::widgets::WidgetKind::Tabs
+        {
+            let part = canvas.name.clone();
+            if shape.name != "reopen" {
+                self.error(format!("{part} is tabs; it brings a closed tab back with {part}.reopen(2)"), shape.span);
+                return;
+            }
+            match args {
+                [tab] => {
+                    let ty = self.expr(tab, Some(Ty::Integer));
+                    if !Ty::Integer.accepts(&ty) {
+                        self.error(format!("{part}.reopen takes the tab to bring back, from 1, not {}", ty.name()), tab.span);
+                    }
+                }
+                _ => self.error(format!("{part}.reopen takes the tab to bring back, from 1, as in {part}.reopen(2)"), shape.span),
+            }
+            return;
+        }
         // `main.swap(ProjectEditor)`: a window's content shows another of the views it lists.
         if let Some((_, Part::Widget(p))) = self.part(&canvas.name)
             && p.kind == crate::widgets::WidgetKind::Content

@@ -11,8 +11,8 @@
   <Data name="interfaceText" type="text" />
   <Data name="apiUses" type="list&lt;ApiUse&gt;" />
   <Tells message="saved" />
-  <Tabs name="objectTabs" at="1,1" span="8" rows="14">
-    <Tab title="@objectTab">
+  <Tabs name="objectTabs" at="1,1" span="8" rows="14" closing="true" cycling="true" available="true">
+    <Tab title="@objectTab" permanent="true">
       <Label name="objectNameLabel" at="1,1" span="2" caption="@objectNameCaption" for="objectNameBox" />
       <Textbox name="objectNameBox" at="3,1" span="3" bind="editedObject.name" placeholder="@objectNamePlaceholder" />
       <Dropdown name="objectKindBox" at="6,1" span="2" bind="editedObject.kind" />

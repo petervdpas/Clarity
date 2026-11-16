@@ -106,6 +106,7 @@ translation nl
     newObjectCaption "Nieuw object"
     newEnumCaption "Nieuwe enum"
     objectTab "Data-object"
+    tabsAddCaption "+ Tab toevoegen"
     interfaceTab "Interface"
     objectNameCaption "Naam"
     objectNamePlaceholder "Het data-object, bijvoorbeeld Medewerker"

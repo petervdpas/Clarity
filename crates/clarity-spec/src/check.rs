@@ -1500,6 +1500,16 @@ impl<'a> Checker<'a> {
                     self.check_widgets(file, page, &widget.children, p.width)
                 }
                 Some(container) => {
+                    // The dropdown of closed tabs and a permanent tab only mean something among tabs the person closes.
+                    if container == ContainerKind::Tabs && p.available && !p.closing {
+                        self.error(file, "'available' lists the closed tabs: write 'closing'", widget.span);
+                    }
+                    if container == ContainerKind::Tabs && !p.closing {
+                        for tab in widget.pages.iter().filter(|t| t.permanent) {
+                            let name = p.name.as_deref().unwrap_or("the tabs");
+                            self.error(file, format!("a permanent tab stays among tabs that close: write 'closing' on {name}"), tab.span);
+                        }
+                    }
                     match container {
                         ContainerKind::Tabs if widget.pages.is_empty() => {
                             self.error(file, "tabs need at least one 'tab'", widget.span);

@@ -211,6 +211,19 @@ impl<'a> Painter<'a> {
         self.line((cx, cy + 2.0), (cx + 4.0, cy - 2.0), color, 1.5);
     }
 
+    /// A small solid triangle pointing left or right, in the middle of `area`: tabs' cycling.
+    pub fn side_triangle(&self, area: Rect, color: Color, left: bool) {
+        let cx = area.x + area.width / 2.0;
+        let cy = area.y + area.height / 2.0;
+        let (tip, back) = if left { (cx - 3.5, cx + 3.5) } else { (cx + 3.5, cx - 3.5) };
+        let mut path = skia_safe::PathBuilder::new();
+        path.move_to((tip as f32, cy as f32));
+        path.line_to((back as f32, (cy - 5.0) as f32));
+        path.line_to((back as f32, (cy + 5.0) as f32));
+        path.close();
+        self.canvas.draw_path(&path.detach(), &Self::paint(color, PaintStyle::Fill, true));
+    }
+
     /// A line cut off with an ellipsis where it is wider than `width`.
     pub fn fit(&self, text: &str, width: f64, size: f64, role: &str, bold: bool) -> String {
         if text.is_empty() || self.fonts.measure(text, role, size, bold) <= width {

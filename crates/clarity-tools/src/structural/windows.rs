@@ -146,7 +146,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "change_tab",
-            "Changes a tab, step, section or pane of a part: its title, the view it shows, a section's color, a splitter's first pane's size (columns side by side, rows stacked). Give only what changes.",
+            "Changes a tab, step, section or pane of a part: its title, the view it shows, a section's color, a splitter's first pane's size (columns side by side, rows stacked), whether a tab of tabs that close is permanent (no x). Give only what changes.",
             schema(
                 json!({
                     "page": page_prop(),
@@ -155,7 +155,8 @@ pub fn definitions() -> Vec<ToolDef> {
                     "title": { "type": "string" },
                     "view": { "type": "string", "description": "The view it shows; empty for parts of its own" },
                     "color": { "type": "string", "description": "An accordion section's header color; empty for the theme's" },
-                    "paneColumns": { "type": "integer", "minimum": 0, "description": "A splitter's first pane: the columns it starts with side by side, the rows stacked; 0 for panes alike" }
+                    "paneColumns": { "type": "integer", "minimum": 0, "description": "A splitter's first pane: the columns it starts with side by side, the rows stacked; 0 for panes alike" },
+                    "permanent": { "type": "boolean", "description": "A tab of tabs that close (closing): true for no x, so the person cannot close it" }
                 }),
                 &["page", "part", "tab"],
             ),
@@ -534,8 +535,11 @@ fn change_tab(tools: &mut ProjectTools, input: &Value) -> Result<String, String>
     if let Some(columns) = number(input, "paneColumns")? {
         edits.push(Edit::SetPaneSpan { target, columns: (columns > 0).then_some(columns) });
     }
+    if let Some(permanent) = flag(input, "permanent")? {
+        edits.push(Edit::SetPagePermanent { target, permanent });
+    }
     let edit = match edits.len() {
-        0 => return Err("give what changes: title, view, color or paneColumns".into()),
+        0 => return Err("give what changes: title, view, color, paneColumns or permanent".into()),
         1 => edits.remove(0),
         _ => Edit::Batch { edits },
     };
@@ -823,6 +827,15 @@ mod tests {
 
         let retitled = tools.call("change_tab", &json!({"page": "MainView", "part": "pages", "tab": 2, "title": "Remarks"}));
         assert!(!retitled.is_error, "{}", retitled.text);
+        // Tabs that close, with a tab of them permanent: as Tab closing and Permanent in the designer.
+        let closing = tools.call("change_part", &json!({"page": "MainView", "part": "pages", "set": {"closing": true, "cycling": true, "available": true}}));
+        assert!(!closing.is_error, "{}", closing.text);
+        let permanent = tools.call("change_tab", &json!({"page": "MainView", "part": "pages", "tab": 1, "permanent": true}));
+        assert!(!permanent.is_error, "{}", permanent.text);
+        let text = view(&dir, "MainView");
+        assert!(text.contains("closing=\"true\"") && text.contains("available=\"true\"") && text.contains("permanent=\"true\""), "{text}");
+        let refused = tools.call("change_part", &json!({"page": "MainView", "part": "pages", "set": {"closing": false}}));
+        assert!(refused.is_error && refused.text.contains("'available' lists the closed tabs"), "{}", refused.text);
         let removed = tools.call("remove_tab", &json!({"page": "MainView", "part": "pages", "tab": 2}));
         assert!(!removed.is_error && !view(&dir, "MainView").contains("notesLabel"), "{}", removed.text);
         let gone = tools.call("remove_data", &json!({"page": "MainView", "name": "nothing"}));

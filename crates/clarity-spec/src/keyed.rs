@@ -15,7 +15,7 @@ use crate::design_edit::Designed;
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
 use crate::model::{App, Command, CommandKind, Frame, Literal, Page, Widget, WidgetProps};
 use crate::widgets::WidgetKind;
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, TAB_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -85,6 +85,8 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
     // Clarity's own words; an image part bound to a picture has its own, and a wizard.
     let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::Image && p.bind.is_some());
     let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps "))) || designs.part(|p| p.kind == WidgetKind::Steps);
+    let available_tabs = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tabs ") && l.split_whitespace().any(|w| w == "available")))
+        || designs.part(|p| p.kind == WidgetKind::Tabs && p.available);
     let files = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("file ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::File && p.bind.is_some());
     let paged = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "page"))) || designs.part(|p| p.kind == WidgetKind::Table && p.page.is_some());
     let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable "))) || designs.part(|p| matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable));
@@ -119,6 +121,7 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
         .chain(if dates && pages { CALENDAR_KEYS.as_slice() } else { &[] })
         .chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if available_tabs { TAB_KEYS.as_slice() } else { &[] })
         .chain(if files { FILE_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) || designs.part(|p| p.kind == WidgetKind::Folder) { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "zoom"))) || canvas(&|p| p.zoom) { ZOOM_KEYS.as_slice() } else { &[] })

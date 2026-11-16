@@ -106,6 +106,7 @@ translation en
     newObjectCaption "New object"
     newEnumCaption "New enum"
     objectTab "Data object"
+    tabsAddCaption "+ Add a tab"
     interfaceTab "Interface"
     objectNameCaption "Name"
     objectNamePlaceholder "The data object, as in Medewerker"

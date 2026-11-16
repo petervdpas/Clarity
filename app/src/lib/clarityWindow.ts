@@ -46,7 +46,7 @@ export type StartOptions = { files: string; server: string; resources: string; i
 export type Chosen = { language?: string };
 
 /** What the drawing shows beyond the saved window: the page each container shows, by its key; the draft; the popovers open. */
-export type Showing = { pages?: Record<string, number>; draft?: boolean; open?: string[] };
+export type Showing = { pages?: Record<string, number>; draft?: boolean; open?: string[]; slideout?: string };
 
 /**
  * The language the IDE shows a window in, as the drawing's choice: the
@@ -115,7 +115,13 @@ export function filesAddress(base: string, shown: Shown, design: boolean, revisi
   const pages = Object.entries(showing.pages ?? {})
     .map(([key, page]) => `${encodeURIComponent(key)}.${page}`)
     .join(",");
-  const more = [pages ? `&pages=${pages}` : "", showing.draft ? "&draft=1" : "", showing.open?.length ? `&open=${showing.open.map(encodeURIComponent).join(",")}` : ""].join("");
+  const more = [
+    pages ? `&pages=${pages}` : "",
+    showing.draft ? "&draft=1" : "",
+    showing.open?.length ? `&open=${showing.open.map(encodeURIComponent).join(",")}` : "",
+    // A slide-out designed on a canvas of its own: its parts as a window of their own.
+    showing.slideout ? `&slideout=${encodeURIComponent(showing.slideout)}` : "",
+  ].join("");
   return `${base}files.json?${what}&design=${design ? 1 : 0}${more}&revision=${revision}`;
 }
 

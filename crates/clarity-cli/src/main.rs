@@ -109,6 +109,12 @@ enum Command {
     },
     /// Look for the build tools of every stack, and say what to install.
     Tools,
+    /// The release checks of Clarity's repository that are no test, run
+    /// inside it (Clarity settings > DevTools > Release planning runs them).
+    Release {
+        #[command(subcommand)]
+        command: ReleaseCommand,
+    },
     /// Serve Clarity's tools to an AI agent over MCP on stdin and stdout, on the
     /// project open in the Clarity IDE (docs/MCP-PLAN.md): it designs and
     /// generates, and never builds or runs. Messages go to stderr.
@@ -120,6 +126,16 @@ enum Command {
     },
     /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth, Clarity.AppMcp) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
     Libraries,
+}
+
+#[derive(Subcommand)]
+enum ReleaseCommand {
+    /// Make target/fresh-checkout a fresh checkout as the checks on GitHub
+    /// have it: the last commit without tags or history, the uncommitted
+    /// changes over it, nothing git ignores. Needs no network.
+    FreshCheckout,
+    /// Fail when the checks left files in the tree since the fresh checkout.
+    CleanTree,
 }
 
 #[derive(Subcommand)]
@@ -327,6 +343,28 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Command::Release { command } => {
+            let here = std::env::current_dir().unwrap_or_default();
+            let Some(repo) = clarity_gen::repository_of(&here) else {
+                eprintln!("clarity: {} is not inside Clarity's repository: run `clarity release` there", here.display());
+                return ExitCode::from(2);
+            };
+            let dir = clarity_gen::tools::devtools::release::fresh_checkout_dir(&repo);
+            let done = match command {
+                ReleaseCommand::FreshCheckout => clarity_gen::tools::devtools::release::fresh_checkout(&repo, &dir).map(|()| format!("a fresh checkout in {}", dir.display())),
+                ReleaseCommand::CleanTree => clarity_gen::tools::devtools::release::clean_tree(&repo, &dir).map(|()| "the checks left the tree clean".to_string()),
+            };
+            match done {
+                Ok(said) => {
+                    println!("{said}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("clarity: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Tools => {
             print!("{}", clarity_gen::tools::report(&clarity_gen::tools::check_all(&clarity_gen::tools::System)));
             ExitCode::SUCCESS

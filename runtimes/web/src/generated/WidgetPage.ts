@@ -27,4 +27,8 @@ tells: Array<TellHandler>,
  * a color of its own (written out, or a color of the theme by name); none
  * keeps the theme's look.
  */
-color: string | null, children: Array<Widget>, span: Span, };
+color: string | null, 
+/**
+ * `tab "Overview" permanent`: a tab of tabs that close that has no x.
+ */
+permanent: boolean, children: Array<Widget>, span: Span, };

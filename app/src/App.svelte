@@ -1251,6 +1251,14 @@
   function selectPage(p: Page) {
     stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
+    pageDesigner.slideout = null;
+  }
+
+  /** A slide-out picked under Views: its window, with the slide-out on a canvas of its own. */
+  function selectSlideout(p: Page, name: string) {
+    stack = [{ kind: "window", name: p.name.name }];
+    pageDesigner.selected = null;
+    pageDesigner.slideout = name;
   }
 
   async function addWindow(target: SpecFile, name: string, template: PageTemplate | "dialog") {
@@ -1560,6 +1568,7 @@
         {full}
         onapp={selectApp}
         onwindow={selectPage}
+        onslideout={full ? selectSlideout : null}
         onselect={select}
         onnewdata={full ? startNewData : null}
         onnewmapping={full ? startNewMapping : null}

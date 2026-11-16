@@ -149,6 +149,10 @@ test("the IDE's language is the drawing's choice", () => {
   );
 });
 
+test("a slide-out designed on a canvas of its own asks the preview for its parts alone", () => {
+  assert.equal(filesAddress("http://x/s/", { window: "ChaptersPart" }, true, 2, { slideout: "properties" }), "http://x/s/files.json?window=ChaptersPart&design=1&slideout=properties&revision=2");
+});
+
 test("the preview takes input and has the accessible mirror; the design canvas neither", () => {
   const preview = startOptions("http://x/s/", { window: "Main" }, false, 1);
   assert.equal(preview.input, true);

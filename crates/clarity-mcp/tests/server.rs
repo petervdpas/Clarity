@@ -9,7 +9,7 @@ use clarity_tools::turn::{self, Shown};
 use clarity_project::ide::{self, Ide};
 use rmcp::ServiceExt;
 use rmcp::model::CallToolRequestParams;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("mcp-{name}"));
@@ -108,6 +108,9 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     let mut offered: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     // Built from the repository (the tests are), the server also offers the cDdev's DevTools Build.
     offered.push(clarity_mcp::BUILD_PIECE.to_string());
+    offered.push(clarity_mcp::RELEASE_STATE.to_string());
+    offered.push(clarity_mcp::DISK_STATE.to_string());
+    offered.push(clarity_mcp::REMOVE_FOLDER.to_string());
     assert_eq!(names, offered);
 
     let result = client.call_tool(CallToolRequestParams::new("project_overview")).await.unwrap();
@@ -133,6 +136,9 @@ fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
     let plain = ClarityServer::with_ide_file(dir.join("ide.json"));
     let mut plain_tools: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     plain_tools.push(clarity_mcp::BUILD_PIECE.to_string());
+    plain_tools.push(clarity_mcp::RELEASE_STATE.to_string());
+    plain_tools.push(clarity_mcp::DISK_STATE.to_string());
+    plain_tools.push(clarity_mcp::REMOVE_FOLDER.to_string());
     assert_eq!(plain.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), plain_tools);
     let turn = plain.for_turn(dir.join("shown.jsonl"));
     let mut expected: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
@@ -288,4 +294,91 @@ fn build_piece_asks_the_ide_and_gives_its_answer() {
     let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
     ide.join().unwrap();
     assert!(!built.is_error && built.text.contains("Finished release"), "{}", built.text);
+}
+
+/// Working on Clarity itself, the agent reads how its releases stand to
+/// write the Release Helper's plan: what changed per release by kind, the
+/// chain of steps, and how the IDE's release checks last ended.
+#[test]
+fn release_state_says_how_the_releases_and_their_checks_stand() {
+    let dir = scratch("release-state");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file);
+    assert!(server.tools().iter().any(|t| t.name == clarity_mcp::RELEASE_STATE), "offered by a server run from the repository");
+    let said = server.call_from("Claude Code", clarity_mcp::RELEASE_STATE, &json!({}));
+    assert!(!said.is_error, "{}", said.text);
+    let state: Value = serde_json::from_str(&said.text).unwrap();
+    let releases = state["releases"].as_array().unwrap();
+    assert_eq!(releases.len(), clarity_gen::tools::devtools::release::UNITS.len());
+    for r in releases {
+        for kind in ["code", "manifest", "tests", "docs"] {
+            assert!(r["changes"][kind].is_array(), "{} {kind}", r["name"]);
+        }
+        assert!(r["workflow"].is_string() || r["workflow"].is_null());
+    }
+    assert_eq!(state["chain"][0]["title"], "Checks on main", "the chain starts with the checks on main");
+    assert!(state["checks"]["total"].as_u64().unwrap() > 0);
+    for part in ["passed", "failed", "notRun"] {
+        assert!(state["checks"][part].is_array(), "{part}");
+    }
+}
+
+/// The agent reads how big the build folders are and the room left.
+#[test]
+fn disk_state_says_the_room_left_and_each_build_folder() {
+    let dir = scratch("disk-state");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file);
+    let said = server.call_from("Claude Code", clarity_mcp::DISK_STATE, &json!({}));
+    assert!(!said.is_error, "{}", said.text);
+    let state: Value = serde_json::from_str(&said.text).unwrap();
+    assert!(state["free"].as_u64().is_some_and(|f| f > 0) && state["low"].is_boolean());
+    let folders = state["folders"].as_array().unwrap();
+    assert!(folders.iter().any(|f| f["folder"] == "debug"));
+    assert!(folders.iter().all(|f| f["cost"].is_string() && f["bytes"].is_u64()));
+}
+
+/// A removal goes to the IDE as an ask, and the agent hears the person's answer.
+#[test]
+fn remove_folder_asks_the_ide_and_gives_its_answer() {
+    use clarity_project::dev_asks::{self, Action};
+    let dir = scratch("remove-folder");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
+    let unknown = server.call_from("Claude Code", clarity_mcp::REMOVE_FOLDER, &json!({ "folder": "src" }));
+    assert!(unknown.is_error && unknown.text.contains("debug"), "only the Disk tab's folders: {}", unknown.text);
+    let alone = server.call_from("Claude Code", clarity_mcp::REMOVE_FOLDER, &json!({ "folder": "testScratch" }));
+    assert!(alone.is_error && alone.text.contains("./dev.sh"), "{}", alone.text);
+    let asks = server.asks();
+    let ide = std::thread::spawn(move || {
+        for _ in 0..100 {
+            if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
+                assert_eq!((ask.action, ask.key.as_str()), (Action::Remove, "testScratch"));
+                assert!(dev_asks::take(&asks, &ask.id));
+                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: false, text: "The person did not allow removing this folder.".into() }).unwrap();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no ask came");
+    });
+    let said = server.call_from("Claude Code", clarity_mcp::REMOVE_FOLDER, &json!({ "folder": "testScratch" }));
+    ide.join().unwrap();
+    assert!(said.is_error && said.text.contains("did not allow"), "{}", said.text);
+}
+
+/// The DevTools tools are compiled only into a server built from the
+/// repository: a release has none, as an installed Clarity has no DevTools.
+#[test]
+fn the_devtools_tools_are_never_compiled_into_a_release() {
+    let lib = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs")).unwrap();
+    assert!(lib.contains("#[cfg(debug_assertions)]\nmod devtools;"), "the module is behind #[cfg(debug_assertions)]");
+    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "clarity_gen::tools::devtools", "dev_asks::ask"] {
+        let outside = lib.lines().filter(|l| !l.trim_start().starts_with("//")).any(|l| l.contains(name));
+        assert!(!outside, "{name} is used outside src/devtools.rs");
+    }
+    assert!(!lib.contains("cfg!(debug_assertions)"), "no tool hidden only at run time: kept out at compile time");
 }

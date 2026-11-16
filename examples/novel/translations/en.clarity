@@ -127,6 +127,7 @@ translation en
     researchLinkLabel "Source"
     researchTextLabel "Text"
     researchSection "Research"
+    tabsAddCaption "+ Add a tab"
     researchPlaceholder "What you found out"
     newResearch "New research"
     bookDailyGoalLabel "Daily goal in words"

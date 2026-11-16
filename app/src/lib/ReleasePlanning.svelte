@@ -1,45 +1,30 @@
 <script lang="ts">
-  // DevTools' Release planning tab (src-tauri/src/devtools/release.rs):
-  // each of Clarity's releases as the repository has it (its newest tag,
-  // the files changed since, the version in source) with Bump; the checks a
-  // release needs first, run as builds one at a time; and Write plan, which
-  // writes the Release Helper's plan into releases/. A check that has not
-  // passed holds the plan until the person decides to write it anyway.
+  // DevTools' Release planning tab, for reviewing (src-tauri/src/devtools/release.rs):
+  // the release checks as one outcome, with one button that runs them all;
+  // the chain of steps a release would start (the checks on main, each tag,
+  // its workflow and where it shows); and each release's changes since its
+  // tag, code first. How each check ends is kept, and the agent reads it
+  // with the rest through Clarity's MCP (release_state) to write the plan.
 
   import { invoke } from "@tauri-apps/api/core";
   import type { ReleaseView } from "@clarity/ui/generated/ReleaseView.ts";
   import BuildLines from "./BuildLines.svelte";
-  import { dialogs } from "./dialogStore.svelte";
-  import { includedAtFirst, openChecks, planStamp, stateText } from "./devtools";
-  import { busy, devtools } from "./devtoolsStore.svelte";
+  import { changeText, checkState, stateText, verdict } from "./devtools";
+  import { devtools } from "./devtoolsStore.svelte";
 
   let view = $state<ReleaseView | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(false);
-  /** Per release: in the plan, its version and its note. */
-  let included = $state<Record<string, boolean>>({});
-  let versions = $state<Record<string, string>>({});
-  let notes = $state<Record<string, string>>({});
-  /** The release whose changed files show. */
+  /** The release whose files show. */
   let opened = $state<string | null>(null);
   /** The check whose lines show. */
   let watched = $state<string | null>(null);
-  let title = $state("");
-  let message = $state("");
-  let written = $state<string | null>(null);
 
-  async function load(command = "release_view", args: Record<string, unknown> = {}) {
+  async function load() {
     error = null;
     loading = true;
     try {
-      const next = await invoke<ReleaseView>(command, args);
-      for (const row of next.rows) {
-        if (!(row.key in included) || command === "release_bump") included[row.key] = included[row.key] ?? includedAtFirst(row);
-        if (!(row.key in versions) || (command === "release_bump" && args.key === row.key)) versions[row.key] = row.next;
-        notes[row.key] = notes[row.key] ?? "";
-      }
-      view = next;
-      if (!title) title = `Clarity ${new Date().toISOString().slice(0, 10)}`;
+      view = await invoke<ReleaseView>("release_view");
     } catch (err) {
       error = String(err);
     } finally {
@@ -52,108 +37,127 @@
     void load();
   });
 
-  const open = $derived(view ? openChecks(view.checks, devtools.jobs) : []);
-  const anyRunning = $derived(view?.checks.some((c) => busy(devtools.jobs[c.job])) ?? false);
-  const watchedJob = $derived(watched ? devtools.jobs[watched] : undefined);
+  const outcome = $derived(view ? verdict(view.checks, devtools.jobs) : null);
+  const busy = $derived(!!outcome && (outcome.running !== null || view!.checks.some((c) => devtools.jobs[c.job]?.state === "waiting")));
+  const shownJob = $derived(watched ? devtools.jobs[watched] : outcome?.running ? devtools.jobs[outcome.running.job] : undefined);
+  const withCode = $derived(view?.releases.filter((r) => r.code.length) ?? []);
+  const withoutCode = $derived(view?.releases.filter((r) => !r.code.length) ?? []);
 
-  async function run(jobs: string[]) {
+  // A run ended: read again, so the kept outcomes show.
+  let wasBusy = false;
+  $effect(() => {
+    if (wasBusy && !busy) void load();
+    wasBusy = busy;
+  });
+
+  async function runAll() {
+    if (!view) return;
     error = null;
-    if (jobs.length) watched = jobs[0];
+    watched = null;
     try {
-      await invoke("release_run", { jobs });
+      await invoke("release_run", { jobs: view.checks.map((c) => c.job) });
     } catch (err) {
       error = String(err);
     }
   }
 
-  async function write() {
-    if (!view) return;
-    const releases = view.rows.filter((r) => included[r.key]).map((r) => ({ key: r.key, version: versions[r.key], note: notes[r.key] ?? "" }));
-    let anyway = false;
-    if (open.length) {
-      anyway = await dialogs.confirm({
-        title: "Write the plan",
-        text: `${open.length} checks have not passed: ${open.join(", ")}. Write the plan anyway?`,
-        action: "Write anyway",
-        danger: true,
-      });
-      if (!anyway) return;
-    }
-    error = null;
-    try {
-      written = await invoke<string>("release_write_plan", { title, message, stamp: planStamp(new Date()), releases, anyway });
-    } catch (err) {
-      error = String(err);
-    }
+  function lastText(c: ReleaseView["checks"][number]): string {
+    const job = devtools.jobs[c.job];
+    if (job) return stateText(job);
+    if (!c.last) return "not run";
+    return `${c.last.passed ? "passed" : "failed"} ${new Date(c.last.ended).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`;
   }
 </script>
 
 <div class="release">
   {#if error}<p class="refused" role="alert">{error}</p>{/if}
-  {#if view}
+  {#if view && outcome}
     <section>
-      <h3>Releases</h3>
-      <table>
-        <thead>
-          <tr><th>In plan</th><th>Release</th><th>Released</th><th>In source</th><th>Changed</th><th>Version</th><th>Note</th></tr>
-        </thead>
-        <tbody>
-          {#each view.rows as row (row.key)}
-            <tr class:quiet={!included[row.key]}>
-              <td><input type="checkbox" bind:checked={included[row.key]} aria-label="{row.name} in the plan" /></td>
-              <td>{row.name}</td>
-              <td><code>{row.tag ?? "never"}</code></td>
-              <td>
-                {#if row.source}{row.source}{#if row.bumped} <span class="ok">bumped</span>{/if}{:else}<span class="muted">the tag</span>{/if}
-                {#if row.bumpable && !row.bumped}<button onclick={() => load("release_bump", { key: row.key })} disabled={loading} title="Raise the version in source to the next minor one">Bump</button>{/if}
-              </td>
-              <td>
-                {#if row.changed.length}
-                  <button class="link" onclick={() => (opened = opened === row.key ? null : row.key)}>{row.changed.length} files</button>
-                {:else}<span class="muted">none</span>{/if}
-              </td>
-              <td><input class="version" bind:value={versions[row.key]} aria-label="{row.name}'s version" /></td>
-              <td><input class="note" bind:value={notes[row.key]} aria-label="{row.name}'s note" /></td>
-            </tr>
-            {#if opened === row.key}
-              <tr><td colspan="7"><pre class="files">{row.changed.join("\n")}</pre></td></tr>
-            {/if}
+      <h3>Release checks <span class="muted">(changes since {view.since ?? "the start"})</span></h3>
+      <div class="outcome" class:passed={outcome.allPassed} class:failed={outcome.failed.length > 0 && !busy} role="status">
+        <strong>{outcome.text}</strong>
+        <span class="bar">
+          <button class="primary" onclick={runAll} disabled={busy}>{busy ? "Running..." : "Run release checks"}</button>
+          <button onclick={load} disabled={loading}>Read again</button>
+        </span>
+      </div>
+      {#if outcome.failed.length}
+        <ul class="failed-list">
+          {#each outcome.failed as f (f.job)}
+            {@const c = view.checks.find((x) => x.job === f.job)}
+            <li>
+              <button class="link" onclick={() => (watched = watched === f.job ? null : f.job)}>{f.title}</button>
+              {#if !devtools.jobs[f.job] && c?.last?.why}<span class="muted">{c.last.why}</span>{/if}
+            </li>
           {/each}
-        </tbody>
-      </table>
-      <p class="muted">A release whose version in source is not past its tag needs a Bump before its plan; the IDE's version is its tag alone.</p>
+        </ul>
+      {/if}
+      {#if shownJob}<BuildLines job={shownJob} />{/if}
+      <details>
+        <summary>All {outcome.total} checks</summary>
+        <ul class="checks">
+          {#each view.checks as c (c.job)}
+            <li class={checkState(c, devtools.jobs[c.job])}>
+              <button class="link" onclick={() => (watched = c.job)} title={c.command}>{c.title}</button>
+              <span class="state">{lastText(c)}</span>
+            </li>
+          {/each}
+        </ul>
+      </details>
     </section>
 
     <section>
-      <h3>Checks <span class="muted">(changes since {view.since ?? "the start"})</span></h3>
-      <div class="bar">
-        <button class="primary" onclick={() => run(open.length ? view!.checks.filter((c) => devtools.jobs[c.job]?.state !== "passed").map((c) => c.job) : [])} disabled={anyRunning || !open.length}>
-          {anyRunning ? "Running..." : `Run the ${open.length} open`}
-        </button>
-        <button onclick={() => load()} disabled={loading}>Read again</button>
-      </div>
-      <ul class="checks">
-        {#each view.checks as check (check.job)}
-          {@const j = devtools.jobs[check.job]}
-          <li class={j?.state ?? "none"}>
-            <button class="link" onclick={() => (watched = check.job)} title={check.command}>{check.title}</button>
-            <span class="state">{stateText(j)}</span>
-            <button onclick={() => run([check.job])} disabled={busy(j)}>Run</button>
-          </li>
-        {/each}
-      </ul>
-      {#if watchedJob}<BuildLines job={watchedJob} />{/if}
+      <h3>What a release would start</h3>
+      {#if view.chain.length <= 1}
+        <p class="muted">No release has code changes since its tag: nothing to release.</p>
+      {:else}
+        <ol class="chain">
+          {#each view.chain as step (step.title)}
+            <li>
+              <strong>{step.title}</strong>
+              {#if step.tag}<code>{step.tag}</code>{/if}
+              <ul>
+                {#if step.workflow}<li>runs <code>{step.workflow}</code>{#if step.nextAfterWorkflow}<span class="muted">; the next step goes once it passed</span>{/if}</li>{/if}
+                {#if step.shows}<li>shows on {step.shows}</li>{/if}
+                {#if step.waitsFor.length}<li class="muted">waits for {step.waitsFor.join(", ")}</li>{/if}
+              </ul>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+      <p class="muted">The agent reads this, the changes and the checks' outcome through Clarity's MCP (<code>release_state</code>) and writes the Release Helper's plan.</p>
     </section>
 
     <section>
-      <h3>Plan</h3>
-      <label>Title <input bind:value={title} /></label>
-      <label>Commit message <textarea rows="6" bind:value={message}></textarea></label>
-      <div class="bar">
-        <button class="primary" onclick={write} disabled={!view.rows.some((r) => included[r.key]) || !message.trim()}>Write plan</button>
-        {#if open.length}<span class="muted">{open.length} checks have not passed</span>{/if}
-      </div>
-      {#if written}<p>Written: <code>{written}</code>. Commit, then start the Release Helper with it.</p>{/if}
+      <h3>Changes since each release</h3>
+      {#if withCode.length}
+        <ul class="releases">
+          {#each withCode as r (r.key)}
+            <li>
+              <button class="link strong" onclick={() => (opened = opened === r.key ? null : r.key)}>{r.name}</button>
+              <span>{changeText(r)}</span>
+              <span class="muted">since <code>{r.tag ?? "never released"}</code>{#if r.source}, {r.source} in source{/if}</span>
+              {#if opened === r.key}
+                <pre class="files">{[...r.code, ...r.manifest, ...r.tests, ...r.docs].join("\n")}</pre>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted">No release has code changes since its tag.</p>
+      {/if}
+      <details>
+        <summary>No code changed ({withoutCode.length})</summary>
+        <ul class="releases quiet">
+          {#each withoutCode as r (r.key)}
+            <li>
+              <button class="link" onclick={() => (opened = opened === r.key ? null : r.key)} disabled={changeText(r) === "no changes"}>{r.name}</button>
+              <span>{changeText(r)}</span>
+              {#if opened === r.key}<pre class="files">{[...r.manifest, ...r.tests, ...r.docs].join("\n")}</pre>{/if}
+            </li>
+          {/each}
+        </ul>
+      </details>
     </section>
   {:else if loading}
     <p class="muted">Reading the repository...</p>
@@ -164,7 +168,7 @@
   .release {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
   }
   section {
     display: flex;
@@ -184,36 +188,36 @@
     color: var(--error);
     margin: 0;
   }
-  .ok {
-    color: var(--accent);
-    font-size: 11px;
+  .outcome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border-strong);
+    border-radius: 6px;
   }
-  table {
-    border-collapse: collapse;
-    font-size: 12px;
+  .outcome.passed {
+    border-left-color: var(--accent);
   }
-  th,
-  td {
-    text-align: left;
-    padding: 3px 6px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
+  .outcome.failed {
+    border-left-color: var(--error);
   }
-  tr.quiet td {
-    color: var(--text-muted);
+  .bar {
+    display: flex;
+    gap: 8px;
   }
-  .version {
-    width: 70px;
-  }
-  .note {
-    width: 100%;
-    min-width: 120px;
-  }
-  .files {
+  .failed-list {
     margin: 0;
-    max-height: 160px;
-    overflow: auto;
-    font-size: 11px;
+    padding-left: 18px;
+    font-size: 12px;
+    color: var(--error);
+  }
+  .failed-list li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
   }
   .link {
     border: none;
@@ -224,14 +228,21 @@
     font: inherit;
     text-align: left;
   }
-  .bar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
+  .link:disabled {
+    color: inherit;
+    cursor: default;
+  }
+  .strong {
+    font-weight: 600;
+  }
+  details summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-muted);
   }
   .checks {
     list-style: none;
-    margin: 0;
+    margin: 6px 0 0;
     padding: 0;
     max-height: 260px;
     overflow: auto;
@@ -239,9 +250,8 @@
   }
   .checks li {
     display: grid;
-    grid-template-columns: 1fr 70px auto;
+    grid-template-columns: 1fr auto;
     gap: 8px;
-    align-items: center;
     padding: 2px 0;
   }
   .checks li.passed .state {
@@ -250,13 +260,47 @@
   .checks li.failed .state {
     color: var(--error);
   }
-  label {
+  .chain {
+    margin: 0;
+    padding-left: 22px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .chain > li > code {
+    margin-left: 6px;
+  }
+  .chain ul {
+    margin: 2px 0 0;
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+    list-style: none;
+  }
+  .releases {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 12px;
   }
-  textarea {
-    font: 12px ui-monospace, monospace;
+  .releases li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .releases.quiet {
+    margin-top: 6px;
+    color: var(--text-muted);
+  }
+  .files {
+    flex-basis: 100%;
+    margin: 0;
+    max-height: 160px;
+    overflow: auto;
+    font-size: 11px;
   }
 </style>

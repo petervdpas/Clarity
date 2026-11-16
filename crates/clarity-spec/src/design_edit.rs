@@ -111,7 +111,7 @@ pub fn is_design_edit(edit: &Edit) -> bool {
     use Edit::*;
     match edit {
         Batch { edits } => edits.iter().all(is_design_edit),
-        Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageTell { .. } | SetViewTell { .. } | SetPageColor { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
+        Remove { .. } | SetTitle { .. } | SetPaneSpan { .. } | SetPageView { .. } | SetPageTell { .. } | SetViewTell { .. } | SetPageColor { .. } | SetPagePermanent { .. } | PlaceWidget { .. } | CreateWidget { .. } | UpdateWidget { .. } | AddTab { .. } | AddMenu { .. }
         | AddData { .. } | SetGrid { .. } | SetSize { .. } | SetPageStyle { .. } | SetPageAllow { .. } | PlaceField { .. } | NameParts | SetMain { .. } | SetSplash { .. } | SetOwnerEvent { .. } | AddRegion { .. }
         | UpdateSidebar { .. } | UpdateSidebars | UpdateRibbon { .. } | SetBarWidth { .. } | SetName { .. } | AddFrameItem { .. } | UpdateCommand { .. } | MoveSibling { .. } => true,
         _ => false,
@@ -453,7 +453,7 @@ impl Editor<'_> {
     }
 
     fn inner(&mut self, title: Option<String>) -> WidgetPage {
-        WidgetPage { title, columns: None, view: None, tells: Vec::new(), color: None, children: Vec::new(), span: self.fresh() }
+        WidgetPage { title, columns: None, view: None, tells: Vec::new(), color: None, permanent: false, children: Vec::new(), span: self.fresh() }
     }
 
     fn command(&mut self, props: CommandProps) -> Command {
@@ -563,6 +563,14 @@ impl Editor<'_> {
                     return fail("only an accordion's section has a color");
                 }
                 section.color = color.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
+                Ok(Some(*target))
+            }
+            Edit::SetPagePermanent { target, permanent } => {
+                let Some((kind, tab)) = page_anywhere(designed, *target) else { return fail("there is no tab there") };
+                if kind != WidgetKind::Tabs {
+                    return fail("only a tab is permanent");
+                }
+                tab.permanent = *permanent;
                 Ok(Some(*target))
             }
             Edit::PlaceWidget { container, props } => self.place_widget(designed, *container, props),

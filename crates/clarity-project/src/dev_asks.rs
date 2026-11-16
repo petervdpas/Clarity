@@ -1,5 +1,6 @@
 //! An agent's ask to press a DevTools tab's Build (the MCP tool
-//! build_piece), and its answer, as files in a folder both read: the
+//! build_piece) or to remove a build folder of the Disk tab (remove_folder),
+//! and its answer, as files in a folder both read: the
 //! agent's side writes `<id>.ask.json`; the IDE takes it (renamed to
 //! `<id>.taken.json`), lets the person allow it as they chose for agents,
 //! builds in the tab and writes `<id>.answer.json`. Only a Clarity run from
@@ -21,12 +22,25 @@ pub fn folder() -> PathBuf {
     crate::clarity_home().join("dev-asks")
 }
 
-/// An ask to build a piece.
+/// What an agent asks the IDE to do.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Action {
+    /// Press a piece's Build.
+    #[default]
+    Build,
+    /// Remove a build folder of the Disk tab.
+    Remove,
+}
+
+/// An ask to build a piece or remove a build folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ask {
     #[serde(default)]
     pub id: String,
-    /// The piece's key: `clarityUi`.
+    #[serde(default)]
+    pub action: Action,
+    /// The piece's key (`clarityUi`) or the folder's (`debug`).
     pub key: String,
     /// Who asks: the MCP client's name.
     pub by: String,
@@ -47,12 +61,17 @@ fn plain(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// Writes an ask; its id.
+/// Writes an ask to build the piece `key`; its id.
 pub fn ask(dir: &Path, key: &str, by: &str) -> Result<String, String> {
+    ask_to(dir, Action::Build, key, by)
+}
+
+/// Writes an ask to do `action` with `key`; its id.
+pub fn ask_to(dir: &Path, action: Action, key: &str, by: &str) -> Result<String, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let id = format!("{nanos}-{}", std::process::id());
-    let text = serde_json::to_string(&Ask { id: id.clone(), key: key.to_string(), by: by.to_string() }).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string(&Ask { id: id.clone(), action, key: key.to_string(), by: by.to_string() }).map_err(|e| e.to_string())?;
     // Written aside first, so the IDE never reads half an ask.
     let aside = path(dir, &id, "writing");
     std::fs::write(&aside, text).map_err(|e| format!("cannot write {}: {e}", aside.display()))?;

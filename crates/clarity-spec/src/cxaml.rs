@@ -455,6 +455,10 @@ fn page_element(kind: WidgetKind, page: &WidgetPage, depth: usize, out: &mut Str
     if let Some(color) = &page.color {
         attributes.push_str(&attribute("color", &Value::String(color.clone())));
     }
+    // A tab of tabs that close that has no x.
+    if page.permanent {
+        attributes.push_str(&attribute("permanent", &Value::Bool(true)));
+    }
     // A splitter's pane starts as wide as its span (as high as its rows, one
     // above the other); a tab, step or section showing a view keeps the view's columns.
     if let Some(columns) = page.columns {
@@ -968,7 +972,7 @@ impl Reading {
     fn widget_page(&mut self, kind: WidgetKind, element: &Element) -> WidgetPage {
         let content = kind == WidgetKind::Content;
         let columns_word = if kind == WidgetKind::Splitter { "span" } else { "columns" };
-        let reserved = ["name", "title", "color", "span", "rows", "columns", "view"];
+        let reserved = ["name", "title", "color", "span", "rows", "columns", "view", "permanent"];
         let tells = element
             .attributes
             .iter()
@@ -983,6 +987,7 @@ impl Reading {
             view: view.map(str::to_string),
             tells,
             color: element.get("color").map(str::to_string),
+            permanent: element.get("permanent") == Some("true"),
             children: element.children.iter().filter_map(|c| self.part(c)).collect(),
             span: element.span,
         }

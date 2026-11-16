@@ -6,9 +6,10 @@
 //! builds (jobs.rs, one build at a time). An agent presses Build through
 //! Clarity's MCP (build_piece): its ask comes through a file
 //! (clarity_project::dev_asks), and the page allows it as the person chose
-//! for agents. The release planning is release.rs. An installed Clarity has
+//! for agents. The release planning is release.rs, the Disk tab disk.rs. An installed Clarity has
 //! no DevTools and always uses the release.
 
+pub mod disk;
 pub mod release;
 
 use std::path::{Path, PathBuf};
@@ -73,6 +74,9 @@ pub struct PieceTab {
     pub uses: String,
     /// Its tab is always there.
     pub core: bool,
+    /// Shown by itself because the cDdev's own build is behind its source,
+    /// not added: it goes again once that build is as new as its source.
+    pub auto: bool,
     /// The cDdev's own build is in use, not the release.
     pub mine: bool,
     /// The release this Clarity names: `0.27.0`.
@@ -115,6 +119,8 @@ pub struct DevToolsView {
 #[ts(export)]
 pub struct BuildAsk {
     pub id: String,
+    /// `build` a piece or `remove` a build folder of the Disk tab.
+    pub action: String,
     pub key: String,
     pub name: String,
     pub by: String,
@@ -137,6 +143,12 @@ fn own_of(repo: &Path, piece: &Piece, os: &str) -> String {
     clarity_project::slashed(&path.canonicalize().unwrap_or(path))
 }
 
+/// The tabs shown by themselves that the cDdev closed: away while Clarity runs, back at its next start.
+fn hidden() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
+    static HIDDEN: std::sync::Mutex<std::collections::BTreeSet<String>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
+    HIDDEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn job_key(piece: &str) -> String {
     format!("piece:{piece}")
 }
@@ -146,14 +158,15 @@ fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
     let env = Environment::current();
     let swaps = env.swaps();
     let tabs = swaps
-        .tabs()
+        .shown(|p| swap::built_at(repo, p, os).is_some() && swap::behind(repo, p, os).is_some())
         .into_iter()
-        .filter_map(swap::piece)
-        .map(|piece| PieceTab {
+        .filter(|(piece, auto)| !auto || !hidden().contains(piece.key))
+        .map(|(piece, auto)| PieceTab {
             key: piece.key.to_string(),
             name: piece.name.to_string(),
             uses: piece.uses.to_string(),
             core: piece.core,
+            auto,
             mine: swaps.mine(piece.key),
             release: release_of(piece),
             own: own_of(repo, piece, os),
@@ -163,7 +176,7 @@ fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
             job: job_key(piece.key),
         })
         .collect::<Vec<_>>();
-    let addable = swap::PIECES.iter().filter(|p| !p.core && !tabs.iter().any(|t| t.key == p.key)).map(|p| PieceChoice { key: p.key.to_string(), name: p.name.to_string() }).collect();
+    let addable = swap::PIECES.iter().filter(|p| !tabs.iter().any(|t| t.key == p.key)).map(|p| PieceChoice { key: p.key.to_string(), name: p.name.to_string() }).collect();
     DevToolsView { tabs, addable, file: environment::file().display().to_string(), jobs: jobs.all().iter().map(JobView::from).collect() }
 }
 
@@ -212,6 +225,10 @@ pub fn devtools_view(jobs: State<DevJobs>) -> Option<DevToolsView> {
 pub fn devtools_swap(key: String, mine: bool, jobs: State<DevJobs>) -> Result<DevToolsView, String> {
     let repo = repo()?;
     let mut swaps = Environment::current().swaps().clone();
+    // A tab shown by itself (its own build behind its source) is kept once its piece is swapped.
+    if !swaps.tabs().contains(&key.as_str()) && view(&repo, &jobs.0).tabs.iter().any(|t| t.key == key && t.auto) {
+        swaps.add(&key)?;
+    }
     swaps.swap(&key, mine)?;
     apply(&repo, swaps)?;
     Ok(view(&repo, &jobs.0))
@@ -223,16 +240,18 @@ pub fn devtools_add_tab(key: String, jobs: State<DevJobs>) -> Result<DevToolsVie
     let repo = repo()?;
     let mut swaps = Environment::current().swaps().clone();
     swaps.add(&key)?;
+    hidden().remove(&key);
     apply(&repo, swaps)?;
     Ok(view(&repo, &jobs.0))
 }
 
-/// Closes an added tab: its piece is the release again.
+/// Closes a piece's tab: its piece is the release again. A tab shown by itself stays away until Clarity starts again or it is added.
 #[tauri::command(async)]
 pub fn devtools_close_tab(key: String, jobs: State<DevJobs>) -> Result<DevToolsView, String> {
     let repo = repo()?;
     let mut swaps = Environment::current().swaps().clone();
     swaps.close(&key)?;
+    hidden().insert(key.clone());
     apply(&repo, swaps)?;
     Ok(view(&repo, &jobs.0))
 }
@@ -288,8 +307,9 @@ pub fn devtools_refuse(id: String, why: String) -> Result<(), String> {
 }
 
 /// In a Clarity run from its repository, takes the agents' asks to press a
-/// Build as they come and hands each to the page, which allows it as the
-/// person chose for agents (devtoolsStore.svelte.ts).
+/// Build or remove a build folder as they come and hands each to the page,
+/// which allows it as the person chose for agents, a removal always asked
+/// first (devtoolsStore.svelte.ts).
 pub fn watch_asks(app: AppHandle) {
     if crate::repository().is_none() {
         return;
@@ -301,12 +321,23 @@ pub fn watch_asks(app: AppHandle) {
                 if !dev_asks::take(&dir, &ask.id) {
                     continue;
                 }
-                match swap::piece(&ask.key) {
-                    Some(piece) => {
-                        let _ = app.emit(ASKED, BuildAsk { id: ask.id.clone(), key: ask.key.clone(), name: piece.name.to_string(), by: ask.by.clone() });
+                let named = match ask.action {
+                    dev_asks::Action::Build => swap::piece(&ask.key).map(|p| ("build", p.name.to_string())).ok_or_else(|| format!("there is no piece {}", ask.key)),
+                    dev_asks::Action::Remove => match repo() {
+                        Ok(repo) => clarity_gen::tools::devtools::disk::places(&repo)
+                            .into_iter()
+                            .find(|p| p.key == ask.key)
+                            .map(|p| ("remove", format!("{}, {}. {}", p.name, clarity_gen::tools::devtools::disk::bytes_text(clarity_gen::tools::devtools::disk::size(&p)), p.cost)))
+                            .ok_or_else(|| format!("there is no build folder {}", ask.key)),
+                        Err(why) => Err(why),
+                    },
+                };
+                match named {
+                    Ok((action, name)) => {
+                        let _ = app.emit(ASKED, BuildAsk { id: ask.id.clone(), action: action.into(), key: ask.key.clone(), name, by: ask.by.clone() });
                     }
-                    None => {
-                        let _ = dev_asks::answer(&dir, &ask.id, &dev_asks::Answer { ok: false, text: format!("there is no piece {}", ask.key) });
+                    Err(why) => {
+                        let _ = dev_asks::answer(&dir, &ask.id, &dev_asks::Answer { ok: false, text: why });
                     }
                 }
             }

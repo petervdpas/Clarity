@@ -13,6 +13,11 @@ uses: string,
  */
 core: boolean, 
 /**
+ * Shown by itself because the cDdev's own build is behind its source,
+ * not added: it goes again once that build is as new as its source.
+ */
+auto: boolean, 
+/**
  * The cDdev's own build is in use, not the release.
  */
 mine: boolean, 

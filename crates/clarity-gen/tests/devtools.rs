@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clarity_gen::tools::devtools::jobs::{JobState, Jobs, Runnable};
-use clarity_gen::tools::devtools::release::{self, Check, Planned, UNITS};
+use clarity_gen::tools::devtools::release::{self, Check, CheckRecord, UNITS};
 use clarity_gen::tools::devtools::swap;
 
 fn temp(name: &str) -> PathBuf {
@@ -98,65 +98,10 @@ fn every_release_reads_its_version_from_the_repository() {
 }
 
 #[test]
-fn a_bump_raises_the_minor_version_and_the_crates_that_name_it() {
-    let dir = temp("bump");
-    std::fs::create_dir_all(dir.join("runtimes/rust")).unwrap();
-    std::fs::create_dir_all(dir.join("runtimes/rust-ui")).unwrap();
-    std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"runtimes/rust\", \"runtimes/rust-ui\"]\n").unwrap();
-    std::fs::write(dir.join("runtimes/rust/Cargo.toml"), "[package]\nname = \"clarity-runtime\"\nversion = \"0.61.0\"\n").unwrap();
-    std::fs::write(dir.join("runtimes/rust-ui/Cargo.toml"), "[package]\nname = \"clarity-ui\"\nversion = \"0.27.0\"\n\n[dependencies]\nclarity-runtime = { path = \"../rust\", version = \"0.61.0\", default-features = false }\nother = { version = \"0.61.0\" }\n").unwrap();
-    let unit = release::unit("clarityRuntime").unwrap();
-    assert_eq!(release::bump(&dir, unit).unwrap(), "0.62.0");
-    assert_eq!(release::source_version(&dir, unit).unwrap(), "0.62.0");
-    let ui = std::fs::read_to_string(dir.join("runtimes/rust-ui/Cargo.toml")).unwrap();
-    assert!(ui.contains("clarity-runtime = { path = \"../rust\", version = \"0.62.0\""), "{ui}");
-    assert!(ui.contains("other = { version = \"0.61.0\" }"), "another crate's version stays");
-    assert!(ui.contains("version = \"0.27.0\""), "clarity-ui's own stays");
-}
-
-#[test]
 fn versions_compare_as_numbers() {
     assert!(release::parse("0.10.0") > release::parse("0.9.3"));
     assert_eq!(release::next_minor("1.1.0").unwrap(), "1.2.0");
     assert_eq!(release::newest(&["runtimes/rust/v0.9.0".into(), "runtimes/rust/v0.10.0".into(), "runtimes/rust-ui/v0.99.0".into()], "runtimes/rust/v"), Some("runtimes/rust/v0.10.0".into()));
-}
-
-#[test]
-fn the_plan_has_the_release_helpers_steps_in_order() {
-    let planned = vec![
-        Planned { key: "clarityRuntime".into(), version: "0.62.0".into(), from: Some("runtimes/rust/v0.61.0".into()), note: String::new(), assets: vec![], packages: vec![] },
-        Planned { key: "csharpRuntime".into(), version: "0.99.0".into(), from: Some("runtimes/csharp/v0.98.0".into()), note: "Folders.".into(), assets: vec![], packages: vec!["Clarity.Runtime".into()] },
-        Planned { key: "goRuntime".into(), version: "0.65.0".into(), from: Some("runtimes/go/v0.64.0".into()), note: String::new(), assets: vec![], packages: vec![] },
-        Planned { key: "ide".into(), version: "1.2.0".into(), from: Some("v1.1.0".into()), note: String::new(), assets: vec!["Clarity-v1.2.0-SHA256SUMS.txt".into()], packages: vec![] },
-    ];
-    let plan = release::plan("Clarity 1.2.0", "Release 1.2.0", &planned).unwrap();
-    let steps = plan["steps"].as_array().unwrap();
-    assert_eq!(steps[0]["workflow"], "checks.yml", "the checks on main come first");
-    assert!(steps[0].get("tag").is_none());
-    assert_eq!(steps[1]["tag"], "runtimes/rust/v0.62.0");
-    assert_eq!(steps[1]["check"]["crates"]["name"], "clarity-runtime");
-    assert_eq!(steps[2]["next_after"], "workflow", "nuget.org lists slowly");
-    assert_eq!(steps[2]["check"]["nuget"]["packages"][0], "Clarity.Runtime");
-    assert_eq!(steps[2]["note"], "Folders.");
-    assert_eq!(steps[3]["check"]["go_proxy"]["version"], "v0.65.0");
-    assert!(steps[4]["manual"].as_str().unwrap().contains("Go sums"), "the sums follow the Go tag");
-    assert_eq!(steps[4]["commit_message"], "Go runtime v0.65.0 sums");
-    assert_eq!(steps[5]["tag"], "v1.2.0");
-    assert_eq!(steps[5]["check"]["github_release"]["assets"][0], "Clarity-v1.2.0-SHA256SUMS.txt");
-    assert_eq!(plan["commit_message"], "Release 1.2.0");
-}
-
-#[test]
-fn a_release_out_of_order_or_unknown_is_refused() {
-    let p = |key: &str| Planned { key: key.into(), version: "1.0.0".into(), from: None, note: String::new(), assets: vec![], packages: vec![] };
-    assert!(release::plan("t", "m", &[p("ide"), p("clarityRuntime")]).is_err());
-    assert!(release::plan("t", "m", &[p("nothing")]).is_err());
-}
-
-#[test]
-fn assets_of_the_last_release_take_the_new_version() {
-    let said = release::assets_for(&["clarity-ui-0.26.0-linux-x64.tar.gz".into(), "SHA256SUMS".into()], "0.26.0", "0.27.0");
-    assert_eq!(said, vec!["clarity-ui-0.27.0-linux-x64.tar.gz".to_string(), "SHA256SUMS".to_string()]);
 }
 
 #[test]
@@ -225,6 +170,7 @@ fn an_agents_ask_to_build_is_answered_through_the_file() {
     let pending = dev_asks::pending(&dir);
     assert_eq!(pending.len(), 1);
     assert_eq!((pending[0].key.as_str(), pending[0].by.as_str()), ("clarityUi", "Claude Code"));
+    assert_eq!(pending[0].action, dev_asks::Action::Build, "an ask of before had no action: a build");
     assert!(dev_asks::take(&dir, &id), "the IDE takes it once");
     assert!(dev_asks::pending(&dir).is_empty() && dev_asks::taken(&dir, &id));
     assert!(dev_asks::answer_of(&dir, &id).is_none());
@@ -248,13 +194,6 @@ fn the_repository_says_how_every_release_stands() {
 }
 
 #[test]
-fn the_nuget_packages_are_the_runtimes_packable_projects() {
-    let packages = release::nuget_packages(&repo());
-    assert!(packages.contains(&"Clarity.Runtime".to_string()) && packages.contains(&"Clarity.Ui".to_string()), "{packages:?}");
-    assert!(!packages.iter().any(|p| p.contains("Tests")), "{packages:?}");
-}
-
-#[test]
 fn a_line_drawn_over_with_a_carriage_return_is_one_line_as_in_a_terminal() {
     // cargo draws its progress bar over itself with \r: the build shows the last drawing, not every one after the other.
     let jobs = Jobs::default();
@@ -273,4 +212,110 @@ fn a_build_names_its_folder_plainly() {
     jobs.start("dir", "Dir", Runnable::new("git", &["--version"], &dir), None).unwrap();
     let job = jobs.wait("dir", Duration::from_secs(20)).unwrap();
     assert!(!job.lines[0].contains(".."), "{}", job.lines[0]);
+}
+
+#[test]
+fn the_checks_run_in_a_fresh_checkout_between_the_guards_and_a_clean_tree() {
+    // As on GitHub: the tests, spec checks and example builds run in a fresh checkout (no tags, no history, nothing git ignores);
+    // the guards write in the tree first, and the tree is checked clean last.
+    let repo = repo();
+    let fresh = release::fresh_checkout_dir(&repo);
+    let checks = release::checks(&repo, &["crates/clarity-spec/src/check.rs".to_string(), "examples/todo/todo.clarity".to_string()]);
+    let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
+    assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| c.run.dir == repo), "the guards write in the tree");
+    assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| at(&c.key) < at("freshCheckout")));
+    for key in ["test:clarity-spec:--lib", "spec:todo", "build:todo"] {
+        let check = &checks[at(key)];
+        assert_eq!(check.run.dir, fresh, "{key} runs in the fresh checkout");
+        assert!(check.run.env.iter().any(|(n, v)| n == "CARGO_TARGET_DIR" && Path::new(v) == release::fresh_target_dir(&repo)), "{key} builds in a folder of its own");
+        assert_ne!(release::fresh_target_dir(&repo), repo.join("target"), "never the tree's: cargo would take one's builds for the other's");
+        assert!(at("freshCheckout") < at(key));
+    }
+    assert_eq!(checks.last().unwrap().key, "cleanTree", "the tree is checked last");
+}
+
+#[test]
+fn a_fresh_checkout_has_the_uncommitted_files_and_no_tags() {
+    let repo = repo();
+    let dir = temp("fresh").join("checkout");
+    release::fresh_checkout(&repo, &dir).unwrap();
+    assert!(release::tags(&dir).unwrap().is_empty(), "no tags, as the checks' checkout");
+    let file = "crates/clarity-gen/tests/devtools.rs";
+    assert_eq!(std::fs::read(dir.join(file)).unwrap(), std::fs::read(repo.join(file)).unwrap(), "the tree as it is, committed or not");
+    assert!(!dir.join("target").exists(), "nothing git ignores");
+    assert!(release::clean_tree(&repo, &dir).is_ok(), "the tree is as the checkout found it");
+}
+
+#[test]
+fn a_file_the_checks_leave_in_the_tree_is_named() {
+    let before = "?? a.txt\t1\n M b.rs\t2\n";
+    assert!(release::left_behind(before, before).is_empty());
+    assert_eq!(release::left_behind(before, "?? a.txt\t1\n M b.rs\t3\n?? stray/x.json\t4\n"), vec!["b.rs", "stray/x.json"], "a new file and one changed again");
+}
+
+#[test]
+fn a_releases_changes_are_sorted_by_kind() {
+    // What the agent reads to write a plan: a manifest or a test alone is no reason to release.
+    let files: Vec<String> = [
+        "runtimes/rust-formats/Cargo.toml",
+        "runtimes/rust-formats/src/csv.rs",
+        "runtimes/rust-formats/tests/csv.rs",
+        "runtimes/rust-formats/README.md",
+        "runtimes/csharp/Clarity.Runtime.Tests/Rows.cs",
+        "runtimes/go/clarity/rows_test.go",
+        "runtimes/csharp/Clarity.Runtime/Clarity.Runtime.csproj",
+        "editors/vscode/package.json",
+        "app/src/lib/devtools.test.ts",
+        "runtimes/rust-formats/LICENSE",
+    ]
+    .map(String::from)
+    .to_vec();
+    let c = release::changes(&files);
+    assert_eq!(c.code, ["runtimes/rust-formats/src/csv.rs"]);
+    assert_eq!(c.manifest, ["runtimes/rust-formats/Cargo.toml", "runtimes/csharp/Clarity.Runtime/Clarity.Runtime.csproj", "editors/vscode/package.json"]);
+    assert_eq!(c.tests, ["runtimes/rust-formats/tests/csv.rs", "runtimes/csharp/Clarity.Runtime.Tests/Rows.cs", "runtimes/go/clarity/rows_test.go", "app/src/lib/devtools.test.ts"]);
+    assert_eq!(c.docs, ["runtimes/rust-formats/README.md", "runtimes/rust-formats/LICENSE"]);
+}
+
+#[test]
+fn a_check_that_ended_is_kept_for_the_agent() {
+    // The IDE runs the checks; the agent reads how each ended (MCP release_state), the last run of each.
+    let dir = temp("records");
+    assert!(release::check_records(&dir).is_empty(), "nothing run yet");
+    let passed = CheckRecord { key: "spec:todo".into(), title: "todo: spec check".into(), passed: true, why: None, ended: 1, head: "abc".into(), lines: vec![] };
+    let failed = CheckRecord { key: "test:clarity-gen:devtools".into(), title: "clarity-gen: devtools".into(), passed: false, why: Some("exit 101".into()), ended: 2, head: "abc".into(), lines: vec!["panicked".into()] };
+    release::record_check(&dir, &passed).unwrap();
+    release::record_check(&dir, &failed).unwrap();
+    release::record_check(&dir, &CheckRecord { passed: true, why: None, ended: 3, lines: vec![], ..failed.clone() }).unwrap();
+    let records = release::check_records(&dir);
+    assert_eq!(records.len(), 2);
+    assert_eq!(records["spec:todo"], passed);
+    assert!(records["test:clarity-gen:devtools"].passed && records["test:clarity-gen:devtools"].ended == 3, "run again, the last run counts");
+    assert!(release::checks_file(&dir).starts_with(dir.join("target")), "kept under the ignored target/");
+}
+
+#[test]
+fn the_chain_of_events_follows_the_release_helpers_order() {
+    // What a release starts, in order: the checks on main, then each tag, its workflow and where it shows, the Go sums after the Go tag.
+    let picked = [(release::unit("clarityUi").unwrap(), "0.28.0".to_string()), (release::unit("clarityRuntime").unwrap(), "0.62.0".to_string()), (release::unit("goRuntime").unwrap(), "0.65.0".to_string()), (release::unit("ide").unwrap(), "1.3.0".to_string())];
+    let needs = |u: &release::Unit| if u.key == "clarityUi" { vec!["clarity-runtime".to_string()] } else { vec![] };
+    let events = release::chain_of(&picked, needs);
+    let titles: Vec<&str> = events.iter().map(|e| e.title.as_str()).collect();
+    assert_eq!(titles, ["Checks on main", "clarity-runtime 0.62.0", "clarity-ui 0.28.0", "Go runtime 0.65.0", "Go sums", "Clarity IDE 1.3.0"], "the table's order, not the order given");
+    assert_eq!(events[0].workflow.as_deref(), Some("checks.yml"));
+    assert_eq!(events[1].tag.as_deref(), Some("runtimes/rust/v0.62.0"));
+    assert_eq!(events[1].shows.as_deref(), Some("crates.io: clarity-runtime"));
+    assert!(events[2].waits_for.contains(&"clarity-runtime 0.62.0".to_string()), "a crate waits for the crate it names: {:?}", events[2].waits_for);
+    assert!(events[4].tag.is_none() && events[4].waits_for == ["Go runtime 0.65.0"], "the sums follow the Go tag");
+    assert_eq!(events[5].tag.as_deref(), Some("v1.3.0"));
+    assert!(events.iter().skip(1).all(|e| e.waits_for.iter().any(|w| w == &events[0].title) || !e.waits_for.is_empty()), "every step waits for something before it");
+}
+
+#[test]
+fn an_agents_ask_to_remove_a_folder_says_so() {
+    use clarity_project::dev_asks::{self, Action};
+    let dir = temp("remove-asks");
+    let id = dev_asks::ask_to(&dir, Action::Remove, "debug", "Claude Code").unwrap();
+    let pending = dev_asks::pending(&dir);
+    assert_eq!((pending[0].id.as_str(), pending[0].action, pending[0].key.as_str()), (id.as_str(), Action::Remove, "debug"));
 }

@@ -1,19 +1,41 @@
 // DevTools' page logic (DevToolsSettings.svelte, ReleasePlanning.svelte).
 
-/** The plan's file name in releases/, after the local time: `2026-11-05-0907`. */
-export function planStamp(at: Date): string {
-  const two = (n: number) => String(n).padStart(2, "0");
-  return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}-${two(at.getHours())}${two(at.getMinutes())}`;
+type JobLike = { state: string } | undefined;
+type CheckLike = { job: string; title: string; last: { passed: boolean } | null };
+
+/** How a check stands: its build in this run of Clarity, else how it last ended. */
+export function checkState(check: CheckLike, job: JobLike): "waiting" | "running" | "passed" | "failed" | "notRun" {
+  if (job?.state === "waiting" || job?.state === "running" || job?.state === "passed") return job.state;
+  if (job) return "failed";
+  if (check.last) return check.last.passed ? "passed" : "failed";
+  return "notRun";
 }
 
-/** A release with files changed since its tag starts in the plan. */
-export function includedAtFirst(row: { changed: string[] }): boolean {
-  return row.changed.length > 0;
+/** The checks as one outcome: what runs now, what failed, what has not run, and that in a line. */
+export function verdict(checks: CheckLike[], jobs: Record<string, JobLike>) {
+  const states = checks.map((c) => ({ title: c.title, job: c.job, state: checkState(c, jobs[c.job]) }));
+  const running = states.find((s) => s.state === "running") ?? null;
+  const waiting = states.filter((s) => s.state === "waiting").length;
+  const passed = states.filter((s) => s.state === "passed").length;
+  const failed = states.filter((s) => s.state === "failed");
+  const notRun = states.filter((s) => s.state === "notRun");
+  const total = checks.length;
+  let text: string;
+  if (running) text = `Running ${passed + failed.length + 1} of ${total}: ${running.title}`;
+  else if (waiting) text = `${waiting} waiting to run`;
+  else if (passed === total) text = `All ${total} checks passed`;
+  else if (notRun.length === total) text = `Not run yet: ${total} checks`;
+  else if (!notRun.length) text = `${failed.length} of ${total} failed`;
+  else text = `${passed} passed, ${failed.length} failed, ${notRun.length} not run`;
+  return { running, failed, notRun, passed, total, allPassed: total > 0 && passed === total, text };
 }
 
-/** The titles of the checks whose build has not passed. */
-export function openChecks(checks: { job: string; title: string }[], jobs: Record<string, { state: string } | undefined>): string[] {
-  return checks.filter((c) => jobs[c.job]?.state !== "passed").map((c) => c.title);
+/** What a release's changes since its tag come to, for review: code first, the rest only named. */
+export function changeText(row: { code: string[]; manifest: string[]; tests: string[]; docs: string[] }): string {
+  if (row.code.length) return row.code.length === 1 ? "1 code file" : `${row.code.length} code files`;
+  const kinds = [row.manifest.length && "manifest", row.tests.length && "tests", row.docs.length && "docs"].filter(Boolean) as string[];
+  if (!kinds.length) return "no changes";
+  return kinds.length === 1 ? `${kinds[0]} only` : `${kinds.slice(0, -1).join(", ")} and ${kinds[kinds.length - 1]}, no code`;
 }
 
 /** How a build stands, in words. */
@@ -30,4 +52,32 @@ export function stateText(job: { state: string } | undefined): string {
     default:
       return "failed";
   }
+}
+
+/** A size as people read it: `39.2 GB`, `448 MB`, `12 KB`. */
+export function bytesText(bytes: number): string {
+  const units = ["bytes", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return unit === 0 ? `${bytes} bytes` : `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+/** The Disk and Release planning tabs' keys: no piece has them. */
+export const DISK_TAB = "disk";
+export const RELEASE_TAB = "releasePlanning";
+
+/** The tabs in their order: Disk and Release planning first, then the pieces marked with a signal, then the others, each in the order given. */
+export function tabOrder(pieces: { key: string; signal: string | null }[]): string[] {
+  return [DISK_TAB, RELEASE_TAB, ...pieces.filter((p) => p.signal).map((p) => p.key), ...pieces.filter((p) => !p.signal).map((p) => p.key)];
+}
+
+/** The tab `step` places from `current` in `order`, round from the last to the first and back. */
+export function cycle(order: string[], current: string, step: number): string {
+  if (!order.length) return current;
+  const at = Math.max(0, order.indexOf(current));
+  return order[(((at + step) % order.length) + order.length) % order.length];
 }

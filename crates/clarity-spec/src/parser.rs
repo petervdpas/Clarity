@@ -1966,6 +1966,8 @@ fn parse_widget_page(
         let handler = cursor.expect_ident("a handler name")?.name;
         tells.push(crate::model::TellHandler { tell, handler });
     }
+    // `tab "Overview" permanent`: a tab of tabs that close that has no x.
+    let permanent = keyword == "tab" && cursor.eat_keyword("permanent");
     let columns = if keyword == "pane" && cursor.eat_keyword("span") {
         let token = cursor.expect(TokenKind::Number, "the columns the pane starts with")?;
         Some(token.text.parse().map_err(|_| Diagnostic::error("a pane's span is a whole number", token.span))?)
@@ -1979,17 +1981,18 @@ fn parse_widget_page(
         view,
         tells,
         color,
+        permanent,
         children: parse_widgets(&node.children, diagnostics),
         span: node.span(),
     })
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 90] = [
+pub const LINE_WORDS: [&str; 94] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "fold", "reading", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "colored", "band", "chip", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
-    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows",
+    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows", "closing", "cycling", "available", "permanent",
 ];
 
 fn parse_widget_props(
@@ -2102,6 +2105,9 @@ fn parse_widget_props(
         picked_id: None,
         hops: None,
         legend: false,
+        closing: false,
+        cycling: false,
+        available: false,
         graph_model: None,
         search: false,
         labels: None,
@@ -2261,6 +2267,19 @@ fn parse_widget_props(
             "pinnable" => {
                 applies(WidgetProperty::Pinnable)?;
                 props.pinnable = true;
+            }
+            // Tabs the person closes, goes through, and brings back.
+            "closing" => {
+                applies(WidgetProperty::Closing)?;
+                props.closing = true;
+            }
+            "cycling" => {
+                applies(WidgetProperty::Cycling)?;
+                props.cycling = true;
+            }
+            "available" => {
+                applies(WidgetProperty::Available)?;
+                props.available = true;
             }
             // `code csharp`: a memo colors its text as code of the language.
             "code" => {

@@ -103,6 +103,40 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     files.to_string() + "\n"
 }
 
+/// `files.json` for the designer showing the slide-out `part` of the window or
+/// view `shown` on a canvas of its own (the Elements tree lists it under
+/// Views, marked slideout): its parts as a window of their own, on its grid
+/// and as wide as it slides out. Each part keeps the key it has in the
+/// window's file (`design_keys::numbered`), so picking and changing one
+/// changes the window's file. Why not, when `part` is no slide-out there.
+pub fn files_json_slideout(project: &Project, title: &str, shown: &Shown, part: &str, showing: &BTreeMap<String, usize>) -> Result<String, String> {
+    let Shown::Window(name) = shown else { return Err("an app has no slide-outs".to_string()) };
+    let filled = clarity_spec::translations::with_app_slots(project);
+    let (filled, keys) = clarity_spec::design_keys::numbered(&filled);
+    let (module, page) = filled
+        .files
+        .iter()
+        .find_map(|f| f.pages.iter().find(|p| p.name.name == *name).map(|p| (f.module.as_ref().map_or("", |m| m.name.as_str()), p)))
+        .ok_or_else(|| format!("there is no window or view {name}"))?;
+    fn find<'a>(widgets: &'a [clarity_spec::model::Widget], name: &str) -> Option<&'a clarity_spec::model::Widget> {
+        widgets.iter().find_map(|w| (w.props.name.as_deref() == Some(name)).then_some(w).or_else(|| find(&w.children, name)).or_else(|| w.pages.iter().find_map(|p| find(&p.children, name))))
+    }
+    let slide = find(&page.widgets, part).filter(|w| w.props.kind == clarity_spec::widgets::WidgetKind::Slideout).ok_or_else(|| format!("{name} has no slide-out {part}"))?;
+    let mut own = page.clone();
+    own.widgets = slide.children.clone();
+    own.columns = slide.props.width.max(1);
+    own.frame = clarity_spec::model::Frame::default();
+    let (_, height) = crate::window_size(&filled, name);
+    let width = slide.props.slide_width.unwrap_or(clarity_spec::model::SLIDEOUT_WIDTH);
+    own.size = Some(clarity_spec::model::WindowSize { width, height });
+    let markup = crate::web_windows::designed_showing(&keys, showing, || crate::web_windows::window_markup_in(&own, module, filled.row_height));
+    let mut files: Value = serde_json::from_str(&files_json(project, title, shown, true, showing)).map_err(|e| e.to_string())?;
+    files["windows"][name.as_str()] = Value::String(markup);
+    files["width"] = Value::from(width);
+    files["height"] = Value::from(height);
+    Ok(files.to_string() + "\n")
+}
+
 /// Fills each content of `placed` with the parts of the views it lists, so
 /// the window is designed as it looks. The parts keep the numbers of their
 /// own file's things (`design_keys::numbered`), so the designer's markup
@@ -166,12 +200,13 @@ impl PreviewProgram {
     pub fn new(project: Project, main: &str) -> PreviewProgram {
         let tree_rows = clarity_spec::trees::sample_data(&project);
         let mut placed = clarity_spec::views::placed(&project);
-        // A view the designer shows on its own is its window here, with its own code.
-        for (file, own) in project.files.iter().zip(placed.files.iter_mut()) {
-            if let Some(view) = file.pages.iter().find(|p| p.name.name == main && p.kind == clarity_spec::model::PageKind::View) {
-                own.pages.push(view.clone());
-                own.code.extend(file.code.iter().find(|c| c.name.name == main).cloned());
-            }
+        // A view the designer shows on its own is its window here, with its own code. Found by
+        // its name, in whichever file it is: placing folds a view's .cxaml into its module, so
+        // the placed files do not line up with the project's.
+        let view = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == main && p.kind == clarity_spec::model::PageKind::View).cloned();
+        if let (Some(view), Some(own)) = (view, placed.files.first_mut()) {
+            own.pages.push(view);
+            own.code.extend(project.files.iter().flat_map(|f| &f.code).find(|c| c.name.name == main).cloned());
         }
         let project = placed;
         let samples = clarity_spec::sample::sample_data(&project);
@@ -542,7 +577,14 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
                     {
                         loaded.project = draft;
                     }
-                    let text = files_json(&loaded.project, &loaded.title, &shown, design, &showing_of(&request.query));
+                    // A slide-out designed on a canvas of its own (`slideout=properties`), else the window or view.
+                    let text = match request.query.get("slideout").filter(|s| design && !s.is_empty()) {
+                        Some(part) => match files_json_slideout(&loaded.project, &loaded.title, &shown, part, &showing_of(&request.query)) {
+                            Ok(text) => text,
+                            Err(why) => return respond(&mut stream, "404 Not Found", "text/plain", why.as_bytes()),
+                        },
+                        None => files_json(&loaded.project, &loaded.title, &shown, design, &showing_of(&request.query)),
+                    };
                     let open: Vec<String> = request.query.get("open").map(|o| o.split(',').filter(|n| !n.is_empty()).map(str::to_string).collect()).unwrap_or_default();
                     *serving.program.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(PreviewProgram::new(loaded.project.clone(), shown.main()).opening(open)));
                     *serving.loaded.lock().unwrap_or_else(|p| p.into_inner()) = Some(loaded);

@@ -34,6 +34,9 @@ pub const TRANSLATIONS_DIR: &str = "translations";
 /// closing a message.
 pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok", "OK"), ("cancel", "Cancel"), ("dismiss", "Dismiss")];
 
+/// Clarity's words on tabs that close, with `available`: the dropdown that brings a closed tab back.
+pub const TAB_KEYS: [(&str, &str); 1] = [("tabsAddCaption", "+ Add a tab")];
+
 /// Clarity's words on the buttons of a wizard, the `steps` part.
 pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("finish", "Finish")];
 /// Clarity's words heading the pickers of the click targets `language` and `theme`.
@@ -370,6 +373,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .iter()
         .chain(&PICTURE_KEYS)
         .chain(&STEP_KEYS)
+        .chain(&TAB_KEYS)
         .chain(&FILE_KEYS)
         .chain(&TEXT_EDIT_KEYS)
         .chain(&CALENDAR_KEYS)
@@ -824,6 +828,7 @@ fn shown(project: &Project) -> Shown {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
     let wizard = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
+    let available_tabs = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Tabs && w.props.available));
     let bound_file = part_lists(project).any(|p| any_widget(p, &|w| {
         w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
     }));
@@ -902,6 +907,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if windows && dates { CALENDAR_KEYS.as_slice() } else { &[] })
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if available_tabs { TAB_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })

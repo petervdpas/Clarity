@@ -58,22 +58,29 @@ fn release(root: &Path) -> PathBuf {
 }
 
 #[test]
-fn the_core_pieces_are_always_on_and_the_others_are_added() {
+fn a_fresh_panel_shows_no_piece_and_pieces_are_added() {
+    // DevTools shows Disk, Release planning and the pieces marked with a signal; any other piece's tab is added.
     let core: Vec<&str> = swap::PIECES.iter().filter(|p| p.core).map(|p| p.key).collect();
     assert_eq!(core, ["clarityUi", "clarityUiBrowser", "rustCrates", "nugetPackages", "goModule"]);
-    let added: Vec<&str> = swap::PIECES.iter().filter(|p| !p.core).map(|p| p.key).collect();
-    assert_eq!(added, ["clarityAudio", "clarityVideo", "clarityImage", "clarityFormats", "clarityAuth", "clarityAppMcp"]);
     let mut swaps = Swaps::default();
-    assert_eq!(swaps.tabs(), core, "a fresh panel shows the core tabs");
+    assert!(swaps.tabs().is_empty(), "a fresh panel has no piece's tab of its own");
     swaps.add("clarityAudio").unwrap();
-    assert!(swaps.tabs().contains(&"clarityAudio"));
-    assert!(swaps.add("rustCrates").is_err(), "a core tab is always there");
+    swaps.add("clarityUi").unwrap();
+    assert_eq!(swaps.tabs(), ["clarityUi", "clarityAudio"], "in the pieces' order");
     assert!(swaps.add("nothing").is_err());
     swaps.swap("clarityAudio", true).unwrap();
     swaps.close("clarityAudio").unwrap();
     assert!(!swaps.tabs().contains(&"clarityAudio") && !swaps.mine("clarityAudio"), "closed, its piece is the release again");
-    assert!(swaps.close("clarityUi").is_err(), "a core tab cannot be closed");
+    assert!(swaps.add("clarityAudio").is_ok() && swaps.tabs().contains(&"clarityAudio"), "and comes back with + Add a piece");
     assert!(swaps.swap("clarityVideo", true).is_err(), "a piece is swapped in its open tab only");
+}
+
+#[test]
+fn a_swapped_piece_keeps_its_tab() {
+    // Kept swaps from before, a core piece swapped without being added: its tab shows, so it can be swapped back.
+    let swaps: Swaps = serde_json::from_str(r#"{"mine":["clarityUiBrowser"]}"#).unwrap();
+    assert!(swaps.tabs().contains(&"clarityUiBrowser"));
+    assert!(swaps.shown(|_| false).iter().any(|(p, auto)| p.key == "clarityUiBrowser" && !*auto));
 }
 
 #[test]
@@ -102,6 +109,7 @@ fn builds_use_the_release_until_a_piece_is_swapped() {
     assert!(chosen.is_empty(), "nothing swapped: every build uses the release");
     swaps.add("clarityAudio").unwrap();
     swaps.swap("clarityAudio", true).unwrap();
+    swaps.add("rustCrates").unwrap();
     swaps.swap("rustCrates", true).unwrap();
     let chosen = swap::choices(&repo, &swaps, Some(&release), "linux").unwrap();
     assert_eq!(chosen.get("rustCrates"), Some(&repo.join("runtimes/rust")));
@@ -115,4 +123,31 @@ fn builds_use_the_release_until_a_piece_is_swapped() {
     // A native piece swapped while the release is not on this machine says so.
     assert!(swap::choices(&repo, &swaps, None, "linux").unwrap_err().contains("release"));
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn a_piece_whose_own_build_is_behind_shows_its_tab_by_itself() {
+    let swaps = Swaps::default();
+    let shown = swaps.shown(|p| p.key == "clarityAudio");
+    let keys: Vec<(&str, bool)> = shown.iter().map(|(p, auto)| (p.key, *auto)).collect();
+    assert!(keys.contains(&("clarityAudio", true)), "behind: shown by itself {keys:?}");
+    assert!(!keys.iter().any(|(k, _)| *k == "clarityVideo"), "not behind and not added: not shown");
+    assert!(!keys.iter().any(|(k, _)| *k == "clarityUi"), "a core piece neither behind nor added: not shown either");
+    let order: Vec<&str> = shown.iter().map(|(p, _)| p.key).collect();
+    let pieces: Vec<&str> = swap::PIECES.iter().map(|p| p.key).filter(|k| order.contains(k)).collect();
+    assert_eq!(order, pieces, "in the pieces' order");
+}
+
+#[test]
+fn a_tab_shown_by_itself_comes_back_while_its_build_is_behind() {
+    // Closing it hides it while Clarity runs (the IDE keeps that); the swaps keep only what was added and swapped.
+    let mut swaps = Swaps::default();
+    assert!(swaps.swap("clarityAudio", true).is_err(), "shown by itself, it is added before it is swapped (the IDE does)");
+    swaps.add("clarityAudio").unwrap();
+    swaps.swap("clarityAudio", true).unwrap();
+    swaps.close("clarityAudio").unwrap();
+    assert!(swaps.shown(|p| p.key == "clarityAudio").iter().any(|(p, auto)| p.key == "clarityAudio" && *auto), "behind: shown by itself again");
+    assert_eq!(serde_json::to_string(&swaps).unwrap(), "{}", "nothing of a closed tab is kept");
+    let old: Swaps = serde_json::from_str(r#"{"closed":["clarityUiBrowser"]}"#).unwrap();
+    assert!(old.shown(|p| p.key == "clarityUiBrowser").iter().any(|(p, _)| p.key == "clarityUiBrowser"), "a closed list kept before is no longer read");
 }

@@ -2,6 +2,7 @@
 //! with what differs from its kind's defaults, written in Clarity's own
 //! words, in an XML file the screen Clarity ships reads.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 fn calculator() -> clarity_spec::Project {
@@ -702,4 +703,42 @@ fn the_sign_in_window_is_a_window_of_its_own_without_the_app_s_frame() {
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let (width, height) = clarity_spec::layout::SIGNIN_SIZE;
     assert!(clarity_gen::web_windows::window_markup(&file.pages[0]).contains(&format!(r#"width="{width}" height="{height}" startup="centerScreen""#)));
+}
+
+/// A slide-out picked in a view the designer shows on its own (novel's
+/// ChaptersPart, its Properties beside the chapter list in a splitter's
+/// pane) shows open, as one in a window does.
+#[test]
+fn the_designer_opens_the_slideout_picked_in_a_view() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/novel");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let program = PreviewProgram::new(project.clone(), "ChaptersPart").opening(vec!["properties".into()]);
+    let opened = program.answer("open_window", &json!({ "window": "ChaptersPart" }));
+    assert_eq!(opened["value"]["state"]["parts"]["properties"], json!({ "visible": true }), "{opened}");
+}
+
+/// A slide-out designed on a canvas of its own (Views, marked slideout):
+/// its parts as a window of their own, on its grid and as wide as it slides
+/// out, each keeping its key in the window's file, so picking and changing
+/// one changes the window's file; nothing else of the window shows.
+#[test]
+fn the_designer_draws_a_slideout_as_a_window_of_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/novel");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let shown = Shown::Window("ChaptersPart".into());
+    let whole = files(&preview::files_json(&project, "Novel", &shown, true, &BTreeMap::new()));
+    let alone = files(&preview::files_json_slideout(&project, "Novel", &shown, "properties", &BTreeMap::new()).unwrap());
+    let markup = alone["windows"]["ChaptersPart"].as_str().unwrap();
+    let window = whole["windows"]["ChaptersPart"].as_str().unwrap();
+    assert!(markup.contains("name=\"linkTabs\"") && markup.contains("name=\"titleBox\""), "its parts: {markup}");
+    assert!(!markup.contains("name=\"chapterList\"") && !markup.contains("name=\"manuscriptBox\""), "nothing else of the window: {markup}");
+    assert!(!markup.contains("<Slideout"), "its parts stand on its own grid, not in a slide-out: {markup}");
+    // Each part keeps the key it has in the window's markup.
+    let key_of = |text: &str, name: &str| text.split(&format!("name=\"{name}\"")).nth(1).and_then(|rest| rest.split("designItem=\"").nth(1)).and_then(|k| k.split('"').next()).map(str::to_string);
+    for name in ["linkTabs", "titleBox", "researchTable"] {
+        assert_eq!(key_of(markup, name), key_of(window, name), "{name} keeps its key");
+        assert!(key_of(markup, name).is_some(), "{name} has a key");
+    }
+    assert_eq!(alone["width"], json!(420), "as wide as it slides out");
+    assert!(preview::files_json_slideout(&project, "Novel", &shown, "chapterList", &BTreeMap::new()).is_err(), "only a slide-out");
 }

@@ -578,6 +578,8 @@ fn main() {{
         panic!("Clarity.UI's library is not found: set CLARITY_UI to its folder, which holds include/clarity_ui.h and lib/ (now '{{folder}}')");
     }}
     let lib = Path::new(&folder).join("lib");
+    // A library rebuilt in the same folder (a cDdev's own build) counts from the next build too.
+    println!("cargo:rerun-if-changed={{}}", lib.display());
     println!("cargo:rustc-link-search=native={{}}", lib.display());
     for name in LIBRARIES {{
         if os == "windows" {{
@@ -1603,4 +1605,15 @@ fn required_inputs(project: &Project) -> String {
         }
     }
     arms
+}
+
+#[cfg(test)]
+mod swapped_library {
+    /// A cDdev rebuilds their own Clarity.UI in the folder named (target/clarity-swap): the build script watches it, so the program takes it.
+    #[test]
+    fn the_build_script_runs_again_when_the_library_folder_changes() {
+        let script = super::native_build_rs(false, false, false);
+        assert!(script.contains("cargo:rerun-if-env-changed=CLARITY_UI"), "{script}");
+        assert!(script.contains("cargo:rerun-if-changed={}\", lib.display()"), "{script}");
+    }
 }

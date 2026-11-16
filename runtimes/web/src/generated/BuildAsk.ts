@@ -3,4 +3,8 @@
 /**
  * An agent's ask to press a Build, for the page to allow.
  */
-export type BuildAsk = { id: string, key: string, name: string, by: string, };
+export type BuildAsk = { id: string, 
+/**
+ * `build` a piece or `remove` a build folder of the Disk tab.
+ */
+action: string, key: string, name: string, by: string, };

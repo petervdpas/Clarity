@@ -34,7 +34,13 @@ endif()
 # and so does any program that reads or writes a format (Clarity.Formats lies there).
 set(CLARITY_RUNTIME_DIR ${CMAKE_CURRENT_LIST_DIR})
 macro(clarity_ui_folder)
-  set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library")
+  # The folder Clarity's build names wins over one kept from an earlier
+  # build: a cDdev's swap (or the release again) counts from the next build.
+  if(NOT "$ENV{CLARITY_UI}" STREQUAL "")
+    set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library" FORCE)
+  else()
+    set(CLARITY_UI "" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library")
+  endif()
   if(NOT CLARITY_UI AND CLARITY_UI_VERSION)
     include(${CLARITY_RUNTIME_DIR}/clarity_ui.cmake)
     clarity_ui_rid(CLARITY_UI_RID "${CMAKE_SYSTEM_NAME}" "${CMAKE_SYSTEM_PROCESSOR}")

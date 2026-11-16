@@ -170,7 +170,9 @@
   // The size a window's edge is being dragged to, kept until the window has
   // it; null while none is.
   let sizing = $state<{ width: number; height: number } | null>(null);
-  const shownSize = $derived(sizing ?? windowSize(page));
+  // A slide-out designed on a canvas of its own (Views, marked slideout): only its parts show, as wide as it slides out.
+  const slideout = $derived(pageDesigner.slideout ? (allParts(page).find((w) => w.props.kind === "slideout" && w.props.name === pageDesigner.slideout) ?? null) : null);
+  const shownSize = $derived(slideout ? { width: slideout.props.slideWidth ?? 420, height: windowSize(page).height } : (sizing ?? windowSize(page)));
 
   async function resize(size: { width: number; height: number }, done: boolean) {
     sizing = size;
@@ -212,7 +214,11 @@
     return new Set(appFile ? commandsOf(projectApp.frame, (t) => keyAt(preview, appFile, t.span.start)) : []);
   });
   // What the drawing shows beyond the saved window: the page each container shows, the draft, the popover picked.
-  const showing = $derived({ pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, open: openPopovers });
+  const showing = $derived(
+    slideout
+      ? { pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, slideout: slideout.props.name ?? undefined }
+      : { pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, open: openPopovers },
+  );
   const chosen = $derived(chosenOf(languageChoice.language, preview.project.locale.language ?? "en"));
 
   /** Makes `edit`, in the places of the file of `key` (this window's when null). */
@@ -494,7 +500,21 @@
   style:grid-template-columns={filled ? "minmax(0, 1fr)" : `minmax(0, 1fr) auto ${layout.folded.properties ? "auto" : layout.sizes.properties + "px"}`}
 >
   <div class="stage" class:hidden={filled}>
-    <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app ? undefined : resize}>
+    <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app || slideout ? undefined : resize}>
+      {#if slideout}
+        <!-- The slide-out on a canvas of its own: its title bar picks it, and a button goes back to the whole window. -->
+        <div
+          class="titlebar"
+          class:selected={pageDesigner.selected === shown.keyOf(slideout)}
+          role="button"
+          tabindex="-1"
+          onpointerdown={() => (pageDesigner.selected = shown.keyOf(slideout))}
+        >
+          <span>{slideout.props.caption ? tr(preview, slideout.props.caption) : slideout.props.name}</span>
+          <code>{slideout.props.name}: slide-out of {page.name.name} | {slideout.props.width} columns</code>
+          <button type="button" class="whole" onpointerdown={(e) => e.stopPropagation()} onclick={() => (pageDesigner.slideout = null)}>{page.name.name}</button>
+        </div>
+      {:else}
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}
@@ -505,6 +525,7 @@
         <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
         <code>{app ? "app " + app.name.name : page.name.name + ": " + page.kind + " | " + page.columns + " columns"}</code>
       </div>
+      {/if}
       <div
         class="client"
         style:height="{shownSize.height}px"
@@ -523,7 +544,7 @@
         </p>
       {/if}
     </ShownWindow>
-    {#if !app}
+    {#if !app && !slideout}
       <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26).
            A popover or slide-out is hidden until opened: it waits here too, marked so, and shows on the window while it is picked. -->
       {@const unplaced = [...page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer"), ...popovers]}
@@ -614,6 +635,11 @@
 {/if}
 
 <style>
+  .titlebar .whole {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 1px 8px;
+  }
   .designer {
     display: grid;
 

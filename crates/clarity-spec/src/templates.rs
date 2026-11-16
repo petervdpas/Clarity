@@ -501,7 +501,7 @@ fn in_content_of(page: crate::model::Page, code: Option<&str>) -> Made {
     content.width = columns;
     content.height = rows;
     let mut content = widget_of(content);
-    content.pages.push(WidgetPage { title: None, columns: None, view: Some(view_name.clone()), tells: Vec::new(), color: None, children: Vec::new(), span: crate::span::Span::default() });
+    content.pages.push(WidgetPage { title: None, columns: None, view: Some(view_name.clone()), tells: Vec::new(), color: None, permanent: false, children: Vec::new(), span: crate::span::Span::default() });
     let mut window = page;
     window.data = Vec::new();
     window.widgets = std::iter::once(content).chain(slideouts).collect();

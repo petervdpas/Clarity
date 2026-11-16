@@ -67,9 +67,22 @@ Code reads and sets whether a foldable panel or form is folded as `details.folde
 Tab pages, each a `<Tab title="@key">` with parts. Code reads and sets the open tab as `customerTabs.tab`, counted from 1. Its `change` runs when the person opens another tab.
 
 - `<Tab title>` (a key): the page's title; **Title** when the tab is picked.
-- Event: `change`.
+- `closing="true"` (**Tab closing**): each tab has an x that closes it; closing the open tab opens the next. The last tab that shows never closes. Its `close` runs when the person closes one. Closed tabs stay closed while the window is open.
+- `<Tab permanent="true">` (**Permanent** when the tab is picked, with Tab closing on): the tab has no x.
+- `cycling="true"` (**Tab cycling**): when the tabs do not fit, two sideways triangles after them go to the tab before or after, round from the last to the first; the open tab stays in view.
+- `available="true"` (**Available tabs**, with Tab closing on): a dropdown at the right end, **+ Add a tab** (the key `tabsAddCaption` in the app's languages), lists the closed tabs and brings the one picked back, open.
+- Events: `change`, `close`.
 
-See [A container's grid](#a-containers-grid) for an example. The checker refuses tabs without a tab (`tabs need at least one 'tab'`).
+Code brings a closed tab back with `customerTabs.reopen(2)`, which opens it as `customerTabs.tab = 2` does: opening a closed tab from code always brings it back.
+
+```xml
+<Tabs name="customerTabs" at="1,1" span="12" rows="8" closing="true" cycling="true" available="true" onclose="tabClosed">
+  <Tab title="@overviewTab" permanent="true">...</Tab>
+  <Tab title="@ordersTab">...</Tab>
+</Tabs>
+```
+
+See [A container's grid](#a-containers-grid) for an example. The checker refuses tabs without a tab (`tabs need at least one 'tab'`), `available` without `closing` (`'available' lists the closed tabs: write 'closing'`) and a permanent tab of tabs that do not close.
 
 ### `content`
 
@@ -189,7 +202,7 @@ The checker refuses a popover without `for` (`a popover opens next to a part: wr
 
 ### `slideout`
 
-Parts on their own grid that slide in over the window from its right, left, top or bottom edge, as an IDE's side and bottom panels do. It has no place in the window's grid: in the designer it waits in the tray under the canvas, marked hidden, and shows on the window while it is picked.
+Parts on their own grid that slide in over the window from its right, left, top or bottom edge, as an IDE's side and bottom panels do. It has no place in the window's grid: in the designer it waits in the tray under the canvas, marked hidden, and shows on the window while it is picked. Each named slide-out is also listed under **Views** in the Elements tree, marked **slideout** with its window or view: picked there, it is designed on a canvas of its own, its parts as a window as wide as it slides out, each picked and set in Properties and kept in its window's file; the button with the window's name in its title bar goes back to the whole window.
 
 At the right (or the left) it is as high as the window's content, below the menu bar, toolbar and ribbon and above the footer, with a shadow, and what is under it stays where it is. At the top or bottom it slides down from the top of the content or up from its bottom, as wide as the content. `span` and `rows` give its own grid; its rows are no more than the window holds under its bars, and an edit that makes it taller cuts it to fit (see [Windows](design.windows.md#size)). Its rows take no room in the window, so it never makes the window scroll.
 
@@ -269,7 +282,7 @@ The checker refuses a splitter without exactly two panes (`a splitter has exactl
 |---|---|---|---|---|---|---|
 | Form | `form` | record | 12 x 4 | yes | `foldable`, `labels` | `submit` |
 | Panel | `panel` | nothing | 6 x 4 | yes | `foldable` | none |
-| Tabs | `tabs` | nothing | 8 x 5 | yes | none | `change` |
+| Tabs | `tabs` | nothing | 8 x 5 | yes | `closing`, `cycling`, `available` | `change`, `close` |
 | Content | `content` | nothing | 8 x 6 | yes | none | none |
 | Accordion | `accordion` | nothing | 6 x 8 | yes | `orientation` | `change` |
 | Scroll box | `scroll` | nothing | 6 x 6 | yes | none | none |

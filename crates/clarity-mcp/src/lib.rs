@@ -21,6 +21,14 @@ use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Value, json};
 
+// The cDdev's DevTools tools (build_piece, release_state, disk_state,
+// remove_folder): only in a server built from Clarity's repository, never
+// compiled into a release, as an installed Clarity has no DevTools.
+#[cfg(debug_assertions)]
+mod devtools;
+#[cfg(debug_assertions)]
+pub use devtools::{BUILD_PIECE, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER};
+
 /// Clarity's icon, as the installers have it (app/src-tauri/icons): a PNG
 /// every MCP client takes and the SVG it is made from.
 const ICON_PNG: &[u8] = include_bytes!("../../../app/src-tauri/icons/128x128.png");
@@ -60,14 +68,12 @@ pub const NO_PROJECT: &str = "No project is open in Clarity. Ask the person to o
 these tools work on the project open there.";
 
 /// What the agent is told beyond the shared instructions (crates/clarity-tools).
-const MCP_LINES: [&str; 4] = [
+const MCP_LINES: [&str; 3] = [
     "You reach Clarity through its MCP server. The tools work on the project open in the Clarity IDE; when the person opens \
 another project there, the tools follow it.",
     "You cannot build or run the application, take or restore backups, or show windows: ask the person to press Run or \
 Build in Clarity, and to tell you what it reports.",
     "A project you make with new_project opens only when the person opens it in Clarity: ask them to open it there.",
-    "Working on Clarity itself, build a piece of Clarity (its library, browser files, runtimes) with build_piece, which presses its \
-Build in Clarity settings > DevTools, never with cargo or a script of your own.",
 ];
 
 /// What the agent is told instead when the IDE started the server for a
@@ -91,10 +97,13 @@ pub const TURN_TOOLS: [&str; 2] = ["show_window", "show_diagram"];
 pub struct ClarityServer {
     /// Where the IDE records its open project.
     ide_file: PathBuf,
-    /// The folder of the asks to press a DevTools Build (clarity_project::dev_asks), beside `ide_file`.
+    /// The folder of the asks to the IDE's DevTools (clarity_project::dev_asks), beside `ide_file`.
+    #[cfg(debug_assertions)]
     asks: PathBuf,
-    /// How long build_piece waits for the IDE to take its ask, and for the build.
+    /// How long an ask waits for the IDE to take it, and for what it asked.
+    #[cfg(debug_assertions)]
     take_waits: std::time::Duration,
+    #[cfg(debug_assertions)]
     build_waits: std::time::Duration,
     /// The turn's file, when the IDE started the server for a turn of its chat panel.
     turn: Option<PathBuf>,
@@ -117,18 +126,17 @@ impl ClarityServer {
     /// The server on the project `ide_file` records as open.
     pub fn with_ide_file(ide_file: PathBuf) -> ClarityServer {
         let activity = ide_file.with_file_name(clarity_project::activity::FILE_NAME);
-        let asks = ide_file.with_file_name("dev-asks");
-        ClarityServer { ide_file, asks, take_waits: clarity_project::dev_asks::TAKE_WAITS, build_waits: clarity_project::dev_asks::BUILD_WAITS, turn: None, activity }
-    }
-
-    /// The same server, waiting `take` for the IDE to take a build's ask and `build` for the build.
-    pub fn with_waits(self, take: std::time::Duration, build: std::time::Duration) -> ClarityServer {
-        ClarityServer { take_waits: take, build_waits: build, ..self }
-    }
-
-    /// The folder of the asks to press a DevTools Build.
-    pub fn asks(&self) -> PathBuf {
-        self.asks.clone()
+        ClarityServer {
+            #[cfg(debug_assertions)]
+            asks: ide_file.with_file_name("dev-asks"),
+            #[cfg(debug_assertions)]
+            take_waits: clarity_project::dev_asks::TAKE_WAITS,
+            #[cfg(debug_assertions)]
+            build_waits: clarity_project::dev_asks::BUILD_WAITS,
+            ide_file,
+            turn: None,
+            activity,
+        }
     }
 
     /// The same server for a turn of the IDE's chat panel: it also offers
@@ -143,9 +151,10 @@ impl ClarityServer {
         if self.turn.is_some() {
             tools.extend(turn_tools());
         }
-        // A server built from Clarity's repository offers the cDdev's DevTools Build; a turn of the IDE's chat panel does not.
-        if cfg!(debug_assertions) && self.turn.is_none() {
-            tools.push(build_piece_tool());
+        // A server built from Clarity's repository offers the cDdev's DevTools tools; a turn of the IDE's chat panel does not.
+        #[cfg(debug_assertions)]
+        if self.turn.is_none() {
+            tools.extend(devtools::tools());
         }
         tools
     }
@@ -157,13 +166,24 @@ impl ClarityServer {
 
     /// What the agent is told before it starts.
     pub fn instructions(&self) -> String {
-        clarity_tools::instructions(if self.turn.is_some() { &TURN_LINES } else { &MCP_LINES })
+        if self.turn.is_some() {
+            return clarity_tools::instructions(&TURN_LINES);
+        }
+        #[cfg(debug_assertions)]
+        let lines: Vec<&str> = MCP_LINES.iter().copied().chain([devtools::LINE]).collect();
+        #[cfg(not(debug_assertions))]
+        let lines: Vec<&str> = MCP_LINES.to_vec();
+        clarity_tools::instructions(&lines)
     }
 
     /// Calls the tool `name` for the MCP client `client`, and adds the call to
     /// the activity log: the tool, the file it names, how it ended, never a file's text.
     pub fn call_from(&self, client: &str, name: &str, input: &Value) -> ToolResult {
-        let result = if name == BUILD_PIECE && cfg!(debug_assertions) && self.turn.is_none() { self.build_piece(client, input) } else { self.call(name, input) };
+        #[cfg(debug_assertions)]
+        let devtools = if self.turn.is_none() { self.devtools_call(client, name, input) } else { None };
+        #[cfg(not(debug_assertions))]
+        let devtools: Option<ToolResult> = None;
+        let result = devtools.unwrap_or_else(|| self.call(name, input));
         let said = if result.is_error { result.text.clone() } else { format!("{} characters", result.text.chars().count()) };
         let path = input.get("path").and_then(Value::as_str).map(str::to_string);
         let call = Call { client: client.to_string(), tool: name.to_string(), path, ok: !result.is_error, said };
@@ -210,61 +230,6 @@ impl ClarityServer {
             }
         }
         result
-    }
-}
-
-/// The tool that presses a DevTools tab's Build.
-pub const BUILD_PIECE: &str = "build_piece";
-
-fn build_piece_tool() -> ToolDef {
-    let keys: Vec<&str> = clarity_gen::tools::devtools::swap::PIECES.iter().map(|p| p.key).collect();
-    ToolDef {
-        name: BUILD_PIECE.into(),
-        description: format!(
-            "For working on Clarity itself: presses the Build button of a piece's tab in Clarity settings > DevTools, in a Clarity run from \
-its repository (./dev.sh), which builds the cDdev's own build of that piece and shows it in the tab. The person allows it as they chose for \
-agents. Waits for the build and gives how it ended with its last lines. Pieces: {}.",
-            keys.join(", ")
-        ),
-        input_schema: json!({ "type": "object", "properties": { "piece": { "type": "string", "enum": keys } }, "required": ["piece"] }),
-    }
-}
-
-impl ClarityServer {
-    /// Asks the IDE to press the Build of the piece `input.piece`, for `client`, and waits for the answer.
-    fn build_piece(&self, client: &str, input: &Value) -> ToolResult {
-        use clarity_project::dev_asks;
-        let failed = |text: String| ToolResult { text, is_error: true };
-        if !clarity_project::ide::outside_agents_in(&self.ide_file) {
-            return failed(NOT_ALLOWED.to_string());
-        }
-        let key = input["piece"].as_str().unwrap_or_default();
-        if clarity_gen::tools::devtools::swap::piece(key).is_none() {
-            let keys: Vec<&str> = clarity_gen::tools::devtools::swap::PIECES.iter().map(|p| p.key).collect();
-            return failed(format!("there is no piece '{key}': one of {}", keys.join(", ")));
-        }
-        let id = match dev_asks::ask(&self.asks, key, client) {
-            Ok(id) => id,
-            Err(why) => return failed(why),
-        };
-        let start = std::time::Instant::now();
-        while !dev_asks::taken(&self.asks, &id) {
-            if start.elapsed() >= self.take_waits {
-                dev_asks::forget(&self.asks, &id);
-                return failed("No Clarity run from its repository took the ask: ask the person to start Clarity with ./dev.sh, or to press Build in Clarity settings > DevTools.".into());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        loop {
-            if let Some(answer) = dev_asks::answer_of(&self.asks, &id) {
-                dev_asks::forget(&self.asks, &id);
-                return ToolResult { text: answer.text, is_error: !answer.ok };
-            }
-            if start.elapsed() >= self.build_waits {
-                return failed(format!("The build of {key} goes on after {} minutes; its tab in Clarity settings > DevTools shows it.", self.build_waits.as_secs() / 60));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(250));
-        }
     }
 }
 

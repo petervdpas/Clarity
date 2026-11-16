@@ -6,6 +6,8 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+# The free space of the disk the repository is on (DevTools' Disk tab); the IDE uses the same version.
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 clarity-spec.workspace = true
 clarity-project.workspace = true
 clarity-wasm.workspace = true

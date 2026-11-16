@@ -16,6 +16,8 @@
   import type { Selected } from "./selection";
   import { invoke } from "@tauri-apps/api/core";
   import { dialogs } from "./dialogStore.svelte";
+  import { allParts } from "@clarity/ui/screen/pages.ts";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
 
   let {
     preview,
@@ -23,6 +25,7 @@
     full = true,
     onapp,
     onwindow,
+    onslideout = null,
     onselect,
     onnewwindow = null,
     onnewview = null,
@@ -51,6 +54,8 @@
     full?: boolean;
     onapp: () => void;
     onwindow: (page: Page) => void;
+    /** A slide-out picked under Views: designed on a canvas of its own. */
+    onslideout?: ((page: Page, name: string) => void) | null;
     onselect: (selected: Selected) => void;
     onnewwindow?: (() => void) | null;
     /** Starts a new view, which a window's slide-out shows; null where the tree only shows. */
@@ -132,6 +137,8 @@
   });
   /** Views in file order: pages a window's content shows; a toolbox, which a canvas shows, is one too. */
   const views = $derived(files.flatMap((f) => f.pages.filter((page) => page.kind === "view" || page.kind === "toolbox").map((page) => ({ page, module: f.module?.name ?? "" }))));
+  /** Each named slide-out of a window or view, designed on a canvas of its own. */
+  const slideouts = $derived(files.flatMap((f) => f.pages.flatMap((page) => allParts(page).filter((w) => w.props.kind === "slideout" && w.props.name).map((w) => ({ page, name: w.props.name as string })))));
   const entities = $derived(files.flatMap((f) => f.entities.filter((e) => !e.settings).map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   /** How files are laid over entities, per case (docs/FORMATS-PLAN.md, step 4), with their modules. */
@@ -248,7 +255,7 @@
   </details>
 
   <details open>
-    <summary>Views <span class="count">{views.length}</span></summary>
+    <summary>Views <span class="count">{views.length + (onslideout ? slideouts.length : 0)}</span></summary>
     {#each views as { page, module } (page.name.name)}
       <button
         class="row"
@@ -263,6 +270,19 @@
     {:else}
       <p class="empty">No views yet.</p>
     {/each}
+    {#if onslideout}
+      {#each slideouts as { page, name } (page.name.name + "/" + name)}
+        <button
+          class="row"
+          class:current={is("window", page.name.name) && pageDesigner.slideout === name}
+          title="{name}: a slide-out of {page.name.name}, designed on a canvas of its own"
+          onclick={() => onslideout(page, name)}
+        >
+          {name}
+          <span class="note">slideout · {page.name.name}</span>
+        </button>
+      {/each}
+    {/if}
     {#if onnewview}
       <button class="row add" onclick={onnewview}>+ New view</button>
     {/if}

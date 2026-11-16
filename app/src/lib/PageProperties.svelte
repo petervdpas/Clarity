@@ -1632,6 +1632,20 @@
       >
     {/if}
 
+    {#if p.kind === "tabs"}
+      <label class="prop" title="Each tab has an x that closes it, but a tab marked permanent; code brings one back with reopen">
+        <span>Tab closing</span>
+        <input type="checkbox" checked={p.closing} onchange={(e) => update(e.currentTarget.checked ? { closing: true } : { closing: false, available: false })} />
+      </label>
+      <label class="prop" title="When the tabs do not fit, two sideways triangles after them go to the tab before or after">
+        <span>Tab cycling</span>
+        <input type="checkbox" checked={p.cycling} onchange={(e) => update({ cycling: e.currentTarget.checked })} />
+      </label>
+      <label class="prop" title={p.closing ? "A dropdown at the right end lists the closed tabs and brings one back" : "Lists the closed tabs: turn on Tab closing first"}>
+        <span>Available tabs</span>
+        <input type="checkbox" checked={p.available} disabled={!p.closing} onchange={(e) => update({ available: e.currentTarget.checked })} />
+      </label>
+    {/if}
     {#if info.container === "tabs"}
       <button onclick={() => onedit({ op: "addTab", item: location.widget.span.start, title: `Tab ${location.widget.pages.length + 1}` })}>
         Add tab
@@ -1684,6 +1698,12 @@
         <span>Title</span>
         <TextField {preview} {onapplied} text={tab.title} onwrite={(text) => onedit({ op: "setTitle", target: tab.span.start, title: text ?? "" })} />
       </label>
+      {#if !step && !section && inner.widget.props.kind === "tabs" && inner.widget.props.closing}
+        <label class="prop" title="It has no x: the person cannot close it">
+          <span>Permanent</span>
+          <input type="checkbox" checked={tab.permanent} onchange={(e) => onedit({ op: "setPagePermanent", target: tab.span.start, permanent: e.currentTarget.checked })} />
+        </label>
+      {/if}
       {#if section}
         <label class="prop" title="Its header in a color of its own, its text black or white as reads; without one it takes the theme's look">
           <span>Color</span>

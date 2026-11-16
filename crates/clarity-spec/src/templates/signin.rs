@@ -91,7 +91,7 @@ pub(super) fn signin_window(project: &Project, name: &str, title: &str) -> Resul
     content.height = tallest;
     let mut content = widget_of(content);
     for view in &names {
-        content.pages.push(WidgetPage { title: None, columns: None, view: Some(view.clone()), tells: Vec::new(), color: None, children: Vec::new(), span: crate::span::Span::default() });
+        content.pages.push(WidgetPage { title: None, columns: None, view: Some(view.clone()), tells: Vec::new(), color: None, permanent: false, children: Vec::new(), span: crate::span::Span::default() });
     }
     window.widgets = vec![content];
     let designed = std::iter::once(Designed::Page(window)).chain(views.into_iter().map(Designed::Page)).collect();

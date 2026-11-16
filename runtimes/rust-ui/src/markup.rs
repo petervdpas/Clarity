@@ -127,6 +127,8 @@ pub struct PageSpec {
     pub item: Option<String>,
     /// The view a content's page shows (`<View name="CodeView">`), by which an "other way" shows it.
     pub view: Option<String>,
+    /// A tab of tabs that close that has no x (`permanent`).
+    pub permanent: bool,
 }
 
 /// An item of a menu: its fields (caption, name, key, handler or window it opens) and its items.
@@ -421,6 +423,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,
                 item: child.attribute(DESIGN_ITEM).map(str::to_string),
                 view: (child.name == "View").then(|| child.attribute("name").map(str::to_string)).flatten(),
+                permanent: child.attribute("permanent") == Some("true"),
             });
         } else {
             children.push(part_of(child)?);

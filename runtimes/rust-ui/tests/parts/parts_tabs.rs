@@ -160,3 +160,99 @@ fn a_tab_with_columns_of_its_own_keeps_its_parts_inside() {
     assert!(save.x + save.width <= tabs.x + tabs.width + 0.5, "the button at 11,1 of 12 ends at {} but the tabs end at {}", save.x + save.width, tabs.x + tabs.width);
     assert!(save.width > 0.0);
 }
+
+/// Tabs with every option: closing (each tab's x, but a permanent one's), cycling and available.
+const CLOSING: &str = r#"<Tabs name="pages" at="1,1" span="12" rows="6" closing="true" cycling="true" available="true" onclose="pageClosed">
+  <Tab title="One" permanent="true"><Label name="first" at="1,1" span="3" caption="First" /></Tab>
+  <Tab title="Two"><Label name="second" at="1,1" span="3" caption="Second" /></Tab>
+  <Tab title="Three"><Label name="third" at="1,1" span="3" caption="Third" /></Tab>
+</Tabs>"#;
+
+fn tab_buttons(screen: &Screen) -> Vec<&tabs::TabButton> {
+    first::<TabsPart>(screen).tabs().into_iter().filter_map(|t| t.as_any().downcast_ref::<tabs::TabButton>()).collect()
+}
+
+#[test]
+fn a_tab_closes_with_its_x_and_a_permanent_one_has_none() {
+    let host = TestHost::new();
+    let mut screen = window(CLOSING, host.clone(), 808.0);
+    let buttons = tab_buttons(&screen);
+    assert!(buttons[0].close_mark().is_none(), "a permanent tab has no x");
+    let x = buttons[1].close_mark().expect("a tab of tabs that close has an x");
+    click(&mut screen, x.x + x.width / 2.0, x.y + x.height / 2.0);
+    let tabs = first::<TabsPart>(&screen);
+    assert_eq!(tabs.closed(), vec![2], "the second tab is closed");
+    assert!(!tabs.tabs()[1].is_shown(), "its tab is gone from the strip");
+    assert!(host.logged().iter().any(|l| l == "run pages close pageClosed"), "the part's close runs: {:?}", host.logged());
+    let plain = window(TABS, TestHost::new(), 808.0);
+    assert!(tab_buttons(&plain).iter().all(|t| t.close_mark().is_none()), "without closing, no tab has an x");
+}
+
+#[test]
+fn closing_the_open_tab_opens_the_next_and_code_brings_one_back() {
+    let host = TestHost::new();
+    let mut screen = window(CLOSING, host.clone(), 808.0);
+    host.set_state("pages", |s| s.tab = Some(2));
+    screen.resize(808.0, 400.0, 1.0);
+    let x = tab_buttons(&screen)[1].close_mark().unwrap();
+    click(&mut screen, x.x + x.width / 2.0, x.y + x.height / 2.0);
+    screen.resize(808.0, 400.0, 1.0);
+    assert_eq!(Some(3), first::<TabsPart>(&screen).open(), "the tab after it opens");
+    // `pages.reopen(2)` is `pages.tab = 2`: opening a closed tab brings it back.
+    host.set_state("pages", |s| s.tab = Some(2));
+    screen.resize(808.0, 400.0, 1.0);
+    let tabs = first::<TabsPart>(&screen);
+    assert!(tabs.closed().is_empty(), "back");
+    assert_eq!(Some(2), tabs.open());
+}
+
+#[test]
+fn tabs_that_do_not_fit_are_gone_through_with_the_triangles() {
+    let host = TestHost::new();
+    let mut screen = window(CLOSING, host.clone(), 808.0);
+    assert!(first::<TabsPart>(&screen).cycle_buttons().is_none(), "all fit: no triangles");
+    screen.resize(150.0, 400.0, 1.0);
+    let (before, next) = first::<TabsPart>(&screen).cycle_buttons().expect("too narrow: the triangles show");
+    assert!(next.x > before.x, "the tab before, then the next");
+    click(&mut screen, next.x + next.width / 2.0, next.y + next.height / 2.0);
+    assert_eq!(Some(2), host.state(Some("pages")).unwrap().tab);
+    click(&mut screen, before.x + before.width / 2.0, before.y + before.height / 2.0);
+    click(&mut screen, before.x + before.width / 2.0, before.y + before.height / 2.0);
+    assert_eq!(Some(3), host.state(Some("pages")).unwrap().tab, "round from the first to the last");
+    screen.resize(150.0, 400.0, 1.0);
+    let tabs = first::<TabsPart>(&screen);
+    assert!(tabs.tabs()[2].is_shown(), "the open tab is in view");
+    let plain = window(TABS, TestHost::new(), 150.0);
+    assert!(first::<TabsPart>(&plain).cycle_buttons().is_none(), "without cycling, no triangles");
+}
+
+#[test]
+fn the_dropdown_lists_the_closed_tabs_and_brings_one_back() {
+    let host = TestHost::new();
+    let mut screen = window(CLOSING, host.clone(), 808.0);
+    assert!(first::<TabsPart>(&screen).available_box().is_none(), "nothing closed: no dropdown");
+    let x = tab_buttons(&screen)[2].close_mark().unwrap();
+    click(&mut screen, x.x + x.width / 2.0, x.y + x.height / 2.0);
+    screen.resize(808.0, 400.0, 1.0);
+    let place = first::<TabsPart>(&screen).available_box().expect("a closed tab: the dropdown shows");
+    click(&mut screen, place.x + 5.0, place.y + 5.0);
+    screen.key_pressed(KeyInput::plain(Key::Down));
+    screen.key_pressed(KeyInput::plain(Key::Enter));
+    screen.resize(808.0, 400.0, 1.0);
+    let tabs = first::<TabsPart>(&screen);
+    assert!(tabs.closed().is_empty(), "picked, it is back");
+    assert_eq!(Some(3), tabs.open(), "and open");
+}
+
+#[test]
+fn tabs_with_their_options_draw_their_x_triangles_and_dropdown() {
+    let host = TestHost::new();
+    let mut screen = window(CLOSING, host.clone(), 420.0);
+    let x = tab_buttons(&screen)[2].close_mark().unwrap();
+    click(&mut screen, x.x + x.width / 2.0, x.y + x.height / 2.0);
+    screen.resize(210.0, 200.0, 1.0);
+    let tabs = first::<TabsPart>(&screen);
+    assert!(tabs.cycle_buttons().is_some() && tabs.available_box().is_some(), "both show at this width with a tab closed: {:?} {:?} {:?} {:?}", tabs.closed(), tabs.cycle_buttons(), tabs.available_box(), tabs.node().bounds);
+    let mut shot = Shot::of(&mut screen, 210, 200, 1.0);
+    keep(&mut shot, "containers-tabs-options.png");
+}

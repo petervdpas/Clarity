@@ -56,6 +56,8 @@ pub enum Edit {
     /// Set the color of an accordion section's header (`section "Chapters"
     /// color "#2e86de"`), or none, so it takes the theme's look.
     SetPageColor { target: u32, color: Option<String> },
+    /// Mark a tab of tabs that close permanent, so it has no x, or not.
+    SetPagePermanent { target: u32, permanent: bool },
     /// Place a new widget on a page, panel, tab or pane.
     PlaceWidget { container: u32, props: WidgetProps },
     /// Place a new widget with the catalog defaults for its kind, optionally

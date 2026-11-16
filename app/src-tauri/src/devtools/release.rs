@@ -155,18 +155,26 @@ fn record_of(job: &Job, ran_on: Option<&(String, String)>) -> Option<CheckRecord
     Some(CheckRecord { key: key.to_string(), title: job.title.clone(), passed, why, ended: job.ended.unwrap_or_default(), head, tree, lines })
 }
 
-/// Runs the checks `jobs` (their builds' keys), one after the other.
+/// Runs the checks `jobs` (their builds' keys) that do not count yet (failed,
+/// not run, or what they read changed since), one after the other.
 #[tauri::command(async)]
 pub fn release_run(jobs: Vec<String>, app: AppHandle, builds: State<DevJobs>) -> Result<(), String> {
     let repo = repo()?;
     let (files, _) = release::since_ide_release(&repo)?;
     let checks = release::checks(&repo, &files);
+    // A check that passed on what it reads now still counts: it is not run again.
+    let state = release::tree_state(&repo).ok();
+    let records = release::check_records(&repo);
+    let counts = |check: &Check| records.get(&check.key).is_some_and(|r| r.passed && state.as_ref().is_some_and(|s| s.fingerprint(check) == r.tree));
     let mut refused = Vec::new();
     for key in jobs {
         let Some(check) = checks.iter().find(|c| job_key(&c.key) == key) else {
             refused.push(format!("there is no check {key}"));
             continue;
         };
+        if counts(check) {
+            continue;
+        }
         if let Err(why) = builds.0.start(&key, &check.title, check.run.clone(), Some(recording(&app, repo.clone(), check.clone()))) {
             refused.push(why);
         }

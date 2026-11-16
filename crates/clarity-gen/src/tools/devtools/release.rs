@@ -610,57 +610,63 @@ fn state_of(repo: &Path, head: &str, changes: &str) -> Result<TreeState, String>
             files.insert(path.to_string(), hash.to_string());
         }
     }
-    let manifests: String = files.iter().filter(|(p, _)| p.as_str() == "Cargo.lock" || p.ends_with("Cargo.toml")).map(|(p, h)| format!("{p}\t{h}\n")).collect();
-    let packages = resolved(repo, &manifests);
+    let packages = lock_packages(repo);
     Ok(TreeState { files, packages })
 }
 
-/// The workspace's packages as Cargo resolves them (offline), the same for
-/// the same manifests and lock (`key`), so read once for them.
-fn resolved(repo: &Path, key: &str) -> Vec<Package> {
-    static KNOWN: std::sync::Mutex<Option<(String, Vec<Package>)>> = std::sync::Mutex::new(None);
-    if let Ok(known) = KNOWN.lock()
-        && let Some((k, packages)) = known.as_ref()
-        && k == key
-    {
-        return packages.clone();
+/// The workspace's packages as its Cargo.lock resolves them, read from
+/// the lock itself (no cargo, no network: the same on every machine). A
+/// member's needs its `[dev-dependencies]` alone name are its tests' only.
+fn lock_packages(repo: &Path) -> Vec<Package> {
+    let lock = std::fs::read_to_string(repo.join("Cargo.lock")).unwrap_or_default();
+    let field = |block: &str, key: &str| block.lines().find_map(|l| l.strip_prefix(key)?.trim_start().strip_prefix('=')).map(|v| v.trim().trim_matches('"').to_string());
+    let blocks: Vec<&str> = lock.split("[[package]]").skip(1).collect();
+    let mut packages: Vec<Package> = blocks
+        .iter()
+        .map(|b| Package { name: field(b, "name").unwrap_or_default(), version: field(b, "version").unwrap_or_default(), source: field(b, "source"), folder: None, needs: Vec::new() })
+        .collect();
+    // The members' folders, by the names their manifests give.
+    let mut tests_only: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
+    for member in members(repo) {
+        let Ok(manifest) = std::fs::read_to_string(repo.join(&member).join("Cargo.toml")) else { continue };
+        let Some((_, name)) = between(&manifest, "name = \"", "\"") else { continue };
+        if let Some(p) = packages.iter_mut().find(|p| p.name == name && p.source.is_none()) {
+            p.folder = Some(member.clone());
+        }
+        let (mut dev, mut other) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+        let mut section = String::new();
+        for line in manifest.lines().map(str::trim) {
+            if line.starts_with('[') {
+                section = line.to_string();
+                continue;
+            }
+            if !section.ends_with("dependencies]") || line.starts_with('#') || !line.contains('=') {
+                continue;
+            }
+            let key = line.split(['=', '.']).next().unwrap_or_default().trim();
+            let name = between(line, "package = \"", "\"").map(|(_, n)| n.to_string()).unwrap_or_else(|| key.to_string());
+            if section.ends_with("dev-dependencies]") { dev.insert(name) } else { other.insert(name) };
+        }
+        tests_only.insert(name.to_string(), dev.difference(&other).cloned().collect());
     }
-    let packages = read_resolve(repo).unwrap_or_default();
-    if !packages.is_empty()
-        && let Ok(mut known) = KNOWN.lock()
-    {
-        *known = Some((key.to_string(), packages.clone()));
+    let find = |entry: &str, packages: &[Package]| {
+        let mut words = entry.split_whitespace();
+        let name = words.next().unwrap_or_default();
+        let version = words.next();
+        packages.iter().position(|p| p.name == name && version.is_none_or(|v| p.version == v))
+    };
+    for (at, block) in blocks.iter().enumerate() {
+        let Some(list) = block.split("dependencies = [").nth(1).and_then(|rest| rest.split(']').next()) else { continue };
+        let own = packages[at].folder.is_some().then(|| tests_only.get(&packages[at].name)).flatten().cloned().unwrap_or_default();
+        let needs: Vec<(usize, bool)> = list
+            .split(',')
+            .map(|e| e.trim().trim_matches('"'))
+            .filter(|e| !e.is_empty())
+            .filter_map(|e| find(e, &packages).map(|to| (to, own.contains(e.split_whitespace().next().unwrap_or_default()))))
+            .collect();
+        packages[at].needs = needs;
     }
     packages
-}
-
-fn read_resolve(repo: &Path) -> Option<Vec<Package>> {
-    let out = Command::new("cargo").args(["metadata", "--format-version", "1", "--offline"]).current_dir(repo).stderr(std::process::Stdio::null()).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let meta: Value = serde_json::from_slice(&out.stdout).ok()?;
-    let root = meta["workspace_root"].as_str().map(PathBuf::from)?;
-    let members: Vec<&str> = meta["workspace_members"].as_array()?.iter().filter_map(Value::as_str).collect();
-    let listed = meta["packages"].as_array()?;
-    let at: BTreeMap<&str, usize> = listed.iter().enumerate().filter_map(|(i, p)| Some((p["id"].as_str()?, i))).collect();
-    let mut packages: Vec<Package> = listed
-        .iter()
-        .map(|p| {
-            let id = p["id"].as_str().unwrap_or_default();
-            let folder = members.contains(&id).then(|| Path::new(p["manifest_path"].as_str().unwrap_or_default()).parent().and_then(|f| f.strip_prefix(&root).ok()).map(|f| f.to_string_lossy().replace('\\', "/"))).flatten();
-            Package { name: p["name"].as_str().unwrap_or_default().to_string(), version: p["version"].as_str().unwrap_or_default().to_string(), source: p["source"].as_str().map(str::to_string), folder, needs: Vec::new() }
-        })
-        .collect();
-    for node in meta["resolve"]["nodes"].as_array()? {
-        let Some(&from) = node["id"].as_str().and_then(|id| at.get(id)) else { continue };
-        for dep in node["deps"].as_array().into_iter().flatten() {
-            let Some(&to) = dep["pkg"].as_str().and_then(|id| at.get(id)) else { continue };
-            let kinds: Vec<&str> = dep["dep_kinds"].as_array().into_iter().flatten().map(|k| k["kind"].as_str().unwrap_or("normal")).collect();
-            packages[from].needs.push((to, !kinds.is_empty() && kinds.iter().all(|k| *k == "dev")));
-        }
-    }
-    Some(packages)
 }
 
 impl TreeState {

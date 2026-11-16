@@ -1,4 +1,4 @@
-// Where a part's edits are undone (DESIGN 5.29): the fields of a form or a
+// Where a part's edits are undone (manual/code.handlers.md): the fields of a form or a
 // panel share the form's scope, so Ctrl+Z walks back across them; a canvas
 // outside one is its own; a part with `no undo` has none.
 

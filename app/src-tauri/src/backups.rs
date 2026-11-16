@@ -1,5 +1,5 @@
 //! Backups of the project's databases in the Database section of the
-//! Project tab and for the agent (docs/BACKUP-PLAN.md): take one, list
+//! Project tab and for the agent (docs/ledger/backups.md): take one, list
 //! them, restore one, delete one. The work is `clarity_db::backup`'s; which
 //! database a data source has, and whether Clarity backs it up, is
 //! `clarity_project::database_to_back_up`'s.

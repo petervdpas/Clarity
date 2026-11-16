@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Clarity.UI's browser files (DESIGN 7.9, round B) into one folder:
+# Builds Clarity.UI's browser files (manual/start.how-it-works.md, round B) into one folder:
 #   clarity-ui.js  clarity-ui.wasm  clarity-ui-worker.js  clarity-ui-page.js
 # Usage: runtimes/rust-ui-browser/build.sh [output folder]
 # The folder is target/clarity-ui-browser by default. Needs the Emscripten SDK

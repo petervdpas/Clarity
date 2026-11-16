@@ -1,4 +1,4 @@
-//! The browser host (DESIGN 7.9, round B): the same library compiled once
+//! The browser host (manual/start.how-it-works.md, round B): the same library compiled once
 //! to WebAssembly (wasm32-unknown-emscripten, Skia from skia-safe's prebuilt
 //! binaries), running in a Web Worker and drawing with Skia through WebGL2
 //! on an OffscreenCanvas the page hands it. The program stays on the server

@@ -72,7 +72,7 @@ pub enum Edit {
         /// Overrides the catalog caption.
         caption: Option<String>,
         bind: Option<String>,
-        /// A custom part (DESIGN 5.19): the name it is declared by, with `kind` custom.
+        /// A custom part (manual/design.custom-parts.md): the name it is declared by, with `kind` custom.
         #[serde(default)]
         part: Option<String>,
         /// Overrides the catalog height, as a custom part's declared size does.
@@ -487,7 +487,7 @@ enum Kind {
     Use,
     /// A menu item, button or separator.
     Command,
-    /// A part's context menu: a `menu` block under it (DESIGN 5.16).
+    /// A part's context menu: a `menu` block under it (manual/design.parts.md).
     ContextMenu,
     RibbonTab,
     RibbonGroup,
@@ -506,7 +506,7 @@ fn widget_kind(node: &LNode) -> Kind {
     }
 }
 
-/// A word in capitals starting a part's line: a custom part's declared name (DESIGN 5.19).
+/// A word in capitals starting a part's line: a custom part's declared name (manual/design.custom-parts.md).
 fn custom_word(token: &Token) -> Option<WidgetKind> {
     (token.kind == TokenKind::Ident && token.text.starts_with(|c: char| c.is_ascii_uppercase())).then_some(WidgetKind::Custom)
 }

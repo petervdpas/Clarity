@@ -97,7 +97,7 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Zoom out": { key: "zoomOut", written: "Zoom out" },
   "Show it whole": { key: "zoomWhole", written: "Show it whole" },
   "Zoom in": { key: "zoomIn", written: "Zoom in" },
-  // The toolbar of a canvas the person paints or draws on (DESIGN 5.31).
+  // The toolbar of a canvas the person paints or draws on (manual/parts.graphics.md).
   Select: { key: "toolSelect", written: "Select" },
   Line: { key: "toolLine", written: "Line" },
   Rectangle: { key: "toolRect", written: "Rectangle" },

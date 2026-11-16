@@ -1,4 +1,4 @@
-//! A data source that is a file in a format (docs/FORMATS-PLAN.md): every
+//! A data source that is a file in a format (docs/ledger/formats.md): every
 //! stack's program, desktop and command line, opens it after connecting,
 //! with its format, options, the entity's table and key and the columns it
 //! maps, and carries Clarity.Formats and SQLite for it.

@@ -1,4 +1,4 @@
-// The IDE's preview and design canvas on Clarity.UI (DESIGN 8.1), driven in
+// The IDE's preview and design canvas on Clarity.UI (manual/design.parts.md), driven in
 // a headless Chromium (tests/web_windows.rs, the_ide_previews_and_designs_on_clarity_ui_in_a_browser).
 // Usage: node ide.mjs <the IDE's page, run by Vite> <the IDE's backend> <folder for the profile and shots>
 // The page runs without Tauri: its `invoke` posts each command to the backend

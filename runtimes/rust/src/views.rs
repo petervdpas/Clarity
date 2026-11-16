@@ -1,4 +1,4 @@
-//! The shown rows of tables, lists, trees and charts (DESIGN 1.7), decided
+//! The shown rows of tables, lists, trees and charts (manual/start.how-it-works.md), decided
 //! here in the runtime: the window's state carries a view per such part,
 //! how it shows its list as the screen sends it, and after every reply the
 //! runtime fills in what shows. A view event (a sort, a page, a tree row
@@ -198,7 +198,7 @@ impl Sent {
     }
 }
 
-/// Fills the views of a window's reply (DESIGN 1.7); a reply of the same
+/// Fills the views of a window's reply (manual/start.how-it-works.md); a reply of the same
 /// window that lost its views keeps those the screen sent.
 pub fn replied(sent: &Sent, reply: &mut Reply) -> Result<()> {
     if reply.state.views.is_empty() && reply.state.instance == sent.instance {
@@ -211,7 +211,7 @@ pub fn replied(sent: &Sent, reply: &mut Reply) -> Result<()> {
     })
 }
 
-/// `view_event` (DESIGN 1.7): the view of `part` changed by the person's
+/// `view_event` (manual/start.how-it-works.md): the view of `part` changed by the person's
 /// `action`: `sort` by a field (the same field again: the other way, from
 /// the first page), `page` to a page, `open` or `close` a tree row by its
 /// id. An empty action changes nothing: the screen declared a view, which

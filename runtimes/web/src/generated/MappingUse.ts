@@ -4,7 +4,7 @@ import type { Ident } from "./Ident";
 
 /**
  * How a file is laid over records where code reads or writes one
- * (docs/FORMATS-PLAN.md, step 4): a mapping written in place, the format
+ * (docs/ledger/formats.md): a mapping written in place, the format
  * and its options (`xml text at "shop/orders/order"`), or a mapping the
  * project declares, by name (`using OrderFeed`).
  */

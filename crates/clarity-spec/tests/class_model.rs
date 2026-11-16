@@ -1,4 +1,4 @@
-//! The class diagram designer's model (DG1, DESIGN section 5.13): boxes for
+//! The class diagram designer's model (manual/data.diagrams.md): boxes for
 //! entities, enums, engines and modules with their places, members and
 //! namespaces, and relations as association, composition or aggregation,
 //! read from Mermaid text and written back as plain Mermaid. Writing what

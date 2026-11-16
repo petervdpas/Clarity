@@ -1,4 +1,4 @@
-//! The web target (DESIGN 7.3): the application as a web server, which
+//! The web target (manual/project.run-build.md): the application as a web server, which
 //! serves the renderer's files to a browser and answers its commands with
 //! the same functions its desktop commands call.
 
@@ -59,7 +59,7 @@ fn the_server_listens_where_it_is_told() {
     }
 }
 
-/// Requests run side by side (round B of DESIGN 7.9): while a long
+/// Requests run side by side (round B of manual/start.how-it-works.md): while a long
 /// handler's request is open, another request (how far it is, Stop) is
 /// answered, and the handler's request ends once that one let it.
 #[test]
@@ -114,7 +114,7 @@ fn a_request_is_answered_while_a_long_one_is_open() {
     assert!(long.join().unwrap().ends_with(r#"{"value":"stopped"}"#));
 }
 
-/// Each browser apart (DESIGN 7.9 B2): a request names its page and brings
+/// Each browser apart (manual/start.how-it-works.md B2): a request names its page and brings
 /// the person's settings as the page keeps them. A handler sees that page's
 /// settings and language, a page that sends none keeps what it had, settings
 /// a command changed go back to that page alone, and a page unasked for

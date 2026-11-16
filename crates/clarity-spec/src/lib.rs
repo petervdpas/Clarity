@@ -225,7 +225,7 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
     }
 }
 
-/// Each part's undo scope (DESIGN 5.29), worked out once for every screen.
+/// Each part's undo scope (manual/code.handlers.md), worked out once for every screen.
 fn make_undo_scopes(files: &mut [model::SpecFile]) {
     fn set(widgets: &mut [model::Widget], page: &[model::Widget]) {
         for w in widgets.iter_mut() {
@@ -259,8 +259,8 @@ fn make_undo_scopes(files: &mut [model::SpecFile]) {
     }
 }
 
-/// What each graph of lists knows of the data model (docs/GRAPH-PLAN.md,
-/// step 2), worked out once for every screen: the entity of each list it
+/// What each graph of lists knows of the data model (docs/ledger/graph.md),
+/// worked out once for every screen: the entity of each list it
 /// shows, its records' label (the first text field, as a reference shows a
 /// record), and its references to the other entities shown, its edges.
 fn make_graph_models(files: &mut [model::SpecFile]) {
@@ -305,7 +305,7 @@ fn make_graph_models(files: &mut [model::SpecFile]) {
 }
 
 /// Each placed custom part grows when its declaration says `grows`
-/// (DESIGN 5.19), worked out once for every screen and the designer.
+/// (manual/design.custom-parts.md), worked out once for every screen and the designer.
 fn make_custom_grows(files: &mut [model::SpecFile]) {
     let growing: Vec<(String, bool, Option<String>)> = files.iter().flat_map(|f| &f.parts).map(|p| (p.name.name.clone(), p.grows, p.description.clone())).collect();
     fn set(widgets: &mut [model::Widget], growing: &[(String, bool, Option<String>)]) {
@@ -313,7 +313,7 @@ fn make_custom_grows(files: &mut [model::SpecFile]) {
             if w.props.kind == widgets::WidgetKind::Custom {
                 let declared = w.props.part.as_ref().and_then(|p| growing.iter().find(|(name, _, _)| name == p));
                 w.props.grows = declared.is_some_and(|d| d.1);
-                // Its description for screen readers, from the declaration too (DESIGN 7.9, A1).
+                // Its description for screen readers, from the declaration too (manual/start.how-it-works.md).
                 w.props.description = declared.and_then(|d| d.2.clone());
             }
             set(&mut w.children, growing);
@@ -343,13 +343,13 @@ fn make_custom_grows(files: &mut [model::SpecFile]) {
 
 /// `arena.restart(2)` reads as a shape drawn on a canvas; where `arena` is
 /// a custom part of the window, or a canvas an engine beside the screen
-/// draws, it is a hear of that part (DESIGN 5.19, 5.12).
+/// draws, it is a hear of that part (manual/design.custom-parts.md, manual/code.engines.md).
 fn make_hears(files: &mut [model::SpecFile]) {
     use code::{Stmt, StmtKind};
     fn custom_parts(widgets: &[model::Widget], found: &mut Vec<String>) {
         for widget in widgets {
-            // A custom part, a sound and a video hear what code tells them (DESIGN 5.19, 5.22, docs/VIDEO-PLAN.md).
-            // So does a canvas an engine beside the screen draws, for its engine (DESIGN 5.12), and a text box or memo (`insert`).
+            // A custom part, a sound and a video hear what code tells them (manual/design.custom-parts.md, manual/design.sound.md, docs/ledger/video-camera.md).
+            // So does a canvas an engine beside the screen draws, for its engine (manual/code.engines.md), and a text box or memo (`insert`).
             if (matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound | widgets::WidgetKind::Video | widgets::WidgetKind::Textbox | widgets::WidgetKind::Memo) || widget.props.runs.is_some())
                 && let Some(name) = &widget.props.name
             {
@@ -382,7 +382,7 @@ fn make_hears(files: &mut [model::SpecFile]) {
     }
     // The pages that share a window with each page: the views it shows (and
     // theirs), and the windows and views that show it; their parts are
-    // reached by name as its own (DESIGN 5.33).
+    // reached by name as its own (manual/design.windows.md).
     let pages: Vec<model::Page> = files.iter().flat_map(|f| f.pages.iter().cloned()).collect();
     let shown_by = |page: &model::Page| -> Vec<String> { views::places(&page.widgets).into_iter().map(|p| p.view.to_string()).collect() };
     let sharing = |name: &str| -> Vec<&model::Page> {
@@ -425,7 +425,7 @@ fn make_hears(files: &mut [model::SpecFile]) {
 }
 
 /// With a `settings` block, every window and the app has the settings as
-/// data of its own, `settings`, without a `data` line (DESIGN 5.17).
+/// data of its own, `settings`, without a `data` line (manual/data.settings.md).
 fn give_settings(files: &mut [model::SpecFile]) {
     use parser::{SETTINGS_DATA, SETTINGS_ENTITY};
     let Some(span) = files.iter().flat_map(|f| &f.entities).find(|e| e.settings).map(|e| e.span) else { return };
@@ -464,7 +464,7 @@ fn resolve_data(files: &mut [model::SpecFile]) {
             }
         }
         // A field `list<Genre>` of an enum is a list of values (U1c), and a
-        // field named after an entity holds a record of it (DESIGN 5.25).
+        // field named after an entity holds a record of it (manual/data.entities.md).
         for field in file.entities.iter_mut().flat_map(|e| &mut e.fields) {
             if let model::FieldType::Enum { name } = &field.ty
                 && entities.contains(&name.name)
@@ -482,7 +482,7 @@ fn resolve_data(files: &mut [model::SpecFile]) {
     }
 }
 
-/// How a web API hands out a long list (DESIGN 5.23, paging).
+/// How a web API hands out a long list (manual/code.web-apis.md, paging).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "kebab-case")]
 #[ts(export)]
@@ -536,9 +536,9 @@ pub struct SourceRef {
     /// How a web API hands out a long list, which `every page` follows.
     pub paging: Option<Paging>,
     /// The mapping a file source is laid over by (`using OrderFeed`,
-    /// docs/FORMATS-PLAN.md step 4), which a module must declare.
+    /// docs/ledger/formats.md), which a module must declare.
     pub mapping: Option<String>,
-    /// A file in a format (docs/FORMATS-PLAN.md): external, kept in memory
+    /// A file in a format (docs/ledger/formats.md): external, kept in memory
     /// while the program runs; the file is the unit a save checks.
     pub file: bool,
 }
@@ -850,7 +850,7 @@ pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Pro
 }
 
 /// The folder of a project's web API descriptions, beside its modules, and
-/// of the modules Clarity writes from them (DESIGN 5.23).
+/// of the modules Clarity writes from them (manual/code.web-apis.md).
 pub const APIS_DIR: &str = "apis";
 
 /// Every folder of a project whose files Clarity reads, beside its modules:
@@ -932,9 +932,9 @@ pub struct Preview {
     /// The icons the project shows, by name, each an SVG path in a 24 by 24 box.
     pub icons: BTreeMap<String, String>,
     /// The commands a person gives keys in the keys window, where the
-    /// project lets them (DESIGN 5.28); empty where it does not.
+    /// project lets them (manual/app.keys.md); empty where it does not.
     pub keys: Vec<shortcuts::KeyLayer>,
-    /// The engines beside the screen (DESIGN 5.12), which the renderer runs itself.
+    /// The engines beside the screen (manual/code.engines.md), which the renderer runs itself.
     #[serde(rename = "screenEngines")]
     #[ts(rename = "screenEngines")]
     pub screen_engines: Vec<engines::ScreenEngine>,

@@ -1,4 +1,4 @@
-//! Which databases of a project Clarity backs up (docs/BACKUP-PLAN.md): the
+//! Which databases of a project Clarity backs up (docs/ledger/backups.md): the
 //! SQLite ones it owns. An external source is someone else's, and a server
 //! database is its administrator's until Clarity has a backup of its own
 //! for those.

@@ -1,4 +1,4 @@
-//! Clarity.UI for Rust (DESIGN 7.9): Clarity's own UI framework, which draws
+//! Clarity.UI for Rust (manual/start.how-it-works.md): Clarity's own UI framework, which draws
 //! its windows itself with Skia, parts, layout, look and the person's input,
 //! with no webview and no native controls. It reads the same window markup
 //! (`.cxaml`) and the same resolved themes as every other version, passes

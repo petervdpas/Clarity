@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The project's sign-in setup (docs/APP-CAPABILITIES-PLAN.md step 4),
+  // The project's sign-in setup (docs/ledger/signin.md),
   // opened from the project tree: the project file's `signin` block. Who signs
   // in, on which targets, by which strategies, what the sign-in part shows and
   // whether it asks to keep people signed in. A window or the splash only

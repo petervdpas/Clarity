@@ -13,6 +13,6 @@ format: string, options: Array<SourceOption>,
 /**
  * `datasource feed file "imports/orders.xml" external using OrderFeed`:
  * a mapping of the project says the format and how the file is laid
- * over its entity (docs/FORMATS-PLAN.md, step 4), in place of the options.
+ * over its entity (docs/ledger/formats.md), in place of the options.
  */
 mapping: string | null, };

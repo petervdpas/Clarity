@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4): the
+//! Who is using the program (docs/ledger/signin.md): the
 //! project's `signin` block, as the project file says it, with the
 //! strategies of Clarity.Auth's catalog.
 
@@ -302,9 +302,9 @@ pub fn check(files: &[crate::model::SpecFile], signin: &Signin) -> Vec<crate::di
 }
 
 /// The app's splash page, which may hold sign-in parts and so double as the
-/// sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4).
+/// sign-in window (docs/ledger/signin.md).
 /// The sign-in views of the sign-in window `window`: the views its content
-/// shows, in order (docs/APP-CAPABILITIES-PLAN.md, "The sign-in window is designed, and guided").
+/// shows, in order (docs/ledger/signin.md).
 pub fn views_of(window: &crate::model::Page) -> Vec<String> {
     let mut views = Vec::new();
     crate::resources::each_widget(&window.widgets, &mut |w| {

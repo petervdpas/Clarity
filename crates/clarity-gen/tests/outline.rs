@@ -1,4 +1,4 @@
-//! Records in app code (DESIGN 5.12) and a tree by key, on every stack: a
+//! Records in app code (manual/code.engines.md) and a tree by key, on every stack: a
 //! window holds a list of records built in code and shows it in a tree, a
 //! tree table, a table and a list; code reads and selects their rows. The
 //! build tests build the same fixture (`fixtures/outline.clarity`).
@@ -85,7 +85,7 @@ fn gofmt_is_content_with_the_go_code() {
     assert_eq!(listed, "", "gofmt would change these files:\n{diff}");
 }
 
-/// A record is a value on every stack (DESIGN 5.12): C# keeps records as
+/// A record is a value on every stack (manual/code.engines.md): C# keeps records as
 /// objects, so what keeps or gets one takes a copy of its own, as Rust, Go,
 /// C and C++ copy a struct. A record put into a list, assigned, read from a
 /// list or a part, or given to a function is copied.

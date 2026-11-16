@@ -1,4 +1,4 @@
-//! The sound part in the output (DESIGN 5.22): what code tells a sound goes
+//! The sound part in the output (manual/design.sound.md): what code tells a sound goes
 //! to the renderer (web stacks) or to the part's state (C#), and the
 //! sound files travel with the program.
 

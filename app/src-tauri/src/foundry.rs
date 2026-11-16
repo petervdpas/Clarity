@@ -1,5 +1,5 @@
 //! Clarity's agent on the company's models in Microsoft Foundry
-//! (docs/FOUNDRY-PLAN.md): a connection of kind `foundry`, signed in with an
+//! (docs/ledger/agent.md): a connection of kind `foundry`, signed in with an
 //! API key or the person's Microsoft work account. The work account's
 //! refresh token is kept in the vault, never in a plain file.
 

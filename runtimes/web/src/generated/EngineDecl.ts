@@ -7,7 +7,7 @@ import type { PartMessage } from "./PartMessage";
 import type { Span } from "./Span";
 
 /**
- * An engine (DESIGN 5.11): a processing module compiled to WebAssembly,
+ * An engine (manual/code.engines.md): a processing module compiled to WebAssembly,
  * its file in the project's `engines` folder, and its functions.
  */
 export type EngineDecl = { name: Ident, 
@@ -33,7 +33,7 @@ state: EngineState,
  */
 opens: boolean, 
 /**
- * `beside the screen` (DESIGN 5.12): it runs in the renderer, where the
+ * `beside the screen` (manual/code.engines.md): it runs in the renderer, where the
  * canvas that `runs` it is drawn, one instance per canvas; the backend
  * never runs it.
  */

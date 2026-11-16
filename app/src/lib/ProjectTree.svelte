@@ -25,7 +25,7 @@
     full = true,
     onapp,
     onwindow,
-    onslideout = null,
+    oncanvas = null,
     onselect,
     onnewwindow = null,
     onnewview = null,
@@ -54,8 +54,8 @@
     full?: boolean;
     onapp: () => void;
     onwindow: (page: Page) => void;
-    /** A slide-out picked under Views: designed on a canvas of its own. */
-    onslideout?: ((page: Page, name: string) => void) | null;
+    /** A slide-out or popover picked under Views: designed on a canvas of its own. */
+    oncanvas?: ((page: Page, name: string) => void) | null;
     onselect: (selected: Selected) => void;
     onnewwindow?: (() => void) | null;
     /** Starts a new view, which a window's slide-out shows; null where the tree only shows. */
@@ -84,7 +84,7 @@
     onnewresource?: (() => void) | null;
     /** Asks for a new diagram: its name and kind; null where the tree only shows. */
     onnewdiagram?: (() => void) | null;
-    /** The web APIs of the project file (DESIGN 5.23): its rest data sources. */
+    /** The web APIs of the project file (manual/code.web-apis.md): its rest data sources. */
     apis?: DataSource[];
     /** Asks for a new web API; null where the tree only shows. */
     onnewapi?: (() => void) | null;
@@ -137,21 +137,29 @@
   });
   /** Views in file order: pages a window's content shows; a toolbox, which a canvas shows, is one too. */
   const views = $derived(files.flatMap((f) => f.pages.filter((page) => page.kind === "view" || page.kind === "toolbox").map((page) => ({ page, module: f.module?.name ?? "" }))));
-  /** Each named slide-out of a window or view, designed on a canvas of its own. */
-  const slideouts = $derived(files.flatMap((f) => f.pages.flatMap((page) => allParts(page).filter((w) => w.props.kind === "slideout" && w.props.name).map((w) => ({ page, name: w.props.name as string })))));
+  /** Each named slide-out or popover of a window or view (not one showing a view: the view is listed), designed on a canvas of its own. */
+  const canvases = $derived(
+    files.flatMap((f) =>
+      f.pages.flatMap((page) =>
+        allParts(page)
+          .filter((w) => (w.props.kind === "slideout" || w.props.kind === "popover") && w.props.name && !w.props.view)
+          .map((w) => ({ page, name: w.props.name as string, kind: w.props.kind })),
+      ),
+    ),
+  );
   const entities = $derived(files.flatMap((f) => f.entities.filter((e) => !e.settings).map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
-  /** How files are laid over entities, per case (docs/FORMATS-PLAN.md, step 4), with their modules. */
+  /** How files are laid over entities, per case (docs/ledger/formats.md), with their modules. */
   const mappings = $derived(files.flatMap((f) => f.mappings.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
-  // The outside libraries code calls (DESIGN 5.21), with their modules.
+  // The outside libraries code calls (manual/code.libraries.md), with their modules.
   const libraries = $derived(preview.project.files.flatMap((f) => f.libraries.map((library) => ({ library, module: f.module?.name ?? "" }))));
   // The functions and actions handlers call, with their modules.
   const functions = $derived(preview.project.files.flatMap((f) => f.functions.map((fn) => ({ fn, module: f.module?.name ?? "" }))));
   // The toasts code shows by name, with their modules.
   const toasts = $derived(preview.project.files.flatMap((f) => (f.toasts ?? []).map((toast) => ({ toast, module: f.module?.name ?? "" }))));
-  // The custom parts outside libraries draw (DESIGN 5.19), with their modules.
+  // The custom parts outside libraries draw (manual/design.custom-parts.md), with their modules.
   const customParts = $derived(preview.project.files.flatMap((f) => f.parts.map((part) => ({ part, module: f.module?.name ?? "" }))));
   function libraryNote(part: (typeof customParts)[number]["part"]): string {
     const l = part.library;
@@ -161,7 +169,7 @@
     if (l.kind === "go") return "Go";
     return l.kind === "nuget" ? "NuGet" : "DLL";
   }
-  // The commands of the command-line program (DESIGN 5.20), by what is typed, with their module.
+  // The commands of the command-line program (manual/code.commands.md), by what is typed, with their module.
   const commands = $derived(
     preview.project.files.flatMap((f) => f.commands.map((c) => ({ line: commandLine(c.group?.name ?? null, c.name.name), module: f.module?.name ?? "" }))),
   );
@@ -255,7 +263,7 @@
   </details>
 
   <details open>
-    <summary>Views <span class="count">{views.length + (onslideout ? slideouts.length : 0)}</span></summary>
+    <summary>Views <span class="count">{views.length + (oncanvas ? canvases.length : 0)}</span></summary>
     {#each views as { page, module } (page.name.name)}
       <button
         class="row"
@@ -270,16 +278,16 @@
     {:else}
       <p class="empty">No views yet.</p>
     {/each}
-    {#if onslideout}
-      {#each slideouts as { page, name } (page.name.name + "/" + name)}
+    {#if oncanvas}
+      {#each canvases as { page, name, kind } (page.name.name + "/" + name)}
         <button
           class="row"
-          class:current={is("window", page.name.name) && pageDesigner.slideout === name}
-          title="{name}: a slide-out of {page.name.name}, designed on a canvas of its own"
-          onclick={() => onslideout(page, name)}
+          class:current={is("window", page.name.name) && pageDesigner.canvas === name}
+          title="{name}: a {kind === 'popover' ? 'popover' : 'slide-out'} of {page.name.name}, designed on a canvas of its own"
+          onclick={() => oncanvas(page, name)}
         >
           {name}
-          <span class="note">slideout · {page.name.name}</span>
+          <span class="note">{kind} · {page.name.name}</span>
         </button>
       {/each}
     {/if}
@@ -328,7 +336,7 @@
       {/if}
     </details>
 
-    <!-- The services the application calls (DESIGN 5.23): web API data sources of the project file. -->
+    <!-- The services the application calls (manual/code.web-apis.md): web API data sources of the project file. -->
     <details open={apis.length > 0}>
       <summary>Web APIs <span class="count">{apis.length}</span></summary>
       {#each apis as api (api.name)}

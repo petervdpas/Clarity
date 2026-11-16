@@ -1,10 +1,11 @@
 # Development ledger
 
-One small entry per piece of Clarity. Read this index, then only the entries the work touches. The ledger replaces the plan documents and the one-off status documents. The manual (`manual/`) is the only documentation for app builders and agents: `docs/LANGUAGE.md` and `docs/DESIGN.md` were removed on 2026-11-13 and their content moved into the manual.
+One entry per piece of Clarity: everything about that piece in one file, its status, its decisions and the design of what is not built yet. Read this index, then only the entries the work touches. There are no plan documents or status documents beside it; they were folded in and removed on 2026-11-16. The manual (`manual/`) is the only documentation for app builders and agents: `docs/LANGUAGE.md` and `docs/DESIGN.md` were removed on 2026-11-13 and their content moved into the manual.
 
 ## How to keep it
 
-- Every entry has the same headings, in this order: Status, Code, Tests, Open, Conflicts, Decisions, Was. At most 80 lines (modularity and docs may run longer).
+- Every entry has the same headings, in this order: Status, Code, Tests, Open, Design, Conflicts, Decisions, Was. Design is there only while something is not built: how that is meant to work, written once, in the code's own words. Open names each item in a line and points into Design. At most 80 lines without a Design section.
+- What is built is described in the manual, not here: Code points at the code, and a built design leaves Design (its decisions stay under Decisions).
 - Status is one of: **built**, **partial**, **not built**, **needs decision**. Open items say NOT BUILT, PARTIAL or UNTRIED (built but never run where it was promised).
 - Under the Status paragraph, one line `Progress: N%` (a multiple of 5): how much of the entry is implemented, judged from its Code against its Open items. Work that changes what is built updates it in the same piece of work; apps read it as written.
 - Code wins: an entry says what the code does. When code and entry disagree, fix the entry, or put the difference under Conflicts until it is settled.

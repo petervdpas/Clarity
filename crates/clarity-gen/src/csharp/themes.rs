@@ -1,4 +1,4 @@
-//! The themes a C# application offers (DESIGN 1.5, 7.9): each as Clarity
+//! The themes a C# application offers (manual/themes.md, manual/start.how-it-works.md): each as Clarity
 //! resolves it for light and dark mode, the JSON Clarity.UI reads and lays
 //! over Clarity's own theme, which Clarity.UI carries. The look is defined in
 //! Clarity; the application only carries it.

@@ -98,7 +98,7 @@ pub fn data_model_of(project: &Project, only: Option<&[String]>) -> View {
                     let line = if field.modifiers.owned { "--" } else { ".." };
                     out.line(&format!("    {} ||{line}o{{ {} : {}", entity.name.name, item.name, field.name.name), Some((path, field.span)));
                 }
-                // A record held inside (DESIGN 5.25): one with the record, always.
+                // A record held inside (manual/data.entities.md): one with the record, always.
                 FieldType::Record { entity: other } if shown(&other.name) => {
                     out.line(&format!("    {} ||--|| {} : {}", entity.name.name, other.name, field.name.name), Some((path, field.span)));
                 }

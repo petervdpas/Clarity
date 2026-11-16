@@ -147,7 +147,7 @@ bool clarity_reload(ClarityDb* db, const ClarityEntity* entity, void* record);
 /// someone saved since it was read is refused.
 bool clarity_delete(ClarityDb* db, const ClarityEntity* entity, const void* record);
 /// Runs a handler, `run(context)`, as one step, which undo takes back whole
-/// (DESIGN 5.29): its id, when it changed anything, is clarity_last_step.
+/// (manual/code.handlers.md): its id, when it changed anything, is clarity_last_step.
 /// Everything it changes is one transaction in each source it changes:
 /// kept when it ends, left whole when it fails, so it leaves nothing
 /// behind. A step inside a step is part of it. Without a database it just

@@ -94,7 +94,7 @@ jobs:
           cargo test --workspace
 
   # ───────────────────────────────────────────────────────────────
-  # Clarity.UI's browser files (DESIGN 7.9, round B), built once with the
+  # Clarity.UI's browser files (manual/start.how-it-works.md, round B), built once with the
   # Emscripten SDK for every installer to carry.
   # ───────────────────────────────────────────────────────────────
   browser:
@@ -182,7 +182,7 @@ jobs:
           name: clarity-ui-browser
           path: app/src-tauri/clarity-ui-browser
 
-      # The installer carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9), and its browser files.
+      # The installer carries Clarity.UI's library for Go, C and C++ builds (manual/start.how-it-works.md), and its browser files.
       - name: Build Clarity.UI's library
         shell: bash
         run: bash .github/scripts/stage-clarity-ui.sh

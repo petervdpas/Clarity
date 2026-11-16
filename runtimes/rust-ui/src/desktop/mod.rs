@@ -1,4 +1,4 @@
-//! The desktop host (DESIGN 7.9): each screen in a window of the system's
+//! The desktop host (manual/start.how-it-works.md): each screen in a window of the system's
 //! own (winit), drawn by Skia through OpenGL (glutin) when it changed, at
 //! the system's content scale. What the person does with the pointer, the
 //! wheel, keys and an input method goes to its screen in its units; the
@@ -165,7 +165,7 @@ pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
 
 /// Runs a program held elsewhere too (one the C interface gives), as `run` does.
 pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
-    // Driven without a window, step by step from standard input (DESIGN 1.6).
+    // Driven without a window, step by step from standard input (manual/start.how-it-works.md).
     if std::env::var_os(crate::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {
         return crate::headless::run_shared(program, files);
     }
@@ -333,7 +333,7 @@ enum Wake {
     Outside,
     /// An AI agent's grant to ask the person, or its call to run (crate::agents).
     Agent(crate::agents::AgentWork),
-    /// The system's screen reader asks for the tree, or for an action (DESIGN 7.9, A1).
+    /// The system's screen reader asks for the tree, or for an action (manual/start.how-it-works.md).
     Access(accesskit_winit::Event),
 }
 

@@ -1,4 +1,4 @@
-//! Paths, one style for every format (docs/FORMATS-PLAN.md, step 4): names
+//! Paths, one style for every format (docs/ledger/formats.md): names
 //! with slashes between (`shop/orders/order`), `@name` an attribute where a
 //! format has them, `.` a record's own text, `..` the record it was found
 //! in (for the records at `at`, the node that holds them; inside a path,

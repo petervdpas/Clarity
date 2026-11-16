@@ -1,4 +1,4 @@
-//! The mapping page's backend (docs/FORMATS-PLAN.md, step 4): a mapping as a
+//! The mapping page's backend (docs/ledger/formats.md): a mapping as a
 //! form, and a sample file laid over it, read through Clarity.Formats.
 
 use std::path::Path;

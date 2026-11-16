@@ -1,4 +1,4 @@
-//! The program over the web server's wire (DESIGN 7.3 and 7.9): Clarity.UI
+//! The program over the web server's wire (manual/project.run-build.md, manual/start.how-it-works.md): Clarity.UI
 //! in the browser asks the program on the server each call of
 //! [`Program`] as a command with its arguments as JSON, and this answers it
 //! with the program: `{"value": ...}` or `{"error": Text}`. The commands and

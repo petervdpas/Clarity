@@ -1,4 +1,4 @@
-//! Clarity's keys window on Clarity.UI (DESIGN 5.28), where the project file
+//! Clarity's keys window on Clarity.UI (manual/app.keys.md), where the project file
 //! says `keys editable`: every command per place, Everywhere (the app's
 //! frame) first, then each window's own, with its keys. Change, then press
 //! the new key; a key another command has in the same place offers a swap;

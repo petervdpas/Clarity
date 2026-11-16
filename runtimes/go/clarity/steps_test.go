@@ -1,4 +1,4 @@
-// A wizard's walk through its steps (DESIGN 5.15) against the cases every
+// A wizard's walk through its steps (manual/parts.containers.md) against the cases every
 // runtime shares (conformance/steps.json, `walk`).
 
 package clarity

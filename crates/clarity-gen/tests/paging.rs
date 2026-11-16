@@ -1,4 +1,4 @@
-//! Every page of a web API (DESIGN 5.23, paging): `http get ... from shop
+//! Every page of a web API (manual/code.web-apis.md, paging): `http get ... from shop
 //! every page` calls the runtime's pages function of each stack with the
 //! source's address, auth and paging, as the project file says them.
 

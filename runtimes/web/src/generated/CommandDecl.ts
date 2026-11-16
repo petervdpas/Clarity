@@ -8,7 +8,7 @@ import type { Stmt } from "./Stmt";
 
 /**
  * `command [group] name(arguments)` with its `option` lines and its
- * statements (DESIGN 5.20).
+ * statements (manual/code.commands.md).
  */
 export type CommandDecl = { 
 /**
@@ -20,7 +20,7 @@ group: Ident | null, name: Ident,
  */
 params: Array<Param>, help: Expr | null, options: Array<CommandOption>, 
 /**
- * `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
+ * `allow when <condition>`: who may run it (docs/ledger/signin.md).
  */
 allow: Expr | null, 
 /**

@@ -1,5 +1,5 @@
 //! `clarity users`: the people of a project that signs people in
-//! (docs/APP-CAPABILITIES-PLAN.md step 4), changed from the command line:
+//! (docs/ledger/signin.md), changed from the command line:
 //! listed, added, given a password, a token or recovery codes, removed. The
 //! secrets are kept as the programs keep them, through Clarity.Auth, with the
 //! project's `minimum`. For the people of a SQLite database the project keeps;

@@ -1,7 +1,7 @@
 # clarity-video
 
 Clarity.Video: the player behind the `video` part of the programs Clarity generates
-(docs/VIDEO-PLAN.md). It reads MP4 files and decodes their pictures through a codec interface.
+(docs/ledger/video-camera.md). It reads MP4 files and decodes their pictures through a codec interface.
 
 - **openh264 is the base codec.** H.264 is decoded by Cisco's prebuilt openh264 library, which
   Clarity.Video fetches from Cisco the first time a video plays and keeps in the person's cache

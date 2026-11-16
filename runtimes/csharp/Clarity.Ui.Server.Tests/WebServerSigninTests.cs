@@ -1,5 +1,5 @@
-// A served program whose people sign in (docs/APP-CAPABILITIES-PLAN.md,
-// step 4): the browser's Cookie header reaches the program, signing in sets
+// A served program whose people sign in (docs/ledger/signin.md):
+// the browser's Cookie header reaches the program, signing in sets
 // the session cookie and signing out clears it, and without a session only
 // the sign-in window and its commands are answered.
 

@@ -69,7 +69,7 @@ fn go_builds_with_go_build() {
 
 /// A Go desktop program links Clarity.UI's library through cgo, from the
 /// folder CLARITY_UI names; it finds the shared library beside it, else in
-/// that folder (DESIGN 7.9).
+/// that folder (manual/start.how-it-works.md).
 #[test]
 fn go_takes_clarity_ui_from_the_folder_clarity_ui_names() {
     use clarity_gen::go_cgo_env;
@@ -104,7 +104,7 @@ fn stacks_without_a_generator_have_no_toolchain() {
     assert!(clarity_gen::toolchain(&shop(Backend::Csharp, Ui::Webview), false).is_none());
 }
 
-/// The command-line program (DESIGN 5.20) builds in `out/cli` with the same
+/// The command-line program (manual/code.commands.md) builds in `out/cli` with the same
 /// tools, into a program named as it is typed.
 #[test]
 fn the_command_line_program_builds_with_the_same_tools() {
@@ -122,7 +122,7 @@ fn the_command_line_program_builds_with_the_same_tools() {
     }
 }
 
-/// Clarity.UI's library for Go, C and C++ (DESIGN 7.9) comes from the
+/// Clarity.UI's library for Go, C and C++ (manual/start.how-it-works.md) comes from the
 /// release of the version Clarity was built with: the ffi crate's.
 #[test]
 fn clarity_ui_is_the_ffi_crates_version() {

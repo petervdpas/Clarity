@@ -25,7 +25,7 @@ typedef struct {
 } ClarityStore;
 
 /// A row of a table as it was before a change and as the change left it
-/// (DESIGN 5.29): its raw column values, kept outside the scratch arena.
+/// (manual/code.handlers.md): its raw column values, kept outside the scratch arena.
 typedef struct {
     const ClarityEntity* entity;
     int64_t id;

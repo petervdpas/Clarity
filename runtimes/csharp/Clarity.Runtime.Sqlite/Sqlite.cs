@@ -1,4 +1,4 @@
-// SQLite, turned on as each server database is (DESIGN 7.6): the desktop
+// SQLite, turned on as each server database is (manual/stacks.csharp.md): the desktop
 // program and the web server keep their data with it, the program in a
 // browser does not carry it.
 

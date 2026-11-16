@@ -1,5 +1,5 @@
 //! A list field's typed item (U1c), decided here, not in the screen
-//! (DESIGN 1.7): trimmed; empty text and an item the list has add nothing;
+//! (manual/start.how-it-works.md): trimmed; empty text and an item the list has add nothing;
 //! text that is no value of the list's kind is refused, and the screen keeps
 //! it as typed. Every runtime adds alike (conformance/list-fields.json, added).
 
@@ -80,7 +80,7 @@ pub fn added(kind: ItemKind, values: &[String], items: &[Value], typed: &str) ->
     Added::Items(list)
 }
 
-/// `item_event` (DESIGN 1.7): an item typed for the list at `path` in the
+/// `item_event` (manual/start.how-it-works.md): an item typed for the list at `path` in the
 /// window's data. An added item sets the list, then `run` runs the handler
 /// as an edit ends (`edits::ended`); nothing added answers the window as it
 /// is (`draw`), and a refused item too, with the reply saying `refused`.

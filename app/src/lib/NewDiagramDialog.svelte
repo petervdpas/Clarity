@@ -2,7 +2,7 @@
   // Asks for a new diagram: its name, its kind, and whether it starts from
   // the project or with a small example of the kind to change. ERDs and class
   // diagrams are offered now; the other kinds come with their rows of the
-  // roadmap (DESIGN 5.13).
+  // roadmap (manual/data.diagrams.md).
 
   import Modal from "./Modal.svelte";
   import type { DiagramKind } from "@clarity/ui/generated/DiagramKind.ts";

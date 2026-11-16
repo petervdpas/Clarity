@@ -27,7 +27,7 @@ video = ["audio", "dep:clarity-video"]
 [dependencies]
 clarity-runtime = { path = "../rust", version = "0.61.0", default-features = false }
 clarity-auth = { path = "../rust-auth", version = "0.2.0" }
-# The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/IMAGE-PLAN.md).
+# The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/ledger/canvas-toolbox.md).
 clarity-image = { path = "../rust-image", version = "0.1.0" }
 clarity-graph = { path = "../rust-graph", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
@@ -42,7 +42,7 @@ skia-safe = { version = "0.156", features = ["gl", "textlayout"] }
 # choice, 2026-11-02); brings usvg and tiny-skia. Skia's own SVG module has
 # no prebuilt binaries for every system with this feature set.
 resvg = "0.49"
-# Screen readers (DESIGN 7.9, A1, user's choice 2026-11-04): the accessibility
+# Screen readers (manual/start.how-it-works.md, user's choice 2026-11-04): the accessibility
 # tree as AccessKit's nodes, on every system and in the browser build.
 accesskit = "0.25"
 

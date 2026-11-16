@@ -1,4 +1,4 @@
-//! A wizard, the steps part (DESIGN 5.15, conformance/steps.json): one step
+//! A wizard, the steps part (manual/parts.containers.md, conformance/steps.json): one step
 //! at a time, the titles of all steps above with the current one marked, and
 //! Clarity's own Back, Next and Finish below. The step it is on, counted from
 //! 1, is its part's state's `step`, so code reads and sets it; a wizard

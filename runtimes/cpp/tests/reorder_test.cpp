@@ -1,4 +1,4 @@
-// Reordering (DESIGN 5.30), decided by the runtime, against the cases every
+// Reordering (manual/parts.data.md), decided by the runtime, against the cases every
 // runtime shares (conformance/reorder.json).
 
 #include "check.hpp"

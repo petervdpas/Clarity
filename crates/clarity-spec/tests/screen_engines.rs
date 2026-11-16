@@ -1,4 +1,4 @@
-//! Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside
+//! Engines beside the screen (manual/code.engines.md): an engine declared `beside
 //! the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one
 //! instance per canvas, its frames in the renderer
 //! (conformance/screen-engines.json). The backend never runs it.
@@ -111,7 +111,7 @@ fn why_an_engine_stopped_is_a_clarity_word() {
 }
 
 /// What an engine beside the screen tells its window, and what a handler
-/// tells it (DESIGN 5.12): `tells` runs the handler wired on the canvas with
+/// tells it (manual/code.engines.md): `tells` runs the handler wired on the canvas with
 /// the tell's values; `sky.start(2)` reaches the engine's export `start`.
 const GAME: &str = "module play
 
@@ -182,7 +182,7 @@ fn the_designer_writes_a_canvas_that_runs_an_engine() {
     );
 }
 
-/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b): its
+/// An engine beside the screen written in Clarity (manual/code.engines.md): its
 /// frame loop is functions of the interface's names, what it draws is a
 /// list of records, and `tell` puts a tell in the call's answer.
 const WRITTEN: &str = "module play

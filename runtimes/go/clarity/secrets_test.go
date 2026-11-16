@@ -18,7 +18,7 @@ func (s *countingStore) Set(program, name, value string) error {
 
 // Keeping the settings writes a secret only when it changed: another
 // setting changing never needs the protected store, nor fails where it
-// cannot be reached (DESIGN 5.27).
+// cannot be reached (manual/data.settings.md).
 func TestASecretGoesToTheStoreOnlyWhenItChanged(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)

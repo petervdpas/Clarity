@@ -1,4 +1,4 @@
-//! A tree of several kinds of records (DESIGN 5.33): `tree name modelTree`
+//! A tree of several kinds of records (manual/design.windows.md): `tree name modelTree`
 //! with `level` lines, each the records of an entity under the row of the
 //! level around it, `group` headings shown when the levels inside them have
 //! rows, and `on select Entity: handler`. The generators get it as a tree of

@@ -1,6 +1,6 @@
 package clarity
 
-// The data formats of code (docs/FORMATS-PLAN.md): `read Order from json
+// The data formats of code (docs/ledger/formats.md): `read Order from json
 // text` and `json of value`, through Clarity.Formats, the one
 // implementation every stack calls. The program's own cgo file (formats.go,
 // generated only when the code uses a format) calls the library; this

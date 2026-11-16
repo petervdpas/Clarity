@@ -1,4 +1,4 @@
-//! The edit bus (DESIGN 5.29): per open window, the record of the person's
+//! The edit bus (manual/code.handlers.md): per open window, the record of the person's
 //! edits, kept here in the runtime, not in the screen. Each edit is a message
 //! with the part, its scope (its form or panel, or the part itself), what it
 //! changed (each name of the window's data, each setting on its own,
@@ -279,7 +279,7 @@ pub fn edit(db: &Db, state: WindowState, part: &str, scope: &str, ends: bool, ru
     Ok(reply)
 }
 
-/// The end of a message that changed the window's data (DESIGN 1.7): with a
+/// The end of a message that changed the window's data (manual/start.how-it-works.md): with a
 /// scope, `run` runs as an edit that ends there; without one, as
 /// `dispatch_event` runs a handler, as one database step.
 pub fn ended(db: &Db, state: WindowState, part: &str, scope: Option<&str>, run: impl FnOnce(WindowState) -> Result<Reply>) -> Result<Reply> {
@@ -301,7 +301,7 @@ pub fn table_edit_fits(before: &Value, after: &Value, editable: &[String]) -> bo
         })
 }
 
-/// A part's options as the runtime's parameters (DESIGN 1.7): a `readonly`
+/// A part's options as the runtime's parameters (manual/start.how-it-works.md): a `readonly`
 /// part's change, or a table's change (its list at `path`) outside the
 /// fields of `editable`, is taken back to the window's edit baseline and
 /// answered `refused` (`draw`), with no handler run and no edit kept. Any

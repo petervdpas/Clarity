@@ -154,7 +154,7 @@ test("a wired event's handler is named after the part and the event, in camelCas
 });
 
 // A custom part grows with its window when its declaration says `grows`
-// (DESIGN 5.19): the designer sets it in the module that declares the part.
+// (manual/design.custom-parts.md): the designer sets it in the module that declares the part.
 test("the designer sets whether a custom part grows in the module that declares it", () => {
   const files = [
     { path: "window.clarity", parts: [] },

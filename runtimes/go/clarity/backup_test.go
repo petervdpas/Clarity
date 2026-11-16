@@ -1,6 +1,6 @@
 package clarity
 
-// A backup before migration steps change a database (docs/BACKUP-PLAN.md),
+// A backup before migration steps change a database (docs/ledger/backups.md),
 // named and pruned as every stack does it (conformance/backups.json).
 
 import (

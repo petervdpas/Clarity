@@ -1,4 +1,4 @@
-//! A Rust desktop application on Clarity.UI (DESIGN 7.9, G8a): `stack rust
+//! A Rust desktop application on Clarity.UI (manual/start.how-it-works.md): `stack rust
 //! desktop`. The program (the runtime's `Program`, implemented once) is the
 //! same one the web server answers with: the windows and app frames as
 //! `.cxaml`, the themes as resolved JSON and the model travel in the program,
@@ -131,7 +131,7 @@ fn the_webview_desktop_is_gone() {
 }
 
 /// `stack rust web` serves Clarity.UI's browser files and answers their
-/// wire (round B of DESIGN 7.9); beside the desktop target it is the same
+/// wire (round B of manual/start.how-it-works.md); beside the desktop target it is the same
 /// program, serving with `--serve`.
 #[test]
 fn the_web_program_serves_clarity_ui_in_the_browser() {

@@ -1,4 +1,4 @@
-//! The accessibility tree for the browser's page (DESIGN 7.9, A1 phase 2):
+//! The accessibility tree for the browser's page (manual/start.how-it-works.md phase 2):
 //! the page keeps a hidden DOM tree with ARIA beside the canvas, one element
 //! per node, and this says what to change in it: the whole tree the first
 //! time, then only the nodes new or changed and the ids gone, as

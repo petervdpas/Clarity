@@ -1,4 +1,4 @@
-//! The windows of a program as markup (DESIGN 7.8, 7.9): one XML file per
+//! The windows of a program as markup (manual/start.how-it-works.md): one XML file per
 //! window, `ui/windows/Main.cxaml`, each part an element with its options as
 //! attributes, written in Clarity's own words, as C# writes each window as
 //! AXAML. Clarity.UI reads them when the program starts, on the desktop and
@@ -36,7 +36,7 @@ thread_local! {
     static SHOWING: std::cell::RefCell<std::collections::BTreeMap<String, usize>> = std::cell::RefCell::new(std::collections::BTreeMap::new());
 }
 
-/// Writes markup as the IDE's designer draws it (DESIGN 8.1): each window,
+/// Writes markup as the IDE's designer draws it (manual/design.parts.md): each window,
 /// part, page and menu item with `designItem`, its key (its file and name,
 /// `design/Main.cxaml#Main/saveButton`), so the designer's layer knows each
 /// box Clarity.UI draws. `keys` gives the key of each number the project's

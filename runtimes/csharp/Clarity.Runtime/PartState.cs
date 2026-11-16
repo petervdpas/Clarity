@@ -68,7 +68,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
         drawn = null;
     }
 
-    /// <summary>Shows a drawing as it is, such as the one a server drew (DESIGN 7.6).</summary>
+    /// <summary>Shows a drawing as it is, such as the one a server drew (manual/stacks.csharp.md).</summary>
     internal void ShowDrawing(IReadOnlyList<Shape> shapes) => Drawing = shapes;
 
     /// <summary>Where a canvas was last clicked; null before any click.</summary>
@@ -184,7 +184,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     string dotColor = "";
 
-    /// <summary>The tool in hand of a painting or vector canvas (DESIGN 5.31): <c>canvas.tool</c>; empty for its mode's first.</summary>
+    /// <summary>The tool in hand of a painting or vector canvas (manual/parts.graphics.md): <c>canvas.tool</c>; empty for its mode's first.</summary>
     public string Tool
     {
         get => tool;
@@ -299,7 +299,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>What the help text under an input shows: its error, or its help.</summary>
     public string Shown => HasError ? Error : Help;
 
-    // -- A custom part (DESIGN 5.19) ------------------------------------------
+    // -- A custom part (manual/design.custom-parts.md) ------------------------------------------
 
     /// <summary>A custom part's properties, as written in the window and set by code.</summary>
     public IReadOnlyDictionary<string, object?> Values => values;

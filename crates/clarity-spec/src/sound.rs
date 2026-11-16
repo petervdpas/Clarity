@@ -1,10 +1,10 @@
-//! The sound part (DESIGN 5.22): what code can tell it, and how a melody's
+//! The sound part (manual/design.sound.md): what code can tell it, and how a melody's
 //! notes read, alike on every stack (conformance/melody.json).
 
 use crate::code::check::TypeInfo;
 
 /// What code tells a sound, with the values each takes: `rollSound.play()`,
-/// or `music.play(path)` for a song from disk (docs/AUDIO-PLAN.md).
+/// or `music.play(path)` for a song from disk (docs/ledger/audio.md).
 pub const HEARS: [(&str, &[(&str, TypeInfo)]); 8] = [
     ("play", &[("path", TypeInfo::Text)]),
     ("pause", &[]),
@@ -26,7 +26,7 @@ pub fn least(name: &str) -> usize {
     if name == "play" { 0 } else { hear(name).map_or(0, <[_]>::len) }
 }
 
-/// What code reads of a sound, as it plays (docs/AUDIO-PLAN.md): kept by
+/// What code reads of a sound, as it plays (docs/ledger/audio.md): kept by
 /// Clarity.UI in the part's values, read as a custom part's are.
 pub const READS: [(&str, TypeInfo); 10] = [
     ("playing", TypeInfo::Bool),

@@ -1,5 +1,5 @@
-//! The window stack's part of signing in (docs/APP-CAPABILITIES-PLAN.md
-//! step 4): the sign-in window shows before the main window, in a desktop
+//! The window stack's part of signing in (docs/ledger/signin.md):
+//! the sign-in window shows before the main window, in a desktop
 //! window of its own on the desktop (or the splash that is it); a sign-in
 //! closes it and opens the main window; a signout closes every window and
 //! shows it again.

@@ -1,4 +1,4 @@
-//! The IR of an engine written in Clarity (DESIGN 5.12): its code lowered
+//! The IR of an engine written in Clarity (manual/code.engines.md): its code lowered
 //! once from the checked source, so the compiler (to wasm) and the
 //! interpreter (in the support module) run the same thing. Every name is
 //! resolved to a local, a kept value or a function by number, and every

@@ -12,6 +12,7 @@ use std::process::Command;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::jobs::Runnable;
 
@@ -457,7 +458,8 @@ fn snapshot(repo: &Path) -> Result<String, String> {
         .lines()
         .filter(|l| l.len() > 3)
         .map(|line| {
-            let hash = std::fs::read(repo.join(&line[3..])).map(|bytes| bytes.iter().fold(0xcbf29ce484222325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3))).unwrap_or(0);
+            // A renamed file is read where it is now (`old -> new`).
+            let hash = std::fs::read(repo.join(line[3..].rsplit(" -> ").next().unwrap_or(&line[3..]))).map(|bytes| bytes.iter().fold(0xcbf29ce484222325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3))).unwrap_or(0);
             format!("{line}\t{hash:x}\n")
         })
         .collect())
@@ -505,6 +507,10 @@ pub struct CheckRecord {
     pub ended: u64,
     /// The commit it ran on (the tree may have had changes over it).
     pub head: String,
+    /// The fingerprint of what it read of the tree it ran on
+    /// ([`TreeState::fingerprint`]); it counts only while that is still the same.
+    #[serde(default)]
+    pub tree: String,
     /// The last lines of a failed one.
     pub lines: Vec<String>,
 }
@@ -528,12 +534,250 @@ pub fn record_check(repo: &Path, record: &CheckRecord) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
     }
     let text = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
-    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
+    // Written beside it and moved over it: a write cut short (a full disk) leaves the kept records as they were.
+    let new = file.with_extension("json.new");
+    std::fs::write(&new, text).map_err(|e| {
+        let _ = std::fs::remove_file(&new);
+        format!("cannot write {}: {e}", new.display())
+    })?;
+    std::fs::rename(&new, &file).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
 
 /// The commit the tree is on.
 pub fn head(repo: &Path) -> Result<String, String> {
     Ok(git(repo, &["rev-parse", "HEAD"])?.trim().to_string())
+}
+
+/// The fingerprint of a tree: its commit and its uncommitted changes, each
+/// changed file with a hash of its content (`snapshot`).
+pub fn fingerprint(head: &str, changes: &str) -> String {
+    let hash = changes.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+    format!("{head}:{hash:016x}")
+}
+
+/// A package of the workspace's resolve: its name, version and where it
+/// comes from (none for a crate of the workspace's own folders), and the
+/// packages it needs, each with whether only for its tests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Package {
+    pub name: String,
+    pub version: String,
+    pub source: Option<String>,
+    /// Its folder in the tree, for a workspace member (`runtimes/rust-ui`).
+    pub folder: Option<String>,
+    /// The packages it needs (their places in [`TreeState::packages`]), true for one its tests alone need.
+    pub needs: Vec<(usize, bool)>,
+}
+
+/// A tree as the checks read it: each file with its content's hash (git's
+/// for a committed file, the snapshot's for a changed one) and the
+/// packages Cargo resolves the workspace to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeState {
+    pub files: BTreeMap<String, String>,
+    pub packages: Vec<Package>,
+}
+
+/// The tree as it is now.
+pub fn tree_state(repo: &Path) -> Result<TreeState, String> {
+    state_of(repo, &head(repo)?, &snapshot(repo)?)
+}
+
+/// The tree the fresh checkout `dir` was made from: its commit and the changes noted beside it.
+pub fn checkout_state(dir: &Path) -> Result<TreeState, String> {
+    let changes = std::fs::read_to_string(snapshot_file(dir)).map_err(|e| format!("cannot read how the tree stood: {e}"))?;
+    state_of(dir, &head(dir)?, &changes)
+}
+
+fn state_of(repo: &Path, head: &str, changes: &str) -> Result<TreeState, String> {
+    let mut files: BTreeMap<String, String> = git(repo, &["ls-tree", "-r", head])?
+        .lines()
+        .filter_map(|line| {
+            let (meta, path) = line.split_once('\t')?;
+            Some((path.to_string(), meta.rsplit(' ').next()?.to_string()))
+        })
+        .collect();
+    for line in changes.lines() {
+        let Some((status, hash)) = line.rsplit_once('\t') else { continue };
+        let Some(path) = status.get(3..) else { continue };
+        let path = path.rsplit(" -> ").next().unwrap_or(path);
+        if let Some((old, _)) = status[3..].split_once(" -> ") {
+            files.remove(old);
+        }
+        if hash == "0" {
+            files.remove(path);
+        } else {
+            files.insert(path.to_string(), hash.to_string());
+        }
+    }
+    let manifests: String = files.iter().filter(|(p, _)| p.as_str() == "Cargo.lock" || p.ends_with("Cargo.toml")).map(|(p, h)| format!("{p}\t{h}\n")).collect();
+    let packages = resolved(repo, &manifests);
+    Ok(TreeState { files, packages })
+}
+
+/// The workspace's packages as Cargo resolves them (offline), the same for
+/// the same manifests and lock (`key`), so read once for them.
+fn resolved(repo: &Path, key: &str) -> Vec<Package> {
+    static KNOWN: std::sync::Mutex<Option<(String, Vec<Package>)>> = std::sync::Mutex::new(None);
+    if let Ok(known) = KNOWN.lock()
+        && let Some((k, packages)) = known.as_ref()
+        && k == key
+    {
+        return packages.clone();
+    }
+    let packages = read_resolve(repo).unwrap_or_default();
+    if !packages.is_empty()
+        && let Ok(mut known) = KNOWN.lock()
+    {
+        *known = Some((key.to_string(), packages.clone()));
+    }
+    packages
+}
+
+fn read_resolve(repo: &Path) -> Option<Vec<Package>> {
+    let out = Command::new("cargo").args(["metadata", "--format-version", "1", "--offline"]).current_dir(repo).stderr(std::process::Stdio::null()).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let meta: Value = serde_json::from_slice(&out.stdout).ok()?;
+    let root = meta["workspace_root"].as_str().map(PathBuf::from)?;
+    let members: Vec<&str> = meta["workspace_members"].as_array()?.iter().filter_map(Value::as_str).collect();
+    let listed = meta["packages"].as_array()?;
+    let at: BTreeMap<&str, usize> = listed.iter().enumerate().filter_map(|(i, p)| Some((p["id"].as_str()?, i))).collect();
+    let mut packages: Vec<Package> = listed
+        .iter()
+        .map(|p| {
+            let id = p["id"].as_str().unwrap_or_default();
+            let folder = members.contains(&id).then(|| Path::new(p["manifest_path"].as_str().unwrap_or_default()).parent().and_then(|f| f.strip_prefix(&root).ok()).map(|f| f.to_string_lossy().replace('\\', "/"))).flatten();
+            Package { name: p["name"].as_str().unwrap_or_default().to_string(), version: p["version"].as_str().unwrap_or_default().to_string(), source: p["source"].as_str().map(str::to_string), folder, needs: Vec::new() }
+        })
+        .collect();
+    for node in meta["resolve"]["nodes"].as_array()? {
+        let Some(&from) = node["id"].as_str().and_then(|id| at.get(id)) else { continue };
+        for dep in node["deps"].as_array().into_iter().flatten() {
+            let Some(&to) = dep["pkg"].as_str().and_then(|id| at.get(id)) else { continue };
+            let kinds: Vec<&str> = dep["dep_kinds"].as_array().into_iter().flatten().map(|k| k["kind"].as_str().unwrap_or("normal")).collect();
+            packages[from].needs.push((to, !kinds.is_empty() && kinds.iter().all(|k| *k == "dev")));
+        }
+    }
+    Some(packages)
+}
+
+impl TreeState {
+    /// The packages `package`'s build and tests use: its own needs, tests'
+    /// too, and theirs without their tests'. None known: every package.
+    fn closure(&self, package: &str) -> Option<std::collections::BTreeSet<usize>> {
+        let start = self.packages.iter().position(|p| p.name == package && p.folder.is_some())?;
+        let mut seen = std::collections::BTreeSet::from([start]);
+        let mut next: Vec<usize> = self.packages[start].needs.iter().map(|(to, _)| *to).collect();
+        while let Some(at) = next.pop() {
+            if seen.insert(at) {
+                next.extend(self.packages[at].needs.iter().filter(|(_, tests)| !tests).map(|(to, _)| *to));
+            }
+        }
+        Some(seen)
+    }
+
+    /// The fingerprint of what `check` reads (its [`Inputs`]) and of its command.
+    pub fn fingerprint(&self, check: &Check) -> String {
+        let mut text = format!("{}\n", check.run.shown());
+        for (name, value) in &check.run.env {
+            text.push_str(&format!("{name}={value}\n"));
+        }
+        let rust = |path: &str| path.ends_with(".rs") || path.ends_with("Cargo.toml") || path == "Cargo.lock";
+        match &check.inputs {
+            Inputs::Whole => self.files.iter().for_each(|(p, h)| text.push_str(&format!("{p}\t{h}\n"))),
+            Inputs::NoRust => self.files.iter().filter(|(p, _)| !rust(p)).for_each(|(p, h)| text.push_str(&format!("{p}\t{h}\n"))),
+            Inputs::Crate(package) => match self.closure(package) {
+                Some(closure) => {
+                    let outside: Vec<String> = self.packages.iter().enumerate().filter(|(i, _)| !closure.contains(i)).filter_map(|(_, p)| p.folder.as_ref().map(|f| format!("{f}/"))).collect();
+                    let read = |path: &str| path != "Cargo.lock" && !(rust(path) && outside.iter().any(|f| path.starts_with(f.as_str()) && !self.inner_member(path, f)));
+                    self.files.iter().filter(|(p, _)| read(p)).for_each(|(p, h)| text.push_str(&format!("{p}\t{h}\n")));
+                    let mut used: Vec<String> = closure.iter().map(|&i| &self.packages[i]).map(|p| format!("{} {} {}", p.name, p.version, p.source.as_deref().unwrap_or("-"))).collect();
+                    used.sort();
+                    used.iter().for_each(|u| text.push_str(&format!("{u}\n")));
+                }
+                None => self.files.iter().for_each(|(p, h)| text.push_str(&format!("{p}\t{h}\n"))),
+            },
+        }
+        let hash = text.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        format!("{hash:016x}")
+    }
+
+    /// Whether `path`, under the member folder `folder`, belongs to a member
+    /// folder inside it (which counts as its own).
+    fn inner_member(&self, path: &str, folder: &str) -> bool {
+        self.packages.iter().filter_map(|p| p.folder.as_ref()).any(|f| f.len() + 1 > folder.len() && f.starts_with(folder) && path.starts_with(&format!("{f}/")))
+    }
+}
+
+/// The fingerprint of the tree as it is now.
+pub fn tree(repo: &Path) -> Result<String, String> {
+    Ok(fingerprint(&head(repo)?, &snapshot(repo)?))
+}
+
+/// The checks of `checks` (key, title, the fingerprint of what it reads now)
+/// that hold a plan back, each with why: failed, ran on another tree, or not run.
+pub fn held_back_of(checks: impl Iterator<Item = (String, String, String)>, records: &BTreeMap<String, CheckRecord>) -> Vec<String> {
+    checks
+        .filter_map(|(key, title, tree)| match records.get(&key) {
+            Some(r) if r.tree != tree => Some(format!("{title}: ran on another tree")),
+            Some(r) if r.passed => None,
+            Some(_) => Some(format!("{title}: failed")),
+            None => Some(format!("{title}: not run")),
+        })
+        .collect()
+}
+
+/// The release checks that hold a plan back now: none when every one passed on the tree as it is.
+pub fn held_back(repo: &Path) -> Result<Vec<String>, String> {
+    let (files, _) = since_ide_release(repo)?;
+    let state = tree_state(repo)?;
+    let checks = checks(repo, &files).into_iter().map(|c| {
+        let print = state.fingerprint(&c);
+        (c.key, c.title, print)
+    });
+    Ok(held_back_of(checks, &check_records(repo)))
+}
+
+/// Whether `stamp` is a plan's name: `YYYY-MM-DD-HHMM`.
+fn plan_stamp(stamp: &str) -> bool {
+    let b = stamp.as_bytes();
+    b.len() == 15 && b.iter().enumerate().all(|(i, c)| if [4, 7, 10].contains(&i) { *c == b'-' } else { c.is_ascii_digit() })
+}
+
+/// Writes the Release Helper's plan `plan` (its format, ~/Projects/ReleaseHelper/README.md)
+/// as `releases/<stamp>.json` of `repo`: its steps begin with the checks on main
+/// (a watch step of checks.yml), and a plan already there is never overwritten.
+/// The caller makes sure every release check passed on the tree (`held_back`).
+pub fn write_plan(repo: &Path, stamp: &str, plan: &Value) -> Result<PathBuf, String> {
+    if !plan_stamp(stamp) {
+        return Err(format!("'{stamp}' is no plan's name: YYYY-MM-DD-HHMM, as 2026-11-17-0930"));
+    }
+    let steps = plan.get("steps").and_then(Value::as_array).filter(|s| !s.is_empty()).ok_or("a plan has steps")?;
+    let first = &steps[0];
+    if first.get("workflow").and_then(Value::as_str) != Some("checks.yml") || first.get("tag").is_some() {
+        return Err("a plan begins with the checks on main: a step with \"workflow\": \"checks.yml\" and no tag".to_string());
+    }
+    let file = repo.join("releases").join(format!("{stamp}.json"));
+    if file.exists() {
+        return Err(format!("{} is there already: a plan is never overwritten", file.display()));
+    }
+    std::fs::create_dir_all(repo.join("releases")).map_err(|e| format!("cannot make releases/: {e}"))?;
+    let text = serde_json::to_string_pretty(plan).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))?;
+    Ok(file)
+}
+
+/// Gives the plan `releases/<stamp>.json` the commit message `message`, its
+/// steps as they are: the fix after a failed release.
+pub fn set_commit_message(repo: &Path, stamp: &str, message: &str) -> Result<PathBuf, String> {
+    let file = repo.join("releases").join(format!("{stamp}.json"));
+    let text = std::fs::read_to_string(&file).map_err(|_| format!("there is no plan {stamp} in releases/"))?;
+    let mut plan: Value = serde_json::from_str(&text).map_err(|e| format!("{} does not read: {e}", file.display()))?;
+    plan["commit_message"] = Value::String(message.to_string());
+    std::fs::write(&file, serde_json::to_string_pretty(&plan).map_err(|e| e.to_string())? + "\n").map_err(|e| format!("cannot write {}: {e}", file.display()))?;
+    Ok(file)
 }
 
 /// A check a release needs first, run as a build.
@@ -542,15 +786,68 @@ pub struct Check {
     pub key: String,
     pub title: String,
     pub run: Runnable,
+    /// It runs in the fresh checkout, so it counts on the tree the checkout was made from.
+    pub fresh: bool,
+    /// What it reads, which its fingerprint is made of.
+    pub inputs: Inputs,
 }
 
-fn cargo_test(repo: &Path, package: &str, test: Option<&str>) -> Runnable {
+/// What a check reads of the tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Inputs {
+    /// All of it (the fresh checkout, the clean tree).
+    Whole,
+    /// What a crate's build and tests read: every file but the Rust code
+    /// (`.rs`, `Cargo.toml`) of the workspace crates it does not build, and
+    /// for Cargo.lock, the versions its own crates resolve to.
+    Crate(String),
+    /// What the IDE's pages read: every file but Rust code and Cargo's files.
+    NoRust,
+}
+
+fn cargo_test(repo: &Path, package: &str, test: Option<&str>, features: &[String]) -> Runnable {
     let mut args = vec!["test", "-p", package];
     match test {
         Some(t) => args.extend(["--test", t]),
         None => args.push("--lib"),
     }
+    let features = features.join(",");
+    if !features.is_empty() {
+        args.extend(["--features", features.as_str()]);
+    }
     Runnable::new("cargo", &args, repo).with_env("CARGO_BUILD_JOBS", "2")
+}
+
+/// The features the test target `test` declares in `manifest` (`required-features`
+/// of its `[[test]]`): cargo leaves the target out without them.
+fn required_features(manifest: &str, test: &str) -> Vec<String> {
+    let value = |line: &str, key: &str| line.strip_prefix(key).map(str::trim_start).and_then(|rest| rest.strip_prefix('=')).map(str::trim).map(str::to_string);
+    let mut features = Vec::new();
+    for block in manifest.split("[[test]]").skip(1) {
+        let lines: Vec<&str> = block.lines().map(str::trim).take_while(|l| !l.starts_with('[')).collect();
+        if !lines.iter().any(|l| value(l, "name").as_deref() == Some(&format!("\"{test}\""))) {
+            continue;
+        }
+        if let Some(list) = lines.iter().find_map(|l| value(l, "required-features")) {
+            features.extend(list.trim_matches(['[', ']']).split(',').map(|f| f.trim().trim_matches('"').to_string()).filter(|f| !f.is_empty()));
+        }
+    }
+    features
+}
+
+/// What the IDE run by dev.sh sets that the checks on GitHub do not have:
+/// the repository's runtimes and Clarity.UI's library or browser files of
+/// its own. Empty is unset to each of them.
+const IDE_ONLY: [&str; 4] = ["CLARITY_RUNTIME", "CLARITY_UI", "CLARITY_UI_BROWSER", "CLARITY_PROJECT"];
+
+/// Clarity.UI's library as the IDE builds apps with it now (chosen in
+/// DevTools, named, carried or fetched before); none while it is still to fetch.
+fn library_in_use() -> Option<PathBuf> {
+    use crate::clarity_ui::Library;
+    match crate::clarity_ui::library() {
+        Library::Chosen(f) | Library::Named(f) | Library::Bundled(f) | Library::Fetched(f) => Some(f),
+        Library::ToFetch { .. } | Library::Unavailable { .. } => None,
+    }
 }
 
 fn node_tool(name: &str) -> String {
@@ -572,18 +869,24 @@ fn clarity_cli(repo: &Path, args: &[&str]) -> Runnable {
 /// when app/ or a model type changed (in the tree, which has its
 /// node_modules); and last, that the checks left the tree clean.
 pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
+    let canonical = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
+    let repo = canonical.as_path();
     let fresh = fresh_checkout_dir(repo);
     let own = fresh_target_dir(repo).to_string_lossy().to_string();
-    let in_fresh = |run: Runnable| Runnable { dir: fresh.clone(), ..run }.with_env("CARGO_TARGET_DIR", &own);
+    // Without debug info: every test target is a program of its own, and with it they took 35 GB; a failure still names its file and line.
+    let in_fresh = |run: Runnable| {
+        let run = Runnable { dir: fresh.clone(), ..run }.with_env("CARGO_TARGET_DIR", &own).with_env("CARGO_PROFILE_DEV_DEBUG", "0").with_env("CARGO_PROFILE_TEST_DEBUG", "0");
+        IDE_ONLY.iter().fold(run, |run, name| run.with_env(name, ""))
+    };
     let mut checks = Vec::new();
     for g in &GUARDS {
         let target = g.test.map(|t| format!("--test {t}")).unwrap_or_else(|| "--lib".into());
         if !g.variable.is_empty() {
-            checks.push(Check { key: format!("guard:write:{}:{target}", g.package), title: format!("Write {}", g.writes), run: cargo_test(repo, g.package, g.test).with_env(g.variable, "1") });
+            checks.push(Check { key: format!("guard:write:{}:{target}", g.package), title: format!("Write {}", g.writes), run: cargo_test(repo, g.package, g.test, &[]).with_env(g.variable, "1"), fresh: false, inputs: Inputs::Crate(g.package.to_string()) });
         }
-        checks.push(Check { key: format!("guard:test:{}:{target}", g.package), title: format!("Check {}", g.writes), run: cargo_test(repo, g.package, g.test) });
+        checks.push(Check { key: format!("guard:test:{}:{target}", g.package), title: format!("Check {}", g.writes), run: cargo_test(repo, g.package, g.test, &[]), fresh: false, inputs: Inputs::Crate(g.package.to_string()) });
     }
-    checks.push(Check { key: "freshCheckout".into(), title: "A fresh checkout, as on GitHub".into(), run: clarity_cli(repo, &["release", "fresh-checkout"]) });
+    checks.push(Check { key: "freshCheckout".into(), title: "A fresh checkout, as on GitHub".into(), run: clarity_cli(repo, &["release", "fresh-checkout"]), fresh: false, inputs: Inputs::Whole });
     let under = |folder: &str| changed.iter().any(|f| f == folder || f.starts_with(&format!("{folder}/")));
     for member in members(repo) {
         if !under(&member) {
@@ -591,21 +894,26 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
         }
         let Ok(manifest) = std::fs::read_to_string(repo.join(&member).join("Cargo.toml")) else { continue };
         let Some((_, package)) = between(&manifest, "name = \"", "\"") else { continue };
+        if package == "clarity-ui-ffi" {
+            // The C header's test links the library, which cargo test does not build (as checks.yml does first).
+            let run = in_fresh(Runnable::new("cargo", &["build", "-p", package], repo).with_env("CARGO_BUILD_JOBS", "2"));
+            checks.push(Check { key: format!("library:{package}"), title: format!("{package}: the library its tests link"), run, fresh: true, inputs: Inputs::Crate(package.to_string()) });
+        }
         if repo.join(&member).join("src/lib.rs").is_file() {
-            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: in_fresh(cargo_test(repo, package, None)) });
+            checks.push(Check { key: format!("test:{package}:--lib"), title: format!("{package}: lib tests"), run: in_fresh(cargo_test(repo, package, None, &[])), fresh: true, inputs: Inputs::Crate(package.to_string()) });
         }
         let mut tests: Vec<String> = std::fs::read_dir(repo.join(&member).join("tests"))
             .map(|d| d.flatten().filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".rs").map(str::to_string)).collect())
             .unwrap_or_default();
         tests.sort();
         for test in tests {
-            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: in_fresh(cargo_test(repo, package, Some(&test))) });
+            checks.push(Check { key: format!("test:{package}:{test}"), title: format!("{package}: {test}"), run: in_fresh(cargo_test(repo, package, Some(&test), &required_features(&manifest, &test))), fresh: true, inputs: Inputs::Crate(package.to_string()) });
         }
     }
     if under("app") || under("runtimes/web/src/generated") {
         let app = repo.join("app");
-        checks.push(Check { key: "app:svelte-check".into(), title: "The IDE's pages: svelte-check".into(), run: Runnable::new(&node_tool("npx"), &["svelte-check", "--threshold", "warning"], &app) });
-        checks.push(Check { key: "app:test".into(), title: "The IDE's pages: tests".into(), run: Runnable::new(&node_tool("npm"), &["test"], &app) });
+        checks.push(Check { key: "app:svelte-check".into(), title: "The IDE's pages: svelte-check".into(), run: Runnable::new(&node_tool("npx"), &["svelte-check", "--threshold", "warning"], &app), fresh: false, inputs: Inputs::NoRust });
+        checks.push(Check { key: "app:test".into(), title: "The IDE's pages: tests".into(), run: Runnable::new(&node_tool("npm"), &["test"], &app), fresh: false, inputs: Inputs::NoRust });
     }
     for example in EXAMPLES {
         let folder = format!("examples/{example}");
@@ -613,16 +921,22 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
             key: format!("spec:{example}"),
             title: format!("{example}: spec check"),
             run: in_fresh(clarity_cli(repo, &["spec", "check", &folder])),
+            fresh: true,
+            inputs: Inputs::Crate("clarity-cli".into()),
         });
     }
+    // A Go, C or C++ desktop example builds with Clarity.UI's library as the IDE gives it to apps.
+    let library = library_in_use().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
     for example in EXAMPLES.iter().filter(|e| under(&format!("examples/{e}"))) {
         let exact = format!("the_{example}_example_builds_without_warnings");
         checks.push(Check {
             key: format!("build:{example}"),
             title: format!("{example}: builds on its stack"),
-            run: in_fresh(Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2")),
+            run: in_fresh(Runnable::new("cargo", &["test", "-p", "clarity-gen", "--test", "examples_build", "--", "--ignored", "--exact", &exact], repo).with_env("CARGO_BUILD_JOBS", "2")).with_env("CLARITY_UI", &library),
+            fresh: true,
+            inputs: Inputs::Crate("clarity-gen".into()),
         });
     }
-    checks.push(Check { key: "cleanTree".into(), title: "The checks left the tree clean".into(), run: clarity_cli(repo, &["release", "clean-tree"]) });
+    checks.push(Check { key: "cleanTree".into(), title: "The checks left the tree clean".into(), run: clarity_cli(repo, &["release", "clean-tree"]), fresh: false, inputs: Inputs::Whole });
     checks
 }

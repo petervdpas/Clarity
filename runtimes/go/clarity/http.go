@@ -1,6 +1,6 @@
 package clarity
 
-// HTTP calls from code (DESIGN 5.23): `http get url` and the others,
+// HTTP calls from code (manual/code.web-apis.md): `http get url` and the others,
 // through net/http. A call never fails: when no answer comes, the reply has
 // status 0 and says why, so the handler decides what that means. Every
 // runtime gives the same replies (conformance/http.json).
@@ -131,7 +131,7 @@ type HTTPAuth struct {
 
 // secretAt is a secret where the project file says it is: env:NAME reads
 // that environment variable, setting:<program>/<name> a secret setting in
-// the system's protected store (DESIGN 5.27); empty when it is not there.
+// the system's protected store (manual/data.settings.md); empty when it is not there.
 func secretAt(location string) string {
 	if name, found := strings.CutPrefix(location, "env:"); found {
 		return os.Getenv(name)
@@ -165,7 +165,7 @@ func HTTPAt(method, base, path string, query []Header, body string, headers []He
 	return reply
 }
 
-// HTTPPaging is how a web API hands out a long list (DESIGN 5.23, paging):
+// HTTPPaging is how a web API hands out a long list (manual/code.web-apis.md, paging):
 // the project file's paging line. Kind is "page", "offset", "cursor" or
 // "link"; Items is where a page's items are in its JSON, "" when a page is
 // a list.

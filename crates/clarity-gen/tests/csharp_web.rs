@@ -1,4 +1,4 @@
-//! The web target of C# on Clarity.UI (DESIGN 7.6, 7.9): the windows' view
+//! The web target of C# on Clarity.UI (manual/stacks.csharp.md, manual/start.how-it-works.md): the windows' view
 //! models run on a server; in the browser runs Clarity.UI's library,
 //! compiled once for every language, which asks the server for what each
 //! window does. Two projects, the application as a library and the server,

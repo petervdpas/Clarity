@@ -1,8 +1,8 @@
-// Package ui runs a generated Go application on Clarity.UI (DESIGN 7.9):
+// Package ui runs a generated Go application on Clarity.UI (manual/start.how-it-works.md):
 // one library, written in Rust, that draws the windows, lays them out,
 // takes the person's input and runs the desktop host, called through its C
 // interface (clarity_ui.h) with cgo. The program keeps its window model in
-// Go: the library asks it by command (the web wire, DESIGN 7.3), and
+// Go: the library asks it by command (the web wire, manual/project.run-build.md), and
 // package shell answers. Custom parts written in Go reach the library as a
 // table of callbacks (custom.go).
 //

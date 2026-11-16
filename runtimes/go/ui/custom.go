@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-// A custom part (DESIGN 5.19, 7.9): a program's own kind of part, written in
+// A custom part (manual/design.custom-parts.md, manual/start.how-it-works.md): a program's own kind of part, written in
 // Go, which Clarity.UI lays out, gives the pointer, keys and the focus, and
 // asks to draw on its canvas. The library holds each part by a handle from
 // its making until it is gone. Every method runs on the screen's thread,

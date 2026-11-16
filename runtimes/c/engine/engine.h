@@ -1,4 +1,4 @@
-// Engines (DESIGN 5.11): processing modules compiled once to WebAssembly,
+// Engines (manual/code.engines.md): processing modules compiled once to WebAssembly,
 // which every stack hosts alike (conformance/engines.json). An engine
 // computes; it imports only the services of Clarity it declares (`uses
 // clock, random, log`), so it reaches no database, file or network.

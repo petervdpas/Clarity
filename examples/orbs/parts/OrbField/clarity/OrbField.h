@@ -1,4 +1,4 @@
-// Custom part OrbField (DESIGN 5.19 and 7.9): the class its library implements, a
+// Custom part OrbField (manual/design.custom-parts.md, manual/start.how-it-works.md): the class its library implements, a
 // control of Clarity.UI. Written by Clarity from the part's declaration, and
 // written again when the declaration changes; the files beside this folder
 // are yours.

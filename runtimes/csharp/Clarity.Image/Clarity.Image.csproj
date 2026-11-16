@@ -1,4 +1,4 @@
-<!-- Clarity.Image for C# (docs/IMAGE-PLAN.md): the native Clarity.Image
+<!-- Clarity.Image for C# (docs/ledger/picture-functions.md): the native Clarity.Image
      library and the picture functions of code on it (resize, crop, rotate,
      flip, blend, adjust, a picture's size). Clarity's generator adds it to a
      program whose code calls one. -->

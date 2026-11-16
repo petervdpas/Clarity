@@ -1,4 +1,4 @@
-// The designer's layer over the window Clarity.UI draws (DESIGN 8.1): a
+// The designer's layer over the window Clarity.UI draws (manual/design.parts.md): a
 // box for each part and each grid, placed where the library reports them
 // (`Layout`, its `layout` step), each known by its key (its file and name,
 // `design/Main.cxaml#Main/saveButton`, see `DesignKey`). Pure, so the
@@ -250,4 +250,37 @@ export function slideSizeAt(part: LayerPart, side: SlideSide | null, at: number,
   const b = part.box;
   const size = side === "left" ? at - b.x : side === "top" ? at - b.y : side === "bottom" ? b.y + b.height - at : b.x + b.width - at;
   return sidebarWidth(size, min, max);
+}
+
+/** What a double click on a part opens of its own: a slide-out or popover on a canvas of its own, or a page (a view or toolbox) it shows. */
+export type Opening = { canvas: string } | { page: string };
+
+/**
+ * What a double click on the part `w` opens, as the Explorer opens it: a
+ * slide-out or popover on a canvas of its own (a slide-out showing a view:
+ * that view), the toolbox a canvas names, the view of the page `shown` of a
+ * tabs, steps, accordion or content part; null when it has nothing of its
+ * own, and the double click opens its code.
+ */
+export function opening(w: Widget, shown: number): Opening | null {
+  const p = w.props;
+  if (p.kind === "slideout" && p.view) return { page: p.view };
+  if (p.kind === "slideout" || p.kind === "popover") return p.name ? { canvas: p.name } : null;
+  if (p.toolboxPage) return { page: p.toolboxPage };
+  const view = w.pages[shown]?.view;
+  return view ? { page: view } : null;
+}
+
+/**
+ * How big the canvas of the slide-out or popover `w` designed on its own is,
+ * as it opens and as the preview draws it (crates/clarity-gen's
+ * `files_json_own_canvas`): a slide-out as wide as it slides out and as high
+ * as the window (`windowHeight`); a popover its columns of 80 and rows of
+ * `rowHeight`, a gap of 8 between each.
+ */
+export function canvasSize(w: Widget, windowHeight: number, rowHeight: number): { width: number; height: number } {
+  if (w.props.kind !== "popover") return { width: w.props.slideWidth ?? 420, height: windowHeight };
+  const columns = Math.max(1, w.props.width);
+  const rows = Math.max(1, w.props.height);
+  return { width: 80 * columns + 8 * (columns - 1), height: rowHeight * rows + 8 * (rows - 1) };
 }

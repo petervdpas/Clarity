@@ -1,4 +1,4 @@
-//! The texts of the application as .NET keeps them (DESIGN 1.5, I1c): a
+//! The texts of the application as .NET keeps them (manual/languages.md): a
 //! `.resx` file for the default language and one per other language, and a
 //! typed accessor class `Texts` with a property per key, as Visual Studio
 //! makes them. A key is the resource's name, so a text made while the

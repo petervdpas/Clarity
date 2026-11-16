@@ -1,4 +1,4 @@
-// A wizard, the steps part (DESIGN 5.15, conformance/steps.json), decided
+// A wizard, the steps part (manual/parts.containers.md, conformance/steps.json), decided
 // here and not by the screen: the step it shows, the buttons it has, and
 // where Next and Back go. Next runs the handler of `on next` on the step
 // shown, then moves one step on, unless the handler refused (the step stays)

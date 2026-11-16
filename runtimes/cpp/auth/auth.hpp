@@ -1,5 +1,5 @@
-// Signing people in through Clarity.Auth (docs/APP-CAPABILITIES-PLAN.md,
-// step 4), the one implementation every stack calls through its C table
+// Signing people in through Clarity.Auth (docs/ledger/signin.md),
+// the one implementation every stack calls through its C table
 // (clarity_auth.h). Carried only when the project has a `signin` block
 // (clarity_use_auth in clarity.cmake links the library). Db::add_signin,
 // declared in clarity/db.hpp, is defined here; what the service, the web

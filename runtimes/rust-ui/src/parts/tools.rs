@@ -1,4 +1,4 @@
-//! The parts of a toolbox (`page Painting: toolbox`, docs/IMAGE-PLAN.md),
+//! The parts of a toolbox (`page Painting: toolbox`, docs/ledger/canvas-toolbox.md),
 //! their look and kind given: a tool, a group of tools, the brush size, the
 //! opacity and the colours. What a tool does is built in (`does pencil`, an
 //! action on the canvas the toolbox serves) or coded (`on click: handler`).

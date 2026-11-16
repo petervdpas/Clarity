@@ -1,4 +1,4 @@
-// HTTP calls (DESIGN 5.23) against the cases every runtime shares
+// HTTP calls (manual/code.web-apis.md) against the cases every runtime shares
 // (conformance/http.json), on the test server the C runtime's tests use.
 
 #include "../../c/tests/http_server.h"

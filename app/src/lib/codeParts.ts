@@ -219,7 +219,7 @@ export function fixOf(message: string): Fix | null {
 
 /**
  * The edit that makes the custom part `part` grow with its window or keep
- * its rows (its declaration's `grows` line, DESIGN 5.19), with the module
+ * its rows (its declaration's `grows` line, manual/design.custom-parts.md), with the module
  * that declares it; null for a part no module declares.
  */
 export function partGrowsEdit(files: SpecFile[], part: string, grows: boolean): { file: SpecFile; edit: Edit } | null {

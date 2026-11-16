@@ -1,7 +1,7 @@
 //! The project file, `<name>.clarity`: what the project is transpiled into
 //! (backend, UI, targets), where its data lives (data sources) and where it
 //! is built. The modules sit in the folder of the same name next to it. See
-//! docs/DESIGN.md sections 1.2 and 1.3.
+//! docs/ledger/project-file.md.
 
 pub mod activity;
 pub mod browse;
@@ -45,9 +45,9 @@ pub enum Backend {
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Ui {
-    /// The shared HTML screen in a webview or a browser (DESIGN 7.8), until a language has its Clarity.UI.
+    /// The shared HTML screen in a webview or a browser (manual/start.how-it-works.md), until a language has its Clarity.UI.
     Webview,
-    /// Clarity.UI, Clarity's own UI framework (DESIGN 7.9); never named in the stack line.
+    /// Clarity.UI, Clarity's own UI framework (manual/start.how-it-works.md); never named in the stack line.
     Clarity,
 }
 
@@ -57,7 +57,7 @@ pub enum Ui {
 pub enum Target {
     Desktop,
     Web,
-    /// A program without a window, run from a terminal (DESIGN 5.20).
+    /// A program without a window, run from a terminal (manual/code.commands.md).
     Cli,
 }
 
@@ -86,7 +86,7 @@ pub struct FileFormat {
     pub options: Vec<SourceOption>,
     /// `datasource feed file "imports/orders.xml" external using OrderFeed`:
     /// a mapping of the project says the format and how the file is laid
-    /// over its entity (docs/FORMATS-PLAN.md, step 4), in place of the options.
+    /// over its entity (docs/ledger/formats.md), in place of the options.
     #[serde(default)]
     pub mapping: Option<String>,
 }
@@ -142,7 +142,7 @@ impl Stack {
 pub struct Auth {
     pub kind: AuthKind,
     /// Where the secret is kept: `env:NAME`, or `setting:name`, a secret
-    /// setting of the person, which the system's keychain keeps (DESIGN 5.27).
+    /// setting of the person, which the system's keychain keeps (manual/data.settings.md).
     pub secret: String,
 }
 
@@ -156,7 +156,7 @@ pub struct FileStore {
     pub location: String,
 }
 
-/// A codec library the project adds (docs/VIDEO-PLAN.md): `codec vp9 from
+/// A codec library the project adds (docs/ledger/video-camera.md): `codec vp9 from
 /// "codecs/libvp9"`, the library's path relative to the project's folder
 /// without the system's extension (.so, .dylib, .dll); Clarity carries it
 /// beside the program and Clarity.Video loads it as the program starts.
@@ -190,7 +190,7 @@ pub struct DataSource {
     #[serde(default)]
     pub beside: bool,
     /// A web API's OpenAPI description, a file in the project's `apis`
-    /// folder, which Clarity writes the API's module from (DESIGN 5.23).
+    /// folder, which Clarity writes the API's module from (manual/code.web-apis.md).
     #[serde(default)]
     pub openapi: Option<String>,
     /// The operations of the description the project uses, by their ids.
@@ -295,7 +295,7 @@ pub struct Settings {
     /// The file stores of image fields kept as files, by name.
     #[serde(default)]
     pub filestores: Vec<FileStore>,
-    /// Codec libraries the project adds to Clarity.Video (docs/VIDEO-PLAN.md).
+    /// Codec libraries the project adds to Clarity.Video (docs/ledger/video-camera.md).
     #[serde(default)]
     pub codecs: Vec<CodecLibrary>,
     /// Where the application is generated and built: a folder relative to
@@ -308,15 +308,15 @@ pub struct Settings {
     #[serde(default)]
     pub keeps: Vec<String>,
     /// Whether the people using the application set its shortcut keys
-    /// themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
+    /// themselves, in Clarity's keys window (manual/app.keys.md): `keys editable`.
     #[serde(default)]
     pub keys_editable: bool,
-    /// Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4):
+    /// Who is using the program (docs/ledger/signin.md):
     /// `signin Member on desktop web` with its strategies; none without it.
     #[serde(default)]
     pub signin: Option<clarity_spec::signin::Signin>,
     /// Whether the engines written in Clarity are run by the interpreter
-    /// rather than compiled (DESIGN 5.12): `engines interpreted`.
+    /// rather than compiled (manual/code.engines.md): `engines interpreted`.
     #[serde(default)]
     pub engines_interpreted: bool,
     /// Whether AI agents may read while the app is closed, until the person
@@ -331,7 +331,7 @@ pub struct Settings {
     /// none for AGENTS_AT_MOST.
     #[serde(default)]
     pub agents_at_most: Option<u32>,
-    /// The port a web application listens on (DESIGN 7.3): `port 8080`;
+    /// The port a web application listens on (manual/project.run-build.md): `port 8080`;
     /// none for DEFAULT_PORT.
     #[serde(default)]
     pub port: Option<u16>,
@@ -615,7 +615,7 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
     if !backend.uis.contains(&stack.ui) {
-        // Every language draws with Clarity.UI only, unnamed (DESIGN 7.9): settings that carry another UI say what to write instead.
+        // Every language draws with Clarity.UI only, unnamed (manual/start.how-it-works.md): settings that carry another UI say what to write instead.
         problems.push(format!(
             "{} draws its windows with Clarity.UI and names no UI; write {}",
             backend.label,
@@ -671,7 +671,7 @@ pub fn validate(settings: &Settings) -> Vec<String> {
 }
 
 /// The prefix of a keychain entry named on its own, which Clarity does not
-/// read: the keychain is reached through a secret setting (DESIGN 5.27).
+/// read: the keychain is reached through a secret setting (manual/data.settings.md).
 const KEYCHAIN: &str = "keychain:";
 
 /// Why `keychain:NAME` is refused, and what to write instead.
@@ -681,7 +681,7 @@ pub fn keychain_problem(reference: &str) -> String {
 }
 
 fn is_reference(text: &str) -> bool {
-    // setting:name is a secret setting of the person (DESIGN 5.27).
+    // setting:name is a secret setting of the person (manual/data.settings.md).
     ["env:", "setting:"]
         .iter()
         .any(|prefix| text.strip_prefix(prefix).is_some_and(|rest| !rest.trim().is_empty()))
@@ -966,7 +966,7 @@ pub fn usual_ui(backend: Backend) -> Ui {
 }
 
 /// The UIs a backend offers, its usual one first. Every language draws with
-/// Clarity.UI only (DESIGN 7.9); the web targets of Rust, Go, C and C++ serve
+/// Clarity.UI only (manual/start.how-it-works.md); the web targets of Rust, Go, C and C++ serve
 /// the shared web screen until Clarity.UI draws in the browser.
 pub(crate) fn backend_uis(backend: Backend) -> &'static [Ui] {
     match backend {
@@ -1049,7 +1049,7 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
             _ => clarity_spec::SourceRef {
                 external: s.external,
                 readonly: s.readonly,
-                // Its connection, which may name a secret setting (DESIGN 5.27).
+                // Its connection, which may name a secret setting (manual/data.settings.md).
                 address: s.url.clone(),
                 mapping: s.file.as_ref().and_then(|f| f.mapping.clone()),
                 file: s.file.is_some(),
@@ -1153,7 +1153,7 @@ pub fn data_folder(dir: &Path, settings: &Settings) -> Option<PathBuf> {
 
 /// The SQLite database Clarity backs up for data source `source` of the
 /// project in folder `dir` (the first one it owns when none is named), with
-/// the source's name (docs/BACKUP-PLAN.md). An external source is someone
+/// the source's name (docs/ledger/backups.md). An external source is someone
 /// else's, and a server database its administrator's for now: each says so.
 pub fn database_to_back_up(dir: &Path, source: Option<&str>) -> Result<(String, PathBuf), String> {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
@@ -1235,7 +1235,7 @@ pub(crate) fn stack_line(stack: &Stack) -> String {
 }
 
 /// The `cli` target and the modules' `cli` block and commands go together,
-/// and the block is named after the project (DESIGN 5.20). `file` is the
+/// and the block is named after the project (manual/code.commands.md). `file` is the
 /// project file, where a missing block is reported.
 /// The icon the project file names is a picture among the resources; a
 /// resources folder that holds `icon.png` while the project names no icon
@@ -1266,7 +1266,7 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
         found.push(if path.is_empty() { clarity_spec::Diagnostic::error(message, span).in_file(file) } else { clarity_spec::Diagnostic::error(message, span).in_file(&path) });
     }
     let cli = settings.stack.has(Target::Cli);
-    // The keys window opens where the project file allows it (DESIGN 5.28).
+    // The keys window opens where the project file allows it (manual/app.keys.md).
     if !settings.keys_editable
         && let Some(name) = clarity_spec::frame::first_click_to(project, "keys")
     {
@@ -1306,7 +1306,7 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
     found
 }
 
-/// A custom part is written in the project's own language (DESIGN 5.19): each
+/// A custom part is written in the project's own language (manual/design.custom-parts.md): each
 /// part whose library line is another language's.
 fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) -> Vec<clarity_spec::Diagnostic> {
     use clarity_spec::code::PartLibrary;
@@ -1334,7 +1334,7 @@ fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) 
                 );
             }
         }
-        // A library is the project's language's package (DESIGN 5.21).
+        // A library is the project's language's package (manual/code.libraries.md).
         for library in &f.libraries {
             use clarity_spec::code::LibrarySource;
             let (written, ok) = match &library.source {
@@ -1641,7 +1641,7 @@ pub fn take_ownership(dir: &Path, source: &str) -> Result<Owned, String> {
 }
 
 /// The folder of a project's web API descriptions and the modules Clarity
-/// writes from them (DESIGN 5.23), in the project's module folder.
+/// writes from them (manual/code.web-apis.md), in the project's module folder.
 pub const APIS_DIR: &str = clarity_spec::APIS_DIR;
 
 /// Writes the module of every web API data source that names an OpenAPI
@@ -1713,7 +1713,7 @@ pub struct ApiSchema {
     pub needed: bool,
 }
 
-/// What the picking of a web API data source shows (DESIGN 5.23).
+/// What the picking of a web API data source shows (manual/code.web-apis.md).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct ApiListing {

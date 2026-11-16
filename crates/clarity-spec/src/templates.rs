@@ -19,13 +19,13 @@ use crate::widgets::{self, Event, WidgetKind, new_props};
 pub enum PageTemplate {
     /// An empty window, showing an empty view in its content.
     Blank,
-    /// An empty view, which a window's content shows (DESIGN 5.33).
+    /// An empty view, which a window's content shows (manual/design.windows.md).
     View,
     /// The app's splash screen: its name and a status code sets while the app starts.
     Splash,
-    /// A toolbox (docs/IMAGE-PLAN.md): a painting canvas's tools to start from, on a grid of 4.
+    /// A toolbox (docs/ledger/canvas-toolbox.md): a painting canvas's tools to start from, on a grid of 4.
     Toolbox,
-    /// The sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4): a name
+    /// The sign-in window (docs/ledger/signin.md): a name
     /// and a password, labeled, and a button that signs in with them.
     SignIn,
     /// A label and an input for every field of the entity, and Save and
@@ -34,7 +34,7 @@ pub enum PageTemplate {
     /// A filter for the first text field, a table of the entity, and New
     /// and Open buttons.
     Browse { entity: String },
-    /// A dialog with a form of every setting of the project (DESIGN 5.17),
+    /// A dialog with a form of every setting of the project (manual/data.settings.md),
     /// labeled, and a Close button.
     Settings,
 }
@@ -334,7 +334,7 @@ pub fn new_app(project: &Project, name: &str) -> Result<Made, String> {
     Ok(Made { designed: vec![crate::design_edit::Designed::App(app)], code: Vec::new() })
 }
 
-/// A painting canvas's tools to start from, on a grid of 4 (docs/IMAGE-PLAN.md).
+/// A painting canvas's tools to start from, on a grid of 4 (docs/ledger/canvas-toolbox.md).
 fn toolbox_page(name: &str) -> crate::model::Page {
     let mut page = page_of(name, crate::model::PageKind::Toolbox, None);
     page.columns = 4;
@@ -479,7 +479,7 @@ fn settings_model(name: &str, title: &str, settings: &Entity) -> crate::model::P
     page
 }
 
-/// A new window as every window is built (DESIGN 5.33): window, content,
+/// A new window as every window is built (manual/design.windows.md): window, content,
 /// view. The window keeps its title, size, look, events, frame and
 /// slide-outs and shows the view `<name>View` in its content `main`; the
 /// view holds its data, grid and parts, and the handlers nothing of the

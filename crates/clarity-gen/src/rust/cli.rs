@@ -1,4 +1,4 @@
-//! The Rust command-line program (DESIGN 5.20): a crate of its own in
+//! The Rust command-line program (manual/code.commands.md): a crate of its own in
 //! `out/cli`, on the runtime crate without Clarity.UI, with the project's
 //! records, actions and commands, and a main that reads the command line
 //! and runs the command it names.
@@ -53,8 +53,8 @@ fn param(p: &ParamSpec) -> String {
     )
 }
 
-/// The options a person signs in with on the command line (docs/APP-CAPABILITIES-PLAN.md
-/// step 4), which every command takes when people sign in there: `--user` and `--token`.
+/// The options a person signs in with on the command line (docs/ledger/signin.md),
+/// which every command takes when people sign in there: `--user` and `--token`.
 const SIGNIN_OPTIONS: [&str; 2] = ["user", "token"];
 
 fn command(c: &CommandSpec, signs_in: bool) -> String {
@@ -85,19 +85,19 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         features.push("engines");
     }
-    // HTTP calls from code (DESIGN 5.23): the runtime's client.
+    // HTTP calls from code (manual/code.web-apis.md): the runtime's client.
     if project.calls_out() {
         features.push("http");
     }
-    // Secret settings (DESIGN 5.27): the system's protected store.
+    // Secret settings (manual/data.settings.md): the system's protected store.
     if !project.secret_settings().is_empty() {
         features.push("secrets");
     }
-    // The picture functions of code (docs/IMAGE-PLAN.md): Clarity.Image.
+    // The picture functions of code (docs/ledger/picture-functions.md): Clarity.Image.
     if crate::uses_picture_functions(project) {
         features.push("pictures");
     }
-    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
+    // The data formats of code (docs/ledger/formats.md): Clarity.Formats.
     if crate::carries_formats(project, settings) {
         features.push("formats");
     }
@@ -105,7 +105,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::file_sources(project, settings)?.is_empty() {
         features.extend(["sqlite", "formats"]);
     }
-    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth.
+    // Who is using the program (docs/ledger/signin.md): Clarity.Auth.
     if crate::signin::carries_auth(project) {
         features.push("auth");
     }
@@ -203,7 +203,7 @@ pub(crate) fn command_parts(project: &Project) -> CommandParts {
                 .map(|f| format!("    if !data.settings.{field}.is_empty() {{\n        clarity_runtime::i18n::set_language(Some(&data.settings.{field}));\n    }}\n", field = ident(&f.name.name)))
                 .unwrap_or_default();
             (
-                format!("/// What every command has as data of its own: the settings (DESIGN 5.17).\npub struct CommandData {{\n    pub settings: modules::{module}::Settings,\n}}\n\n/// The settings kept, each one that still fits; the others have their default.\nfn kept_settings() -> modules::{module}::Settings {{\n    modules::{module}::Settings::from_kept(&clarity_runtime::settings::read(PROGRAM))\n}}\n"),
+                format!("/// What every command has as data of its own: the settings (manual/data.settings.md).\npub struct CommandData {{\n    pub settings: modules::{module}::Settings,\n}}\n\n/// The settings kept, each one that still fits; the others have their default.\nfn kept_settings() -> modules::{module}::Settings {{\n    modules::{module}::Settings::from_kept(&clarity_runtime::settings::read(PROGRAM))\n}}\n"),
                 "    let mut data = CommandData { settings: kept_settings() };\n    let before = serde_json::to_value(&data.settings).unwrap_or_default();\n".to_string(),
                 "    // A command that changed a setting keeps it, as a window does.\n    let after = serde_json::to_value(&data.settings).unwrap_or_default();\n    if after != before && let serde_json::Value::Object(mut values) = after {\n        values.remove(\"id\");\n        if let Err(err) = clarity_runtime::settings::keep(PROGRAM, &values) {\n            eprintln!(\"{err}\");\n        }\n    }\n".to_string(),
                 language,
@@ -223,12 +223,12 @@ pub(crate) fn command_parts(project: &Project) -> CommandParts {
         let args: String = values.iter().map(|v| format!(", {v}")).collect();
         dispatch.push_str(&format!("            {i} => modules::{}::{}(&db, cli, &mut data{args}),\n", snake(&c.module), logic::command_function(c.decl)));
     }
-    // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
+    // Secret settings (manual/data.settings.md) are kept in the system's protected store, never in the file.
     let secret_names = crate::secret_names(project);
     let secrets_const = if secret_names.is_empty() {
         String::new()
     } else {
-        format!("/// The settings kept in the system's protected store (DESIGN 5.27).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
+        format!("/// The settings kept in the system's protected store (manual/data.settings.md).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
     };
     let (data, keep) = if secret_names.is_empty() {
         (data, keep)

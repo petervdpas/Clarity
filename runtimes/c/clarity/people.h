@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4), as the
+// Who is using the program (docs/ledger/signin.md), as the
 // runtime's core sees it. Signing in itself is auth/auth.h, carried only by
 // a program that names people who sign in (clarity_use_auth in
 // clarity.cmake): when it adds its people to a database it hands the core

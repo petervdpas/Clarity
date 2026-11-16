@@ -1,4 +1,4 @@
-//! A written diagram compared with the project (DG1, DESIGN section 5.13):
+//! A written diagram compared with the project (manual/data.diagrams.md):
 //! what it would add, change or leave out, as proposals; Apply turns the
 //! ticked ones into ordinary edits, one batch per module, with their texts
 //! keyed. Nothing outside the diagram is proposed for removal.

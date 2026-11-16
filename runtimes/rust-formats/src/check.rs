@@ -1,4 +1,4 @@
-//! A mapping's `check` (docs/FORMATS-PLAN.md, step 4): a file read is
+//! A mapping's `check` (docs/ledger/formats.md): a file read is
 //! checked against a schema before anything is fitted, written once for
 //! every format with schema kinds. The options carry the schema's text
 //! (`"check": "<xs:schema ...>"`; the generator reads the project's file),

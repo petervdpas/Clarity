@@ -1,4 +1,4 @@
-//! Wizards (DESIGN 5.15): the `steps` part, a container like `tabs` whose
+//! Wizards (manual/parts.containers.md): the `steps` part, a container like `tabs` whose
 //! `step` blocks show one at a time, with Back, Next and Finish of
 //! Clarity's own; `on next` runs before moving on and `on finish` on the
 //! last step; code reads and sets `wizard.step`, from 1.

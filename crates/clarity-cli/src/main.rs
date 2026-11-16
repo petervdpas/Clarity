@@ -36,7 +36,7 @@ enum Command {
         out: Option<PathBuf>,
     },
     /// Write the file each custom part and library follows from its
-    /// declaration, and a starter into a folder that has none (DESIGN 5.19, 5.21).
+    /// declaration, and a starter into a folder that has none (manual/design.custom-parts.md, manual/code.libraries.md).
     Parts {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -94,13 +94,13 @@ enum Command {
         #[arg(long)]
         schema: Option<PathBuf>,
     },
-    /// Back up the project's SQLite databases, list the backups, and restore one (docs/BACKUP-PLAN.md).
+    /// Back up the project's SQLite databases, list the backups, and restore one (docs/ledger/backups.md).
     Data {
         #[command(subcommand)]
         command: DataCommand,
     },
     /// The people of a project that signs people in: list, add, give a
-    /// password, a token or recovery codes, remove (docs/APP-CAPABILITIES-PLAN.md, step 4).
+    /// password, a token or recovery codes, remove (docs/ledger/signin.md).
     Users {
         /// The project file, like club.clarity.
         project: PathBuf,
@@ -116,7 +116,7 @@ enum Command {
         command: ReleaseCommand,
     },
     /// Serve Clarity's tools to an AI agent over MCP on stdin and stdout, on the
-    /// project open in the Clarity IDE (docs/MCP-PLAN.md): it designs and
+    /// project open in the Clarity IDE (docs/ledger/mcp-tools.md): it designs and
     /// generates, and never builds or runs. Messages go to stderr.
     Mcp {
         /// For a turn of the IDE's chat panel: the file where show_window and
@@ -240,7 +240,7 @@ enum SpecCommand {
         samples: bool,
     },
     /// Write each window and app of a project as markup for the web stacks'
-    /// screen (DESIGN 7.8): `windows/Main.cxaml` and `apps/Shop.cxaml` in a folder.
+    /// screen (manual/start.how-it-works.md): `windows/Main.cxaml` and `apps/Shop.cxaml` in a folder.
     Windows {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
@@ -417,7 +417,7 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
 /// Loads the modules of a project, given its project file or its folder.
 fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
     let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
-    // Each web API's module follows its description and picks (DESIGN 5.23).
+    // Each web API's module follows its description and picks (manual/code.web-apis.md).
     if path.is_file() {
         match clarity_project::refresh_apis(path) {
             Ok(warnings) => warnings.iter().for_each(|w| eprintln!("clarity: {w}")),

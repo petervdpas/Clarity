@@ -1,4 +1,4 @@
-//! Clarity as an MCP server (docs/MCP-PLAN.md): the shared tools minus the
+//! Clarity as an MCP server (docs/ledger/mcp-tools.md): the shared tools minus the
 //! ones that execute or need the IDE, always on the project the IDE has open.
 
 use std::path::{Path, PathBuf};
@@ -111,6 +111,7 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     offered.push(clarity_mcp::RELEASE_STATE.to_string());
     offered.push(clarity_mcp::DISK_STATE.to_string());
     offered.push(clarity_mcp::REMOVE_FOLDER.to_string());
+    offered.push(clarity_mcp::WRITE_RELEASE_PLAN.to_string());
     assert_eq!(names, offered);
 
     let result = client.call_tool(CallToolRequestParams::new("project_overview")).await.unwrap();
@@ -139,6 +140,7 @@ fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
     plain_tools.push(clarity_mcp::RELEASE_STATE.to_string());
     plain_tools.push(clarity_mcp::DISK_STATE.to_string());
     plain_tools.push(clarity_mcp::REMOVE_FOLDER.to_string());
+    plain_tools.push(clarity_mcp::WRITE_RELEASE_PLAN.to_string());
     assert_eq!(plain.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), plain_tools);
     let turn = plain.for_turn(dir.join("shown.jsonl"));
     let mut expected: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
@@ -376,9 +378,47 @@ fn remove_folder_asks_the_ide_and_gives_its_answer() {
 fn the_devtools_tools_are_never_compiled_into_a_release() {
     let lib = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs")).unwrap();
     assert!(lib.contains("#[cfg(debug_assertions)]\nmod devtools;"), "the module is behind #[cfg(debug_assertions)]");
-    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "clarity_gen::tools::devtools", "dev_asks::ask"] {
+    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "write_release_plan", "clarity_gen::tools::devtools", "dev_asks::ask"] {
         let outside = lib.lines().filter(|l| !l.trim_start().starts_with("//")).any(|l| l.contains(name));
         assert!(!outside, "{name} is used outside src/devtools.rs");
     }
     assert!(!lib.contains("cfg!(debug_assertions)"), "no tool hidden only at run time: kept out at compile time");
+}
+
+/// The developer's build (debug, `./mcp.sh`, `clarity-cdev` in .mcp.json)
+/// says it is: its name and its instructions. A turn of the IDE's chat
+/// panel is the app developer's, and is plain `clarity` (the release is
+/// always `clarity`: the name is compiled in only with the DevTools tools).
+#[test]
+fn the_developers_build_names_itself_clarity_cdev() {
+    use rmcp::ServerHandler;
+    let dir = scratch("cdev-name");
+    let server = ClarityServer::with_ide_file(dir.join("ide.json"));
+    assert_eq!(server.get_info().server_info.name, "clarity-cdev");
+    let said = server.instructions();
+    assert!(said.contains("clarity-cdev") && said.contains("developer's build"), "{said}");
+    let turn = server.for_turn(dir.join("shown.jsonl"));
+    assert_eq!(turn.get_info().server_info.name, "clarity", "a chat turn is the app developer's");
+    assert!(!turn.instructions().contains("clarity-cdev"));
+}
+
+/// A release plan is written only through write_release_plan, and only while
+/// every release check passed on the tree as it is: else it says which hold
+/// it back. The tree under test has uncommitted test changes of its own, so
+/// its checks have not all passed on it.
+#[test]
+fn write_release_plan_refuses_while_a_check_holds_it_back() {
+    let dir = scratch("release-plan");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file);
+    let plan = json!({ "stamp": "2026-11-17-2359", "plan": { "title": "t", "commit_message": "m", "steps": [{ "title": "Checks on main", "workflow": "checks.yml" }] } });
+    let refused = server.call_from("Claude Code", clarity_mcp::WRITE_RELEASE_PLAN, &plan);
+    assert!(refused.is_error && refused.text.contains("held back") && refused.text.contains("Run release checks"), "{}", refused.text);
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert!(!repo.join("releases/2026-11-17-2359.json").exists(), "nothing written");
+    let fix = server.call_from("Claude Code", clarity_mcp::WRITE_RELEASE_PLAN, &json!({ "fix": "2026-11-17-2359", "commit_message": "Fix the failed Clarity 1.4.0 release" }));
+    assert!(fix.is_error && fix.text.contains("held back"), "the fix's message too, only once the checks passed: {}", fix.text);
+    let neither = server.call_from("Claude Code", clarity_mcp::WRITE_RELEASE_PLAN, &json!({}));
+    assert!(neither.is_error && neither.text.contains("plan"), "{}", neither.text);
 }

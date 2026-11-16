@@ -1,4 +1,4 @@
-//! A toggle (DESIGN 7.9): a button that stays pressed, its value bound or
+//! A toggle (manual/start.how-it-works.md): a button that stays pressed, its value bound or
 //! kept in its state's `checked`; the person pressing it is a change, what
 //! code sets is not, and a read-only one is not pressed. Drawn as a button
 //! in the theme's `button` look, in the soft accent with an accent line

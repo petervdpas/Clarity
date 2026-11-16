@@ -1,4 +1,4 @@
-//! Undo and redo (DESIGN 5.29): built-in targets, as `quit` is, for a menu
+//! Undo and redo (manual/code.handlers.md): built-in targets, as `quit` is, for a menu
 //! item, a toolbar button or a button in a window.
 
 use clarity_spec::{Severity, load_converted};

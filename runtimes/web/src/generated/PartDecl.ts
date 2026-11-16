@@ -7,7 +7,7 @@ import type { Span } from "./Span";
 import type { TypeRef } from "./TypeRef";
 
 /**
- * `part Arena` (DESIGN 5.19): a part an outside library draws, with what
+ * `part Arena` (manual/design.custom-parts.md): a part an outside library draws, with what
  * the rest of the project sees of it.
  */
 export type PartDecl = { name: Ident, 
@@ -46,6 +46,6 @@ grows: boolean,
 preview: string | null, 
 /**
  * `description @arenaDescription`: what a screen reader says of it
- * besides its name (DESIGN 7.9, A1), a text people read.
+ * besides its name (manual/start.how-it-works.md), a text people read.
  */
 description: string | null, span: Span, };

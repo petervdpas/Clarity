@@ -1,4 +1,4 @@
-//! How a desktop window's size follows what it shows (DESIGN 7.9): a window
+//! How a desktop window's size follows what it shows (manual/start.how-it-works.md): a window
 //! that names its size and opens in place grows the desktop window to it, as
 //! far as the screen has room, and never makes it smaller than the person
 //! left it. A sidebar that opens grows it by the room it takes, so the

@@ -1,4 +1,4 @@
-//! A turn of an outside agent in Clarity's chat panel (docs/ACP-PLAN.md).
+//! A turn of an outside agent in Clarity's chat panel (docs/ledger/acp.md).
 //! Such an agent also writes files itself, not only through Clarity's tools,
 //! so the IDE takes the project's files when a turn starts and again when it
 //! ends: the difference is the turn, one change for Undo however it was

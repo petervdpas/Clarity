@@ -1,4 +1,4 @@
-// Command-line programs (DESIGN 5.20): reading a command line against the
+// Command-line programs (manual/code.commands.md): reading a command line against the
 // program's commands, writing its help, printing a table and asking on a
 // terminal, as conformance/command-line.json says every runtime does. A
 // generated program describes itself as a CliProgram and runs the command
@@ -529,7 +529,7 @@ public static class Cli
     }
 
     /// <summary>Runs a command-line program: reads the command line, writes help or what is wrong
-    /// with it, or runs the command it names with its values, and gives the exit code its run ends with (DESIGN 5.20).</summary>
+    /// with it, or runs the command it names with its values, and gives the exit code its run ends with (manual/code.commands.md).</summary>
     public static int RunProgram(CliProgram program, string[] args, Func<CliSession, int, IReadOnlyList<string?>, int> run)
     {
         switch (Parse(program, args, CliLanguage.Words))
@@ -590,7 +590,7 @@ public static class CliLanguage
     public static string Translate(string key, string fallback) => Translate(key) is var value && value != key ? value : fallback;
 
     /// <summary>Text as shown: a key by its value in the language shown, each slot as the command line
-    /// writes values, the same on every stack and in every language (DESIGN 5.20).</summary>
+    /// writes values, the same on every stack and in every language (manual/code.commands.md).</summary>
     public static string Show(Text text) => text.Show();
 }
 

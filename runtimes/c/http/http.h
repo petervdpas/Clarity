@@ -1,4 +1,4 @@
-// HTTP calls from code (DESIGN 5.23): `http get url` and the others, through
+// HTTP calls from code (manual/code.web-apis.md): `http get url` and the others, through
 // libcurl. A call never fails: when no answer comes, the reply has status 0
 // and says why, so the handler decides what that means. Every runtime gives
 // the same replies (conformance/http.json). Only a project whose code calls
@@ -60,7 +60,7 @@ typedef enum {
 ClarityHttpReply clarity_http_call_at(ClarityHttpMethod method, const char* base, const char* path, const ClarityHttpHeader* query, size_t query_count, const char* body,
                                       const ClarityHttpHeader* headers, size_t count, ClarityAuthKind auth, const char* secret);
 
-/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// How a web API hands out a long list (manual/code.web-apis.md, paging): the project
 /// file's `paging` line.
 typedef enum {
     CLARITY_PAGING_PAGE,

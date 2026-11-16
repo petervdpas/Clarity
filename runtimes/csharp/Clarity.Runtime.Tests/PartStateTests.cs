@@ -1,4 +1,4 @@
-// Custom parts (DESIGN 5.19 and 6.5): what a window's code sets and tells a
+// Custom parts (manual/design.custom-parts.md): what a window's code sets and tells a
 // part, kept in its PartState until the part that shows it hears it, and the
 // values crossing to and from it as JSON.
 

@@ -1,5 +1,5 @@
 //! WebView2's own keys: F5 and Ctrl+R reload the page, Ctrl+P prints, Ctrl+F
-//! finds, Alt+Left goes back. In Clarity those keys are Clarity's (DESIGN 5.28),
+//! finds, Alt+Left goes back. In Clarity those keys are Clarity's (manual/app.keys.md),
 //! or nothing, so the webview's browser keys are off. The page still hears
 //! every key; only the webview's own action is gone.
 

@@ -1,4 +1,4 @@
-//! A tree of several kinds of records (DESIGN 5.33): `level` lines, each
+//! A tree of several kinds of records (manual/design.windows.md): `level` lines, each
 //! the records of an entity under the row of the level around it, `group`
 //! headings shown when the levels inside have rows, `on select Entity:
 //! handler` with the record picked, and `tree.reload()`. Placed, it is a

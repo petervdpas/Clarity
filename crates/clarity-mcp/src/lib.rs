@@ -1,4 +1,4 @@
-//! Clarity as an MCP server (docs/MCP-PLAN.md). An agent the person already
+//! Clarity as an MCP server (docs/ledger/mcp-tools.md). An agent the person already
 //! uses (Claude Code, Codex, Copilot) starts `clarity mcp` and designs and
 //! generates through Clarity's own tools, the ones the IDE's agent has.
 //!
@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 #[cfg(debug_assertions)]
 mod devtools;
 #[cfg(debug_assertions)]
-pub use devtools::{BUILD_PIECE, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER};
+pub use devtools::{BUILD_PIECE, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER, WRITE_RELEASE_PLAN};
 
 /// Clarity's icon, as the installers have it (app/src-tauri/icons): a PNG
 /// every MCP client takes and the SVG it is made from.
@@ -77,7 +77,7 @@ Build in Clarity, and to tell you what it reports.",
 ];
 
 /// What the agent is told instead when the IDE started the server for a
-/// turn in its chat panel (docs/ACP-PLAN.md): it can show what it made.
+/// turn in its chat panel (docs/ledger/acp.md): it can show what it made.
 const TURN_LINES: [&str; 3] = [
     "You reach Clarity through its MCP server, from Clarity's chat panel. The tools work on the project open in Clarity.",
     "You cannot build or run the application or take or restore backups: ask the person to press Run or Build in Clarity, \
@@ -162,6 +162,17 @@ impl ClarityServer {
     /// The tools offered: the shared ones, less the left-out ones.
     pub fn offered() -> Vec<ToolDef> {
         ProjectTools::new(None, PathBuf::new()).definitions().into_iter().filter(|t| !LEFT_OUT.contains(&t.name.as_str())).collect()
+    }
+
+    /// The name it gives: `clarity-cdev` for the developer's build (debug,
+    /// with the DevTools tools), `clarity` for the release and for a turn
+    /// of the IDE's chat panel.
+    pub fn name(&self) -> &'static str {
+        #[cfg(debug_assertions)]
+        if self.turn.is_none() {
+            return devtools::NAME;
+        }
+        "clarity"
     }
 
     /// What the agent is told before it starts.
@@ -295,7 +306,7 @@ fn mcp_tool(def: ToolDef) -> Tool {
 impl ServerHandler for ClarityServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("clarity", env!("CARGO_PKG_VERSION")).with_icons(icons()))
+            .with_server_info(Implementation::new(self.name(), env!("CARGO_PKG_VERSION")).with_icons(icons()))
             .with_instructions(self.instructions())
     }
 

@@ -88,7 +88,7 @@ pub fn command_signature(project: &Project, command: &clarity_spec::code::Comman
     format!("int {}({})", command_function(command), params.join(", "))
 }
 
-/// The commands of a module (DESIGN 5.20).
+/// The commands of a module (manual/code.commands.md).
 pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
     let mut out = String::new();
     let mut errors = Vec::new();
@@ -205,13 +205,13 @@ pub struct PartInfo {
     /// A spin box's range as its line writes it.
     pub spin: (i64, i64),
     pub dot_color: String,
-    /// A canvas's mode (DESIGN 5.31), the list of its objects, and its tool, brush and ink as its line says.
+    /// A canvas's mode (manual/parts.graphics.md), the list of its objects, and its tool, brush and ink as its line says.
     pub mode: Option<clarity_spec::model::CanvasMode>,
     pub objects: Option<String>,
     pub tool: String,
     pub brush: u32,
     pub ink: String,
-    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    /// A custom part (manual/design.custom-parts.md): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
@@ -305,7 +305,7 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their member functions.
     pub draws: Vec<(String, String)>,
-    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// The handlers an answer runs (manual/code.statements.md): the Clarity name, the
     /// member function, and each value's type.
     pub answers: Vec<(String, String, Vec<TypeInfo>)>,
 }
@@ -372,7 +372,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes, all_t
                     let _ = writeln!(fields, "    {ty} {member};");
                 }
             }
-            // A list of records starts empty: code builds it (DESIGN 5.12).
+            // A list of records starts empty: code builds it (manual/code.engines.md).
             if let DataKind::List { entity } = &d.of
                 && !project.entity(&entity.name).is_some_and(|e| e.record)
             {
@@ -472,7 +472,7 @@ struct Emitter<'a> {
     decl: Option<&'a FunctionDecl>,
     /// The window of a handler.
     window: Option<&'a WindowCtx>,
-    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// Whether this is a command of the command-line program (manual/code.commands.md):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
     errors: Vec<String>,
@@ -794,7 +794,7 @@ impl<'a> Emitter<'a> {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
-            // A hear of a custom part (DESIGN 5.19), sent with the reply.
+            // A hear of a custom part (manual/design.custom-parts.md), sent with the reply.
             // An engine's statement; engines are compiled to WebAssembly before generating (N5b).
             StmtKind::Tell { .. } => self.errors.push("'tell' is for an engine beside the screen".into()),
             StmtKind::Hear { part, hear, args } => {
@@ -814,7 +814,7 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name, Ok(arg)) => self.value(arg),
                         (ShapeValue::Points, Ok(arg)) => format!("nlohmann::json({})", self.value(arg)),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
-                        // An object sends its record's id (DESIGN 5.31).
+                        // An object sends its record's id (manual/parts.graphics.md).
                         (ShapeValue::Record, Ok(arg)) => format!("nlohmann::json({})", self.value(&clarity_spec::code::check::object_id(arg))),
                         (ShapeValue::Record, Err(_)) => "nullptr".to_string(),
                         (ShapeValue::Text, Ok(arg)) => format!("nlohmann::json({})", self.shown(arg)),
@@ -1148,7 +1148,7 @@ impl<'a> Emitter<'a> {
         (self.types.name_of(object) == Some(&NameKind::Part)).then(|| (name.clone(), member.name.clone()))
     }
 
-    /// Whether `property` is a custom part's own (DESIGN 5.19).
+    /// Whether `property` is a custom part's own (manual/design.custom-parts.md).
     fn custom_property(&self, part: &str, property: &str) -> bool {
         let info = self.window.and_then(|w| w.parts.get(part));
         info.and_then(|i| i.custom.as_ref()).is_some_and(|(kind, _)| crate::parts::keeps(self.project, kind, property))
@@ -1191,7 +1191,7 @@ impl<'a> Emitter<'a> {
             "tool" => format!("ui.tool({quoted}, {})", string(&info.tool)),
             "brush" => format!("ui.brush({quoted}, {})", info.brush),
             "ink" => format!("ui.ink({quoted}, {})", string(&info.ink)),
-            // A canvas's choice (DESIGN 5.31): the object's record, or the shape's place from 1.
+            // A canvas's choice (manual/parts.graphics.md): the object's record, or the shape's place from 1.
             "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("ui.shape_chosen({quoted})"),
             "selected" if info.objects.is_some() => format!("ui.selected({quoted}, {})", ident(info.objects.as_deref().unwrap_or_default())),
             "maximized" => format!("ui.maximized({quoted})"),
@@ -1244,7 +1244,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// A format's options as a C++ expression of their JSON object (an empty string for none).
-    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    /// The format of a reading or writing and its options object (docs/ledger/formats.md).
     fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse) -> (String, String) {
         let project = self.project;
         match crate::shape::mapping_pieces(project, mapping, |v| format!("clarity::json_of(std::string({}))", self.value(v))) {
@@ -1281,7 +1281,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            // A list of values, or of records, grows by a list of its items (manual/parts.data.md, manual/code.engines.md).
             ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => format!(
                 "[&] {{ auto joined = {}; auto&& more = {}; joined.insert(joined.end(), more.begin(), more.end()); return joined; }}()",
                 self.value(left),
@@ -1302,7 +1302,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
-            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            // A format of the catalog (docs/ledger/formats.md): a value written in it, and records read from it, through Clarity.Formats.
             ExprKind::FormatOf { value, mapping } => {
                 let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
@@ -1324,7 +1324,7 @@ impl<'a> Emitter<'a> {
                 let (format, options) = self.format_options(mapping);
                 format!("clarity::formats_read<{read}>({}, {}, {options}, {})", string(&format), self.value(input), cpp_pieces(&kind))
             }
-            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            // A call to a web API (manual/code.web-apis.md): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
@@ -1342,7 +1342,7 @@ impl<'a> Emitter<'a> {
                 if from.is_none() && query.is_empty() {
                     return format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {headers})");
                 }
-                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                // A path of a web API data source (manual/code.web-apis.md): its address and auth come from the project file.
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
                 let query = self.http_pairs(query);
                 let (kind, secret) = match auth {
@@ -1351,7 +1351,7 @@ impl<'a> Emitter<'a> {
                     Some(("basic", s)) => ("Basic", s),
                     _ => ("None", ""),
                 };
-                // Every page, as the source's paging says (DESIGN 5.23).
+                // Every page, as the source's paging says (manual/code.web-apis.md).
                 if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
                     let paging = match p.kind {
                         clarity_spec::PagingKind::Page => "Page",
@@ -1376,7 +1376,7 @@ impl<'a> Emitter<'a> {
                     string(secret)
                 )
             }
-            // A function of a library, through its adapter (DESIGN 5.21).
+            // A function of a library, through its adapter (manual/code.libraries.md).
             ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
                 let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
                 format!("::{}::{}({})", engine.name, function.name, values.join(", "))

@@ -74,7 +74,7 @@ pub fn replace_decl(source: &str, item: u32, text: &str) -> EditResult<String> {
     Ok(format!("{}{text}{}", &source[..start], &source[end..]))
 }
 
-/// The custom part declared at `item` with its `grows` line (DESIGN 5.19)
+/// The custom part declared at `item` with its `grows` line (manual/design.custom-parts.md)
 /// when `grows`, without it otherwise; every other line as written.
 pub fn set_part_grows(source: &str, item: u32, grows: bool) -> EditResult<String> {
     let (start, end) = decl_range(source, item)?;

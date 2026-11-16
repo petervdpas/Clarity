@@ -1,4 +1,4 @@
-// The settings each person keeps for themselves (DESIGN 5.17): one JSON
+// The settings each person keeps for themselves (manual/data.settings.md): one JSON
 // file per application in the folder for application settings of the
 // person's system (conformance/settings.json, `file`). The screen decides
 // which kept values still fit; this only reads and keeps the file.
@@ -41,7 +41,7 @@ cJSON* clarity_settings_merged(const cJSON* on_file, const cJSON* kept);
 /// (clarity_settings_merged), written whole and then put in place.
 bool clarity_keep_settings(const char* program, const cJSON* values);
 
-/// The system's protected store of secret settings (DESIGN 5.27): `get`
+/// The system's protected store of secret settings (manual/data.settings.md): `get`
 /// gives a secret in the scratch arena or NULL, `set` keeps one ("" forgets
 /// it). Empty in a program without secret settings; one with them calls
 /// clarity_secrets_use (clarity/secrets) to fill it.

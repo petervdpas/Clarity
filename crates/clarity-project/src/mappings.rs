@@ -1,5 +1,5 @@
-//! The mappings of a project for the IDE's mapping page (docs/FORMATS-PLAN.md,
-//! step 4): each one as a form to edit, and a preview of a sample file laid
+//! The mappings of a project for the IDE's mapping page (docs/ledger/formats.md):
+//! each one as a form to edit, and a preview of a sample file laid
 //! over it, read by Clarity.Formats with the mapping's own options object,
 //! as a program reads the file.
 

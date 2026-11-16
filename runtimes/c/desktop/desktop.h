@@ -1,4 +1,4 @@
-// The desktop of C applications (DESIGN 7.9): Clarity.UI, the one library
+// The desktop of C applications (manual/start.how-it-works.md): Clarity.UI, the one library
 // every language draws with, shows the windows, and the program answers it
 // through the service (service/service.h). This is the thin C layer between
 // them: the program's files go in, the library's commands are answered, and
@@ -32,12 +32,12 @@ typedef struct {
     /// The names of the secret settings, as a JSON array; NULL for none.
     const char* secrets;
     /// Whether an engine says how far a long call is: the library then runs
-    /// handlers on its worker thread, and Stop stops them (DESIGN 5.12).
+    /// handlers on its worker thread, and Stop stops them (manual/code.engines.md).
     bool watches;
     /// Registers the program's custom parts with the library (clarity_custom_register); NULL for none.
     void (*register_parts)(void);
     /// Answers the library's commands of engines beside the screen (engine_open,
-    /// engine_hears, engine_frame, engine_close; DESIGN 5.12) as {"value"} or
+    /// engine_hears, engine_frame, engine_close; manual/code.engines.md) as {"value"} or
     /// {"error"}, NULL for none (clarity_screen_answer); NULL when the program has none.
     cJSON* (*screen_engines)(const char* command, const cJSON* args);
     /// The commands AI agents may call while the app runs (docs/ledger/app-mcp.md):

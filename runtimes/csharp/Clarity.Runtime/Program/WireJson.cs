@@ -1,5 +1,5 @@
 // The runtime's values as the library's JSON reads them (clarity_runtime::ui,
-// the web server's wire, DESIGN 7.3): a text with its slots or its key, a
+// the web server's wire, manual/project.run-build.md): a text with its slots or its key, a
 // message, a part's state, a question. Values of the window are Clarity's
 // JSON, as JsonValues writes them: names as the project wrote them, decimals as exact
 // text, enums by their names.

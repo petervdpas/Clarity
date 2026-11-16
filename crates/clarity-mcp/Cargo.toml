@@ -14,7 +14,7 @@ clarity-tools.workspace = true
 serde_json.workspace = true
 # Clarity's icon, embedded in the server's info as data URIs.
 base64 = "0.22"
-# The official Rust MCP SDK: a server over stdio, nothing else (docs/MCP-PLAN.md).
+# The official Rust MCP SDK: a server over stdio, nothing else (docs/ledger/mcp-tools.md).
 rmcp = { version = "3.8.0", default-features = false, features = ["server", "transport-io"] }
 # The version the workspace already has through the IDE.
 tokio = { version = "1.53.3", features = ["rt"] }

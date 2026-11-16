@@ -1,4 +1,4 @@
-//! A list's look and its cards' (DESIGN 1.5): they come from the theme,
+//! A list's look and its cards' (manual/themes.md): they come from the theme,
 //! alike on every stack.
 
 /// A list's and a card's look come from the theme (`part list`, `part card`,

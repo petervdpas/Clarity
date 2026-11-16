@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4) on the
+//! Who is using the program (docs/ledger/signin.md) on the
 //! Rust stack: the program carries Clarity.Auth, names its people after
 //! the databases open, starts with the sign-in window, answers signing in
 //! and out, reads `me`, checks `allow when`, `readable when` and

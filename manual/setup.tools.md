@@ -4,7 +4,7 @@ What to install for each stack on Windows, Linux and macOS, where to get it, and
 
 Clarity designs, previews and generates without any of these. Run and Build need the tools of the project's stack; Clarity uses them and does not bring them along. **Clarity settings**, **Environment** says which stacks are ready, and each missing tool there has a **How to install** button that opens this page at its part. The links below open in your browser.
 
-The Clarity.UI library that Go, C and C++ desktop programs draw with is not installed by hand: Clarity's installer carries it, and a Clarity without it fetches it from its GitHub release on the first build, into your cache folder, on every system. To use one of your own, set the environment variable `CLARITY_UI` to its folder (`include/clarity_ui.h` and `lib/`).
+The Clarity.UI library that Rust, Go, C and C++ desktop programs draw with is not installed by hand: Clarity's installer carries it, and a Clarity without it fetches it from its GitHub release on the first build, into your cache folder, on every system. To use one of your own, set the environment variable `CLARITY_UI` to its folder (`include/clarity_ui.h` and `lib/`).
 
 ## Windows
 
@@ -13,7 +13,7 @@ The Clarity.UI library that Go, C and C++ desktop programs draw with is not inst
 1. Install the Visual Studio Build Tools with the **Desktop development with C++** workload, from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Rust links its programs with them on Windows.
 2. Run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and take the defaults.
 
-A Rust program draws its windows with Clarity.UI, on Skia, whose prebuilt library cargo downloads: it needs no webview.
+A Rust desktop program draws its windows with Clarity.UI's ready-made library, which it links as Go, C and C++ do (see above): nothing more to install, and no webview.
 
 ### .NET on Windows
 
@@ -61,7 +61,7 @@ Install Rust with rustup from [rustup.rs](https://rustup.rs):
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-A Rust program draws its windows with Clarity.UI and needs nothing more: cargo downloads Skia's prebuilt library.
+A Rust desktop program draws its windows with Clarity.UI's ready-made library, which it links as Go, C and C++ do: nothing more to install.
 
 ### .NET on Linux
 

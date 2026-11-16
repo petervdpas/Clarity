@@ -6,8 +6,8 @@ import type { MappingText } from "./MappingText";
 import type { Span } from "./Span";
 
 /**
- * `mapping OrderFeed of Order from xml` with its lines (docs/FORMATS-PLAN.md,
- * step 4): how one kind of file is laid over an entity, for this case only.
+ * `mapping OrderFeed of Order from xml` with its lines (docs/ledger/formats.md):
+ * how one kind of file is laid over an entity, for this case only.
  * Every line is optional; what a mapping leaves out is found as without one.
  */
 export type MappingDecl = { name: Ident, entity: Ident, format: Ident, 

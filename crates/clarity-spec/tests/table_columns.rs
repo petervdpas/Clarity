@@ -1,4 +1,4 @@
-//! A table's columns (U1e, DESIGN.md): a width in pixels after a field
+//! A table's columns (manual/parts.data.md): a width in pixels after a field
 //! (`columns title 240, artist`), `resizable` and `sortable` as options,
 //! and `order by field [desc]` for the order its rows show in first.
 

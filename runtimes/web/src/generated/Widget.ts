@@ -16,7 +16,7 @@ children: Array<Widget>,
  */
 pages: Array<WidgetPage>, 
 /**
- * Its context menu: a `menu` block under the part (DESIGN 5.16).
+ * Its context menu: a `menu` block under the part (manual/design.parts.md).
  */
 menu: Menu | null, 
 /**

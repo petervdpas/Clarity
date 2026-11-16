@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4) on the
+//! Who is using the program (docs/ledger/signin.md) on the
 //! Go stack: the program carries Clarity.Auth's binding only when it signs
 //! people in, names its people after the databases open, and writes `me`,
 //! `allow when`, `readable when`, `writable when`, hashed fields,

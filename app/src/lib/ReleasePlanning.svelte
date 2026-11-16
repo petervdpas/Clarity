@@ -61,11 +61,21 @@
     }
   }
 
+  async function stopAll() {
+    error = null;
+    try {
+      await invoke("release_stop");
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
   function lastText(c: ReleaseView["checks"][number]): string {
     const job = devtools.jobs[c.job];
     if (job) return stateText(job);
     if (!c.last) return "not run";
-    return `${c.last.passed ? "passed" : "failed"} ${new Date(c.last.ended).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`;
+    const when = new Date(c.last.ended).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return `${c.last.passed ? "passed" : "failed"} ${when}${c.last.current ? "" : ", on another tree"}`;
   }
 </script>
 
@@ -78,9 +88,11 @@
         <strong>{outcome.text}</strong>
         <span class="bar">
           <button class="primary" onclick={runAll} disabled={busy}>{busy ? "Running..." : "Run release checks"}</button>
+          {#if busy}<button onclick={stopAll}>Stop</button>{/if}
           <button onclick={load} disabled={loading}>Read again</button>
         </span>
       </div>
+      <p class="plan-line" class:ready={outcome.allPassed}>{outcome.planText}</p>
       {#if outcome.failed.length}
         <ul class="failed-list">
           {#each outcome.failed as f (f.job)}
@@ -207,6 +219,15 @@
   .bar {
     display: flex;
     gap: 8px;
+  }
+  .plan-line {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .plan-line.ready {
+    color: var(--accent);
+    font-weight: 600;
   }
   .failed-list {
     margin: 0;

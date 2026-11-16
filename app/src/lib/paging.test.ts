@@ -1,4 +1,4 @@
-// The paging form of a web API (DESIGN 5.23, paging): what each kind asks
+// The paging form of a web API (manual/code.web-apis.md, paging): what each kind asks
 // for and what a change of kind keeps.
 
 import { test } from "node:test";

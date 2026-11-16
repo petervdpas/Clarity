@@ -62,7 +62,7 @@ func TestALongCallIsWatchedOnTheThreadItsHandlerRunsOn(t *testing.T) {
 	}
 }
 
-// A browser's page asks the same program over HTTP (round B of DESIGN 7.9):
+// A browser's page asks the same program over HTTP (round B of manual/start.how-it-works.md):
 // the server serves the browser files and answers the wire, the library's
 // commands with their arguments; what the program does not answer is an
 // error, which the library reads as its default.
@@ -222,7 +222,7 @@ func (c pagesCards) Dispatch(db *clarity.Db, state clarity.WindowState, handler 
 	return ui.Reply(state.Window, state.Data)
 }
 
-// Each browser apart (DESIGN 7.9 B2): a request names its page and brings
+// Each browser apart (manual/start.how-it-works.md B2): a request names its page and brings
 // the person's settings as the page keeps them. A handler sees that page's
 // settings and language, a page that sends none keeps what it had, settings
 // a command changed and quit go back to that page alone, and a page unasked

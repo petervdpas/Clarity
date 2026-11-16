@@ -376,7 +376,7 @@ fn windows() -> Vec<OutFile> {
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
-/// The desktop program is Clarity.UI's (DESIGN 7.9): the windows and app
+/// The desktop program is Clarity.UI's (manual/start.how-it-works.md): the windows and app
 /// frames as markup, the themes and the facts of the fields, embedded, and
 /// main runs package ui; nothing of the web screen or a webview.
 #[test]
@@ -717,7 +717,7 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
     has(file(&files, "schema.go"), "\t\t// 2: Search albums\n\t\t{},\n");
 }
 
-/// The web target (DESIGN 7.3, round B of 7.9): the program serves
+/// The web target (manual/project.run-build.md, round B of 7.9): the program serves
 /// Clarity.UI's browser files and answers their wire, and links nothing of
 /// the desktop; beside the desktop target one program does both, and
 /// `--serve` serves.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Outside agents in Clarity settings, Agent (docs/ACP-PLAN.md): whether an
+  // Outside agents in Clarity settings, Agent (docs/ledger/acp.md): whether an
   // agent program the person added Clarity to (Claude Code, Codex, Copilot
   // through `clarity mcp`) may work on the open project, and what those
   // agents did, call by call, as it happens. The list is read only while

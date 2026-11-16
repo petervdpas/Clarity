@@ -1,4 +1,4 @@
-//! The picture functions of code (docs/IMAGE-PLAN.md) on the runtime's
+//! The picture functions of code (docs/ledger/picture-functions.md) on the runtime's
 //! pictures, through Clarity.Image: each takes a picture in hand (or bytes
 //! read from a file) and gives a new one as PNG, leaving its arguments as
 //! they were. Every stack gives the same pixels (conformance/picture-functions.json).

@@ -1,4 +1,4 @@
-// Custom parts in the designer (DESIGN 5.19): what is typed for a property
+// Custom parts in the designer (manual/design.custom-parts.md): what is typed for a property
 // as the value written on the part's line, and how its tells read. A
 // running custom part draws on Clarity.UI's canvas, not on this screen.
 

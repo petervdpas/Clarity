@@ -1,5 +1,5 @@
 //! Clarity.Video: the player behind the `video` part of the programs Clarity
-//! generates (docs/VIDEO-PLAN.md). [`open`] gives a video's pictures from
+//! generates (docs/ledger/video-camera.md). [`open`] gives a video's pictures from
 //! the first of: a codec the project added for its format ([`register`]),
 //! the system's own decoder ([`system`]), or openh264, Cisco's binary
 //! ([`openh264`]) under the MP4 reader ([`Movie`]). It draws nothing:

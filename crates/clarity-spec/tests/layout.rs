@@ -5,7 +5,7 @@
 use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
-/// The running window of every generated program: Clarity.UI (DESIGN 7.9).
+/// The running window of every generated program: Clarity.UI (manual/start.how-it-works.md).
 const MESSAGES_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/messages.rs");
 const GRID_RS: &str = include_str!("../../../runtimes/rust-ui/src/grid.rs");
 const VIEW_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/view.rs");
@@ -16,7 +16,7 @@ const PAGE_DESIGNER: &str = include_str!("../../../app/src/lib/PageDesigner.svel
 const APP: &str = include_str!("../../../app/src/App.svelte");
 
 /// Every language opens its windows through the one Clarity.UI library
-/// (DESIGN 7.9), whose desktop host this is.
+/// (manual/start.how-it-works.md), whose desktop host this is.
 const SHELLS: [(&str, &str); 1] = [("Clarity.UI", include_str!("../../../runtimes/rust-ui/src/desktop/mod.rs"))];
 
 /// The number a `const NAME = 123;` line in `source` gives.
@@ -65,7 +65,7 @@ fn every_window_opens_at_the_size_the_designer_shows() {
     }
     assert!(SHOWN_WINDOW.contains("WINDOW_WIDTH"));
     // The designer and the preview both show the window so, at its own size
-    // (or the standard one), drawn by Clarity.UI as it runs (DESIGN 8.1), its padding Clarity.UI's own.
+    // (or the standard one), drawn by Clarity.UI as it runs (manual/design.parts.md), its padding Clarity.UI's own.
     assert!(APP.contains("<ShownWindow") && APP.contains("clientWidth={windowSize(page).width}") && APP.contains("windowSize(page).height") && APP.contains("<ClarityWindow"), "preview");
     // The designer shows the size a window's edge is dragged to while it is dragged.
     // (A slide-out designed on a canvas of its own shows as wide as it slides out.)

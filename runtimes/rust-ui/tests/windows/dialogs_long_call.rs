@@ -1,4 +1,4 @@
-//! A long call (DESIGN 5.12), as the C# LongCallBarTests have it: while a
+//! A long call (manual/code.engines.md), as the C# LongCallBarTests have it: while a
 //! handler runs off the screen's thread the window keeps drawing, shows how
 //! far the call is with a bar and Stop at the bottom right, and takes no
 //! other handler; Stop stops once and then greys; once the handler ended

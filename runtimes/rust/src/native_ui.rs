@@ -1,4 +1,4 @@
-//! The desktop through Clarity.UI's ready-made library (DESIGN 7.9): its C
+//! The desktop through Clarity.UI's ready-made library (manual/start.how-it-works.md): its C
 //! interface (`clarity_ui.h`), as Go, C and C++ programs use it, so a Rust
 //! program need not build Clarity.UI and Skia itself. The program answers the
 //! library's commands through `wire::answer`, the same answers the web wire
@@ -199,7 +199,7 @@ struct VideoApi {
 }
 
 /// Adds the codec library `file` the program carries (its `codecs` folder,
-/// docs/VIDEO-PLAN.md) to Clarity.Video: `api` is its `clarity_video_api()`.
+/// docs/ledger/video-camera.md) to Clarity.Video: `api` is its `clarity_video_api()`.
 pub fn add_codec(api: *const c_void, file: &str) -> Result<(), String> {
     if api.is_null() {
         return Err(format!("codec {file}: Clarity.Video is not there"));
@@ -221,7 +221,7 @@ pub fn wake() {
 
 /// Shows the program's windows in desktop windows until they closed, on the
 /// calling (main) thread; with CLARITY_HEADLESS set the library drives it
-/// from standard input instead (DESIGN 1.6), as `clarity_ui::desktop::run`.
+/// from standard input instead (manual/start.how-it-works.md), as `clarity_ui::desktop::run`.
 /// Asks the agent whose command runs now, through Clarity.UI (docs/ledger/app-mcp.md).
 fn agent_ask(question: &str, form: &str) -> Option<String> {
     let mut out: *mut c_char = std::ptr::null_mut();
@@ -265,7 +265,7 @@ fn run_native(program: Held, app: &AppFiles) -> Result<i32, String> {
     ran.map(|()| code)
 }
 
-// -- Custom parts (DESIGN 5.19, 7.9) ----------------------------------------
+// -- Custom parts (manual/design.custom-parts.md, manual/start.how-it-works.md) ----------------------------------------
 //
 // A custom part written in Rust is a table of callbacks to the library, as a
 // Go, C or C++ part is: the program's glue wraps the part's crate in a

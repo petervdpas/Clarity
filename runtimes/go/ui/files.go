@@ -12,7 +12,7 @@ import (
 )
 
 // Files are what the library shows a program from (ClarityFiles): its
-// windows' and apps' markup (.cxaml, DESIGN 7.8), its resolved themes, its
+// windows' and apps' markup (.cxaml, manual/start.how-it-works.md), its resolved themes, its
 // model as JSON, the files of its resources folder, and the title and size
 // its main window opens with.
 type Files struct {

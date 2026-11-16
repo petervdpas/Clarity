@@ -16,7 +16,7 @@ serde_json.workspace = true
 ts-rs.workspace = true
 # Whether the IDE that recorded its open project still runs (ide.rs); the IDE's own version and features.
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
-# OpenAPI descriptions in YAML or JSON (DESIGN 5.23).
+# OpenAPI descriptions in YAML or JSON (manual/code.web-apis.md).
 yaml-rust2 = "0.13"
 
 [dev-dependencies]

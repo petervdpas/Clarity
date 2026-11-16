@@ -1,6 +1,6 @@
 //! The Rust backend: a desktop program drawn by Clarity.UI (its ready-made
 //! library, through the runtime's `native_ui`), a web program that serves Clarity.UI's browser files and
-//! answers their wire (round B, DESIGN 7.9), or one program that does both
+//! answers their wire (round B, manual/start.how-it-works.md), or one program that does both
 //! (`--serve` serves). One Rust module per Clarity module, the schema as its first
 //! migration, the window structs and handlers, on the runtime crate
 //! `clarity-runtime` from crates.io with the features of the project's
@@ -91,7 +91,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         features.push("engines");
     }
-    // Custom parts written in Rust (DESIGN 5.19): the runtime's part host.
+    // Custom parts written in Rust (manual/design.custom-parts.md): the runtime's part host.
     let rust_parts = parts::crate_parts(project);
     let mut mismatches = parts::ui_mismatches(project);
     // What the part's code lacks of Clarity's file, read without building it.
@@ -99,7 +99,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !mismatches.is_empty() {
         return Err(mismatches);
     }
-    // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (DESIGN 7.9).
+    // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (manual/start.how-it-works.md).
     // `stack rust web`: the program serves Clarity.UI's browser files and answers their wire;
     // with both, `--serve` serves.
     let clarity = settings.stack.has(clarity_project::Target::Desktop);
@@ -110,20 +110,20 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let songs = clarity && clarity_spec::resources::plays_songs(project);
     let videos = clarity && clarity_spec::resources::plays_videos(project);
-    // The engines beside the screen run in the program, on the runtime's engines (DESIGN 5.12).
+    // The engines beside the screen run in the program, on the runtime's engines (manual/code.engines.md).
     let screen_engines = !crate::screen_engines(project).is_empty();
     if screen_engines {
         features.push("engines");
     }
-    // HTTP calls from code (DESIGN 5.23): the runtime's client.
+    // HTTP calls from code (manual/code.web-apis.md): the runtime's client.
     if project.calls_out() {
         features.push("http");
     }
-    // The picture functions of code (docs/IMAGE-PLAN.md): Clarity.Image.
+    // The picture functions of code (docs/ledger/picture-functions.md): Clarity.Image.
     if crate::uses_picture_functions(project) {
         features.push("pictures");
     }
-    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
+    // The data formats of code (docs/ledger/formats.md): Clarity.Formats.
     if crate::carries_formats(project, settings) {
         features.push("formats");
     }
@@ -131,11 +131,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if clarity && crate::agent_tools::offers_agents(project) {
         features.push("mcp");
     }
-    // Secret settings (DESIGN 5.27): the system's protected store.
+    // Secret settings (manual/data.settings.md): the system's protected store.
     if !project.secret_settings().is_empty() {
         features.push("secrets");
     }
-    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth.
+    // Who is using the program (docs/ledger/signin.md): Clarity.Auth.
     if crate::signin::carries_auth(project) {
         features.push("auth");
     }
@@ -167,7 +167,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text("src/model.json", crate::web::model_json(project)),
     ];
     if clarity {
-        // The windows and app frames as markup, the themes and the texts, which Clarity.UI reads (DESIGN 7.9).
+        // The windows and app frames as markup, the themes and the texts, which Clarity.UI reads (manual/start.how-it-works.md).
         files.extend(clarity_files(project));
     }
     if web {
@@ -236,7 +236,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !rust_parts.is_empty() {
         files.push(text("src/parts.rs", parts::ui_glue(project)));
     }
-    // Each library's crate, its trait written from its declaration (DESIGN 5.21).
+    // Each library's crate, its trait written from its declaration (manual/code.libraries.md).
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
         let own = crate::libraries::own_file(library, false);
@@ -254,7 +254,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty(), songs, videos));
     let main_text = main_rs(project, settings, &owners, &databases, &main_window, &served, clarity_run.as_deref());
-    // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
+    // What Clarity.UI's parts read beside the values: the facts of the fields and types (manual/start.how-it-works.md).
     files.push(text("src/facts.rs", facts_rs(project)));
     let main_text = main_text
         .replacen("mod modules;\n", if agents { "mod modules;\nmod facts;\nmod commands;\n// The commands' data, where the command functions name it.\nuse commands::CommandData;\n" } else { "mod modules;\nmod facts;\n" }, 1)
@@ -286,7 +286,7 @@ fn screen_engines_static(project: &Project) -> String {
 }
 
 /// The program's answer to a canvas that runs an engine beside the screen
-/// (DESIGN 5.12): a new instance of it from its file, kept in the program by
+/// (manual/code.engines.md): a new instance of it from its file, kept in the program by
 /// number, its frames and its end by that number; none for a name it has no
 /// engine of. Empty without such engines.
 fn screen_engine_fn(project: &Project) -> String {
@@ -363,7 +363,7 @@ fn code_fact_type(ty: &clarity_spec::code::TypeRef) -> String {
     }
 }
 
-/// The facts of a program on Clarity.UI (DESIGN 7.9), as the C# program's
+/// The facts of a program on Clarity.UI (manual/start.how-it-works.md), as the C# program's
 /// Fields.cs: each window's values and their types, each entity's and
 /// record's fields and theirs, the facts of every entity's field keyed
 /// "Entity.field", and each enum's values.
@@ -526,7 +526,7 @@ fn fact_format(field: &clarity_spec::model::Field) -> Option<String> {
     Some(format!("FieldFormat {{ kind: FormatKind::{kind}, scale: {scale}, format: {format} }}"))
 }
 
-/// The files of a program on Clarity.UI (DESIGN 7.9), beside its code: the
+/// The files of a program on Clarity.UI (manual/start.how-it-works.md), beside its code: the
 /// windows and app frames as `.cxaml` (the same markup the shared screen and
 /// C# read) and the themes the project offers as Clarity resolves them. The
 /// program carries them, with the model, whose translations Clarity.UI loads.
@@ -542,7 +542,7 @@ pub(crate) fn clarity_files(project: &Project) -> Vec<OutFile> {
 }
 
 /// The build script of a Rust desktop program on Clarity.UI's ready-made
-/// library (DESIGN 7.9), as cgo and CMake link it for Go, C and C++: from the
+/// library (manual/start.how-it-works.md), as cgo and CMake link it for Go, C and C++: from the
 /// folder CLARITY_UI names (include/ and lib/), with Clarity.Audio and
 /// Clarity.Video beside it when the program plays songs or videos. The
 /// program finds the libraries beside itself (they are copied next to it),
@@ -676,7 +676,7 @@ fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_w
     )
 }
 
-/// The engines of the application (DESIGN 5.11): each loaded once from its
+/// The engines of the application (manual/code.engines.md): each loaded once from its
 /// file, and every one checked when the application starts.
 fn engines_rs(project: &Project) -> String {
     let mut out = format!(
@@ -742,7 +742,7 @@ fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], librari
     let profile = if parts.is_empty() { "" } else { "# Dependencies, such as those of the custom parts, build optimized in a debug\n# build too; the program's own code stays quick to build.\n[profile.dev.package.\"*\"]\nopt-level = 3\n\n" };
     // Each custom part's crate, which draws on Clarity.UI's own surface.
     let parts: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
-    // Each library's crate (DESIGN 5.21).
+    // Each library's crate (manual/code.libraries.md).
     let libraries: String = libraries.iter().map(|(package, library)| format!("{package} = {{ path = \"libraries/{library}\" }}\n")).collect();
     let parts = format!("{libraries}{parts}");
     format!(
@@ -780,7 +780,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 /// serves.
 #[allow(clippy::too_many_arguments)]
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, served: &[String], clarity_run: Option<&str>) -> String {
-    // An engine that says how far a long call is (DESIGN 5.12): handlers run off
+    // An engine that says how far a long call is (manual/code.engines.md): handlers run off
     // the screen's thread, so the window keeps painting its bar, and Stop reaches the call.
     let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
     // The program watches its long calls for any screen: Clarity.UI shows the bar with Stop itself.
@@ -790,19 +790,19 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         ""
     };
     let program = crate::settings_program(settings);
-    // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
+    // Secret settings (manual/data.settings.md) are kept in the system's protected store, never in the file.
     let secret_names = crate::secret_names(project);
     let secrets_const = if secret_names.is_empty() {
         String::new()
     } else {
-        format!("/// The settings kept in the system's protected store (DESIGN 5.27).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
+        format!("/// The settings kept in the system's protected store (manual/data.settings.md).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
     };
     let (read, keep) = if secret_names.is_empty() {
         ("clarity_runtime::settings::read(PROGRAM)", "clarity_runtime::settings::keep(PROGRAM, &settings)")
     } else {
         ("clarity_runtime::settings::read_with(PROGRAM, SECRETS)", "clarity_runtime::settings::keep_with(PROGRAM, &settings, SECRETS)")
     };
-    // A database that connects with a secret setting (DESIGN 5.27): when it
+    // A database that connects with a secret setting (manual/data.settings.md): when it
     // cannot open at start, the screen shows the window that keeps it first.
     let (app_struct, open_db, app_new, started_unconnected, connect_fn) = match crate::unconnected(project) {
         None => (
@@ -814,7 +814,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         ),
         Some(unconnected) => (
             format!(
-                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// The program: its databases, which every call shares, and why they did not\n/// open: none once they have.\nstruct App(Mutex<Db>, Mutex<Option<Text>>);\n",
+                "/// What the screen shows when the databases did not open (manual/data.settings.md): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// The program: its databases, which every call shares, and why they did not\n/// open: none once they have.\nstruct App(Mutex<Db>, Mutex<Option<Text>>);\n",
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
@@ -824,7 +824,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "\n    /// Opens the databases again, as when the person has kept their connection.\n    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;\n        *self.0.lock().map_err(|_| Text::plain(\"the database is not available\"))? = db;\n        if let Ok(mut problem) = self.1.lock() {\n            *problem = None;\n        }\n        Ok(())\n    }\n".to_string(),
         ),
     };
-    // The desktop program is Clarity.UI's, in the program's own process (DESIGN 7.9):
+    // The desktop program is Clarity.UI's, in the program's own process (manual/start.how-it-works.md):
     // Clarity.UI's start is main's last line; its files' constant follows main.
     // Without it, main serves Clarity.UI's browser files to a browser.
     let (clarity_run, files_const) = match clarity_run.map(|run| run.split_once("//~files\n").unwrap_or((run, ""))) {
@@ -856,7 +856,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     };
     // On Clarity.UI main answers what the window's host ends with.
     let main_returns = if clarity_run.is_some() { " -> std::process::ExitCode" } else { "" };
-    // Custom parts (DESIGN 6.5), which Clarity.UI draws.
+    // Custom parts (manual/design.custom-parts.md), which Clarity.UI draws.
     let native = !parts::crate_parts(project).is_empty();
     let parts_mod = if native { "mod parts;\n" } else { "" };
     let databases = databases
@@ -972,7 +972,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             ));
         }
     }
-    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    // The handlers an answer runs, with the values written for them and the answer (manual/code.statements.md).
     let mut answers = String::new();
     for o in owners.iter().filter(|o| !o.is_app) {
         for (handler, function, records) in &o.answers {
@@ -1002,7 +1002,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         }
     }
     // The app's `on unconnected` runs with why the databases did not open, on empty
-    // app data: there are no records to load (DESIGN 5.27).
+    // app data: there are no records to load (manual/data.settings.md).
     if let Some((app, handler)) = crate::unconnected(project).and_then(|u| u.handler)
         && let Some(o) = owners.iter().find(|o| o.is_app && o.name == app)
     {
@@ -1093,7 +1093,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    db.add_file({})?;\n", file_source(f))))
         .chain(crate::signin::signin_plan(project).map(|plan| format!("    db.add_signin({});\n", signin_source(&plan))))
         .collect();
-    // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): the start
+    // Who is using the program (docs/ledger/signin.md): the start
     // says the sign-in window, and the program signs people in and out.
     let (started_signin, signin_fns) = if crate::signin::carries_auth(project) {
         (
@@ -1217,7 +1217,7 @@ fn run(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
     }}
 }}
 
-/// Runs the handler the answer to a question goes to (DESIGN 5.14), with
+/// Runs the handler the answer to a question goes to (manual/code.statements.md), with
 /// the values written for it and the answer last.
 #[allow(unused_variables, unused_mut)]
 fn answer_to(db: &Db, state: WindowState, handler: &str, values: Vec<Value>) -> Result<Reply> {{
@@ -1277,7 +1277,7 @@ fn shown_at_input(db: &Db, state: WindowState, run: impl FnOnce(WindowState) -> 
 }}
 
 /// A window's reply: what each table, tree and chart shows is filled in
-/// (DESIGN 1.7), and its edits start there (DESIGN 5.29): what a handler
+/// (manual/start.how-it-works.md), and its edits start there (manual/code.handlers.md): what a handler
 /// changed is never the person's edit. `sent` is what the screen sent.
 fn window_reply(sent: &clarity_runtime::views::Sent, answer: Answer<Reply>) -> Answer<Reply> {{
     let mut reply = answer?;
@@ -1299,7 +1299,7 @@ fn open_databases() -> Result<Db> {{
 }}
 
 /// What the screen asks of the program, the same for the web server's
-/// commands and Clarity.UI (DESIGN 7.9).
+/// commands and Clarity.UI (manual/start.how-it-works.md).
 impl Program for App {{
     fn started(&self) -> program::Started {{
         program::Started {{ main: MAIN_WINDOW.to_string(), unconnected: {started_unconnected}, signin: {started_signin} }}
@@ -1327,7 +1327,7 @@ impl Program for App {{
     }}
 
     fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {{
-        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        // One undo step (manual/code.handlers.md): the reply carries its id when the handler changed the database.
         let sent = clarity_runtime::views::Sent::of(&state);
         window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::stepped(db, || dispatch(db, state, handler)))))
     }}
@@ -1489,8 +1489,8 @@ fn readable_all(entity: &clarity_spec::model::Entity, module: &str, found: &str)
     if entity.readable.is_none() { found.to_string() } else { format!("{module}::{}::readable_all(db, {found})?", entity.name.name) }
 }
 
-/// The project's people as the runtime's signin source takes them (docs/APP-CAPABILITIES-PLAN.md
-/// step 4), its remembered sign-in kept under the program's name (main's `PROGRAM`).
+/// The project's people as the runtime's signin source takes them (docs/ledger/signin.md),
+/// its remembered sign-in kept under the program's name (main's `PROGRAM`).
 pub(crate) fn signin_source(plan: &crate::signin::SigninPlan) -> String {
     let texts = |items: &[String]| items.iter().map(|t| format!("{t:?}.into()")).collect::<Vec<_>>().join(", ");
     let options = |name: &str| plan.options.get(name).map(|o| o.iter().map(|(k, v)| format!("({k:?}.into(), {v:?}.into())")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
@@ -1552,7 +1552,7 @@ pub const SOURCES: &[(&str, &[&[&str]])] = &[
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// main as a web server (DESIGN 7.3, round B of 7.9): the browser files,
+/// main as a web server (manual/project.run-build.md, round B of 7.9): the browser files,
 /// embedded in the program, and the page's wire, answered by the program
 /// (`clarity_runtime::wire::answer`).
 fn serve_main(address: &str, served: &[String]) -> String {

@@ -27,7 +27,7 @@ pub fn emit(project: &Project, file: &SpecFile) -> String {
     out
 }
 
-/// A record (DESIGN 5.12): its fields with their JSON names and `NewX` with
+/// A record (manual/code.engines.md): its fields with their JSON names and `NewX` with
 /// their defaults; never stored, so it has no id and no table.
 fn plain_record(project: &Project, record: &Entity) -> String {
     let name = &record.name.name;
@@ -118,7 +118,7 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
-        // Held records (DESIGN 5.25): a new one, and an empty list rather than nil.
+        // Held records (manual/data.entities.md): a new one, and an empty list rather than nil.
         (FieldType::Record { entity }, _) => Some(format!("New{}()", entity.name)),
         (FieldType::List { .. }, _) => Some(format!("{}{{}}", field_type(&f.ty))),
         _ => None,
@@ -162,13 +162,13 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
     let mut rows = vec![vec!["ID".to_string(), "int64".into(), "`json:\"id\"`".into()]];
-    // An entity of a web API holds its records inside (DESIGN 5.25); a stored one keeps them in their own table.
+    // An entity of a web API holds its records inside (manual/data.entities.md); a stored one keeps them in their own table.
     let held: Vec<&Field> = if project.in_web_api(name) { entity.fields.iter().filter(|f| f.ty.is_held()).collect() } else { Vec::new() };
     let fields: Vec<&Field> = stored(entity).chain(held.iter().copied()).collect();
     for f in &fields {
         rows.push(vec![field(&f.name.name), field_type(&f.ty), format!("`json:\"{}\"`", f.name.name)]);
     }
-    // A versioned entity (docs/APP-CAPABILITIES-PLAN.md step 5) carries the
+    // A versioned entity (docs/ledger/row-versions.md) carries the
     // version it was read with, which travels with the record to the screen and back.
     let version = project.version_column(name);
     if version.is_some() {
@@ -247,7 +247,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     // function generated from it.
     let events: Vec<DataEvent> =
         project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
-    // `writable when` (docs/APP-CAPABILITIES-PLAN.md step 4) is checked before a
+    // `writable when` (docs/ledger/signin.md) is checked before a
     // save and a delete, by code or by a window, then the event written for it runs.
     let writable = entity.writable.is_some() && !entity.record && !entity.settings;
     let unwritten = [DataEvent::BeforeSave, DataEvent::BeforeDelete].into_iter().filter(|e| writable && !events.contains(e));

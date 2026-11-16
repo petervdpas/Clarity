@@ -323,7 +323,7 @@ func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
 	}
 }
 
-// An engine beside the screen logs through the shell (DESIGN 5.12): the
+// An engine beside the screen logs through the shell (manual/code.engines.md): the
 // line goes into the application's log, where the backend's engines write.
 func TestAnEngineLineGoesIntoTheApplicationsLog(t *testing.T) {
 	c, _ := service(t)
@@ -348,7 +348,7 @@ func TestAnAnswerRunsTheHandlerItGoesToWithItsValues(t *testing.T) {
 	}
 }
 
-// The databases did not open (DESIGN 5.27): start says what to show and why,
+// The databases did not open (manual/data.settings.md): start says what to show and why,
 // and connect opens them once the person has kept their connection.
 func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 	c, _ := service(t)
@@ -377,7 +377,7 @@ func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 }
 
 // While the databases are not open, the title bar's close of the main window
-// goes to the screen, which connects again (DESIGN 5.27); once they are open,
+// goes to the screen, which connects again (manual/data.settings.md); once they are open,
 // or the screen ends the application, it closes as any window does.
 func TestTheTitleBarsCloseGoesToTheScreenWhileUnconnected(t *testing.T) {
 	c, _ := service(t)
@@ -441,7 +441,7 @@ func (s *screen) Eval(_ context.Context, js string) {
 	s.scripts = append(s.scripts, js)
 }
 
-// A long call on the screen (DESIGN 5.12): the handler's engine calls report
+// A long call on the screen (manual/code.engines.md): the handler's engine calls report
 // to the screen, at most ten times a second, until the handler ends; Stop
 // comes in while it runs, outside the lock the handler holds.
 func TestALongHandlerShowsHowFarItIsAndStops(t *testing.T) {
@@ -504,7 +504,7 @@ func (m *memo) Load(id int64, v []any) error {
 	return r.Err()
 }
 
-// Undo (DESIGN 5.29): the runtime keeps each window's edits. An edit whose
+// Undo (manual/code.handlers.md): the runtime keeps each window's edits. An edit whose
 // handler saved is taken back with what it saved and done again; a field
 // the person changed goes back to what the window's last reply had.
 func TestTheRuntimeKeepsTheEditsAndCtrlZTakesThemBack(t *testing.T) {
@@ -561,7 +561,7 @@ func dataOf(reply map[string]any) map[string]any {
 	return reply["state"].(map[string]any)["data"].(map[string]any)
 }
 
-// Reordering (DESIGN 1.7, 5.30): the screen sends the move, the runtime gives
+// Reordering (manual/start.how-it-works.md, manual/parts.data.md): the screen sends the move, the runtime gives
 // the list its order and numbers, chooses the moved row and runs the handler,
 // as one edit that Ctrl+Z takes back.
 func TestTheRuntimeReordersAMovedRow(t *testing.T) {
@@ -606,7 +606,7 @@ func TestTheRuntimeReordersAMovedRow(t *testing.T) {
 	}
 }
 
-// Canvas modes (DESIGN 5.31): the screen sends where the person dropped an
+// Canvas modes (manual/parts.graphics.md): the screen sends where the person dropped an
 // object, the runtime snaps it, chooses it and runs on change, as one edit
 // Ctrl+Z takes back; a vector canvas keeps its drawing as SVG.
 func TestTheRuntimeMovesAnObjectAndEditsADrawing(t *testing.T) {
@@ -704,7 +704,7 @@ func TestTheRuntimeMovesARangedValue(t *testing.T) {
 	}
 }
 
-// A wizard (DESIGN 5.15): Next runs on next on the step shown and moves on,
+// A wizard (manual/parts.containers.md): Next runs on next on the step shown and moves on,
 // unless it refused or set the step; Back runs nothing; Finish runs on finish.
 func TestTheRuntimeWalksAWizard(t *testing.T) {
 	c, windows := service(t)
@@ -789,7 +789,7 @@ func viewOf(reply map[string]any, part string) string {
 	return string(text)
 }
 
-// The shown rows (DESIGN 1.7): after every reply the runtime fills in what
+// The shown rows (manual/start.how-it-works.md): after every reply the runtime fills in what
 // each table, tree and chart shows, so a handler's new row shows at once.
 func TestEveryReplyFillsTheShownRows(t *testing.T) {
 	c, _ := service(t)
@@ -856,7 +856,7 @@ func TestAViewEventChangesHowAPartShowsItsRows(t *testing.T) {
 	}
 }
 
-// readonly (DESIGN 1.7): the runtime takes back what the screen changed, as
+// readonly (manual/start.how-it-works.md): the runtime takes back what the screen changed, as
 // the window's last reply had it, runs no handler, records no edit, and
 // answers refused.
 func TestAReadonlyPartsChangeIsTakenBack(t *testing.T) {
@@ -892,7 +892,7 @@ func TestAReadonlyPartsChangeIsTakenBack(t *testing.T) {
 	}
 }
 
-// editable (DESIGN 1.7): a table's edit keeps to the columns its cells edit;
+// editable (manual/start.how-it-works.md): a table's edit keeps to the columns its cells edit;
 // a change to any other field of its rows is taken back.
 func TestATablesEditKeepsToItsEditableColumns(t *testing.T) {
 	c, _ := service(t)
@@ -910,7 +910,7 @@ func TestATablesEditKeepsToItsEditableColumns(t *testing.T) {
 	}
 }
 
-// sortable (DESIGN 1.7): a header click on a table that is not sortable changes nothing.
+// sortable (manual/start.how-it-works.md): a header click on a table that is not sortable changes nothing.
 func TestATableThatIsNotSortableKeepsItsOrder(t *testing.T) {
 	c, _ := service(t)
 	state := tasksWindow()
@@ -921,7 +921,7 @@ func TestATableThatIsNotSortableKeepsItsOrder(t *testing.T) {
 	}
 }
 
-// A chart of a list of numbers (DESIGN 1.7, points): its last points
+// A chart of a list of numbers (manual/start.how-it-works.md, points): its last points
 // numbers, decimals as their value; what is no number is left out.
 func TestANumbersViewShowsTheLastPoints(t *testing.T) {
 	c, _ := service(t)

@@ -1,4 +1,4 @@
-// The themes an application offers (DESIGN 1.5): which one is shown, kept
+// The themes an application offers (manual/themes.md): which one is shown, kept
 // for the next start as the person's choice. Clarity.UI draws the theme
 // shown; the generated AppThemes names the themes offered.
 

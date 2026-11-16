@@ -1,5 +1,5 @@
 //! A window with every kind of part in Clarity's own look, light and dark,
-//! drawn as the IDE's own pages look (DESIGN 1.5): the window, its fields,
+//! drawn as the IDE's own pages look (manual/themes.md): the window, its fields,
 //! buttons, header and chosen row take their colors from the theme's data,
 //! not from drawing code. With CLARITY_SHOTS set the two pictures are kept,
 //! to lay beside the IDE's.

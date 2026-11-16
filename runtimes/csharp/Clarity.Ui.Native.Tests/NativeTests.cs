@@ -1,7 +1,7 @@
 // The C# layer over the native library itself: the library loads and has
 // the interface this layer is written for, a native error comes back as a
 // C# exception with the library's message, and a C# window model drives the
-// library's screen (driven without a window, DESIGN 1.6) through the
+// library's screen (driven without a window, manual/start.how-it-works.md) through the
 // program's callback: a click runs the view model's handler, what the
 // person types reaches its values, and what a handler throws never crosses
 // into native code.

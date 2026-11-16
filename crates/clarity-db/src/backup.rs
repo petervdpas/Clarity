@@ -1,4 +1,4 @@
-//! Backups of the SQLite databases a project owns (docs/BACKUP-PLAN.md).
+//! Backups of the SQLite databases a project owns (docs/ledger/backups.md).
 //! A backup is a copy beside the database, in `backups/`, made with
 //! SQLite's `VACUUM INTO` so it is consistent while the database is open,
 //! and named for when (UTC) and why: `shop-20261105T213012Z-manual.db`.

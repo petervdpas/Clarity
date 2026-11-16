@@ -63,7 +63,7 @@ const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(
  * person's folder for application data (conformance/data-folder.json). */
 const char* clarity_data_folder_sqlite_on(const char* os, const char* location, const char* (*env)(const char* name));
 
-/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// Why the databases did not open, as the person reads it (manual/data.settings.md,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.
 ClarityText* clarity_unconnected_reason(const ClarityError* error);

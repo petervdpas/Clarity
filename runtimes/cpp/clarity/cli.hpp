@@ -1,4 +1,4 @@
-// Command-line programs (DESIGN 5.20): reading a command line against the
+// Command-line programs (manual/code.commands.md): reading a command line against the
 // program's commands, writing its help, printing a table and asking on a
 // terminal, as conformance/command-line.json says every runtime does. A
 // generated program describes itself as a cli::Program and runs the
@@ -201,7 +201,7 @@ std::pair<std::string, bool> run_line(const Program& program, const std::vector<
 
 /// Runs a command-line program: reads the command line, writes help or what
 /// is wrong with it, or runs the command it names with its values, and gives
-/// the exit code its run ends with (DESIGN 5.20).
+/// the exit code its run ends with (manual/code.commands.md).
 int run(const Program& program, int argc, char** argv, const std::function<int(Session&, size_t, const std::vector<std::optional<std::string>>&)>& command);
 
 // A value read from the command line, or answered, as the type code holds

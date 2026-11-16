@@ -21,7 +21,7 @@ width: number | null,
  */
 caption: string | null, bind: string | null, 
 /**
- * A custom part (DESIGN 5.19): the name it is declared by, with `kind` custom.
+ * A custom part (manual/design.custom-parts.md): the name it is declared by, with `kind` custom.
  */
 part: string | null, 
 /**

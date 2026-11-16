@@ -1,4 +1,4 @@
-//! The picture functions of code (docs/IMAGE-PLAN.md, conformance/picture-functions.json):
+//! The picture functions of code (docs/ledger/picture-functions.md, conformance/picture-functions.json):
 //! typed by the checker, a project's own function of the same name taking its place.
 
 use clarity_spec::{Severity, load_converted};

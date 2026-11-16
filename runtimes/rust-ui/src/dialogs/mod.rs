@@ -1,4 +1,4 @@
-//! Clarity's own dialogs (DESIGN 7.9), never the system's: a question a
+//! Clarity's own dialogs (manual/start.how-it-works.md), never the system's: a question a
 //! handler asks (`ask`), an AI agent's call the person allows or refuses (`grant`), a dialog window shown over the window that opened
 //! it where the host opens no desktop window of its own (`over`), the keys
 //! window (`keys`) and the bar of a long call with Stop (`long_call`). What

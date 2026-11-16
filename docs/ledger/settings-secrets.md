@@ -21,12 +21,12 @@ Progress: 90%
 
 ## Open
 - Secrets stored alike on every stack: PARTIAL. On macOS go-keyring stores `go-keyring-base64:` values no other runtime reads (`runtimes/go/secrets/secrets.go:11-40`).
-- One name for secrets in the Credential Manager on every stack: UNTRIED on Windows (WINDOWS-TESTS.md:13-19).
-- The `forget` option on a secret (kept in memory for the run only): NOT BUILT; see [encrypted-storage](encrypted-storage.md).
+- One name for secrets in the Credential Manager on every stack: UNTRIED on Windows ([os-checks](os-checks.md)).
+- The `forget` option on a secret (kept in memory for the run only): NOT BUILT; see [encrypted-storage](encrypted-storage.md) Design "Forget".
 
 ## Conflicts
 - In C# the person's keys have two writers in `settings.json`: Clarity.UI (`runtimes/rust-ui/src/window/mod.rs:103-108`) and `PersonKeys`, read once at start (`crates/clarity-gen/src/csharp/model.rs:287`, `runtimes/csharp/Clarity.Runtime/PersonKeys.cs:25`); see [frame-keys](frame-keys.md).
-- `conformance/secret-store.json` is skipped by Go, C and C++ (CONFLICTING.md 3).
+- `conformance/secret-store.json` is skipped by Go, C and C++.
 
 ## Decisions
 - 2026-10-23: one unnamed `settings` block per project, kept per person in the system's settings folder, never in the database; `language` and `theme` are Clarity's own lines (DESIGN 5.17, U1g).

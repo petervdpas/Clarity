@@ -1,9 +1,9 @@
-// A generated application on the desktop (DESIGN 7.9): the native Clarity.UI
+// A generated application on the desktop (manual/start.how-it-works.md): the native Clarity.UI
 // library shows its windows in the system's own windows, draws them, lays
 // them out and takes what the person does; the application's view models
 // answer it (ProgramWire). The windows' markup, themes, model and resources
 // come from the application's assembly. With CLARITY_HEADLESS set the
-// library drives the program from standard input instead (DESIGN 1.6).
+// library drives the program from standard input instead (manual/start.how-it-works.md).
 
 using System.Reflection;
 using Clarity.Runtime;
@@ -27,7 +27,7 @@ public static class DesktopWindow
     }
 
     /// <summary>
-    /// The databases did not open (DESIGN 5.27): says why, then shows what
+    /// The databases did not open (manual/data.settings.md): says why, then shows what
     /// keeps the connection, or what the app's <c>on unconnected</c> opens;
     /// once the databases open the main window shows on them, until the person
     /// closes it.

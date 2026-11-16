@@ -1,4 +1,4 @@
-// Clarity.UI for C++ (DESIGN 7.9): a thin layer over the library's C
+// Clarity.UI for C++ (manual/start.how-it-works.md): a thin layer over the library's C
 // interface (clarity_ui.h). Handles free themselves, text goes in as
 // std::string_view and comes back as std::string, and a failing call throws
 // clarity::ui::Error with the library's message. The program is an abstract
@@ -100,7 +100,7 @@ int run_desktop(Program& program, const Files& files);
 /// Wakes the running desktop from any thread: every window reads its values again.
 void wake_desktop();
 
-/// The program on a screen without a window, driven step by step (DESIGN 1.6),
+/// The program on a screen without a window, driven step by step (manual/start.how-it-works.md),
 /// on the thread that made it.
 class Driven {
 public:
@@ -118,7 +118,7 @@ private:
     ClarityDriven* driven_ = nullptr;
 };
 
-// -- Custom parts (DESIGN 5.19) ----------------------------------------------
+// -- Custom parts (manual/design.custom-parts.md) ----------------------------------------------
 
 /// A color as 0xAARRGGBB.
 using Color = uint32_t;

@@ -1,4 +1,4 @@
-//! The picture functions on the runtime's pictures (docs/IMAGE-PLAN.md),
+//! The picture functions on the runtime's pictures (docs/ledger/picture-functions.md),
 //! through Clarity.Image: a picture in hand or read bytes, a new picture back.
 
 #![cfg(feature = "pictures")]

@@ -1,4 +1,4 @@
-//! External libraries in the output (DESIGN 5.21): the adapter in the
+//! External libraries in the output (manual/code.libraries.md): the adapter in the
 //! project's language, the file Clarity types its functions in, and the
 //! program's calls, on every stack.
 

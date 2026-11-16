@@ -1,4 +1,4 @@
-// Package engine hosts engines (DESIGN 5.11): processing modules compiled
+// Package engine hosts engines (manual/code.engines.md): processing modules compiled
 // once to WebAssembly, which every stack hosts alike
 // (conformance/engines.json). An engine computes; it imports only the
 // services of Clarity it declares (`uses clock, random, log`), so it reaches
@@ -278,7 +278,7 @@ func (e *Engine) CallWatched(window uint64, watch Watch, function string, args .
 }
 
 // run calls function in window as CallWatched does; what the answer tells
-// goes to told, when given (an engine beside the screen, DESIGN 5.12).
+// goes to told, when given (an engine beside the screen, manual/code.engines.md).
 func (e *Engine) run(window uint64, watch Watch, function string, args []any, told *[]Tell) (any, error) {
 	state := &call{name: e.name, clock: e.services.Clock, random: rand.Uint64(), log: e.services.Log, progress: watch.Progress}
 	if e.services.Seed != nil {

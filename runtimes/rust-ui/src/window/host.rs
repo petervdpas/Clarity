@@ -576,7 +576,7 @@ impl PartHost for ProgramHost {
                 return true;
             }
         }
-        // Signing in and out (docs/APP-CAPABILITIES-PLAN.md step 4), unless a window has that name.
+        // Signing in and out (docs/ledger/signin.md), unless a window has that name.
         if let Some(ran) = self.run_signin(part, call) {
             return ran;
         }

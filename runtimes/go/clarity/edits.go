@@ -1,6 +1,6 @@
 package clarity
 
-// The edit bus (DESIGN 5.29): per open window, the record of the person's
+// The edit bus (manual/code.handlers.md): per open window, the record of the person's
 // edits, kept here in the runtime, not in the screen. Each edit is a message
 // with the part, its scope (its form or panel, or the part itself), what it
 // changed (each name of the window's data, or #parts.<name> for a part's own

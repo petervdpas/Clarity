@@ -1,5 +1,5 @@
 //! Code behind: the handlers of a window or the app, written in Clarity
-//! (docs/DESIGN.md section 5.9). This module holds the syntax tree; `parse`
+//! (docs/ledger/language.md). This module holds the syntax tree; `parse`
 //! reads `code` blocks and `check` resolves names and types against the
 //! window they belong to.
 
@@ -172,7 +172,7 @@ pub enum StmtKind {
         shape: Ident,
         args: Vec<Expr>,
     },
-    /// A hear of a custom part (DESIGN 5.19): `arena.restart(2)`. Read as a
+    /// A hear of a custom part (manual/design.custom-parts.md): `arena.restart(2)`. Read as a
     /// `Draw` and made a hear when loading, where the window's parts are known.
     Hear {
         part: Ident,
@@ -189,7 +189,7 @@ pub enum StmtKind {
         name: Ident,
         args: Vec<Arg>,
     },
-    /// `ask @question ... then handler(values)` (DESIGN 5.14): Clarity's
+    /// `ask @question ... then handler(values)` (manual/code.statements.md): Clarity's
     /// dialog, shown when the handler has finished. The answer runs `then`
     /// with `args` and, for a value, the answer last; cancelling runs nothing.
     Ask {
@@ -210,7 +210,7 @@ pub enum StmtKind {
     },
     /// `save customer`: stores a record, refused when someone saved it since
     /// it was read; `save customer anyway` writes regardless of the version
-    /// (docs/APP-CAPABILITIES-PLAN.md step 5).
+    /// (docs/ledger/row-versions.md).
     Save {
         value: Expr,
         anyway: bool,
@@ -238,7 +238,7 @@ pub enum StmtKind {
         path: Expr,
     },
     /// `print value`, or `print list columns a, b` (a table): writes to
-    /// standard output, in a command (DESIGN 5.20).
+    /// standard output, in a command (manual/code.commands.md).
     Print {
         value: Expr,
         columns: Vec<Ident>,
@@ -252,7 +252,7 @@ pub enum StmtKind {
     Exit {
         code: Expr,
     },
-    /// `tell finished(time)` in an engine beside the screen (DESIGN 5.12):
+    /// `tell finished(time)` in an engine beside the screen (manual/code.engines.md):
     /// a tell with its values, in the answer of the call it is in.
     Tell {
         tell: Ident,
@@ -394,7 +394,7 @@ impl ToastCorner {
 }
 
 /// How a file is laid over records where code reads or writes one
-/// (docs/FORMATS-PLAN.md, step 4): a mapping written in place, the format
+/// (docs/ledger/formats.md): a mapping written in place, the format
 /// and its options (`xml text at "shop/orders/order"`), or a mapping the
 /// project declares, by name (`using OrderFeed`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -421,8 +421,8 @@ impl MappingUse {
     }
 }
 
-/// `mapping OrderFeed of Order from xml` with its lines (docs/FORMATS-PLAN.md,
-/// step 4): how one kind of file is laid over an entity, for this case only.
+/// `mapping OrderFeed of Order from xml` with its lines (docs/ledger/formats.md):
+/// how one kind of file is laid over an entity, for this case only.
 /// Every line is optional; what a mapping leaves out is found as without one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -598,14 +598,14 @@ pub enum ExprKind {
         args: Vec<Expr>,
         named: Vec<NamedArg>,
     },
-    /// A function of an engine: `Pricing.total(lines)` (DESIGN 5.11).
+    /// A function of an engine: `Pricing.total(lines)` (manual/code.engines.md).
     EngineCall {
         engine: Ident,
         function: Ident,
         args: Vec<Expr>,
     },
     /// `ask @question yes @a no @b` or `ask @question for type ...` in a
-    /// command (DESIGN 5.20): waits for the answer on the terminal and
+    /// command (manual/code.commands.md): waits for the answer on the terminal and
     /// gives it, a bool for yes or no.
     Ask {
         question: Box<Expr>,
@@ -643,7 +643,7 @@ pub enum ExprKind {
     /// The value at a position of a list, from 1: `squares[3]`.
     Index { list: Box<Expr>, index: Box<Expr> },
     /// `json of order`: a record, a list or a value written in a format of
-    /// the catalog (docs/FORMATS-PLAN.md), as every stack writes it;
+    /// the catalog (docs/ledger/formats.md), as every stack writes it;
     /// `text of orders using OrderFeed` writes it as a mapping says.
     FormatOf { value: Box<Expr>, mapping: MappingUse },
     /// `read list<Order> from json text at "data.orders"`: what a format
@@ -651,7 +651,7 @@ pub enum ExprKind {
     /// text using OrderFeed` reads it as a mapping says.
     ReadFormat { ty: TypeRef, input: Box<Expr>, mapping: MappingUse },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
-    /// web API, giving its reply (DESIGN 5.23). Only post, put and patch send a body.
+    /// web API, giving its reply (manual/code.web-apis.md). Only post, put and patch send a body.
     /// `from shop` calls a path of that web API data source, at its address
     /// and with its auth; `query "status": s` adds an encoded query parameter.
     /// `every page` reads a long list a page at a time, as the source's
@@ -871,7 +871,7 @@ pub struct Param {
     pub default: Option<Expr>,
 }
 
-/// `part Arena` (DESIGN 5.19): a part an outside library draws, with what
+/// `part Arena` (manual/design.custom-parts.md): a part an outside library draws, with what
 /// the rest of the project sees of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -895,12 +895,12 @@ pub struct PartDecl {
     /// `preview "arena.png"`: its picture on the design canvas, from the resources.
     pub preview: Option<String>,
     /// `description @arenaDescription`: what a screen reader says of it
-    /// besides its name (DESIGN 7.9, A1), a text people read.
+    /// besides its name (manual/start.how-it-works.md), a text people read.
     pub description: Option<String>,
     pub span: Span,
 }
 
-/// `library Words` (DESIGN 5.21): an outside library in the project's own
+/// `library Words` (manual/code.libraries.md): an outside library in the project's own
 /// language, with the functions code calls, written by the adapter in
 /// `libraries/Words/`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -968,7 +968,7 @@ pub struct PartMessage {
     pub span: Span,
 }
 
-/// The `cli Shop` block (DESIGN 5.20): the command-line program of a
+/// The `cli Shop` block (manual/code.commands.md): the command-line program of a
 /// project with the `cli` target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -980,7 +980,7 @@ pub struct CliDecl {
 }
 
 /// `command [group] name(arguments)` with its `option` lines and its
-/// statements (DESIGN 5.20).
+/// statements (manual/code.commands.md).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct CommandDecl {
@@ -991,7 +991,7 @@ pub struct CommandDecl {
     pub params: Vec<Param>,
     pub help: Option<Expr>,
     pub options: Vec<CommandOption>,
-    /// `allow when <condition>`: who may run it (docs/APP-CAPABILITIES-PLAN.md step 4).
+    /// `allow when <condition>`: who may run it (docs/ledger/signin.md).
     pub allow: Option<Expr>,
     /// `agent`: offered to AI agents as a tool of the app's MCP service
     /// (docs/ledger/app-mcp.md); off without it.
@@ -1050,7 +1050,7 @@ impl CommandOption {
     }
 }
 
-/// A `function` or `action` declared in a module (docs/DESIGN.md 5.10).
+/// A `function` or `action` declared in a module (docs/ledger/language.md).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct FunctionDecl {
@@ -1064,13 +1064,13 @@ pub struct FunctionDecl {
     pub ensures: Vec<Expr>,
     /// Effects an action may have, such as `db.write`.
     pub effects: Vec<Ident>,
-    /// `allow when <condition>`: who may run an action (docs/APP-CAPABILITIES-PLAN.md step 4).
+    /// `allow when <condition>`: who may run an action (docs/ledger/signin.md).
     pub allow: Option<Expr>,
     pub body: Vec<Stmt>,
     pub span: Span,
 }
 
-/// An engine (DESIGN 5.11): a processing module compiled to WebAssembly,
+/// An engine (manual/code.engines.md): a processing module compiled to WebAssembly,
 /// its file in the project's `engines` folder, and its functions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -1087,7 +1087,7 @@ pub struct EngineDecl {
     pub state: EngineState,
     /// `on open`: the engine's `clarity_open` runs on every new instance.
     pub opens: bool,
-    /// `beside the screen` (DESIGN 5.12): it runs in the renderer, where the
+    /// `beside the screen` (manual/code.engines.md): it runs in the renderer, where the
     /// canvas that `runs` it is drawn, one instance per canvas; the backend
     /// never runs it.
     pub beside: bool,
@@ -1124,7 +1124,7 @@ pub struct EngineBody {
 }
 
 /// `const lives = 3`: a value written out, read by name and never set
-/// (DESIGN 5.12), in a module or an engine written in Clarity.
+/// (manual/code.engines.md), in a module or an engine written in Clarity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct ConstDecl {

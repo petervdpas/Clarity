@@ -1,4 +1,4 @@
-//! Custom parts in the output (DESIGN 5.19 and 6.5): each stack's part is a
+//! Custom parts in the output (manual/design.custom-parts.md): each stack's part is a
 //! library in its own language, drawn by Clarity.UI, and code sets, reads
 //! and hears it.
 
@@ -365,7 +365,7 @@ fn notes_settings() -> clarity_project::Settings {
     clarity_project::parse("project Notes\n    stack csharp desktop\n    datasource main sqlite \"data/notes.db\"\n").unwrap()
 }
 
-/// A .NET custom part is a control of Clarity.UI (DESIGN 7.9): its package
+/// A .NET custom part is a control of Clarity.UI (manual/start.how-it-works.md): its package
 /// in the project file, its adapter, and the half generated from its
 /// declaration, which names it for the window that places it.
 #[test]
@@ -500,7 +500,7 @@ fn a_dotnet_part_on_another_stack_is_refused() {
     assert!(refused.iter().any(|e| e.contains("part Notes is .NET, but the project is written in Go")), "{refused:?}");
 }
 
-/// A custom part draws in a window of the desktop (DESIGN 6.5), which a
+/// A custom part draws in a window of the desktop (manual/design.custom-parts.md), which a
 /// program served to a browser alone has not: generating it says so, on each
 /// stack, and the same project with a desktop window generates.
 #[test]
@@ -516,7 +516,7 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
         let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
-    // A .NET part too: Clarity.UI runs alone in the browser, for every language (DESIGN 7.9, B2).
+    // A .NET part too: Clarity.UI runs alone in the browser, for every language (manual/start.how-it-works.md).
     let web = clarity_project::parse("project Notes\n    stack csharp web\n    datasource main sqlite \"data/notes.db\"\n").unwrap();
     let refused = clarity_gen::generate(&notes_project(), &web).expect_err("a .NET part in a browser");
     assert_eq!(refused, ["part Notes draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
@@ -534,7 +534,7 @@ fn a_c_or_cpp_part_built_on_its_own_finds_the_library_header() {
     }
 }
 
-// -- Reading a part's code when Clarity generates (DESIGN 5.19) --------------
+// -- Reading a part's code when Clarity generates (manual/design.custom-parts.md) --------------
 
 /// The game with its part on `line` and the part's own files `own`, beside
 /// the build file each kind of part has.

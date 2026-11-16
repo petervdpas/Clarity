@@ -1,4 +1,4 @@
-//! Entities in a web API (DESIGN 5.23): a module with `source shop`, where
+//! Entities in a web API (manual/code.web-apis.md): a module with `source shop`, where
 //! shop is a `rest` data source, holds the records a service sends and
 //! takes. They are not stored, so no migration covers them and `find`,
 //! `save` and `delete` do not reach them; actions read and send them with
@@ -82,7 +82,7 @@ fn a_call_from_a_source_names_a_web_api() {
 }
 
 /// `every page` reads a long list a page at a time, as the source's `paging`
-/// line says (DESIGN 5.23, paging); only `get` reads pages, from a source
+/// line says (manual/code.web-apis.md, paging); only `get` reads pages, from a source
 /// that pages.
 #[test]
 fn every_page_reads_a_source_that_pages() {

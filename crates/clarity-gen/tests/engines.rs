@@ -1,4 +1,4 @@
-//! Engines (DESIGN 5.11) in every stack's output: each engine is loaded
+//! Engines (manual/code.engines.md) in every stack's output: each engine is loaded
 //! with the services it uses (`uses clock, random, log`) and the limits its
 //! declaration gives (`limit 2 seconds, 64 MB`).
 

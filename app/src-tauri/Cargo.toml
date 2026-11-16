@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 clarity-spec.workspace = true
 clarity-project.workspace = true
-# Backups of the project's databases (backups.rs, docs/BACKUP-PLAN.md).
+# Backups of the project's databases (backups.rs, docs/ledger/backups.md).
 clarity-db.workspace = true
 clarity-vault.workspace = true
 clarity-agent.workspace = true

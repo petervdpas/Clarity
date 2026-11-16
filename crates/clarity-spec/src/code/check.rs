@@ -78,7 +78,7 @@ fn check_window_handlers(files: &[SpecFile]) -> Vec<Diagnostic> {
 }
 
 /// Every command line names one command, a group is no command of its
-/// own, and a project has one `cli` block (DESIGN 5.20).
+/// own, and a project has one `cli` block (manual/code.commands.md).
 fn check_command_lines(files: &[SpecFile]) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let commands: Vec<(&SpecFile, &CommandDecl)> = files.iter().flat_map(|f| f.commands.iter().map(move |c| (f, c))).collect();
@@ -125,7 +125,7 @@ fn written_number(expr: &Expr) -> Option<f64> {
     }
 }
 
-/// A custom part's declaration (DESIGN 5.19): its library, one name per
+/// A custom part's declaration (manual/design.custom-parts.md): its library, one name per
 /// property, tell and hear, none of them a word every part has, plain types
 /// and defaults and bounds that fit.
 fn check_parts(env: &Env, file: &SpecFile, out: &mut Output) {
@@ -209,7 +209,7 @@ fn check_parts(env: &Env, file: &SpecFile, out: &mut Output) {
     }
 }
 
-/// A library's declaration (DESIGN 5.21): its package, one name per
+/// A library's declaration (manual/code.libraries.md): its package, one name per
 /// function, and plain values in and out.
 fn check_libraries(env: &Env, file: &SpecFile, out: &mut Output) {
     for library in &file.libraries {
@@ -447,7 +447,7 @@ pub enum TypeInfo {
     Files,
     /// The contents of a file as they are.
     Bytes,
-    /// What a web API answered (DESIGN 5.23): status, ok and text.
+    /// What a web API answered (manual/code.web-apis.md): status, ok and text.
     HttpReply,
     Enum(String),
     Record(String),
@@ -581,9 +581,9 @@ pub enum NameKind {
     Handler,
     /// What an engine written in Clarity keeps between calls.
     Kept,
-    /// A constant: `const lives = 3` (DESIGN 5.12).
+    /// A constant: `const lives = 3` (manual/code.engines.md).
     Const,
-    /// `me`, the record of who signed in (docs/APP-CAPABILITIES-PLAN.md step 4).
+    /// `me`, the record of who signed in (docs/ledger/signin.md).
     Me,
 }
 
@@ -696,7 +696,7 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name)
     }
 
-    /// A library declared in a visible module (DESIGN 5.21).
+    /// A library declared in a visible module (manual/code.libraries.md).
     fn library(&self, name: &str) -> Option<&'a LibraryDecl> {
         self.visible.iter().flat_map(|f| &f.libraries).find(|l| l.name.name == name)
     }
@@ -706,12 +706,12 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.toasts).find(|t| t.name.name == name)
     }
 
-    /// A mapping declared in a visible module (docs/FORMATS-PLAN.md, step 4).
+    /// A mapping declared in a visible module (docs/ledger/formats.md).
     fn mapping(&self, name: &str) -> Option<&'a super::MappingDecl> {
         self.visible.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
     }
 
-    /// A custom part declared in a visible module (DESIGN 5.19).
+    /// A custom part declared in a visible module (manual/design.custom-parts.md).
     fn part_decl(&self, name: &str) -> Option<&'a PartDecl> {
         self.visible.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name)
     }
@@ -986,7 +986,7 @@ struct Wired<'a> {
 enum TellOf<'a> {
     Part(&'a str),
     Engine(&'a str),
-    /// The view a slide-out, tab, step or section shows (DESIGN 5.33).
+    /// The view a slide-out, tab, step or section shows (manual/design.windows.md).
     View(&'a str),
     /// A row of this entity picked in a tree of levels: the handler takes its record.
     TreeRow(&'a str),
@@ -1330,7 +1330,7 @@ pub fn all_commands<'f>(frame: &'f Frame, widgets: &'f [Widget]) -> Vec<&'f Comm
     out
 }
 
-/// A condition of who may (docs/APP-CAPABILITIES-PLAN.md step 4), outside
+/// A condition of who may (docs/ledger/signin.md), outside
 /// any body: `scope` holds what it names beside `me`.
 fn check_access<'a>(env: &Env<'a>, word: &str, condition: &Expr, scope: HashMap<String, Ty<'a>>, out: &mut Output) {
     let mut checker = BodyChecker {
@@ -1499,7 +1499,7 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
         }
         return;
     }
-    // The app's databases did not open (DESIGN 5.27): the handler may take why, as text.
+    // The app's databases did not open (manual/data.settings.md): the handler may take why, as text.
     if wired.own_event && wired.event == "unconnected" {
         let fits = match decl.params.as_slice() {
             [] => true,
@@ -1670,7 +1670,7 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
 }
 
 /// The engines of a file: a .wasm file each, and functions that take and
-/// give values (DESIGN 5.11).
+/// give values (manual/code.engines.md).
 fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
     let mut seen: Vec<&str> = Vec::new();
     for engine in &file.engines {
@@ -1840,7 +1840,7 @@ fn check_consts(env: &Env, consts: &[ConstDecl], engine: Option<&EngineDecl>, ou
     }
 }
 
-/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b): the
+/// An engine beside the screen written in Clarity (manual/code.engines.md): the
 /// frame loop is functions of the interface's names, what it draws a list
 /// of records, and each hear a function of its name with its values.
 fn check_written_screen(env: &Env, engine: &EngineDecl, body: &crate::code::EngineBody, out: &mut Output) {
@@ -1964,7 +1964,7 @@ fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, 
 fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, engine: Option<&EngineDecl>, kept: HashMap<String, Ty<'a>>, out: &mut Output) {
     let name = decl.name.name.as_str();
     let mut scope = HashMap::new();
-    // An engine uses records of values only (DESIGN 5.12).
+    // An engine uses records of values only (manual/code.engines.md).
     let in_engine = |ty: &Ty, span: Span, out: &mut Output| {
         if engine.is_some()
             && let Ty::Record(record) | Ty::List(record) = ty
@@ -2070,7 +2070,7 @@ struct BodyChecker<'e, 'a> {
     /// The engine written in Clarity whose function this is: its keep
     /// values are in scope, its functions callable, and it shows nothing.
     engine: Option<&'e EngineDecl>,
-    /// The command being checked (DESIGN 5.20): it has no window, prints,
+    /// The command being checked (manual/code.commands.md): it has no window, prints,
     /// asks on the terminal and exits.
     command: Option<&'e CommandDecl>,
     out: &'e mut Output,
@@ -2080,7 +2080,7 @@ struct BodyChecker<'e, 'a> {
 /// The id every record has, which code can read.
 pub const RECORD_ID: &str = "id";
 
-/// The id of the record an `object` shape marks (DESIGN 5.31): `record.id`,
+/// The id of the record an `object` shape marks (manual/parts.graphics.md): `record.id`,
 /// read at the end of the record's own text, so the checker types it and every
 /// generator compiles it as any other field read.
 pub fn object_id(record: &Expr) -> Expr {
@@ -2099,7 +2099,7 @@ pub const JOIN: &str = "join";
 pub const SNAPPED: &str = "snapped";
 /// `length(text)`: how many characters a text has.
 pub const LENGTH: &str = "length";
-/// The service a long engine call says how far it is with (DESIGN 5.12).
+/// The service a long engine call says how far it is with (manual/code.engines.md).
 pub const PROGRESS: &str = "progress";
 
 /// What a built-in function takes and gives: a text function
@@ -2117,7 +2117,7 @@ pub enum BuiltInValue {
     Number,
 }
 
-/// The built-in picture functions of code (docs/IMAGE-PLAN.md): each gives a
+/// The built-in picture functions of code (docs/ledger/picture-functions.md): each gives a
 /// new picture, as PNG, and leaves its arguments as they were. Every stack
 /// runs them through Clarity.Image, giving the same pixels.
 pub const PICTURE_FUNCTIONS: [(&str, &[BuiltInValue], BuiltInValue); 8] = [
@@ -2168,8 +2168,8 @@ pub fn text_function(name: &str) -> Option<(&'static [BuiltInValue], BuiltInValu
 /// the application runs.
 pub const TODAY: &str = "today";
 
-/// `newToken()`: a new random token as text (docs/APP-CAPABILITIES-PLAN.md
-/// step 4), which code gives a person and keeps in a hashed field.
+/// `newToken()`: a new random token as text (docs/ledger/signin.md),
+/// which code gives a person and keeps in a hashed field.
 pub const NEW_TOKEN: &str = "newToken";
 
 /// `newRecoveryCodes(count)`: that many new recovery codes as lines of
@@ -2237,7 +2237,7 @@ pub enum ShapeValue {
     Name,
     /// Points as whole numbers, x, y, x, y, ...: a list<integer>.
     Points,
-    /// A record of a canvas's objects (DESIGN 5.31); the shape keeps its id.
+    /// A record of a canvas's objects (manual/parts.graphics.md); the shape keeps its id.
     Record,
 }
 
@@ -2321,7 +2321,7 @@ pub const SHAPES: [Shape; 11] = [
             ("style", ShapeValue::Name, Some("")),
         ],
     },
-    // The box of an object of a canvas in mode objects (DESIGN 5.31): what is
+    // The box of an object of a canvas in mode objects (manual/parts.graphics.md): what is
     // drawn after it, until the next object, moves with it while it is dragged.
     Shape {
         name: "object",
@@ -2443,7 +2443,7 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// A shape on a canvas, in the canvas's own draw handler or one it runs.
-    /// `Words.spell(42)`: a function of a library, with values of its types (DESIGN 5.21).
+    /// `Words.spell(42)`: a function of a library, with values of its types (manual/code.libraries.md).
     fn library_call(&mut self, expr: &Expr, library: &'a LibraryDecl, function: &Ident, args: &[Expr]) -> Ty<'a> {
         let Some(callee) = library.functions.iter().find(|f| f.name.name == function.name) else {
             for arg in args {
@@ -2471,7 +2471,7 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// `arena.restart(2)`: a hear of a custom part, with values of its types.
     /// `tell finished(time)`: a tell the engine beside the screen declares,
-    /// with values that fit it (DESIGN 5.12).
+    /// with values that fit it (manual/code.engines.md).
     fn tell(&mut self, tell: &Ident, args: &[Expr]) {
         let message = match self.engine {
             Some(engine) if engine.beside => {
@@ -2481,7 +2481,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
                 found
             }
-            // A view tells the window it shows in (DESIGN 5.33).
+            // A view tells the window it shows in (manual/design.windows.md).
             _ if self.owner.and_then(|o| o.tells).is_some() => {
                 let owner = self.owner.expect("a view's code");
                 let found = owner.tells.unwrap_or_default().iter().find(|t| t.name.name == tell.name);
@@ -2534,7 +2534,7 @@ impl<'a> BodyChecker<'_, 'a> {
         {
             return self.media_hear(part, hear, args, crate::video::hear(&hear.name), crate::video::least(&hear.name), "a video hears play, pause, resume, seek, stop or volume");
         }
-        // A canvas hears for the engine beside the screen it runs (DESIGN 5.12).
+        // A canvas hears for the engine beside the screen it runs (manual/code.engines.md).
         let engine = match self.part(&part.name) {
             Some((_, Part::Widget(p))) => p.runs.as_deref().and_then(|name| self.env.engine(name)),
             _ => None,
@@ -2574,7 +2574,7 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
-    /// What code tells a sound (DESIGN 5.22): its values, and the notes of a melody written in the code.
+    /// What code tells a sound (manual/design.sound.md): its values, and the notes of a melody written in the code.
     fn sound_hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
         self.media_hear(part, hear, args, crate::sound::hear(&hear.name), crate::sound::least(&hear.name), "a sound hears play, pause, resume, seek, stop, tone, melody or volume");
         if hear.name == "melody"
@@ -3359,7 +3359,7 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// `read Order from json text at "path"`: an entity or a list of one,
-    /// read from a format of the catalog (docs/FORMATS-PLAN.md), from text,
+    /// read from a format of the catalog (docs/ledger/formats.md), from text,
     /// with the format's options. Pure, so functions read formats too; an
     /// engine keeps to its own values.
     fn read_format(&mut self, ty: &TypeRef, input: &Expr, mapping: &super::MappingUse, span: Span) -> Ty<'a> {
@@ -3861,7 +3861,7 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
-            // What a video plays, read as it plays (docs/VIDEO-PLAN.md).
+            // What a video plays, read as it plays (docs/ledger/video-camera.md).
             _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Video) && crate::video::read(property).is_some() => {
                 let ty = match crate::video::read(property) {
                     Some(TypeInfo::Bool) => Ty::Bool,
@@ -3870,7 +3870,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 };
                 Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the video plays")) })
             }
-            // What a sound plays, read as it plays (docs/AUDIO-PLAN.md).
+            // What a sound plays, read as it plays (docs/ledger/audio.md).
             _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Sound) && crate::sound::read(property).is_some() => {
                 let ty = match crate::sound::read(property) {
                     Some(TypeInfo::Bool) => Ty::Bool,
@@ -3932,7 +3932,7 @@ impl<'a> BodyChecker<'_, 'a> {
             "via" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Values(Item::Integer), writable: Err(format!("{name}.{property} is read, not set: it is where the line a person bent bends now")) })
             }
-            // What the person changed last on a canvas with a mode (DESIGN 5.31):
+            // What the person changed last on a canvas with a mode (manual/parts.graphics.md):
             // the record of an object, or the place of a shape in the drawing, from 1.
             "selected" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.mode.is_some()) => {
                 let Part::Widget(props) = part else { return None };
@@ -4075,7 +4075,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     _ => None,
                 };
                 let first = self.expr(&items[0], wanted);
-                // A list of records (DESIGN 5.12), made in code or stored: every item the same record.
+                // A list of records (manual/code.engines.md), made in code or stored: every item the same record.
                 if let Ty::Record(record) = first {
                     for other in &items[1..] {
                         let ty = self.expr(other, Some(first));
@@ -4270,7 +4270,7 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// A call to a function of an engine: checked against its signature
-    /// like a call to a function (DESIGN 5.11).
+    /// like a call to a function (manual/code.engines.md).
     fn engine_call(&mut self, expr: &Expr, engine: &Ident, function: &Ident, args: &[Expr]) -> Ty<'a> {
         if self.env.engine(&engine.name).is_none()
             && let Some(library) = self.env.library(&engine.name)
@@ -4908,7 +4908,7 @@ impl<'a> BodyChecker<'_, 'a> {
     /// The value a name or path reads.
     fn value_of(&mut self, expr: &Expr) -> Ty<'a> {
         let place = self.place(expr);
-        // A hashed field is set, never read (docs/APP-CAPABILITIES-PLAN.md step 4).
+        // A hashed field is set, never read (docs/ledger/signin.md).
         if matches!(place, Some(Place::Value { .. }))
             && let Some(field) = self.field_of(expr).filter(|f| f.modifiers.hashed)
         {
@@ -4960,7 +4960,7 @@ impl<'a> BodyChecker<'_, 'a> {
     /// a date and time or a reference, and of nothing else.
     fn empty(&mut self, expected: Option<Ty<'a>>, span: Span) -> Ty<'a> {
         match expected {
-            // A record (DESIGN 5.12) is a value with fields, never stored, so never none.
+            // A record (manual/code.engines.md) is a value with fields, never stored, so never none.
             Some(Ty::Record(record)) if record.record => {
                 self.error(format!("{} is a record, which is never none; compare one of its fields", record.name.name), span);
                 Ty::Unknown
@@ -5062,7 +5062,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 if l.is_unknown() || r.is_unknown() {
                     return Ty::Unknown;
                 }
-                // A list of values grows by a list of its items: `readings + [value]` (DESIGN 5.26).
+                // A list of values grows by a list of its items: `readings + [value]` (manual/parts.data.md).
                 if matches!(l, Ty::Values(_)) || matches!(r, Ty::Values(_)) {
                     let named = crate::code::path_text(left);
                     let named = if named.is_empty() { "list".to_string() } else { named };
@@ -5252,14 +5252,14 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
     project.diagnostics.extend(found);
 }
 
-/// Entities in a web API (DESIGN 5.23) are not in a database, so `find`,
+/// Entities in a web API (manual/code.web-apis.md) are not in a database, so `find`,
 /// `save` and `delete` do not reach them; `http ... from source` names a web
 /// API data source of the project.
 pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
     let web: Vec<&str> = project.entities().map(|e| e.name.name.as_str()).filter(|e| project.in_web_api(e)).collect();
     let types = types(&project.files);
     let mut found = held_records(project);
-    // A web API that signs with a setting names a secret one (DESIGN 5.27).
+    // A web API that signs with a setting names a secret one (manual/data.settings.md).
     let secrets = project.secret_settings();
     for source in &project.sources {
         // A database may connect with one too.
@@ -5324,7 +5324,7 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
                             format!("unknown data source '{}'; the project has {}", source.name, crate::check::listed(&names))
                         }
                         Some(s) if s.sql => format!("'{}' is no web API: 'from' names a rest data source of the project", source.name),
-                        // `every page` follows the source's paging (DESIGN 5.23).
+                        // `every page` follows the source's paging (manual/code.web-apis.md).
                         Some(s) if *pages && s.paging.is_none() => format!(
                             "data source '{}' does not page: say how under its datasource line, like: paging page \"page\" size \"per_page\" 100",
                             source.name
@@ -5347,7 +5347,7 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
     project.diagnostics.extend(found);
 }
 
-/// Records inside records (DESIGN 5.25): only an entity of a web API holds
+/// Records inside records (manual/data.entities.md): only an entity of a web API holds
 /// a record (`owner: User`), what it holds lives in the web API too, and a
 /// record never holds itself, through any number of records.
 fn held_records(project: &crate::model::Project) -> Vec<Diagnostic> {

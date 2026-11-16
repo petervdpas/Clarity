@@ -1,6 +1,6 @@
 <script lang="ts">
   // Picks what an application uses of a web API's OpenAPI description
-  // (DESIGN 5.23): the description file in the project's apis folder, the
+  // (manual/code.web-apis.md): the description file in the project's apis folder, the
   // operations it calls and the schemas it keeps on their own. Clarity
   // writes the API's module from the picks, an entity per schema they need
   // and an action per operation, and writes it again for a new revision.

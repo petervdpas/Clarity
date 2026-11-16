@@ -1,4 +1,4 @@
-//! Canvas modes (DESIGN 5.31), decided here in the runtime: the screen sends
+//! Canvas modes (manual/parts.graphics.md), decided here in the runtime: the screen sends
 //! what the person did on a canvas (an object dropped, a stroke painted, a
 //! shape added, changed, moved or deleted) and the runtime changes the
 //! window's data, snapped to the canvas's grid, and chooses what it touched.
@@ -138,7 +138,7 @@ pub fn apply(state: &mut WindowState, a: &CanvasArgs, action: &Map<String, Value
     }
 }
 
-/// `canvas_event` (DESIGN 5.31): the person's action on the canvas `a.part`.
+/// `canvas_event` (manual/parts.graphics.md): the person's action on the canvas `a.part`.
 /// A change runs `run`, the handler, as an edit ends (`edits::ended`); a
 /// refused action answers the window as it is (`draw`), saying `refused`.
 pub fn event(

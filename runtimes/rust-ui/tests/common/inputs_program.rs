@@ -1,6 +1,6 @@
 //! A program as a generated one is, for the inputs' window tests: one
 //! window of the test's markup over the test's data, the record of the
-//! person's edits kept with the runtime's own edit bus (DESIGN 5.29: the
+//! person's edits kept with the runtime's own edit bus (manual/code.handlers.md: the
 //! runtime holds it), the handlers it ran, and the values a typed dropdown's
 //! field holds.
 

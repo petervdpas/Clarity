@@ -131,7 +131,7 @@
       </label>
     {/if}
     {#if preview.project.signin && (p.kind === "item" || p.kind === "button")}
-      <!-- Who may run it (docs/APP-CAPABILITIES-PLAN.md step 4): a condition on `me`. -->
+      <!-- Who may run it (docs/ledger/signin.md): a condition on `me`. -->
       <label class="prop">
         <span>Allow</span>
         <input

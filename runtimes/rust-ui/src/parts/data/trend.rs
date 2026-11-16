@@ -1,4 +1,4 @@
-//! A trend (DESIGN 5.26), the same as on the web: the last values of one
+//! A trend (manual/parts.data.md), the same as on the web: the last values of one
 //! number, taken every so many seconds while its window is open (hidden
 //! too, so its history has no gap), drawn as Clarity's line chart with the
 //! newest at the right. It takes a value when it is first laid out to be

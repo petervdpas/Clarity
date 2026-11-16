@@ -1,4 +1,4 @@
-//! The folders of custom parts (DESIGN 5.19). `native "parts/Arena"` names
+//! The folders of custom parts (manual/design.custom-parts.md). `native "parts/Arena"` names
 //! a folder of the project with the library's sources and its
 //! `CMakeLists.txt`, which the generated program builds; its `clarity`
 //! folder is Clarity's: the header written from the declaration. A part
@@ -29,7 +29,7 @@ pub struct PartFile {
 /// Folders a part's build leaves, which are not its sources.
 const LEFT_OUT: [&str; 4] = ["build", "out", "target", OWN_FOLDER];
 
-/// Where a library's adapter is: `libraries/<Name>` (DESIGN 5.21).
+/// Where a library's adapter is: `libraries/<Name>` (manual/code.libraries.md).
 pub fn library_folder(library: &str) -> String {
     format!("libraries/{library}")
 }

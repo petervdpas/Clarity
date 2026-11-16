@@ -334,7 +334,7 @@ public sealed partial class Db : IDisposable
     {
         var conn = Conn(source);
         var done = SchemaVersion(conn);
-        // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+        // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
         if (done > 0 && done < steps.Count)
             Backup.BeforeMigration(conn, done + 1);
         for (var i = done; i < steps.Count; i++)

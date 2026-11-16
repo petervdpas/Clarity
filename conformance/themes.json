@@ -1,5 +1,5 @@
 {
-  "about": "How a theme resolves (DESIGN section 1.5, T1): what it sets, for light or dark mode. A color is \"#rrggbb\" as written, or \"@role\" for a role the theme does not set, which keeps the value of Clarity's own theme. Parts are keyed by kind, or kind:state. clarity_spec::themes::resolve gives these, and each stack is written from it: the web renderer as a CSS file per theme (clarity_gen::theme_css), Avalonia as resources. mode and dark say whether the theme shows dark for the system's choice, which the web renderer checks too.",
+  "about": "How a theme resolves (manual/themes.md): what it sets, for light or dark mode. A color is \"#rrggbb\" as written, or \"@role\" for a role the theme does not set, which keeps the value of Clarity's own theme. Parts are keyed by kind, or kind:state. clarity_spec::themes::resolve gives these, and each stack is written from it: the web renderer as a CSS file per theme (clarity_gen::theme_css), Avalonia as resources. mode and dark say whether the theme shows dark for the system's choice, which the web renderer checks too.",
   "resolves": [
     {
       "what": "light mode with a color of its own, a font, a size, a radius and styles",

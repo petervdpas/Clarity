@@ -1,5 +1,5 @@
 {
-  "about": "A mapping's `check` (docs/FORMATS-PLAN.md, step 4) through Clarity.Formats, one engine for every format with schemas: the options carry the schema's text (the generator reads the project's file), the format reads it into the engine's rules, and the whole file is checked before anything is fitted, a value that breaks it stopping the read with where it is (an XPath with a record's place among its kind). `read` cases read `input` in `format` as `kind` and give `fitted` or `error`; `table` cases read a file source's table (`#node` left out) or give `error`. A format without schema kinds refuses `check`.",
+  "about": "A mapping's `check` (docs/ledger/formats.md) through Clarity.Formats, one engine for every format with schemas: the options carry the schema's text (the generator reads the project's file), the format reads it into the engine's rules, and the whole file is checked before anything is fitted, a value that breaks it stopping the read with where it is (an XPath with a record's place among its kind). `read` cases read `input` in `format` as `kind` and give `fitted` or `error`; `table` cases read a file source's table (`#node` left out) or give `error`. A format without schema kinds refuses `check`.",
   "read": [
     {
       "name": "a file the schema allows reads as it does without the check",

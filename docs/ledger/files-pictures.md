@@ -21,12 +21,12 @@ Progress: 90%
 - `runtimes/rust-ui/tests/inputs/inputs_file.rs`, `inputs_picture_field.rs`
 
 ## Open
-- The folder picker on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:65; folder settings :64).
+- The folder picker on Windows and macOS: UNTRIED ([os-checks](os-checks.md)).
 - The file part runs no change handlers on open and save a copy: by design (`runtimes/rust-ui/src/parts/inputs/file.rs:1-9`).
 - The folder part has no picker in a browser; the path is typed (`parts/inputs/folder.rs:8`).
 - Folders that are no store: generated code for Go, C, C++ and C# is checked as text only (`crates/clarity-gen/tests/files.rs`), not yet built in an example; Rust is built through examples/maintenance. Open question: should the folder part and Clarity's file browser show a folder's files by its extensions? Open question: should a `filestore` line take `extensions` and `hidden` too?
 - A `video` field kept in a file store: NOT BUILT; see [video-camera](video-camera.md).
-- File stores on a server (`filestore shared sftp "sftp://..."`): NOT BUILT, noted only (APP-CAPABILITIES-PLAN.md step 3 "Later on the same line").
+- File stores on a server (`filestore shared sftp "sftp://..."`): NOT BUILT, noted only ([mail](mail.md)).
 - Encrypted file stores: NOT BUILT; see [encrypted-storage](encrypted-storage.md).
 - Picture functions (resize, crop, ...): see [picture-functions](picture-functions.md).
 

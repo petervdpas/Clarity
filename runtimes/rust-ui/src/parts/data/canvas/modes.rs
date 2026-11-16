@@ -1,4 +1,4 @@
-//! A canvas with a mode (DESIGN 5.31, conformance/canvas-modes.json): what
+//! A canvas with a mode (manual/parts.graphics.md, conformance/canvas-modes.json): what
 //! the person does on it. The canvas shows the gesture and sends what was
 //! done as one action (a JSON object, `PartHost::acted`); the runtime decides
 //! what it does, snaps it and keeps it (`clarity_runtime::canvas::apply`),

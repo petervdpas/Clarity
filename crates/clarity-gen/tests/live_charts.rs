@@ -1,4 +1,4 @@
-//! Live graphs in the output (DESIGN 5.26): a timer's ticks run its
+//! Live graphs in the output (manual/parts.time.md): a timer's ticks run its
 //! handler, a trend and a chart of numbers draw on every renderer, and code
 //! grows a window's list of values with `+` on every stack.
 

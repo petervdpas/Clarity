@@ -28,7 +28,7 @@ version: string, module: Ident | null, uses: Array<Ident>,
  */
 source: Ident | null, enums: Array<EnumDecl>, entities: Array<Entity>, 
 /**
- * Its records: values with fields that belong to no table (DESIGN 5.12).
+ * Its records: values with fields that belong to no table (manual/code.engines.md).
  */
 records: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
 /**
@@ -44,32 +44,32 @@ code: Array<CodeBlock>,
  */
 functions: Array<FunctionDecl>, 
 /**
- * Its constants (DESIGN 5.12): `const lives = 3`.
+ * Its constants (manual/code.engines.md): `const lives = 3`.
  */
 consts: Array<ConstDecl>, 
 /**
- * Its engines (DESIGN 5.11).
+ * Its engines (manual/code.engines.md).
  */
 engines: Array<EngineDecl>, 
 /**
- * The `cli` block of a command-line program (DESIGN 5.20).
+ * The `cli` block of a command-line program (manual/code.commands.md).
  */
 clis: Array<CliDecl>, 
 /**
- * Its commands, for the command-line program (DESIGN 5.20).
+ * Its commands, for the command-line program (manual/code.commands.md).
  */
 commands: Array<CommandDecl>, 
 /**
- * Its custom parts, drawn by outside libraries (DESIGN 5.19).
+ * Its custom parts, drawn by outside libraries (manual/design.custom-parts.md).
  */
 parts: Array<PartDecl>, 
 /**
- * Its outside libraries, called from code (DESIGN 5.21).
+ * Its outside libraries, called from code (manual/code.libraries.md).
  */
 libraries: Array<LibraryDecl>, 
 /**
  * Its mappings: how a kind of file is laid over an entity, per case
- * (docs/FORMATS-PLAN.md, step 4).
+ * (docs/ledger/formats.md).
  */
 mappings: Array<MappingDecl>, 
 /**

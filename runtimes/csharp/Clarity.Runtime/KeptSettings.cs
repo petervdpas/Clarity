@@ -1,4 +1,4 @@
-// The settings each person keeps for themselves (DESIGN 5.17), the same
+// The settings each person keeps for themselves (manual/data.settings.md), the same
 // as on every stack (conformance/settings.json): one JSON file per
 // application in the folder for application settings of the person's
 // system, and of what was kept only what still fits its setting is taken
@@ -106,7 +106,7 @@ public static partial class KeptSettings
         System.IO.File.Move(written, file, overwrite: true);
     }
 
-    /// <summary>The settings <paramref name="program"/> kept, with its secrets (DESIGN 5.27): each one named that the
+    /// <summary>The settings <paramref name="program"/> kept, with its secrets (manual/data.settings.md): each one named that the
     /// system's protected store holds, beside the file's values.</summary>
     public static JsonObject Read(string program, IReadOnlyCollection<string> secrets)
     {

@@ -1,4 +1,4 @@
-// The server's plain socket as browsers meet it (DESIGN 7.6): HEAD answers
+// The server's plain socket as browsers meet it (manual/stacks.csharp.md): HEAD answers
 // the head alone, a connection stays open for the next request unless the
 // browser speaks HTTP/1.0 or says close, commands sent at once are each
 // answered, and a head or body past its limit ends the connection unanswered.

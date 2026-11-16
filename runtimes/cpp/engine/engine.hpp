@@ -1,4 +1,4 @@
-// Engines (DESIGN 5.11): processing modules compiled once to WebAssembly,
+// Engines (manual/code.engines.md): processing modules compiled once to WebAssembly,
 // which every stack hosts alike (conformance/engines.json). An engine
 // computes; it imports only the services of Clarity it declares (`uses
 // clock, random, log`), so it reaches no database, file or network.
@@ -106,7 +106,7 @@ public:
     nlohmann::json call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const;
 
     /// Calls `function` on the engine's one instance, as an engine beside the
-    /// screen is called (DESIGN 5.12): what its answer tells goes on `tells`
+    /// screen is called (manual/code.engines.md): what its answer tells goes on `tells`
     /// ({"tell", "values"}), and a refusal is an EngineError in its words.
     nlohmann::json call_telling(const std::string& function, const nlohmann::json& args, nlohmann::json& tells) const;
 

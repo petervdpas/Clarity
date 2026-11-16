@@ -1,6 +1,6 @@
 //! Keeping the settings writes a secret only when it changed: another
 //! setting changing never needs the protected store, nor fails where it
-//! cannot be reached (DESIGN 5.27). Its own file: it sets where settings go.
+//! cannot be reached (manual/data.settings.md). Its own file: it sets where settings go.
 #![cfg(feature = "secrets")]
 
 use std::collections::HashMap;

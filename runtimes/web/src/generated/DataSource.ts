@@ -27,7 +27,7 @@ readonly: boolean,
 beside: boolean, 
 /**
  * A web API's OpenAPI description, a file in the project's `apis`
- * folder, which Clarity writes the API's module from (DESIGN 5.23).
+ * folder, which Clarity writes the API's module from (manual/code.web-apis.md).
  */
 openapi: string | null, 
 /**

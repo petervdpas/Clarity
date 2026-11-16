@@ -1,9 +1,9 @@
-//! What every container part shares (DESIGN 7.8, 7.9): a panel, a form,
+//! What every container part shares (manual/start.how-it-works.md): a panel, a form,
 //! tabs, steps, an accordion, a splitter, a scroll box and a popover each
 //! hold grids of parts, made by their kinds through `parts::make` and placed
 //! as the window's grid places its own. A container grows when a part in it
 //! does, and it frames what it holds: a list, table or tree inside it shows
-//! no border of its own (DESIGN 7.8 "frames"), which such a part asks with
+//! no border of its own (manual/start.how-it-works.md "frames"), which such a part asks with
 //! `is_inside` as it draws. Also here: the pieces containers draw with (a
 //! button in Clarity's own words or a page's title, a header's chevron, a
 //! page that shows or not) and what a container keeps of the look for the

@@ -1,4 +1,4 @@
-//! Structural tools (docs/AGENT-TOOLS-PLAN.md): agents change the project's
+//! Structural tools (docs/ledger/mcp-tools.md): agents change the project's
 //! data model, windows, views, parts, app and frame through these, never by
 //! writing a `.cxaml` file. Each tool names things by name (`Customer`,
 //! `customerTable`), lists what is allowed in its schema, turns the names

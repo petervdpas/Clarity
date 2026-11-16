@@ -1,5 +1,5 @@
 //! `clarity mcp`: Clarity's tools served to an AI agent over MCP on stdin
-//! and stdout (docs/MCP-PLAN.md). Only the protocol goes to stdout.
+//! and stdout (docs/ledger/mcp-tools.md). Only the protocol goes to stdout.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -40,6 +40,8 @@ fn mcp_answers_initialize_and_prints_nothing_else() {
     assert_eq!(lines.len(), 1, "only the answer on stdout: {stdout}");
     let answer: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert_eq!(answer["id"], 1);
-    assert_eq!(answer["result"]["serverInfo"]["name"], "clarity", "{answer}");
+    // A debug build is the developer's (clarity-cdev, with the DevTools tools); the release is clarity.
+    let name = if cfg!(debug_assertions) { "clarity-cdev" } else { "clarity" };
+    assert_eq!(answer["result"]["serverInfo"]["name"], name, "{answer}");
     assert!(answer["result"]["capabilities"]["tools"].is_object(), "{answer}");
 }

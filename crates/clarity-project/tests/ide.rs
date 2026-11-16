@@ -1,6 +1,6 @@
 //! The project the Clarity IDE has open, kept in `ide.json` in Clarity's
 //! own folder, so `clarity mcp` works on that project and follows the IDE
-//! when it opens another (docs/MCP-PLAN.md, "Which project").
+//! when it opens another (docs/ledger/mcp-tools.md).
 
 use std::path::{Path, PathBuf};
 

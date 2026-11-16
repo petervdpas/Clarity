@@ -2,7 +2,7 @@
 //! (conformance/ribbons.json), the width a sidebar is dragged to and whether
 //! it is folded or fills the window (conformance/sidebars.json), and what of
 //! a frame's commands shows, takes clicks and answers keys, as their part
-//! state says (conformance/overlays.json `item`, DESIGN 5.28).
+//! state says (conformance/overlays.json `item`, manual/app.keys.md).
 
 use std::rc::Rc;
 

@@ -20,7 +20,7 @@ pub fn emit(project: &Project, file: &SpecFile) -> String {
     out
 }
 
-/// A record (DESIGN 5.12): its fields and their defaults, never stored, so
+/// A record (manual/code.engines.md): its fields and their defaults, never stored, so
 /// it has no id and no table.
 fn plain_record(project: &Project, record: &Entity) -> String {
     let name = &record.name.name;
@@ -96,7 +96,7 @@ fn default_value(project: &Project, field: &Field) -> String {
             None => "Default::default()".into(),
         },
         (FieldType::List { .. } | FieldType::Values { .. }, _) => "Vec::new()".into(),
-        // A record held inside starts as a new one (DESIGN 5.25).
+        // A record held inside starts as a new one (manual/data.entities.md).
         (FieldType::Record { entity }, _) => format!("{}::default()", entity.name),
         _ => "None".into(),
     }
@@ -262,7 +262,7 @@ fn settings_kept(project: &Project, entity: &Entity) -> String {
 }
 
 /// The struct field that carries a versioned record's version
-/// (docs/APP-CAPABILITIES-PLAN.md step 5): snake_case, so no Clarity field
+/// (docs/ledger/row-versions.md): snake_case, so no Clarity field
 /// (camelCase) has its name.
 const VERSION_FIELD: &str = "row_version";
 /// Its name on the wire to Clarity.UI, the same on every stack.
@@ -321,7 +321,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         .iter()
         .filter(|f| f.ty.is_held())
         .map(|f| match &f.ty {
-            // A record held inside starts as a new one (DESIGN 5.25).
+            // A record held inside starts as a new one (manual/data.entities.md).
             FieldType::Record { entity } => format!("            {}: {}::default(),\n", ident(&f.name.name), entity.name),
             _ => format!("            {}: Vec::new(),\n", ident(&f.name.name)),
         })
@@ -371,7 +371,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         }
         hooks.push_str("        Ok(())\n    }\n");
     }
-    // `writable when` (docs/APP-CAPABILITIES-PLAN.md step 4) is checked first,
+    // `writable when` (docs/ledger/signin.md) is checked first,
     // in the hooks before a save and a delete, so nothing of a refused one is kept.
     let writable = entity.writable.is_some();
     if !events.is_empty() || writable {

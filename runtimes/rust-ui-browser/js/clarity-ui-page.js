@@ -1,4 +1,4 @@
-// Clarity.UI's page script (DESIGN 7.9, round B): owns the <canvas>, hands it
+// Clarity.UI's page script (manual/start.how-it-works.md, round B): owns the <canvas>, hands it
 // to the worker (clarity-ui-worker.js) as an OffscreenCanvas, and sends it what
 // the person does: pointer, wheel, keys, typed text and an input method's
 // (through a hidden textarea), size and device pixel ratio, light or dark. It
@@ -124,7 +124,7 @@
     return pageScript.then(() => window.ClarityUiPageWorker());
   }
 
-  // The roles the mirror writes as ARIA's, where Clarity's tree says otherwise (DESIGN 7.9, A1).
+  // The roles the mirror writes as ARIA's, where Clarity's tree says otherwise (manual/start.how-it-works.md).
   const ARIA_ROLES = { window: "application", label: null, textarea: null, password: null, date: null, color: null, canvas: "img", textbox: null, spinbutton: "spinbutton" };
   // The roles whose number the mirror says as a range.
   const RANGES = ["slider", "progressbar", "spinbutton"];
@@ -139,7 +139,7 @@
     return "div";
   }
 
-  // The hidden but accessible tree beside the canvas (DESIGN 7.9, A1 phase
+  // The hidden but accessible tree beside the canvas (manual/start.how-it-works.md phase
   // 2): one element per node of the library's tree, with its ARIA role,
   // name, states and value, placed where the node shows (for magnifiers and
   // touch exploration), updated in place from the host's `access` tells.
@@ -698,6 +698,8 @@
       } else if (message.type === "failed") {
         console.error("Clarity.UI:", message.what);
         startedReject(new Error(message.what));
+        // Before or after the start: the page that started it says so in the canvas's place (options.failed).
+        if (typeof options.failed === "function") options.failed(message.what, message.stack || "");
       } else if (["stepped", "shot", "reloaded", "laid"].includes(message.type)) {
         const done = waiting.get(message.id);
         waiting.delete(message.id);

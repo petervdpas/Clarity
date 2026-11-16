@@ -1,5 +1,5 @@
 // A long engine call on the server belongs to the browser that runs it
-// (DESIGN 5.12, 7.6): while one browser's handler waits for its call, the
+// (manual/code.engines.md, manual/stacks.csharp.md): while one browser's handler waits for its call, the
 // server answers the others, whose handlers run; that browser's own windows
 // take no other handler until the call ended. The watch its handler's
 // command names says how far it is and stops it, from requests of their

@@ -1,5 +1,5 @@
 //! A Rust desktop program links Clarity.UI's ready-made library through the
-//! runtime's `native_ui` (DESIGN 7.9), as Go, C and C++ do, so it builds no
+//! runtime's `native_ui` (manual/start.how-it-works.md), as Go, C and C++ do, so it builds no
 //! Skia. A change of Clarity.UI is tried by rebuilding the base libraries
 //! (`clarity libraries`).
 

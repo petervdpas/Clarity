@@ -10,7 +10,7 @@ obj/
 
 # What Clarity generates and builds for the examples.
 /examples/*/out/
-# The backups Clarity takes of the examples' databases (docs/BACKUP-PLAN.md).
+# The backups Clarity takes of the examples' databases (docs/ledger/backups.md).
 /examples/*/data/backups/
 
 # Settings folders older secrets tests left beside where they ran.

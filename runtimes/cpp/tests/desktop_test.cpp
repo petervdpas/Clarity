@@ -1,4 +1,4 @@
-// The desktop program on Clarity.UI (DESIGN 7.9): the library's commands
+// The desktop program on Clarity.UI (manual/start.how-it-works.md): the library's commands
 // answered by the service, the desktop's own (started, facts, watches),
 // and a program driven on a screen without a window, with a custom part.
 
@@ -139,7 +139,7 @@ TEST(the_desktop_answers_the_librarys_commands) {
     CHECK_EQ(called(engines, "engine_open", {{"name", "Other"}}), json("none"));
 }
 
-// A long call (DESIGN 5.12): the handler runs on a worker thread between
+// A long call (manual/code.engines.md): the handler runs on a worker thread between
 // start_watch and end_watch; the screen's thread asks how far it is and
 // stops it while the handler holds the program.
 TEST(a_long_call_is_watched_and_stopped_from_the_screens_thread) {
@@ -184,7 +184,7 @@ TEST(a_long_call_is_watched_and_stopped_from_the_screens_thread) {
     CHECK(current_watch() == nullptr);
 }
 
-// The program driven on a screen without a window (DESIGN 1.6): its main
+// The program driven on a screen without a window (manual/start.how-it-works.md): its main
 // window opens from its files, a click runs its handler, and a custom part
 // written in C++ draws, changes its value and tells its window.
 TEST(a_driven_desktop_program_runs_its_windows_and_custom_parts) {

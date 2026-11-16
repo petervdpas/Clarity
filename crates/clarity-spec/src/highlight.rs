@@ -58,32 +58,32 @@ pub const KEYWORDS: &[&str] = &[
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "div", "mod", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit", "copy",
-    // HTTP calls (DESIGN 5.23).
+    // HTTP calls (manual/code.web-apis.md).
     "http", "get", "post", "put", "patch", "header", "query", "when", "every",
     // A web API data source: its paging and its OpenAPI description.
     "paging", "offset", "cursor", "next", "items", "link", "openapi", "pick", "schema",
-    // Custom parts (DESIGN 5.19).
+    // Custom parts (manual/design.custom-parts.md).
     "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "grows", "library", "cmake",
-    // Engines beside the screen and written in Clarity (DESIGN 5.12).
+    // Engines beside the screen and written in Clarity (manual/code.engines.md).
     "record", "tell", "beside", "engines", "compiled", "interpreted", "const",
     // Parts and the frame.
     "name", "at", "span", "rows", "bottom", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
     "large", "group", "tab", "step", "section", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
     "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives", "to", "max", "split", "labels",
-    // Undo (DESIGN 5.29): `no undo`, and the targets `undo` and `redo`.
+    // Undo (manual/code.handlers.md): `no undo`, and the targets `undo` and `redo`.
     "undo", "redo",
-    // Reordering (DESIGN 5.30): `reorder by position`.
+    // Reordering (manual/parts.data.md): `reorder by position`.
     "reorder",
-    // Canvas modes (DESIGN 5.31): `mode objects ... | paint | vector`, `tools`, `brush`, `ink`.
+    // Canvas modes (manual/parts.graphics.md): `mode objects ... | paint | vector`, `tools`, `brush`, `ink`.
     "mode", "objects", "paint", "vector", "tools", "brush", "ink",
-    // A tree's levels (DESIGN 5.33): `level Domain under project show name`.
+    // A tree's levels (manual/design.windows.md): `level Domain under project show name`.
     "level", "under",
-    // Mappings (docs/FORMATS-PLAN.md, step 4): `mapping OrderFeed of Order from xml`, `order is ".."`, `check "orders.xsd"`, `using OrderFeed`.
+    // Mappings (docs/ledger/formats.md): `mapping OrderFeed of Order from xml`, `order is ".."`, `check "orders.xsd"`, `using OrderFeed`.
     "mapping", "is", "check", "using",
-    // Sign-in (docs/APP-CAPABILITIES-PLAN.md step 4): `hashed`, `me`, `allow when`, `readable when`, `writable when`, the kind and the targets `signin` and `signout`.
+    // Sign-in (docs/ledger/signin.md): `hashed`, `me`, `allow when`, `readable when`, `writable when`, the kind and the targets `signin` and `signout`.
     "hashed", "me", "allow", "readable", "writable", "signin", "signout",
-    // Versions (docs/APP-CAPABILITIES-PLAN.md step 5): `save customer anyway`, `savedSince @key` on an entity; `version` is above.
+    // Versions (docs/ledger/row-versions.md): `save customer anyway`, `savedSince @key` on an entity; `version` is above.
     "anyway", "savedSince",
     // Apps as MCP servers (docs/ledger/app-mcp.md): `agent` offers a command to AI agents;
     // the project file's `agents while closed read change` is what they may do while the app is closed.

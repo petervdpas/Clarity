@@ -1,4 +1,4 @@
-// Clarity.UI's worker (DESIGN 7.9, round B): runs clarity-ui.wasm, draws with
+// Clarity.UI's worker (manual/start.how-it-works.md, round B): runs clarity-ui.wasm, draws with
 // WebGL2 on the OffscreenCanvas the page handed it, and asks the program on
 // the server with synchronous requests, which a worker may make. The page
 // script (clarity-ui-page.js) starts it and sends it what the person does;
@@ -56,11 +56,27 @@ function clarityUiWorker(scope) {
   let gl = null;
   let context = 0;
   let ended = false;
+  // The library's wasm stopped (the engine's own error, a WebAssembly.RuntimeError):
+  // it is not called again, and the page heard why once.
+  let broken = false;
   // This tab's own number, so the server tells its pages apart.
   const browser = globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : String(Math.random()).slice(2) + String(Date.now());
 
   function post(message) {
     scope.post(message);
+  }
+
+  // The library stopped while `doing`: the page hears it once, with the
+  // engine's words and where, and nothing is drawn or called any more.
+  function fail(doing, why) {
+    if (broken) return;
+    broken = true;
+    scheduled = true;
+    clearTimeout(waking);
+    waking = null;
+    const words = why && why.message ? why.message : String(why);
+    const where = why && why.stack ? String(why.stack).split("\n").slice(0, 8).join("\n") : "";
+    post({ type: "failed", what: "Clarity.UI stopped while " + doing + ": " + words, stack: where });
   }
 
   // The program's answer to a command, as the server gives it; the person's
@@ -163,9 +179,15 @@ function clarityUiWorker(scope) {
   // Frames run while the screen changes or waits for a time it asked for.
   function frame() {
     scheduled = false;
-    if (!ui) return;
-    ui._clarity_ui_frame();
-    const wake = ui._clarity_ui_next_wake();
+    if (!ui || broken) return;
+    let wake;
+    try {
+      ui._clarity_ui_frame();
+      wake = ui._clarity_ui_next_wake();
+    } catch (why) {
+      fail("drawing", why);
+      return;
+    }
     if (wake === 0) {
       want();
     } else if (wake > 0) {
@@ -219,7 +241,13 @@ function clarityUiWorker(scope) {
       return;
     }
     const choices = JSON.stringify(message.choices || {});
-    const why = withText(files, (at) => withText(choices, (kept) => taken(ui._clarity_ui_start(at, kept, message.width, message.height, message.dpr, message.dark ? 1 : 0))));
+    let why;
+    try {
+      why = withText(files, (at) => withText(choices, (kept) => taken(ui._clarity_ui_start(at, kept, message.width, message.height, message.dpr, message.dark ? 1 : 0))));
+    } catch (stopped) {
+      fail("starting the window", stopped);
+      return;
+    }
     if (why) {
       post({ type: "failed", what: why });
       return;
@@ -300,13 +328,16 @@ function clarityUiWorker(scope) {
   return (message) => {
     const handler = handlers[message.type];
     if (message.type === "stop") return stop();
-    if (!handler || (!ui && message.type !== "start")) return;
+    if (broken || !handler || (!ui && message.type !== "start")) return;
+    // What the library's wasm stops in, now or later (a start waits for the library), ends it with a word to the page.
+    const stopped = (why) => (why instanceof WebAssembly.RuntimeError ? fail("handling " + message.type, why) : console.error("Clarity.UI:", why));
     try {
-      handler(message);
+      const done = handler(message);
+      if (done && typeof done.catch === "function") done.catch(stopped);
     } catch (why) {
-      console.error("Clarity.UI:", why);
+      stopped(why);
     }
-    if (ui) want();
+    if (ui && !broken) want();
   };
 }
 

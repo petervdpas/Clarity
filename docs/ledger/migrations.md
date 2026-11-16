@@ -24,10 +24,10 @@ Progress: 60%
 - Data migrations (Clarity code that changes rows), down steps, one-way steps, renaming enum values: NOT BUILT (DESIGN.md:155-156; `Op` holds schema operations only, `migrate.rs:163-192`).
 - A migrate switch in the generated program for server deployments: NOT BUILT (DESIGN.md:158). `clarity data migrate` works on the IDE's SQLite only.
 - Baseline steps for server databases: NOT BUILT (`crates/clarity-gen/src/schema.rs:426`); see [databases](databases.md).
-- Shared runtime core for migrations: NOT BUILT; each runtime applies steps itself (MODULAR-PLAN.md order 2).
+- Shared runtime core for migrations: NOT BUILT; each runtime applies steps itself ([modularity](modularity.md) step 2).
 
 ## Conflicts
-- `conformance/migrations.json` is not run by R, and C# runs it only against server databases (CONFLICTING.md 3).
+- `conformance/migrations.json` is not run by R, and C# runs it only against server databases.
 
 ## Decisions
 - 2026-10-16: migrations built in for every owned source; a rename is a designer edit with a known intent, so no data is lost by guessing (DESIGN 1.3).

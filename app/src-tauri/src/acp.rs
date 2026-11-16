@@ -1,4 +1,4 @@
-//! The person's own agent in the chat panel (docs/ACP-PLAN.md): a vault
+//! The person's own agent in the chat panel (docs/ledger/acp.md): a vault
 //! connection of kind `codex` or `copilot` starts that vendor's program over
 //! ACP (crates/clarity-acp), signed in with its own login, so no API key.
 //!
@@ -186,7 +186,7 @@ async fn started(app: &AppHandle, connection: &str, vendor: Vendor, program: &cl
     };
     let agent = Agent::start(&program, dir, Host { events, permissions }).await.map_err(Failure::Other)?;
     if let Some(mode) = vendor.ask_first_mode() {
-        // The person chose this for Codex (docs/ACP-PLAN.md): it is said once, when the program starts.
+        // The person chose this for Codex (docs/ledger/acp.md): it is said once, when the program starts.
         let _ = app.emit(AGENT_EVENT, &Event::Text {
             text: format!("{} works in its {mode} mode: it may run commands that only read, inside its own sandbox, without asking. Anything that changes files or reaches further asks you first.\n\n", vendor.name()),
         });
@@ -356,7 +356,7 @@ pub fn forget(app: &AppHandle) {
 /// browser opens. Run only when the person asks for it (the panel's Sign in).
 #[tauri::command]
 pub async fn agent_sign_in(connection: String, app: AppHandle) -> Result<String, String> {
-    // A Foundry connection signs in with the person's Microsoft work account (docs/FOUNDRY-PLAN.md).
+    // A Foundry connection signs in with the person's Microsoft work account (docs/ledger/agent.md).
     if crate::foundry::is_foundry(&app, &connection) {
         return tauri::async_runtime::spawn_blocking(move || crate::foundry::sign_in(&app, &connection)).await.map_err(|err| err.to_string())?;
     }

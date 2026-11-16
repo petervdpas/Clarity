@@ -5,7 +5,7 @@ import type { LibrarySource } from "./LibrarySource";
 import type { Span } from "./Span";
 
 /**
- * `library Words` (DESIGN 5.21): an outside library in the project's own
+ * `library Words` (manual/code.libraries.md): an outside library in the project's own
  * language, with the functions code calls, written by the adapter in
  * `libraries/Words/`.
  */

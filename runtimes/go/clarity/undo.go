@@ -1,4 +1,4 @@
-// The database side of undo (DESIGN 5.29): the changes of each handler run
+// The database side of undo (manual/code.handlers.md): the changes of each handler run
 // that changed something, by the step's id. The screen keeps the edits on
 // its bus, each with the id of the step its handler made, and asks for that
 // step to be undone or done again. The last UndoSteps are kept.

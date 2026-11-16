@@ -1,4 +1,4 @@
-//! Custom parts of the program as a table of callbacks (DESIGN 5.19, 7.9):
+//! Custom parts of the program as a table of callbacks (manual/design.custom-parts.md, manual/start.how-it-works.md):
 //! the caller registers a kind with its functions, and each `<Custom
 //! part="Gauge">` of a window gets a part of its own made by `make`. What
 //! the part says to its window (a change, a tell, a wake) goes back through

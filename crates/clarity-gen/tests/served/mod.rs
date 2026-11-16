@@ -1,4 +1,4 @@
-//! The web target (DESIGN 7.3) as each stack's build tests check it: the
+//! The web target (manual/project.run-build.md) as each stack's build tests check it: the
 //! built program, started as a web server, serves the renderer's page,
 //! telling it where its commands go, and answers a command.
 
@@ -31,7 +31,7 @@ pub fn post(address: &str, path: &str, body: &str) -> String {
 }
 
 /// Starts `program` in `dir` with `args` and the address, checks what it
-/// serves (round B of DESIGN 7.9: Clarity.UI's page and browser files,
+/// serves (round B of manual/start.how-it-works.md: Clarity.UI's page and browser files,
 /// files.json and the wire the library asks), and stops it, whatever the
 /// checks found.
 #[allow(dead_code)]

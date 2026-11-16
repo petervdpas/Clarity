@@ -1,4 +1,4 @@
-//! The dropdown (DESIGN 7.9, conformance/forms.json): a closed box showing
+//! The dropdown (manual/start.how-it-works.md, conformance/forms.json): a closed box showing
 //! the label of its value's choice, which opens its list over the window
 //! below it (above when there is no room below). Only the person picking
 //! another choice is a change; what code sets is not. Its choices are an

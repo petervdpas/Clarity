@@ -1,4 +1,4 @@
-//! Command-line applications (DESIGN 5.20): a `cli` block and `command`
+//! Command-line applications (manual/code.commands.md): a `cli` block and `command`
 //! declarations with arguments, `option` lines and `help`, written inline
 //! as a function is. In a command `print` writes a line or a table, `ask`
 //! waits and gives the answer, and `exit` ends the program with a code.

@@ -245,7 +245,7 @@ code Gallery
         if albumList.selected != none
             album = albumList.selected
 
-    // The person's own order of the albums (DESIGN 5.30).
+    // The person's own order of the albums (manual/parts.data.md).
     handler albumsMoved
         for a in albums
             save a

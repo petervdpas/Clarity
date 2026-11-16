@@ -32,14 +32,13 @@ What each stack writes:
 - Examples: `invaders` (go web), `walker` (csharp web); no example uses rust web, c web or cpp web
 
 ## Open
-- The web targets in Edge; the walker in a browser on Windows; C# web on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:41, :50, :52).
+- The web targets in Edge; the walker in a browser on Windows; C# web on Windows and macOS: UNTRIED ([os-checks](os-checks.md)).
 - The C# program driven live in tests: NOT BUILT (`everything_live.rs` has go, rust, c, cpp; DESIGN.md:272).
 - Everything in the browser (database in the browser, offline tool): NOT BUILT, later and only on request (DESIGN 7.6 open choices).
 
 ## Conflicts
 - `crates/clarity-project/src/lib.rs:967-969` speaks of the shared web screen.
 - Port 8080 is written twice: `crates/clarity-project/src/lib.rs:349`, `app/src/lib/ProjectSettings.svelte:416`, :422 (equal).
-- WINDOWS-TESTS.md:41 treats C# in the browser as missing; it is built.
 
 ## Decisions
 - 2026-10-27: the web target serves the application at the project's port; each tab runs its own application against the server's database (W1).

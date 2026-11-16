@@ -1,6 +1,6 @@
 //! A small player whose sound part plays an mp3, built on each desktop stack
 //! as the IDE builds it, without a warning: Clarity.Audio linked and handed
-//! to Clarity.UI (docs/AUDIO-PLAN.md). Each is a whole build, so they are
+//! to Clarity.UI (docs/ledger/audio.md). Each is a whole build, so they are
 //! ignored: run one at a time,
 //! `cargo test -p clarity-gen --test songs_build -- --ignored --exact <name>`.
 //! Go, C and C++ want Clarity.Audio's library beside Clarity.UI's:

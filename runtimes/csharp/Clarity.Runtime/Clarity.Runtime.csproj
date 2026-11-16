@@ -20,9 +20,9 @@
     <PackageTags>clarity;runtime;database;migrations</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The Secret Service over D-Bus for secret settings (DESIGN 5.27), -->
+    <!-- The Secret Service over D-Bus for secret settings (manual/data.settings.md), -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
-    <!-- The window model's view models (DESIGN 7.9). -->
+    <!-- The window model's view models (manual/start.how-it-works.md). -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
   <ItemGroup>
@@ -31,9 +31,9 @@
     <InternalsVisibleTo Include="Clarity.Runtime.PostgreSql" />
     <InternalsVisibleTo Include="Clarity.Runtime.MySql" />
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
-    <!-- A file as a data source, kept in SQLite (docs/FORMATS-PLAN.md). -->
+    <!-- A file as a data source, kept in SQLite (docs/ledger/formats.md). -->
     <InternalsVisibleTo Include="Clarity.Formats" />
-    <!-- Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4): its people read from the databases. -->
+    <!-- Who is using the program (docs/ledger/signin.md): its people read from the databases. -->
     <InternalsVisibleTo Include="Clarity.Auth" />
     <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
     <InternalsVisibleTo Include="Clarity.Ui" />

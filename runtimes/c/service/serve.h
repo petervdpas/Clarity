@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3): the application as a web server. Clarity.UI
+// The web target (manual/project.run-build.md): the application as a web server. Clarity.UI
 // runs in the browser and asks the program over HTTP: the server serves the
 // browser files the program carries (its browser/ folder: the page, the
 // library's files, clarity/files.json and the resources below
@@ -34,7 +34,7 @@ typedef struct {
     /// bar with Stop, and names the call's watch in the handler's request.
     bool watches;
     /// Answers the library's commands of engines beside the screen
-    /// (engine_open, engine_hears, engine_frame, engine_close; DESIGN 5.12)
+    /// (engine_open, engine_hears, engine_frame, engine_close; manual/code.engines.md)
     /// as {"value"} or {"error"}, beside the service's turn
     /// (clarity_screen_answer); NULL when the program has none.
     cJSON* (*screen_engines)(const char* command, const cJSON* args);

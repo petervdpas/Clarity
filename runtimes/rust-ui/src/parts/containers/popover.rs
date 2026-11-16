@@ -1,4 +1,4 @@
-//! A popover (DESIGN 5.16): parts on a grid of their own, shown over the
+//! A popover (manual/parts.containers.md): parts on a grid of their own, shown over the
 //! window while its part's state is visible, next to the part named in its
 //! `for` (below it, or above when there is no room under it), else at its
 //! own place. In the window's grid it takes no room and no pointer. A press

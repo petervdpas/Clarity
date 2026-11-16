@@ -1,4 +1,4 @@
-// An action on a canvas with a mode (DESIGN 5.31), in the window: the
+// An action on a canvas with a mode (manual/parts.graphics.md), in the window: the
 // runtime moves the window's own record, keeps the stroke's picture or the
 // drawing's SVG, chooses what it touched, runs `on change`, and the whole
 // is one edit Ctrl+Z takes back. A refused action runs nothing. And a canvas

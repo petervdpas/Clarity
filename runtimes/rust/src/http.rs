@@ -1,4 +1,4 @@
-//! HTTP calls from code (DESIGN 5.23): `http get url` and the others, giving
+//! HTTP calls from code (manual/code.web-apis.md): `http get url` and the others, giving
 //! a reply that code reads. A call never fails: when no answer comes, the
 //! reply has status 0 and says why, so the handler decides what that means.
 //! Every runtime gives the same replies (conformance/http.json).
@@ -116,7 +116,7 @@ fn secret(location: &str) -> String {
     if let Some(name) = location.strip_prefix("env:") {
         return std::env::var(name).unwrap_or_default();
     }
-    // A secret setting (DESIGN 5.27): `setting:<program>/<name>`, from the system's protected store.
+    // A secret setting (manual/data.settings.md): `setting:<program>/<name>`, from the system's protected store.
     if let Some(at) = location.strip_prefix("setting:") {
         #[cfg(feature = "secrets")]
         if let Some((program, name)) = at.split_once('/') {
@@ -151,7 +151,7 @@ pub fn call_at(method: Method, base: &str, path: &str, query: &[(&str, &str)], b
     fetch_at(method, base, path, query, body, headers, auth).0
 }
 
-/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// How a web API hands out a long list (manual/code.web-apis.md, paging): the project
 /// file's `paging` line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PagingKind {

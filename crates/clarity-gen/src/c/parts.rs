@@ -1,4 +1,4 @@
-//! Custom parts of a C program (DESIGN 5.19 and 7.9): a part is a library of
+//! Custom parts of a C program (manual/design.custom-parts.md, manual/start.how-it-works.md): a part is a library of
 //! the project (`native "parts/Gauge"`, C with its CMakeLists.txt) that
 //! implements the functions Clarity writes from the declaration into its
 //! `clarity/<Name>.h`: a kind of part of Clarity.UI, drawing on the canvas
@@ -71,7 +71,7 @@ pub fn parts(project: &Project) -> Vec<&PartDecl> {
 pub fn header(part: &PartDecl) -> String {
     let n = &part.name.name;
     let mut out = String::new();
-    let _ = writeln!(out, "// Custom part {n} (DESIGN 5.19 and 7.9): what its library implements, a kind");
+    let _ = writeln!(out, "// Custom part {n} (manual/design.custom-parts.md, manual/start.how-it-works.md): what its library implements, a kind");
     let _ = writeln!(out, "// of part of Clarity.UI. Written by Clarity from the part's declaration, and");
     let _ = writeln!(out, "// written again when the declaration changes; the files beside this folder");
     let _ = writeln!(out, "// are yours.");
@@ -129,7 +129,7 @@ pub fn header(part: &PartDecl) -> String {
 /// `src/parts.c`: each part's callbacks as Clarity.UI calls them, read into
 /// its typed functions, its tells back, and every kind registered by its name.
 pub fn glue(parts: &[&PartDecl]) -> String {
-    let mut out = format!("{}\n// The program's custom parts, kinds of part of Clarity.UI (DESIGN 7.9).\n\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"cjson/cJSON.h\"\n#include \"desktop/desktop.h\"\n#include \"parts.h\"\n", super::HEADER);
+    let mut out = format!("{}\n// The program's custom parts, kinds of part of Clarity.UI (manual/start.how-it-works.md).\n\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"cjson/cJSON.h\"\n#include \"desktop/desktop.h\"\n#include \"parts.h\"\n", super::HEADER);
     for part in parts {
         let _ = writeln!(out, "#include \"clarity/{}.h\"", part.name.name);
     }
@@ -181,14 +181,14 @@ pub fn glue(parts: &[&PartDecl]) -> String {
 }
 
 /// `src/parts.h`, which main.c calls.
-pub const GLUE_H: &str = "#pragma once\n\n/// Tells Clarity.UI about every kind of part the program has, by its name (DESIGN 7.9).\nvoid program_parts_register(void);\n";
+pub const GLUE_H: &str = "#pragma once\n\n/// Tells Clarity.UI about every kind of part the program has, by its name (manual/start.how-it-works.md).\nvoid program_parts_register(void);\n";
 
 /// The lines of the program's CMakeLists.txt that build each part into it.
 pub fn cmake_lines(program: &str, parts: &[&PartDecl]) -> String {
     if parts.is_empty() {
         return String::new();
     }
-    let mut out = String::from("\n# The custom parts (DESIGN 5.19), each a library of its own folder, built into\n# the program; they draw with Clarity.UI (clarity_ui.h).\n");
+    let mut out = String::from("\n# The custom parts (manual/design.custom-parts.md), each a library of its own folder, built into\n# the program; they draw with Clarity.UI (clarity_ui.h).\n");
     for part in parts {
         let n = &part.name.name;
         let _ = writeln!(out, "add_subdirectory(parts/{n})\ntarget_link_libraries({n} PUBLIC clarity_ui)\ntarget_link_libraries({program} PRIVATE {n})");

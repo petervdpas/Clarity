@@ -2,7 +2,7 @@ name: Release Rust Clarity.Video
 
 # Push a runtimes/rust-video/v* tag (e.g. `git tag runtimes/rust-video/v0.1.0 &&
 # git push origin runtimes/rust-video/v0.1.0`) to publish the crate
-# clarity-video to crates.io (docs/VIDEO-PLAN.md). The tag must name the
+# clarity-video to crates.io (docs/ledger/video-camera.md). The tag must name the
 # version in runtimes/rust-video/Cargo.toml: bump that first, commit, then tag.
 # clarity-ui's `video` feature names a clarity-video version, so this release
 # goes before the clarity-ui release that needs it (tag runtimes/rust-ui/v*).

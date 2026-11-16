@@ -1,6 +1,6 @@
 <script lang="ts">
   import { designLog } from "./designLog";
-  // The designer's layer over the window Clarity.UI draws (DESIGN 8.1): a
+  // The designer's layer over the window Clarity.UI draws (manual/design.parts.md): a
   // box over each part, where the library drew it, to pick, move, size and
   // open the code of; each grid, to drop new parts and fields into, with
   // its cells when the snap grid shows; and, while a frame region is
@@ -288,8 +288,12 @@
           data-page={shownPage.item}
           style={where(shownPage.box)}
           role="presentation"
-          title="Show this page"
+          title="Show this page; double-click it to open the view it shows"
           onpointerdown={(e) => pressPage(e, part, index)}
+          ondblclick={(e) => {
+            e.stopPropagation();
+            pageDesigner.openPartCode(part.item);
+          }}
         ></div>
       {/if}
     {/each}
@@ -302,7 +306,11 @@
             data-tab-switch="{part.item}:{index}"
             data-page={shownPage.item}
             title={shownPage.title ?? `Step ${index + 1}`}
-            onpointerdown={(e) => pressPage(e, part, index)}>{part.kind === "content" ? (shownPage.title ?? index + 1) : index + 1}</button
+            onpointerdown={(e) => pressPage(e, part, index)}
+            ondblclick={(e) => {
+              e.stopPropagation();
+              pageDesigner.openPartCode(part.item);
+            }}>{part.kind === "content" ? (shownPage.title ?? index + 1) : index + 1}</button
           >
         {/each}
       </div>

@@ -1,4 +1,4 @@
-// Canvas modes (DESIGN 5.31), decided here in the runtime, as every runtime
+// Canvas modes (manual/parts.graphics.md), decided here in the runtime, as every runtime
 // decides them (conformance/canvas-modes.json): the screen says what the
 // person did on a canvas (an object dropped, a stroke painted, a shape added,
 // changed, moved or deleted) and the runtime changes the window's data,

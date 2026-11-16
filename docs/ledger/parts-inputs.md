@@ -31,7 +31,7 @@ Progress: 90%
 - Unbound input parts as warnings: NOT BUILT (DESIGN.md:489; the catalog flag `input` at `widgets.rs:545` is read for form labels, no check warns of an unbound input).
 - A `time` field and part: NOT BUILT (DESIGN.md:2474).
 - Conformance cases for `enter`, `leave` and pictures in forms: NOT BUILT (DESIGN.md:277).
-- The folder picker on Windows and macOS: UNTRIED (WINDOWS-TESTS.md:139).
+- The folder picker on Windows and macOS: UNTRIED ([os-checks](os-checks.md)).
 - The status item's gauge stands at the item's right end, not right after its caption: the caption's width is not known when the places are laid out (`StatusItemPart::places`). PARTIAL by choice; settle if it looks wrong in a wide item.
 
 ## Conflicts

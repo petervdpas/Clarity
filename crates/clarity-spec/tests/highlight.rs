@@ -179,7 +179,7 @@ fn the_editor_grammar_is_the_highlighters() {
     }
 }
 
-/// Web APIs (DESIGN 5.23): the calls, every page, and the lines under a
+/// Web APIs (manual/code.web-apis.md): the calls, every page, and the lines under a
 /// web API data source.
 #[test]
 fn web_api_calls_and_their_paging() {

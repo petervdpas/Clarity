@@ -1,7 +1,7 @@
 // A guard for the IDE: every window of every example opens in the designer
 // without an error, as the IDE gets them (`clarity spec model --samples`):
 // its lists, inspector and layer. The window itself is drawn by Clarity.UI
-// (DESIGN 8.1), whose markup every example is read with in its own tests.
+// (manual/design.parts.md), whose markup every example is read with in its own tests.
 
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";

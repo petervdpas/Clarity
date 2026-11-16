@@ -1,4 +1,4 @@
-//! A graph of the data model (docs/GRAPH-PLAN.md, step 2): the records of
+//! A graph of the data model (docs/ledger/graph.md): the records of
 //! several lists, each of its own entity, as nodes whose kind is their
 //! entity; each reference field of a record to an entity shown is an edge
 //! to that record's node, labelled with the field. A node is named by its

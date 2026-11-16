@@ -1,4 +1,4 @@
-// Every browser of a served program is its own (DESIGN 7.9, B2): a handler
+// Every browser of a served program is its own (manual/start.how-it-works.md): a handler
 // sees the settings and the language of the page that asked, a setting it
 // changes goes back to that page alone, and quit and keys from code reach
 // only the reply of the page whose handler ran them.

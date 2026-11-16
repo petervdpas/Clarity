@@ -1,4 +1,4 @@
-//! Context menus and popovers (DESIGN 5.16) on every stack: the web stacks
+//! Context menus and popovers (manual/parts.containers.md) on every stack: the web stacks
 //! run the menu's handlers as any handler and keep a popover's `visible` in
 //! the part's state; C# keeps them in the window's view model, which
 //! Clarity.UI draws.

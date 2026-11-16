@@ -11,7 +11,7 @@
 //! An owned table carries a version column (`row_version`), which a save
 //! checks so it never overwrites someone else's change: a new entity gets it
 //! in its `add entity` (a line `version`), an existing table from
-//! `add version Customer` (docs/APP-CAPABILITIES-PLAN.md step 5).
+//! `add version Customer` (docs/ledger/row-versions.md).
 //!
 //! Replaying the steps in order gives the schema as last migrated, so no
 //! separate snapshot is kept. What the dictionary has and that schema does

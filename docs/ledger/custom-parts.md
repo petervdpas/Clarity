@@ -25,8 +25,7 @@ Progress: 90%
 - Whether Clarity's agent may write a part's C, C++ or C# adapter, or only the declaration: open (DESIGN 20 question 12).
 
 ## Conflicts
-- `crates/clarity-gen/src/csharp/logic.rs:558` says custom parts are refused "until CP1 builds them"; the code after it generates them.
-- `manual/design.custom-parts.md:51` says Clarity.UI on Rust and C#; it is all five stacks.
+- `crates/clarity-gen/src/csharp/logic.rs:588` says custom parts are refused "until CP1 builds them"; the code after it generates them.
 - `conformance/custom-parts.json` "about" still names Avalonia.
 
 ## Decisions

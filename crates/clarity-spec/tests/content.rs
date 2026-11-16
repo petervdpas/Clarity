@@ -1,4 +1,4 @@
-//! A window's content, which shows one view at a time (DESIGN 5.33):
+//! A window's content, which shows one view at a time (manual/design.windows.md):
 //! `content name main` with a `view X` line for each view it can show. It has
 //! no look of its own (a view brings its heading, buttons and tabs); code
 //! picks the view with `main.swap(X)`. Each view's parts, data and code join

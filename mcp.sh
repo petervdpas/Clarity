@@ -3,7 +3,8 @@
 # own build, so the agent works with the Clarity of this repository, not an
 # installed one. It builds the command first when it is behind its source
 # (cargo does nothing when it is not), then runs it. .mcp.json names it for
-# Claude Code; any agent that starts a command over stdio can use it.
+# Claude Code as clarity-cdev, beside the installed Clarity's `clarity` (user
+# scope); any agent that starts a command over stdio can use it.
 #
 #   ./mcp.sh            the tools, on the project open in the Clarity IDE
 #

@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3, round B of 7.9): the application as a web
+// The web target (manual/project.run-build.md, round B of 7.9): the application as a web
 // server. It serves the browser files (Clarity.UI's page, its library
 // compiled for the browser and the program's files.json and resources) and
 // answers the page's wire at /clarity/invoke with the program, which asks

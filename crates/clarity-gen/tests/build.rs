@@ -542,7 +542,7 @@ fn an_engine_written_in_clarity_runs() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// A window that asks each kind of question (DESIGN 5.14) builds with
+/// A window that asks each kind of question (manual/code.statements.md) builds with
 /// cargo, on the runtime in this repository.
 #[test]
 #[ignore]
@@ -564,7 +564,7 @@ fn questions_and_their_answers_build_in_rust() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// Records in app code and a tree by key (DESIGN 5.12) build with cargo, on
+/// Records in app code and a tree by key (manual/code.engines.md) build with cargo, on
 /// the runtime in this repository.
 #[test]
 #[ignore]
@@ -586,7 +586,7 @@ fn an_outline_of_records_builds_in_rust() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The web target (DESIGN 7.3, round B of 7.9): a project whose only target
+/// The web target (manual/project.run-build.md, round B of 7.9): a project whose only target
 /// is the web builds into a web server that serves Clarity.UI's browser
 /// files and answers the wire the library asks the program over.
 #[test]

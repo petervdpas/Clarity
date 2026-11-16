@@ -1,4 +1,4 @@
-//! Custom parts in the output (DESIGN 5.19 and 6.5), the same for every
+//! Custom parts in the output (manual/design.custom-parts.md), the same for every
 //! stack: what code reads of a part, and the files of Clarity's and the
 //! starter that declaring a part writes into its folder. Each stack writes
 //! its own part files (c/parts.rs, cpp/parts.rs, go/parts.rs, rust/parts.rs,
@@ -16,10 +16,10 @@ pub fn native_parts(project: &Project) -> Vec<&PartDecl> {
 }
 
 /// The kind under which a sound part keeps what code reads of it
-/// (docs/AUDIO-PLAN.md): lower case, so no declared part has it.
+/// (docs/ledger/audio.md): lower case, so no declared part has it.
 pub(crate) const SOUND_KIND: &str = "sound";
 
-/// The kind under which a video part keeps what code reads of it (docs/VIDEO-PLAN.md).
+/// The kind under which a video part keeps what code reads of it (docs/ledger/video-camera.md).
 pub(crate) const VIDEO_KIND: &str = "video";
 
 /// The kind under which a text box or memo keeps where the person types: its caret and selected text (Writer gap 21).
@@ -137,7 +137,7 @@ pub(crate) fn told_handlers(page: Option<&clarity_spec::model::Page>) -> Vec<Str
 /// folder that has no build file yet. Gives the files written.
 pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::Result<Vec<std::path::PathBuf>> {
     let mut written = Vec::new();
-    // A .NET part's adapter, a control of Clarity.UI (DESIGN 7.9), written once.
+    // A .NET part's adapter, a control of Clarity.UI (manual/start.how-it-works.md), written once.
     for part in crate::csharp::parts::dotnet_parts(project) {
         let n = &part.name.name;
         let adapter = dir.join(native::adapter_folder(n)).join(format!("{n}.cs"));
@@ -151,7 +151,7 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
     }
     // A native, Rust or Go part: its starter where the folder has none, and
     // the file of Clarity's (the header, `src/clarity.rs`, `clarity.go`) always.
-    // A C project's native part is a kind of part of Clarity.UI, in C (DESIGN 7.9).
+    // A C project's native part is a kind of part of Clarity.UI, in C (manual/start.how-it-works.md).
     let c_project = project_is_c(dir);
     for part in project.files.iter().flat_map(|f| &f.parts) {
         let (folder, files, manifest, own): (&String, Vec<(String, String)>, &str, &str) = match &part.library {
@@ -192,7 +192,7 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
             written.push(target);
         }
     }
-    // A library's adapter, written once, and the file of Clarity's always (DESIGN 5.21).
+    // A library's adapter, written once, and the file of Clarity's always (manual/code.libraries.md).
     let cpp = project_is_cpp(dir);
     for library in crate::libraries::libraries(project) {
         let root = dir.join(native::library_folder(&library.name.name));
@@ -245,19 +245,19 @@ fn project_is_c(dir: &std::path::Path) -> bool {
 }
 
 /// What declaring a native part writes into its folder in a C project: a
-/// kind of part of Clarity.UI, the functions of `clarity/<Name>.h` (DESIGN 7.9).
+/// kind of part of Clarity.UI, the functions of `clarity/<Name>.h` (manual/start.how-it-works.md).
 pub fn c_starter(part: &PartDecl) -> Vec<(String, String)> {
     crate::c::parts::starter(part)
 }
 
 /// What declaring a native part writes into its folder in a C++ project: a
-/// control of Clarity.UI, the class of `clarity/<Name>.h` (DESIGN 7.9).
+/// control of Clarity.UI, the class of `clarity/<Name>.h` (manual/start.how-it-works.md).
 pub fn cpp_starter(part: &PartDecl) -> Vec<(String, String)> {
     crate::cpp::parts::starter(part)
 }
 
 /// The starter adapter of .NET part `name`, as declaring it writes it: a
-/// control of Clarity.UI (DESIGN 7.9).
+/// control of Clarity.UI (manual/start.how-it-works.md).
 pub fn dotnet_adapter(project: &Project, name: &str) -> Option<String> {
     let part = crate::csharp::parts::dotnet_parts(project).into_iter().find(|p| p.name.name == name)?;
     Some(crate::csharp::parts::adapter_starter(project, part))

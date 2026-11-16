@@ -295,7 +295,7 @@ fn operator_keys_are_keys() {
     assert_eq!(shortcut_keys("Ctrl+Shift+F2"), (vec!["Ctrl", "Shift"], "F2"));
 }
 
-/// `bottom` sticks a placed part to the bottom of its grid (DESIGN 2): it is
+/// `bottom` sticks a placed part to the bottom of its grid (manual/design.parts.md): it is
 /// read, written back after the place, and has no place on a popover.
 #[test]
 fn a_placed_part_sticks_to_the_bottom() {

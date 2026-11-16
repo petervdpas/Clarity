@@ -1,6 +1,6 @@
 <script lang="ts">
   // New custom part and New library: a name, the module it goes into, and
-  // its package in the stack's own kind (DESIGN 5.19, 5.21). It hands back
+  // its package in the stack's own kind (manual/design.custom-parts.md, manual/code.libraries.md). It hands back
   // the declaration to add; its properties, tells and functions are set in
   // its view afterwards.
 

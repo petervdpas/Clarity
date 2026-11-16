@@ -1,4 +1,4 @@
-// Engines beside the screen (DESIGN 5.12, conformance/screen-engines.json)
+// Engines beside the screen (manual/code.engines.md, conformance/screen-engines.json)
 // as Clarity.UI runs them in the program's own process: one instance per
 // canvas, which keeps its memory from frame to frame. Each frame hands over
 // the input since the last (clarity_pointer, clarity_key, a hear by its

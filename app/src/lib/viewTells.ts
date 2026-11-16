@@ -1,4 +1,4 @@
-// What a view tells the window it shows in (DESIGN 5.33): the view's page
+// What a view tells the window it shows in (manual/design.windows.md): the view's page
 // declares each tell, and the content's view line that shows it wires a tell
 // to a handler of the window. Pure, so it is tested without a browser.
 

@@ -1,5 +1,5 @@
 // A test project, not an example: a command-line program that calls a web
-// API (DESIGN 5.23), which tests/http_build.rs builds on every stack and
+// API (manual/code.web-apis.md), which tests/http_build.rs builds on every stack and
 // runs against a small server of its own.
 module calls
 use store
@@ -21,7 +21,7 @@ cli Calls
     help "Calls a web API"
 
 // A token the person keeps for a second web API, in the system's protected
-// store (DESIGN 5.27), which that API signs its calls with.
+// store (manual/data.settings.md), which that API signs its calls with.
 settings
     apiToken: secret
 
@@ -59,7 +59,7 @@ command amend(url: text, body: text)
     let reply = http patch url with body
     print reply.text
 
-// Every page of a list a web API hands out a page at a time (DESIGN 5.23, paging).
+// Every page of a list a web API hands out a page at a time (manual/code.web-apis.md, paging).
 command numbers()
     help "Reads every page of the numbers and prints them as one list"
     let reply = http get "/paged" from paged every page

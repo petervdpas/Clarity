@@ -1,6 +1,6 @@
 /*
- * clarity_auth.h: the C interface of Clarity.Auth (docs/APP-CAPABILITIES-PLAN.md,
- * step 4). The library (libclarity_auth.so, clarity_auth.dll,
+ * clarity_auth.h: the C interface of Clarity.Auth (docs/ledger/signin.md).
+ * The library (libclarity_auth.so, clarity_auth.dll,
  * libclarity_auth.dylib) holds the sign-in of the programs Clarity makes,
  * one implementation for every stack: the catalog of strategies, finding
  * and checking a person, hashes, tokens, failed tries and sessions.

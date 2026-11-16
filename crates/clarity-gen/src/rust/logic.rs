@@ -56,8 +56,8 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// An entity's `readable when` and `writable when` (docs/APP-CAPABILITIES-PLAN.md
-/// step 4), refused with notYours as a check rather than a hidden filter:
+/// An entity's `readable when` and `writable when` (docs/ledger/signin.md),
+/// refused with notYours as a check rather than a hidden filter:
 /// readable on each stored record code reads, writable before a save or a
 /// delete (the record's hooks), on the record as code holds it and as it is stored.
 fn accesses(project: &Project, types: &FileTypes, entity: &clarity_spec::model::Entity) -> Result<String, Vec<String>> {
@@ -118,7 +118,7 @@ struct Emitter<'a> {
     decl: Option<&'a FunctionDecl>,
     /// The window or app of a handler.
     window: Option<WindowCtx>,
-    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// Whether this is a command of the command-line program (manual/code.commands.md):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
     /// Whether the place being written is assigned, so a list position in
@@ -541,7 +541,7 @@ impl<'a> Emitter<'a> {
                 self.errors.push("messages and windows belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
-            // A hear of a custom part (DESIGN 5.19), sent with the reply.
+            // A hear of a custom part (manual/design.custom-parts.md), sent with the reply.
             // An engine's statement; engines are compiled to WebAssembly before generating (N5b).
             StmtKind::Tell { .. } => self.errors.push("'tell' is for an engine beside the screen".into()),
             StmtKind::Hear { part, hear, args } => {
@@ -560,7 +560,7 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => format!("{default:?}"),
-                        // An object sends its record's id (DESIGN 5.31).
+                        // An object sends its record's id (manual/parts.graphics.md).
                         (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
                         (ShapeValue::Record, Err(_)) => "null".to_string(),
                         (ShapeValue::Text, Ok(arg)) => format!("serde_json::to_value({}).unwrap_or_default()", self.shown(arg)),
@@ -811,7 +811,7 @@ impl<'a> Emitter<'a> {
         Some((name.clone(), property))
     }
 
-    /// A custom part's own property (DESIGN 5.19): the part, the property,
+    /// A custom part's own property (manual/design.custom-parts.md): the part, the property,
     /// the part's kind and the values written on its line.
     fn custom_property(&self, expr: &Expr) -> Option<(String, String, String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
         let ExprKind::Member { object, member } = &expr.kind else { return None };
@@ -853,7 +853,7 @@ impl<'a> Emitter<'a> {
             ("tool", Some(info)) => format!("ui.tool({part:?}, {:?})", info.tool),
             ("brush", Some(info)) => format!("ui.brush({part:?}, {})", info.brush),
             ("ink", Some(info)) => format!("ui.ink({part:?}, {:?})", info.ink),
-            // A canvas with a mode (DESIGN 5.31): the object's record, as a table's selected row; a shape's place from 1.
+            // A canvas with a mode (manual/parts.graphics.md): the object's record, as a table's selected row; a shape's place from 1.
             ("selected", Some(PartInfo { mode: Some(CanvasMode::Objects), objects: Some(list), .. })) => {
                 format!("ui.selected({part:?}, &w.{})?", ident(&list))
             }
@@ -1033,7 +1033,7 @@ impl<'a> Emitter<'a> {
 
     /// An expression as an owned value.
     /// A format's options as a Rust expression of their JSON object (`String::new()` for none).
-    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    /// The format of a reading or writing and its options object (docs/ledger/formats.md).
     fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse) -> (String, String) {
         let project = self.project;
         match crate::shape::mapping_pieces(project, mapping, |v| format!("clarity_runtime::formats::quoted(&{})", self.value(v))) {
@@ -1091,7 +1091,7 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            // A list of values, or of records, grows by a list of its items (manual/parts.data.md, manual/code.engines.md).
             ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 format!("{{ let mut joined = {}; joined.extend({}); joined }}", self.value(left), self.value(right))
             }
@@ -1127,12 +1127,12 @@ impl<'a> Emitter<'a> {
                 format!("{prefix}__{}(db, w, ui{code})?", super::names::snake(&function.name))
             }
             ExprKind::Call { function, args, .. } => self.call(&function.name, args),
-            // A function of a library, through its crate (DESIGN 5.21).
+            // A function of a library, through its crate (manual/code.libraries.md).
             ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
                 let values: Vec<String> = args.iter().map(|a| format!("({}).clone()", self.value(a))).collect();
                 format!("{}({})", crate::libraries::rust_call(self.project, &engine.name, &function.name), values.join(", "))
             }
-            // A function of an engine: values to JSON and back (DESIGN 5.11).
+            // A function of an engine: values to JSON and back (manual/code.engines.md).
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self
                     .project
@@ -1169,7 +1169,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
-            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            // A format of the catalog (docs/ledger/formats.md): a value written in it, and records read from it, through Clarity.Formats.
             ExprKind::FormatOf { value, mapping } => {
                 let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
@@ -1191,7 +1191,7 @@ impl<'a> Emitter<'a> {
                 let (format, options) = self.format_options(mapping);
                 format!("clarity_runtime::formats::read::<{read}>({:?}, &{}, &{options}, &{})?", format, self.value(input), rust_pieces(&kind))
             }
-            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            // A call to a web API (manual/code.web-apis.md): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
@@ -1209,7 +1209,7 @@ impl<'a> Emitter<'a> {
                 if from.is_none() && query.is_empty() {
                     return format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, {headers})");
                 }
-                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                // A path of a web API data source (manual/code.web-apis.md): its address and auth come from the project file.
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
                 let auth = match auth {
                     Some(("bearer", secret)) => format!("clarity_runtime::http::Auth::Bearer({secret:?})"),
@@ -1218,7 +1218,7 @@ impl<'a> Emitter<'a> {
                     _ => "clarity_runtime::http::Auth::None".to_string(),
                 };
                 let query = self.http_pairs(query);
-                // Every page, as the source's paging says (DESIGN 5.23).
+                // Every page, as the source's paging says (manual/code.web-apis.md).
                 if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
                     let kind = match p.kind {
                         clarity_spec::PagingKind::Page => "Page",
@@ -1659,7 +1659,7 @@ impl<'a> Emitter<'a> {
             let (list, separator) = (args.first().map(|a| self.value(a)).unwrap_or_default(), args.get(1).map(|a| self.value(a)).unwrap_or_default());
             return format!("{list}.join({separator}.as_str())");
         }
-        // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): a token and recovery codes from Clarity.Auth.
+        // Who is using the program (docs/ledger/signin.md): a token and recovery codes from Clarity.Auth.
         let own = |n: &str| self.project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == n);
         if name == clarity_spec::code::check::NEW_TOKEN && !own(name) {
             return "clarity_runtime::signin::new_token()?".to_string();
@@ -1728,14 +1728,14 @@ pub struct PartInfo {
     pub dot_color: String,
     /// A spin box's range as its line writes it.
     pub spin: (i64, i64),
-    /// A canvas's mode (DESIGN 5.31), and in mode objects the list of its objects.
+    /// A canvas's mode (manual/parts.graphics.md), and in mode objects the list of its objects.
     pub mode: Option<CanvasMode>,
     pub objects: Option<String>,
     /// A painting or vector canvas's tool (its first of `tools`, or none), brush (2 without it) and ink ("text" without it).
     pub tool: String,
     pub brush: u32,
     pub ink: String,
-    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    /// A custom part (manual/design.custom-parts.md): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
@@ -1877,7 +1877,7 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their Rust functions.
     pub draws: Vec<(String, String)>,
-    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// The handlers an answer runs (manual/code.statements.md): the Clarity name, the
     /// Rust function, and for each value whether it is a record.
     pub answers: Vec<(String, String, Vec<bool>)>,
     /// Whether the window has `allow when`, checked before it opens (its struct's `allowed`).
@@ -1952,7 +1952,7 @@ pub fn emit_windows(
                     // The settings are what the person kept, each value that still fits.
                     DataKind::Record { entity } if project.entity(&entity.name).is_some_and(|e| e.settings) => "crate::kept_settings()".to_string(),
                     DataKind::Record { entity } => format!("{}::default()", entity.name),
-                    // A list of records starts empty: code builds it (DESIGN 5.12).
+                    // A list of records starts empty: code builds it (manual/code.engines.md).
                     DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => "Vec::new()".to_string(),
                     DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.readable.is_some()) => format!("{e}::readable_all(db, db.all::<{e}>()?)?", e = entity.name),
                     DataKind::List { entity } => format!("db.all::<{}>()?", entity.name),
@@ -1979,7 +1979,7 @@ impl {struct_name} {{
 "
         ));
 
-        // `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): a window's, decided before it opens.
+        // `allow when` (docs/ledger/signin.md): a window's, decided before it opens.
         let mut access = Emitter::new(project, types, None);
         let allowed = page.and_then(|p| p.allow_condition.as_ref()).map(|condition| {
             let holds = access.value(condition);
@@ -2140,7 +2140,7 @@ fn allowed_commands<'f>(frame: &'f Frame, widgets: &'f [Widget]) -> Vec<&'f Comm
 }
 
 /// A value written in the design as Rust, of the parameter's type.
-/// The commands of a module (DESIGN 5.20): each a function taking the
+/// The commands of a module (manual/code.commands.md): each a function taking the
 /// database, the session it prints and asks through, the settings (as
 /// `w.settings`, as a window has them) and its arguments and options, and
 /// giving its exit code.

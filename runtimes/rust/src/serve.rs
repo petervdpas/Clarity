@@ -1,9 +1,9 @@
-//! The web target (DESIGN 7.3): the application as a web server. It serves
+//! The web target (manual/project.run-build.md): the application as a web server. It serves
 //! the browser files (Clarity.UI's page, library and the program's files)
 //! and answers each command of the page's wire with the function the program
 //! gives (`wire::answer` on its `Program`). Requests run side by side; the
 //! database is the server's. Each browser tab is a page of its own (its
-//! `"browser"` id): its person's settings and language (DESIGN 7.9 B2).
+//! `"browser"` id): its person's settings and language (manual/start.how-it-works.md B2).
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -271,7 +271,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
 /// Runs the application as a web server on `address` until it stops. The
 /// requests run side by side, each on a thread of its own: while a long
 /// handler's request is open, the page still asks how far it is, stops it,
-/// and draws (round B of DESIGN 7.9).
+/// and draws (round B of manual/start.how-it-works.md).
 pub fn serve(name: &str, address: &str, files: &(dyn Fn(&str) -> Option<Vec<u8>> + Sync), invoke: &(dyn Fn(&str, Value) -> Value + Sync)) -> std::io::Result<()> {
     let listener = TcpListener::bind(address)?;
     eprintln!("{name}: serving on http://{address}");

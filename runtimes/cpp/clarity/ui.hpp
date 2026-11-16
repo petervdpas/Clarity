@@ -51,7 +51,7 @@ struct PartState {
     // A spin box's range, as a handler set it; empty keeps what its line writes.
     std::optional<int64_t> min;
     std::optional<int64_t> max;
-    // A painting or vector canvas's tool in hand, how wide it paints and its color, as a handler set them (DESIGN 5.31).
+    // A painting or vector canvas's tool in hand, how wide it paints and its color, as a handler set them (manual/parts.graphics.md).
     std::optional<std::string> tool;
     std::optional<int64_t> brush;
     std::optional<std::string> ink;
@@ -95,7 +95,7 @@ struct WindowState {
     /// to it, such as an engine's state per window, goes by it.
     uint64_t instance = 0;
     /// What the window's tables, trees and charts show of their lists, by
-    /// part (DESIGN 1.7): the screen says how, the runtime fills in what.
+    /// part (manual/start.how-it-works.md): the screen says how, the runtime fills in what.
     nlohmann::json views = nlohmann::json::object();
 };
 
@@ -136,7 +136,7 @@ struct OpenRequest {
     bool new_window = false;
 };
 
-/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
+/// `ask ... then handler(values)` (manual/code.statements.md): a question the screen asks
 /// in Clarity's own dialog when the handler has finished. Its answer runs
 /// `handler` with `values` and, for a value, the answer last.
 struct Ask {
@@ -176,7 +176,7 @@ struct Reply {
     std::vector<Hear> hears;
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
     std::optional<Text> copy;
-    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// The id of the database step the handler made (manual/code.handlers.md), which
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     int64_t step = 0;
     /// Whether the runtime refused what the person typed (a list field's
@@ -275,7 +275,7 @@ public:
     void set_brush(const std::string& part, int64_t value) { parts_[part].brush = value; }
     std::string ink(const std::string& part, const std::string& design) const;
     void set_ink(const std::string& part, const std::string& value) { parts_[part].ink = value; }
-    /// The place of the shape a person touched last on a vector canvas, counted from 1; 0 when none (DESIGN 5.31).
+    /// The place of the shape a person touched last on a vector canvas, counted from 1; 0 when none (manual/parts.graphics.md).
     int64_t shape_chosen(const std::string& part) const {
         auto found = selected_.find(part);
         return found == selected_.end() || found->second < 0 ? 0 : int64_t(found->second) + 1;

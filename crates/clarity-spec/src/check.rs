@@ -65,7 +65,7 @@ fn shown_as(ty: &crate::code::TypeRefKind) -> Option<FieldType> {
         T::DateTime => FieldType::DateTime,
         T::Duration => FieldType::Duration,
         T::Named { name } => FieldType::Enum { name: Ident { name: name.clone(), span: crate::span::Span::default() } },
-        // A list of values (DESIGN 5.26); a list of records is not a plain value.
+        // A list of values (manual/parts.data.md); a list of records is not a plain value.
         T::List { item } => FieldType::Values { item: crate::model::ListItem::of_word(item)? },
         T::File | T::Bytes => return None,
     })
@@ -120,7 +120,7 @@ struct Checker<'a> {
     diagnostics: Vec<Diagnostic>,
     /// The popovers and slide-outs of the window being checked: a menu item's click opens them too.
     overlays: HashSet<&'a str>,
-    /// The project file's `signin` block (docs/APP-CAPABILITIES-PLAN.md step 4); none without it.
+    /// The project file's `signin` block (docs/ledger/signin.md); none without it.
     signin: Option<&'a crate::signin::Signin>,
     /// The page being checked, for the parts a `signin` button reads.
     page: Option<&'a Page>,
@@ -517,7 +517,7 @@ impl<'a> Checker<'a> {
                 DataKind::Record { entity } | DataKind::List { entity } => {
                     let record = self.decls.get(entity.name.as_str()).is_some_and(|ds| ds.iter().any(|d| d.kind == DeclKind::Record));
                     let found = if record {
-                        // A record (DESIGN 5.12) is window data too, made in code and never stored.
+                        // A record (manual/code.engines.md) is window data too, made in code and never stored.
                         self.resolve(file, entity, DeclKind::Record).map(|(f, i)| &self.files[f].records[i])
                     } else if self.decls.contains_key(entity.name.as_str()) {
                         self.resolve(file, entity, DeclKind::Entity).map(|(f, i)| &self.files[f].entities[i])
@@ -579,7 +579,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The settings (DESIGN 5.17): one block, of plain values, and the name
+    /// The settings (manual/data.settings.md): one block, of plain values, and the name
     /// `Settings` theirs.
     fn check_settings(&mut self) {
         let files = self.files;
@@ -592,7 +592,7 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        // A secret is the person's, kept in the system's store: never a field of a record (DESIGN 5.27).
+        // A secret is the person's, kept in the system's store: never a field of a record (manual/data.settings.md).
         for (file, f) in files.iter().enumerate() {
             for entity in f.entities.iter().filter(|e| !e.settings) {
                 for field in entity.fields.iter().filter(|f| f.ty == FieldType::Secret) {
@@ -655,7 +655,7 @@ impl<'a> Checker<'a> {
         self.key_clashes(keyed, "the app's frame");
     }
 
-    /// One key runs one command where it is active (DESIGN 5.28): in the
+    /// One key runs one command where it is active (manual/app.keys.md): in the
     /// window's frame, when it has regions of its own (the app's alone are
     /// checked with the app), and among the window's own buttons, which may
     /// take a frame's key, since what is innermost goes first.
@@ -843,7 +843,7 @@ impl<'a> Checker<'a> {
     }
 
     /// The views a window's slide-outs, tabs, steps and sections show (`view
-    /// ClassEditor`, DESIGN 5.33): each a view of the project, shown once, in
+    /// ClassEditor`, manual/design.windows.md): each a view of the project, shown once, in
     /// a window, its parts and data named apart from the window's, and the
     /// place holding none of its own.
     fn check_views(&mut self, file: usize, page: &'a Page) {
@@ -1297,7 +1297,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A tree of several kinds of records (DESIGN 5.33): named, bound to
+    /// A tree of several kinds of records (manual/design.windows.md): named, bound to
     /// nothing (its rows are its levels'), each level an entity whose
     /// `under` field refers to the level around it, showing a field or a key,
     /// ordered by a field; each `on select` an entity of its levels.
@@ -1412,7 +1412,7 @@ impl<'a> Checker<'a> {
                     _ => {}
                 }
             }
-            // A sound and a timer have no place at all (DESIGN 5.22, 5.26).
+            // A sound and a timer have no place at all (manual/design.sound.md, manual/parts.time.md).
             let popover = popover || widgets::off_grid(p.kind);
             self.check_time(file, widget);
             if let Some(menu) = &widget.menu {
@@ -1574,7 +1574,7 @@ impl<'a> Checker<'a> {
             } else if p.kind == WidgetKind::Canvas && !p.tells.is_empty() {
                 let canvas = p.name.clone().unwrap_or_else(|| format!("at {},{}", p.col, p.row));
                 self.error(file, format!("canvas {canvas} runs no engine, so it tells nothing"), widget.span);
-            // A painted or vector canvas shows what it binds (DESIGN 5.31).
+            // A painted or vector canvas shows what it binds (manual/parts.graphics.md).
             } else if p.kind == WidgetKind::Canvas && !draws && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
                 self.warning(
                     file,
@@ -1675,7 +1675,7 @@ impl<'a> Checker<'a> {
             Held::Record(entity) => (entity, false),
             Held::List(entity) => (entity, true),
             Held::Value(shown) => {
-                // A chart of a list of numbers draws them as they are (DESIGN 5.26).
+                // A chart of a list of numbers draws them as they are (manual/parts.data.md).
                 if p.kind == WidgetKind::Chart && field_name.is_none() && matches!(shown, FieldType::Values { .. }) {
                     self.check_number_chart(file, &at, widget, &shown);
                     return;
@@ -1701,7 +1701,7 @@ impl<'a> Checker<'a> {
             }
         };
         let Some(entity) = entity else { return };
-        // A hashed field keeps a hash, which no one reads (docs/APP-CAPABILITIES-PLAN.md step 4).
+        // A hashed field keeps a hash, which no one reads (docs/ledger/signin.md).
         let named = field_name.into_iter().chain(p.columns.iter().chain(&p.edit).chain(&p.show).map(String::as_str));
         if let Some(hashed) = named.filter(|f| entity.field(f).is_some_and(|f| f.modifiers.hashed)).next() {
             self.error(file, format!("{at}: {hashed} is hashed, so no part shows it"), widget.span);
@@ -1751,7 +1751,7 @@ impl<'a> Checker<'a> {
                         ),
                         widget.span,
                     ),
-                    // Only a password input shows a secret, as dots (DESIGN 5.27).
+                    // Only a password input shows a secret, as dots (manual/data.settings.md).
                     Some(field) if field.ty == FieldType::Secret && p.kind != WidgetKind::Password => self.error(
                         file,
                         format!("{at}: '{field_name}' is secret; only a password input shows it, as dots"),
@@ -1761,7 +1761,7 @@ impl<'a> Checker<'a> {
                     Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
             }
-            // A chart of a record's list of numbers (DESIGN 5.26).
+            // A chart of a record's list of numbers (manual/parts.data.md).
             BindTarget::Collection
                 if p.kind == WidgetKind::Chart
                     && !list
@@ -1874,7 +1874,7 @@ impl<'a> Checker<'a> {
 
     /// A chart groups its rows by a field and gives each group a number:
     /// its rows counted, or a number field summed or averaged.
-    /// A chart of a list of numbers (DESIGN 5.26): drawn as they are, as
+    /// A chart of a list of numbers (manual/parts.data.md): drawn as they are, as
     /// bars or a line, never grouped.
     fn check_number_chart(&mut self, file: usize, at: &str, widget: &Widget, ty: &FieldType) {
         let p = &widget.props;
@@ -1889,7 +1889,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// What keeps time (DESIGN 5.26): a timer's ticks and a trend's values
+    /// What keeps time (manual/parts.time.md): a timer's ticks and a trend's values
     /// come every 0.1 to 86400 seconds, and a trend or chart shows 2 to 1000 points.
     fn check_time(&mut self, file: usize, widget: &Widget) {
         let p = &widget.props;
@@ -2078,7 +2078,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A canvas's mode (DESIGN 5.31): the records of a list placed by integer
+    /// A canvas's mode (manual/parts.graphics.md): the records of a list placed by integer
     /// fields, a painted picture in an image field, or a vector drawing in a
     /// text field; its tools, brush and ink belong to its mode, and what the
     /// person changes is lost without `on change`.
@@ -2155,7 +2155,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A part that reorders (DESIGN 5.30) numbers its rows in an integer
+    /// A part that reorders (manual/parts.data.md) numbers its rows in an integer
     /// field of the listed entity, follows no sort of its own, and saves the
     /// order in an `on reorder` handler.
     fn check_reorder(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
@@ -2223,7 +2223,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The parts of a toolbox (docs/IMAGE-PLAN.md): they stand in a toolbox page, a group holds tools, a
+    /// The parts of a toolbox (docs/ledger/canvas-toolbox.md): they stand in a toolbox page, a group holds tools, a
     /// tool does a built-in action or runs a handler; a toolbox holds its parts, buttons, labels and lines.
     fn check_tools(&mut self, file: usize, widgets: &[Widget], toolbox: bool, in_group: bool) {
         for w in widgets {
@@ -2432,7 +2432,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `hashed` (docs/APP-CAPABILITIES-PLAN.md step 4): text of a stored
+    /// `hashed` (docs/ledger/signin.md): text of a stored
     /// entity, long enough for a hash, and none of what reads or shows its
     /// value: a hash is never searched, has no default, pattern, bounds or format.
     fn check_hashed(&mut self, file: usize, stored: bool, field: &Field) {
@@ -2686,7 +2686,7 @@ pub(crate) fn check_sources(project: &mut Project) {
         let Some(source) = &file.source else { continue };
         let message = match project.sources.iter().find(|s| s.name == source.name) {
             None => format!("unknown data source '{}'; the project has {}", source.name, listed(&names)),
-            // Entities in a web API (DESIGN 5.23): its actions read and send them.
+            // Entities in a web API (manual/code.web-apis.md): its actions read and send them.
             Some(_) => continue,
         };
         found.push(Diagnostic::error(message, source.span).in_file(&file.path));
@@ -2823,7 +2823,7 @@ fn is_address(to: &str) -> bool {
 }
 
 /// What a command with a key does: a menu item and a button that open the
-/// same window or run the same handler are one command (DESIGN 5.28).
+/// same window or run the same handler are one command (manual/app.keys.md).
 #[derive(PartialEq)]
 enum Does<'a> {
     Open(&'a str, bool),

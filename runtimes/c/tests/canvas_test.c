@@ -1,4 +1,4 @@
-// Canvas modes (DESIGN 5.31), against the cases every runtime shares
+// Canvas modes (manual/parts.graphics.md), against the cases every runtime shares
 // (conformance/canvas-modes.json).
 
 #include "check.h"

@@ -2,7 +2,7 @@ name: Release Rust Clarity.Formats
 
 # Push a runtimes/rust-formats/v* tag (e.g. `git tag runtimes/rust-formats/v0.1.0 &&
 # git push origin runtimes/rust-formats/v0.1.0`) to publish the crate
-# clarity-formats to crates.io (docs/FORMATS-PLAN.md). The tag must name the
+# clarity-formats to crates.io (docs/ledger/formats.md). The tag must name the
 # version in runtimes/rust-formats/Cargo.toml: bump that first, commit, then tag.
 # clarity-runtime names a clarity-formats version (its formats feature), so
 # this release goes before the clarity-runtime release that needs it (tag runtimes/rust/v*).

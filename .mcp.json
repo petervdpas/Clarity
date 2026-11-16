@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "clarity": {
+    "clarity-cdev": {
       "type": "stdio",
       "command": "./mcp.sh",
       "args": []

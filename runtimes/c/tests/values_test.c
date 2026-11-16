@@ -509,7 +509,7 @@ void a_canvas_keeps_the_grid_and_snap_code_sets(void) {
     CHECK(clarity_ui_resizable(ui, "sheet"));
     clarity_ui_set_resizable(ui, "sheet", false);
     CHECK(!clarity_ui_resizable(ui, "sheet"));
-    // A painting or vector canvas's tool, brush and ink (DESIGN 5.31), and the chosen shape from 1.
+    // A painting or vector canvas's tool, brush and ink (manual/parts.graphics.md), and the chosen shape from 1.
     CHECK_TEXT(clarity_ui_tool(ui, "sheet", "pen"), "pen");
     CHECK_INT(clarity_ui_brush(ui, "sheet", 2), 2);
     CHECK_TEXT(clarity_ui_ink(ui, "sheet", "text"), "text");

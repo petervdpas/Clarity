@@ -1,4 +1,4 @@
-//! A button (DESIGN 7.9): its click runs its handlers and opens the window
+//! A button (manual/start.how-it-works.md): its click runs its handlers and opens the window
 //! its `opens` names. Drawn in the theme's `button` look, with its hover and
 //! pressed looks, a style over it, the ring of a default button, the focus
 //! ring in the focus color and the dimmed look of a disabled part, as the

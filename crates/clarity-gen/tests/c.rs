@@ -163,7 +163,7 @@ fn handlers_are_functions_of_their_window() {
     has(main, "        for (size_t i = 0; i < all.count; i++) clarity_add_option(*out, all.items[i].id, all.items[i].name);");
 }
 
-/// The desktop carries what Clarity.UI draws from (DESIGN 7.9): the windows
+/// The desktop carries what Clarity.UI draws from (manual/start.how-it-works.md): the windows
 /// and app frames as markup, the themes and the resources, put into the
 /// program in the order the project gives them, the model and the facts of
 /// its fields; and Clarity.UI's library goes beside the program.
@@ -413,7 +413,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(code.contains("clarity_ui_x(ui, \"dial\") + clarity_ui_y(ui, \"dial\")"), "{code}");
 }
 
-/// The web target (DESIGN 7.3, round B): the program serves Clarity.UI's
+/// The web target (manual/project.run-build.md, round B): the program serves Clarity.UI's
 /// browser files and its own (browser/), carried in it, and answers the
 /// library over HTTP; beside the desktop target it serves with `--serve`.
 #[test]
@@ -461,7 +461,7 @@ fn the_web_target_serves_the_renderer() {
     has(file(&files, "CMakeLists.txt"), "\n  BROWSER browser)\nclarity_beside(shop)\n");
 }
 
-// A canvas with a mode (DESIGN 5.31): its tool, brush and ink are part state
+// A canvas with a mode (manual/parts.graphics.md): its tool, brush and ink are part state
 // a handler reads and sets, as its line says until then; `selected` is the
 // record of the objects list at the chosen place, or the chosen shape from 1.
 const CANVASES: &str = "module m
@@ -545,7 +545,7 @@ code Game
         gauge.reset(level)
 ";
 
-/// A custom part of a C program is a kind of part of Clarity.UI (DESIGN 7.9):
+/// A custom part of a C program is a kind of part of Clarity.UI (manual/start.how-it-works.md):
 /// a C library of the project implementing the header written from its
 /// declaration, built into the program and registered as a table of callbacks.
 #[test]

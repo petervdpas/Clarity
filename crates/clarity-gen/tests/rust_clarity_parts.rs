@@ -1,4 +1,4 @@
-//! Custom parts of a Rust program on Clarity.UI (DESIGN 7.9, "Custom
+//! Custom parts of a Rust program on Clarity.UI (manual/start.how-it-works.md, "Custom
 //! controls", Rust): a crate of the project whose type implements the typed
 //! trait Clarity writes from the declaration into the crate's
 //! `src/clarity.rs`, in plain Rust, as a Go part's `clarity.go`. The program's

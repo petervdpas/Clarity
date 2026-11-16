@@ -154,7 +154,7 @@ const char* clarity_url_part(const char* text) {
 
 /// A secret where the project file says it is: `env:NAME` reads that
 /// environment variable, `setting:<program>/<name>` a secret setting from
-/// the system's protected store (DESIGN 5.27); empty when it is not there.
+/// the system's protected store (manual/data.settings.md); empty when it is not there.
 static const char* secret_at(const char* location) {
     if (!location) return "";
     if (strncmp(location, "env:", 4) == 0) {

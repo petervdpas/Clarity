@@ -1,5 +1,5 @@
-//! A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md
-//! step 5) on the C++ stack: a versioned entity names its version column and
+//! A save never overwrites someone else's change (docs/ledger/row-versions.md)
+//! on the C++ stack: a versioned entity names its version column and
 //! carries the version, also through its JSON (a window's data travels as
 //! JSON), an entity's `savedSince` text is filled from the record as stored
 //! now (also `{current.changedBy.name}`, through the database), `save ... anyway` and `reload` of a record call the runtime, and an

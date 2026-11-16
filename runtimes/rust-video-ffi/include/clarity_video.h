@@ -1,5 +1,5 @@
 /*
- * clarity_video.h: the C interface of Clarity.Video (docs/VIDEO-PLAN.md).
+ * clarity_video.h: the C interface of Clarity.Video (docs/ledger/video-camera.md).
  * The library (libclarity_video.so, clarity_video.dll,
  * libclarity_video.dylib) opens a video and decodes its pictures on a
  * thread of its own, by the first decoder that takes it: a codec the

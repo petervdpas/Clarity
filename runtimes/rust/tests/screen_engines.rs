@@ -1,4 +1,4 @@
-//! Engines beside the screen on Rust (DESIGN 5.12): wasmi in the program's
+//! Engines beside the screen on Rust (manual/code.engines.md): wasmi in the program's
 //! own process, one instance per canvas, which keeps its memory from frame to
 //! frame, as C#'s ScreenEngine (conformance/screen-engines.json).
 

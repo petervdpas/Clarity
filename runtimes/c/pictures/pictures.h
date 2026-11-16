@@ -1,5 +1,5 @@
 /*
- * The picture functions of code (docs/IMAGE-PLAN.md) through Clarity.Image's
+ * The picture functions of code (docs/ledger/picture-functions.md) through Clarity.Image's
  * library (clarity_image.h): each takes a picture in hand and gives a new one
  * as PNG in the scratch arena, leaving its arguments as they were. Every
  * stack gives the same pixels (conformance/picture-functions.json). A program

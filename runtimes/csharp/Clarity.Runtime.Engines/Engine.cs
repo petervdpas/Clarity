@@ -1,4 +1,4 @@
-// Engines (DESIGN 5.11): processing modules compiled once to WebAssembly,
+// Engines (manual/code.engines.md): processing modules compiled once to WebAssembly,
 // which every stack hosts alike (conformance/engines.json). An engine
 // computes; it imports only the services of Clarity it declares (`uses
 // clock, random, log`), so it reaches no database, file or network.
@@ -159,7 +159,7 @@ public sealed class Engine
             throw Refused("lacks the memory of the engine interface");
         if (functions.FirstOrDefault(f => !exported.Contains(f)) is { } missing)
             throw Refused($"has no function {missing}");
-        // An engine beside the screen exports its frame loop (DESIGN 5.12).
+        // An engine beside the screen exports its frame loop (manual/code.engines.md).
         foreach (var needed in declaration.Screen ? new[] { "clarity_tick", "clarity_draw" } : [])
             if (!exported.Contains(needed))
                 throw Refused($"lacks {needed}, which an engine beside the screen needs");
@@ -190,7 +190,7 @@ public sealed class Engine
     public JsonNode? CallIn(long window, string function, params object?[] args) => CallIn(window, function, null, args);
 
     /// Calls `function` in open window `window`, adding what its answer tells
-    /// to `told` (an engine beside the screen, DESIGN 5.12).
+    /// to `told` (an engine beside the screen, manual/code.engines.md).
     public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args) => Run(window, function, told, Watching.Current, args);
 
     /// <summary>Calls `function` in open window `window` as CallIn does, telling <paramref name="watch"/> how far it is and stopping when it says so.</summary>

@@ -55,7 +55,7 @@ pub(crate) fn applied(version: usize) -> String {
 
 /// The location of a database: as written, from the environment variable
 /// that `env:NAME` names, or from the secret setting `setting:<program>/<name>`
-/// in the system's protected store (DESIGN 5.27), so passwords stay out of the program.
+/// in the system's protected store (manual/data.settings.md), so passwords stay out of the program.
 pub(crate) fn location(text: &str) -> Result<String> {
     if let Some(at) = text.strip_prefix("setting:") {
         let (program, name) = at.split_once('/').unwrap_or(("", at));

@@ -1,4 +1,4 @@
-//! Secret settings (DESIGN 5.27): kept in the system's protected store, per
+//! Secret settings (manual/data.settings.md): kept in the system's protected store, per
 //! person and per application, never in settings.json. Windows keeps them in
 //! the Credential Manager, macOS in the Keychain, other systems in the Secret
 //! Service (GNOME Keyring, KWallet). An entry is the application's program

@@ -123,7 +123,7 @@ fn every_sqlite_file_is_found_from_the_project_folder() {
     assert_eq!(std::path::Path::new(&built.datasources[1].url), dir.join("legacy/erp.db"));
 }
 
-/// A data source that is a file (docs/FORMATS-PLAN.md) imports as one
+/// A data source that is a file (docs/ledger/formats.md) imports as one
 /// entity, a text field per column; types are not guessed from the values.
 /// Beside it Import writes a mapping with the paths that differ from the
 /// fields' names and the source's options, and lays the source over it.

@@ -1,4 +1,4 @@
-# The support module of engines written in Clarity (DESIGN 5.12, N5b): the
+# The support module of engines written in Clarity (manual/code.engines.md): the
 # engine interface, values, JSON, kept values. Built twice:
 #   cargo build --release --target wasm32-unknown-unknown
 # copied to crates/clarity-wasm/support.wasm, which the compiler adds each

@@ -1,5 +1,5 @@
-//! The window host's part of signing in (docs/APP-CAPABILITIES-PLAN.md
-//! step 4): a `signin <strategy>` click, by a sign-in button of a sign-in
+//! The window host's part of signing in (docs/ledger/signin.md):
+//! a `signin <strategy>` click, by a sign-in button of a sign-in
 //! view (the fields of its own view) or a hand-built one on the splash (the
 //! parts named after the inputs); an "other way" showing another sign-in
 //! view; `signout`; and the refusal a sign-in view shows.

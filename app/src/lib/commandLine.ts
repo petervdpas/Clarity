@@ -1,4 +1,4 @@
-// Run and the command-line program (DESIGN 5.20): which programs a stack
+// Run and the command-line program (manual/code.commands.md): which programs a stack
 // makes, so Run runs the one there is or asks which, and how the stack is
 // named when it has no windows.
 

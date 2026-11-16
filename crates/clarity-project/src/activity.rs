@@ -1,4 +1,4 @@
-//! What outside agents did through `clarity mcp` (docs/ACP-PLAN.md, "Agent
+//! What outside agents did through `clarity mcp` (docs/ledger/acp.md, "Agent
 //! activity"): one JSON line per tool call in `activity.jsonl` in Clarity's
 //! own folder, which the IDE follows. It names the program, the tool, the
 //! file and how the call ended, never what a file holds.

@@ -1,6 +1,6 @@
 package clarity
 
-// HTTP calls (DESIGN 5.23) against the cases every runtime shares
+// HTTP calls (manual/code.web-apis.md) against the cases every runtime shares
 // (conformance/http.json), on a small server of the test's own.
 
 import (

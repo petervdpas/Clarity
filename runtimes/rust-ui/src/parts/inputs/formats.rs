@@ -1,4 +1,4 @@
-//! Showing and reading values in the person's locale (DESIGN 1.5, I1a), as
+//! Showing and reading values in the person's locale (manual/languages.md), as
 //! every renderer does (conformance/formats.json; C# Clarity.Runtime's
 //! Formats). The locale data is carried here, as the shared cases pin it:
 //! dates with two-digit days and months, a 24-hour clock with two-digit

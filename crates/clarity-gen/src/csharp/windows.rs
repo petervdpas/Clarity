@@ -1,4 +1,4 @@
-//! Each window's view model (DESIGN 7.9): the window's data, the state of its
+//! Each window's view model (manual/start.how-it-works.md): the window's data, the state of its
 //! named parts (`PartState`), and its handlers as methods, run as commands.
 //! Clarity.UI draws the window from its markup (`Windows/*.cxaml`, written
 //! by `web_windows`) over this view model.
@@ -338,7 +338,7 @@ impl<'a> Window<'a> {
             .unwrap_or_default()
     }
 
-    /// Where a part's edits are undone (DESIGN 5.29): its form or panel, or itself; none without undo.
+    /// Where a part's edits are undone (manual/code.handlers.md): its form or panel, or itself; none without undo.
     fn undo_scope(&self, p: &clarity_spec::model::WidgetProps) -> Option<String> {
         p.undo_scope.clone()
     }
@@ -373,7 +373,7 @@ impl<'a> Window<'a> {
             let prop = member(data);
             let field = backing(data);
             if *list {
-                // A list of records starts empty: code builds it (DESIGN 5.12).
+                // A list of records starts empty: code builds it (manual/code.engines.md).
                 if !self.project.entity(entity).is_some_and(|e| e.record) {
                     let _ = writeln!(constructor, "        {field} = {};", super::readable(self.project, entity, "Db", format!("Db.All<{entity}>()")));
                 }
@@ -384,7 +384,7 @@ impl<'a> Window<'a> {
             } else if self.project.entity(entity).is_some_and(|e| e.settings) {
                 // Every window shows the same settings.
                 let _ = write!(properties, "    public {entity} {prop} => {entity}.Current;\n\n");
-                // A part bound to a setting changes it: its edit takes it along for Ctrl+Z (DESIGN 5.29).
+                // A part bound to a setting changes it: its edit takes it along for Ctrl+Z (manual/code.handlers.md).
                 let _ = write!(properties, "    protected override ISettings? AppSettings => {entity}.Current;\n\n");
             } else {
                 let _ = write!(
@@ -403,7 +403,7 @@ impl<'a> Window<'a> {
                 (Some(Literal::Str(text)), _) => self.texts.code(text),
                 (Some(value), _) => logic::literal(self.project, ty, value),
                 (None, clarity_spec::code::check::TypeInfo::Text) => "\"\"".into(),
-                // A list of values starts empty (DESIGN 5.26).
+                // A list of values starts empty (manual/parts.data.md).
                 (None, clarity_spec::code::check::TypeInfo::Values(_)) => "[]".into(),
                 (None, _) => "default".into(),
             };
@@ -417,7 +417,7 @@ impl<'a> Window<'a> {
         }
         // The picture each picture field shows when the record has one stored.
         let mut fetches: BTreeMap<String, (&str, String)> = BTreeMap::new();
-        // A painting canvas paints on its field's picture (DESIGN 5.31).
+        // A painting canvas paints on its field's picture (manual/parts.graphics.md).
         let paints = |w: &&&Widget| w.props.kind == WidgetKind::Canvas && w.props.mode == Some(clarity_spec::model::CanvasMode::Paint);
         for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File) || paints(w)) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
@@ -559,7 +559,7 @@ impl<'a> Window<'a> {
                 if let Some(color) = &widget.props.dot_color {
                     set.push(format!("DotColor = {}", string(color)));
                 }
-                // A painting or vector canvas's tool, brush and ink (DESIGN 5.31).
+                // A painting or vector canvas's tool, brush and ink (manual/parts.graphics.md).
                 let tool = crate::canvas_tool(&widget.props);
                 if !tool.is_empty() {
                     set.push(format!("Tool = {}", string(&tool)));
@@ -711,7 +711,7 @@ impl<'a> Window<'a> {
             for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt"), (Event::Connect, "ConnectAt"), (Event::Resize, "ResizeAt")] {
                 let Some(handler) = Self::handler(widget, event) else { continue };
                 let run = format!("Handle(() =>\n    {{\n        {c}.Pointer = at;\n        {}();\n    }}, [at])", on(&handler.handler), c = member(canvas));
-                // A drag, a drop, a bend, a new line and a resize are edits Ctrl+Z takes back (DESIGN 5.29); a drag starts one its drop ends.
+                // A drag, a drop, a bend, a new line and a resize are edits Ctrl+Z takes back (manual/code.handlers.md); a drag starts one its drop ends.
                 let run = match (&scope, event) {
                     (Some(scope), Event::Drag | Event::Drop | Event::Bend | Event::Connect | Event::Resize | Event::Click) => {
                         format!("EditOf(\"{canvas}\", \"{scope}\", ends: {}, () => {run})", event != Event::Drag)
@@ -722,7 +722,7 @@ impl<'a> Window<'a> {
             }
         }
 
-        // An action on a canvas with a mode (DESIGN 5.31): the runtime applies it, then `on change`, as one edit.
+        // An action on a canvas with a mode (manual/parts.graphics.md): the runtime applies it, then `on change`, as one edit.
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas && w.props.mode.is_some()) {
             let Some(canvas) = &widget.props.name else { continue };
             let p = &widget.props;

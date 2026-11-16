@@ -1,4 +1,4 @@
-//! A container frames the data parts in it (DESIGN 7.8), as the C#
+//! A container frames the data parts in it (manual/start.how-it-works.md), as the C#
 //! FramesTests check it: a list, table or tree inside a panel, a form, a tabs
 //! page, a step, a section, a pane, a scroll box or a popover shows no border
 //! of its own unless it has `frame`; on the window it keeps one.

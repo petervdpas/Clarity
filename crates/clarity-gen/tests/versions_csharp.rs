@@ -1,5 +1,5 @@
-//! A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md
-//! step 5) on the C# stack: a versioned entity names its version column to
+//! A save never overwrites someone else's change (docs/ledger/row-versions.md)
+//! on the C# stack: a versioned entity names its version column to
 //! the runtime and carries the version, an entity's `savedSince` text is
 //! built from the record as stored now, `save ... anyway` writes over the
 //! version and `reload` of a record variable reads it again.

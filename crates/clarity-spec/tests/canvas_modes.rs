@@ -1,4 +1,4 @@
-//! Canvas modes (DESIGN 5.31), one option with shared parameters. `mode`
+//! Canvas modes (manual/parts.graphics.md), one option with shared parameters. `mode`
 //! says what the person does on the canvas: draw (the default: code draws),
 //! `objects` (the records of a list, dragged), `paint` (a picture, bound to an
 //! image field) or `vector` (shapes, bound to a text field kept as SVG). The

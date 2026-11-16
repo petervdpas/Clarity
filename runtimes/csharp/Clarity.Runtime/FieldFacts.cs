@@ -1,4 +1,4 @@
-// What a screen needs to know of a field beyond its value (DESIGN 7.9): its
+// What a screen needs to know of a field beyond its value (manual/start.how-it-works.md): its
 // label, how it is shown and read, whether it is required, its range, and
 // what it refers to. The generated application gives a table of them, keyed
 // "Entity.field" (the entity's type name, the field as Clarity writes it):

@@ -315,7 +315,7 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
     Ok(decl)
 }
 
-/// `when <condition>` after `allow` (docs/APP-CAPABILITIES-PLAN.md step 4).
+/// `when <condition>` after `allow` (docs/ledger/signin.md).
 fn parse_allow(cursor: &mut Cursor) -> ParseResult<Expr> {
     if !cursor.eat_keyword("when") {
         return Err(cursor.error_here("expected 'when' and a condition, as in 'allow when me.role == Admin'"));
@@ -802,7 +802,7 @@ fn parse_ask_form(cursor: &mut Cursor) -> ParseResult<AskForm> {
     Ok(AskForm::Confirm { yes, no })
 }
 
-/// `cli Shop` with its `help` line (DESIGN 5.20).
+/// `cli Shop` with its `help` line (manual/code.commands.md).
 pub(crate) fn parse_cli(node: &Node) -> ParseResult<CliDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -822,7 +822,7 @@ pub(crate) fn parse_cli(node: &Node) -> ParseResult<CliDecl> {
 }
 
 /// `command [group] name(arguments)`, its `help` and `option` lines, and
-/// its statements (DESIGN 5.20).
+/// its statements (manual/code.commands.md).
 pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<CommandDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -904,7 +904,7 @@ fn parse_option(cursor: &mut Cursor, span: Span) -> ParseResult<CommandOption> {
 }
 
 /// `part Arena` with its library, `binds`, properties, `tells`, `hears`,
-/// `size`, `grows` and `preview` lines (DESIGN 5.19).
+/// `size`, `grows` and `preview` lines (manual/design.custom-parts.md).
 pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<PartDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -1037,7 +1037,7 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
     Ok(part)
 }
 
-/// `library Words` with its package line and its `function` lines (DESIGN 5.21).
+/// `library Words` with its package line and its `function` lines (manual/code.libraries.md).
 pub(crate) fn parse_library(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<LibraryDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -1110,8 +1110,8 @@ pub(crate) fn parse_library(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
     Ok(library)
 }
 
-/// `mapping OrderFeed of Order from xml` and its lines (docs/FORMATS-PLAN.md,
-/// step 4): `at`, a line per field, the records inside with their own lines,
+/// `mapping OrderFeed of Order from xml` and its lines (docs/ledger/formats.md):
+/// `at`, a line per field, the records inside with their own lines,
 /// `check`, and the format's options. The checker holds them to the entity
 /// and the catalog; the parser only reads their shape.
 /// `toast saved` and its lines: `text @savedToast`, `lifespan 3000` (in
@@ -1583,7 +1583,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             value: token.text == "true",
         },
         TokenKind::Ident if token.text == NONE => ExprKind::Empty,
-        // `ask @question ...` as a value: a command's question (DESIGN 5.20).
+        // `ask @question ...` as a value: a command's question (manual/code.commands.md).
         TokenKind::Ident
             if token.text == "ask" && cursor.peek_at(1).is_some_and(|t| !matches!(t.kind, TokenKind::Dot | TokenKind::Assign | TokenKind::LParen | TokenKind::Comma | TokenKind::RParen)) =>
         {
@@ -1602,7 +1602,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "files" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_files(cursor);
         }
-        // `json of value` and `read Order from json text`: a format of the catalog (docs/FORMATS-PLAN.md).
+        // `json of value` and `read Order from json text`: a format of the catalog (docs/ledger/formats.md).
         TokenKind::Ident if clarity_formats::format(&token.text).is_some() && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
             let format = Ident { name: token.text.clone(), span: token.span };
             cursor.next();
@@ -1654,7 +1654,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             let (options, end) = parse_format_options(cursor, &format.name, true, input.span)?;
             return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadFormat { ty, input: Box::new(input), mapping: MappingUse::Inline { format, options } } });
         }
-        // `http get url`: a call to a web API (DESIGN 5.23).
+        // `http get url`: a call to a web API (manual/code.web-apis.md).
         TokenKind::Ident
             if token.text == "http" && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident && !RESERVED.contains(&t.text.as_str())) =>
         {
@@ -1784,7 +1784,7 @@ fn parse_http(cursor: &mut Cursor) -> ParseResult<Expr> {
     } else {
         None
     };
-    // `every page` follows the source's paging (DESIGN 5.23).
+    // `every page` follows the source's paging (manual/code.web-apis.md).
     let pages = cursor.eat_keyword("every");
     if pages {
         let page = cursor.expect_ident("page, as in every page")?;

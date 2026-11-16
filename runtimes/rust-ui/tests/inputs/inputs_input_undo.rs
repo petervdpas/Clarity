@@ -1,4 +1,4 @@
-//! Undo of typed inputs in a real window (DESIGN 5.29), as a person types:
+//! Undo of typed inputs in a real window (manual/code.handlers.md), as a person types:
 //! typing taken when a text box is left is the window's edit, so Ctrl+Z
 //! there walks back the form, while typing not yet taken is the box's own
 //! to take back first; an input that wraps its text box (a number, a color,
@@ -6,7 +6,7 @@
 //! with a key and a setting changed by a part are taken back too. Each part
 //! carries the undoScope the generator writes.
 //!
-//! The record of edits is the program's (DESIGN 5.29: the runtime holds
+//! The record of edits is the program's (manual/code.handlers.md: the runtime holds
 //! it), so the program of these tests keeps one with the runtime's own
 //! edit bus, as a generated program does.
 

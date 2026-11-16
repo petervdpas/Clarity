@@ -1,4 +1,4 @@
-//! The frame of a window as its markup writes it (DESIGN 7.8): the menu
+//! The frame of a window as its markup writes it (manual/start.how-it-works.md): the menu
 //! bar, toolbar, ribbon, sidebars and footer of the window's own `.cxaml`
 //! and of its app's (`apps/Shop.cxaml`). A window shows its own region where
 //! it has one and the app's where it has none, as every screen does.

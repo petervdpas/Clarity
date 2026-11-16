@@ -1,4 +1,4 @@
-//! What the program knows of its fields and types (DESIGN 7.9), as it gives
+//! What the program knows of its fields and types (manual/start.how-it-works.md), as it gives
 //! them in plain JSON (`Program::facts_json`, the runtime's
 //! `fields::Facts::to_json`): each window's values and their types, each
 //! record's fields, the facts of every entity field keyed "Entity.field",

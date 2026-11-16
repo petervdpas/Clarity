@@ -1,4 +1,4 @@
-// Canvas modes (DESIGN 5.31) against the cases every runtime shares
+// Canvas modes (manual/parts.graphics.md) against the cases every runtime shares
 // (conformance/canvas-modes.json): a drawing's SVG for its shapes and back,
 // and what each action on a canvas makes of the window's data.
 

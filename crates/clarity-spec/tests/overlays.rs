@@ -1,4 +1,4 @@
-//! Context menus and popovers (DESIGN 5.16): a `menu` block under a part is
+//! Context menus and popovers (manual/parts.containers.md): a `menu` block under a part is
 //! its context menu, written as the frame's menu items are; a `popover` is a
 //! container part outside the window's grid, opened next to the part in its
 //! `for` by `on click -> name` or by code through `name.visible`.

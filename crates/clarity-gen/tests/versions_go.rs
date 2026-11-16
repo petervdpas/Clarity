@@ -1,5 +1,5 @@
-//! A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md
-//! step 5) on the Go stack: a versioned entity names its version column and
+//! A save never overwrites someone else's change (docs/ledger/row-versions.md)
+//! on the Go stack: a versioned entity names its version column and
 //! carries the version, an entity's `savedSince` text is filled from the
 //! record as stored now, `save ... anyway` and `reload` of a record call the
 //! runtime, and an entity whose versions step is not written yet carries

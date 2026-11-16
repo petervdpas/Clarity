@@ -1,4 +1,4 @@
-// A custom part (DESIGN 5.19, 7.9): a control a .NET library of the program
+// A custom part (manual/design.custom-parts.md, manual/start.how-it-works.md): a control a .NET library of the program
 // brings, placed in a window as <Custom part="Gauge">. The native library
 // lays it out, gives it the pointer, keys and the focus, and asks it to draw
 // on its canvas; it speaks with its window in the part's declared words:

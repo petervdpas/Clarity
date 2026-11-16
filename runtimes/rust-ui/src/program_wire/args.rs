@@ -1,5 +1,5 @@
 //! The program's calls as JSON, in the shapes of the web server's wire
-//! (DESIGN 7.3, clarity-gen's `served`): what each `Program` call carries
+//! (manual/project.run-build.md, clarity-gen's `served`): what each `Program` call carries
 //! becomes the arguments of its command, and what the program answers is
 //! read back. The runtime's types that have no JSON of their own (a move, a
 //! range move, a canvas's arguments, an engine's input) are written here.

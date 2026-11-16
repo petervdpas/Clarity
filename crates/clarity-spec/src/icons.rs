@@ -59,7 +59,7 @@ fn distance(a: &str, b: &str) -> usize {
     row[b.len()]
 }
 
-/// The icons a painting canvas's toolbox shows (docs/IMAGE-PLAN.md): one per
+/// The icons a painting canvas's toolbox shows (docs/ledger/canvas-toolbox.md): one per
 /// paint tool, in the order of `CanvasMode::Paint`'s tools, then its own buttons.
 pub const TOOLBOX_ICONS: [&str; 33] = [
     "paintbrush", "pencil", "spray-can", "eraser", "paint-bucket", "pipette",

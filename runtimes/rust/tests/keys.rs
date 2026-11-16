@@ -1,4 +1,4 @@
-// Keys set by the person (DESIGN 5.28), as every renderer sets them
+// Keys set by the person (manual/app.keys.md), as every renderer sets them
 // (conformance/shortcut-keys.json), and where the settings file keeps them.
 
 use std::collections::BTreeMap;

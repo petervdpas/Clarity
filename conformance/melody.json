@@ -1,5 +1,5 @@
 {
-  "about": "Melodies a sound part plays (DESIGN 5.22): notes apart by spaces. A note is a letter A to G, then # or b, then an octave 0 to 8 (4 unless given); - is a rest. A note lasts one beat, *n n beats, /n a nth of a beat; a beat lasts 60 / tempo seconds. `plays` gives each note's frequency in hertz (A4 is 440, equal temperament, rounded to 2 decimals; null for a rest) and its seconds (rounded to 4 decimals). `skips` are the words that are not notes: the checker reports them in a melody written in the code, and a running program skips them. Every runtime runs these cases.",
+  "about": "Melodies a sound part plays (manual/design.sound.md): notes apart by spaces. A note is a letter A to G, then # or b, then an octave 0 to 8 (4 unless given); - is a rest. A note lasts one beat, *n n beats, /n a nth of a beat; a beat lasts 60 / tempo seconds. `plays` gives each note's frequency in hertz (A4 is 440, equal temperament, rounded to 2 decimals; null for a rest) and its seconds (rounded to 4 decimals). `skips` are the words that are not notes: the checker reports them in a melody written in the code, and a running program skips them. Every runtime runs these cases.",
   "cases": [
     {
       "notes": "A4",

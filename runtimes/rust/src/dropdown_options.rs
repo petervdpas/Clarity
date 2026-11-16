@@ -1,5 +1,5 @@
 //! The dropdown's options of U1c, decided here, not in the screen
-//! (DESIGN 1.7). A `typed` dropdown offers the values its field already
+//! (manual/start.how-it-works.md). A `typed` dropdown offers the values its field already
 //! has: each once, without empty text, those containing the typed text
 //! (ignoring case), sorted ignoring case and then as written. A `search`
 //! dropdown offers the records whose text or shown fields hold every typed
@@ -49,7 +49,7 @@ pub fn searched(options: Vec<RefOption>, show: &[String], typed: &str) -> Vec<Re
         .collect()
 }
 
-/// `find_options` (DESIGN 1.7): what a dropdown of `kind` offers for
+/// `find_options` (manual/start.how-it-works.md): what a dropdown of `kind` offers for
 /// `typed`: for `typed`, the field's `values`; for `search`, the entity's
 /// `options` with the fields of `show`. Answers the list.
 pub fn find(kind: &str, show: &[String], typed: &str, values: impl FnOnce() -> Result<Vec<String>>, options: impl FnOnce() -> Result<Vec<RefOption>>) -> Result<Value> {

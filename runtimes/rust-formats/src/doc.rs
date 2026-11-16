@@ -1,5 +1,5 @@
 //! The one document model every format reads into and writes from
-//! (docs/FORMATS-PLAN.md, "How it is built: one document model, one
+//! (docs/ledger/formats.md, "How it is built: one document model, one
 //! engine"). A node has a name, attributes where its format has them, its
 //! own text or value, and what it holds in order; it keeps what a writer
 //! needs to write the file back as it was (comments, CDATA, processing

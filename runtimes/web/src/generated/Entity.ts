@@ -16,18 +16,18 @@ table: string | null,
  */
 key: string | null, 
 /**
- * The project's settings (`settings` block, DESIGN 5.17): kept per
+ * The project's settings (`settings` block, manual/data.settings.md): kept per
  * person on their machine, never in the database; named `Settings`.
  */
 settings: boolean, 
 /**
- * `record Shape` (DESIGN 5.12): values with fields that belong to no
+ * `record Shape` (manual/code.engines.md): values with fields that belong to no
  * table, never stored; kept in the module's `records`, not its entities.
  */
 record: boolean, 
 /**
  * The entity of people the project file's `signin` names
- * (docs/APP-CAPABILITIES-PLAN.md step 4): `me` is one of its records.
+ * (docs/ledger/signin.md): `me` is one of its records.
  */
 people: boolean, 
 /**
@@ -42,7 +42,7 @@ readable: Expr | null,
 writable: Expr | null, 
 /**
  * `version "RowVersion"`: the column of an external database's table
- * that holds each record's version (docs/APP-CAPABILITIES-PLAN.md step
+ * that holds each record's version (docs/ledger/row-versions.md step
  * 5). An owned entity has none written: Clarity keeps `row_version`
  * itself; `Project::version_column` gives the column either way.
  */
@@ -61,8 +61,8 @@ versionNone: boolean,
 savedSince: string | null, 
 /**
  * The column the runtime keeps each record's version in, once the
- * project's steps or `version "Col"` give one (docs/APP-CAPABILITIES-PLAN.md
- * step 5); none while saves of it are not checked. Set after loading, for
+ * project's steps or `version "Col"` give one (docs/ledger/row-versions.md);
+ * none while saves of it are not checked. Set after loading, for
  * the IDE to show: the version is Clarity's, never a field.
  */
 keptVersion: string | null, span: Span, };

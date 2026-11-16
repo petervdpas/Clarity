@@ -1,4 +1,4 @@
-// The database side of undo (DESIGN 5.29), as on the other stacks
+// The database side of undo (manual/code.handlers.md), as on the other stacks
 // (runtimes/rust/tests/undo.rs): everything one handler run changed is one
 // step, with an id the window's edit keeps. Undo puts the rows back as they
 // were, with their own ids, cascades included; redo does it again; a

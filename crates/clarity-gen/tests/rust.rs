@@ -107,7 +107,7 @@ fn writes_a_complete_cargo_project() {
         [
             "Cargo.toml",
             "README.md",
-            // It links Clarity.UI's ready-made library (DESIGN 7.9).
+            // It links Clarity.UI's ready-made library (manual/start.how-it-works.md).
             "build.rs",
             "src/facts.rs",
             "src/main.rs",
@@ -119,7 +119,7 @@ fn writes_a_complete_cargo_project() {
         ]
     );
     let cargo = file(&files, "Cargo.toml");
-    // Clarity.UI draws the desktop program (DESIGN 7.9), from its ready-made library: no crate of it, nothing of a webview.
+    // Clarity.UI draws the desktop program (manual/start.how-it-works.md), from its ready-made library: no crate of it, nothing of a webview.
     assert!(!cargo.contains("clarity-ui = ") && !cargo.contains("tauri"), "{cargo}");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
     // The runtime crate from crates.io, at the version this generator is made
@@ -852,7 +852,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(sales.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{sales}");
 }
 
-/// The web target (DESIGN 7.3, round B of 7.9): the program serves
+/// The web target (manual/project.run-build.md, round B of 7.9): the program serves
 /// Clarity.UI's browser files and answers their wire with the program;
 /// beside the desktop target, one program does both and `--serve` serves.
 #[test]
@@ -894,7 +894,7 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
     assert!(files.iter().any(|f| f.path == "browser/index.html") && files.iter().any(|f| f.path == "windows/OrderForm.cxaml"));
 }
 
-/// Backend drives frontend (DESIGN 1.7): the screen sends the person's
+/// Backend drives frontend (manual/start.how-it-works.md): the screen sends the person's
 /// action and the runtime decides what it does, on the desktop and on the web.
 #[test]
 fn the_runtime_decides_what_the_persons_action_does() {
@@ -907,17 +907,17 @@ fn the_runtime_decides_what_the_persons_action_does() {
         ("range_event", true, "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
         ("step_event", false, "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
     ] {
-        // A part's options are the runtime's parameters (DESIGN 1.7): a readonly part's change is taken back.
-        // The program (DESIGN 7.9) calls the runtime.
+        // A part's options are the runtime's parameters (manual/start.how-it-works.md): a readonly part's change is taken back.
+        // The program (manual/start.how-it-works.md) calls the runtime.
         assert!(main.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{main}");
         // A wizard's Next and Finish run handlers, whose refused save shows at its input.
         let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { format!("shown_at_input(db, state, |state| {call})") };
         assert!(main.contains(&format!("window_reply(&sent, locked(self, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
     }
-    // Canvas modes (DESIGN 5.31): the runtime applies the person's action and runs on change as one edit.
+    // Canvas modes (manual/parts.graphics.md): the runtime applies the person's action and runs on change as one edit.
     assert!(main.contains("window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
     assert!(main.contains("clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
-    // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
+    // The shown rows (manual/start.how-it-works.md): every window reply fills the views; a view event is no edit and not watched.
     assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
     assert!(main.contains("        let sent = clarity_runtime::views::Sent::view_event(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::views::event(state, part, &action, |state| drawn(db, state))))"), "{main}");
     assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::stepped(db, || dispatch(db, state, handler)))))"), "{main}");
@@ -933,7 +933,7 @@ fn the_runtime_decides_what_the_persons_action_does() {
     assert!(web.contains("clarity_runtime::dropdown_options::find(kind, show, typed, || values_of(db, entity, field.unwrap_or_default()), || options(db, entity))"), "{web}");
 }
 
-/// A canvas with a mode (DESIGN 5.31): handlers read and set its tool, brush
+/// A canvas with a mode (manual/parts.graphics.md): handlers read and set its tool, brush
 /// and ink as part state, each with its design value, and read what the
 /// person touched: an object's record, or a shape's place from 1.
 #[test]

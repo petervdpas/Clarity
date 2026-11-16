@@ -1,4 +1,4 @@
-//! The shown rows of tables, lists, trees and charts (DESIGN 1.7) against
+//! The shown rows of tables, lists, trees and charts (manual/start.how-it-works.md) against
 //! the cases every runtime shares (conformance/table-order.json,
 //! table-pages.json, trees.json, charts.json `groups`), and the views a
 //! reply fills and `view_event` changes.

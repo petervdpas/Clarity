@@ -1,5 +1,5 @@
-//! The sign-in window designed as views (docs/APP-CAPABILITIES-PLAN.md,
-//! "The sign-in window is designed, and guided"): its content shows the
+//! The sign-in window designed as views (docs/ledger/signin.md):
+//! its content shows the
 //! sign-in views one at a time; a sign-in button signs in with the fields of
 //! its own view and "keep me signed in" there; a refusal shows in the view's
 //! refusal; an "other way" shows another view; the language dropdown lists

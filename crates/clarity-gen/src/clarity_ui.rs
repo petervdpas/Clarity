@@ -1,4 +1,4 @@
-//! Clarity.UI's library for Go, C and C++ programs (DESIGN 7.9). Their
+//! Clarity.UI's library for Go, C and C++ programs (manual/start.how-it-works.md). Their
 //! builds take it from the folder the environment variable `CLARITY_UI`
 //! names: `include/clarity_ui.h` and, in `lib/`, the library for the
 //! system. In order: the folder the person names; the one the installed
@@ -137,7 +137,7 @@ pub fn audio_file(os: &str) -> &'static str {
 }
 
 /// Cisco's openh264 for a system and processor (as std names them), which
-/// every app with video carries beside its program (docs/VIDEO-PLAN.md);
+/// every app with video carries beside its program (docs/ledger/video-camera.md);
 /// the names of runtimes/rust-video/openh264.sha256.
 pub fn openh264_file(os: &str, arch: &str) -> Option<&'static str> {
     Some(match (os, arch) {
@@ -167,7 +167,7 @@ pub fn openh264_hash(name: &str) -> Option<&'static str> {
 }
 
 /// Makes sure `folder/lib` holds Cisco's openh264 for this system, as every
-/// video app carries it (docs/VIDEO-PLAN.md): when it lacks it, or holds one
+/// video app carries it (docs/ledger/video-camera.md): when it lacks it, or holds one
 /// whose hash Clarity does not know, the binary is fetched from Cisco with
 /// `get`, unpacked and checked, then put there. None where Cisco has no
 /// binary for the system; the path otherwise.

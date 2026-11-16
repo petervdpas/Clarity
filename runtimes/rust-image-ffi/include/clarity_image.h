@@ -1,5 +1,5 @@
 /*
- * clarity_image.h: the C interface of Clarity.Image (docs/IMAGE-PLAN.md).
+ * clarity_image.h: the C interface of Clarity.Image (docs/ledger/picture-functions.md).
  * The library (libclarity_image.so, clarity_image.dll, libclarity_image.dylib)
  * holds the picture functions of code: resize, crop, rotate, flip, blend,
  * adjust and a picture's size, alike on every stack (conformance/picture-functions.json).

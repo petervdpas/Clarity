@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4) on the
+// Who is using the program (docs/ledger/signin.md) on the
 // C++ runtime: signing in and out through Clarity.Auth as every runtime does
 // (conformance/signin.json), the program's start, the wire's commands, the
 // served session cookie and the command line.

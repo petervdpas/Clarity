@@ -1,4 +1,4 @@
-// The engines a project declares (DESIGN 5.11), for the project tree and the
+// The engines a project declares (manual/code.engines.md), for the project tree and the
 // module view: each with its module and the errors found in its declaration,
 // such as a file that is missing or lacks a declared function.
 
@@ -160,7 +160,7 @@ export function freeName(taken: string[], base: string): string {
   return base + n;
 }
 
-/** The engines a canvas can run (DESIGN 5.12): those declared beside the screen. */
+/** The engines a canvas can run (manual/code.engines.md): those declared beside the screen. */
 export function besideEngines(project: Project): EngineDecl[] {
   return project.files.flatMap((file) => file.engines).filter((engine) => engine.beside);
 }

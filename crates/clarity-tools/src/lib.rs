@@ -3,7 +3,7 @@
 //! steps, diagrams, new projects, generating and reading the generated code.
 //! They design and generate only: none of them builds, runs or touches a
 //! database. The IDE's agent adds its own tools (build, backups, Preview) on
-//! top; the MCP server offers these as they are (docs/MCP-PLAN.md).
+//! top; the MCP server offers these as they are (docs/ledger/mcp-tools.md).
 
 pub mod diagrams;
 pub mod edits;
@@ -459,7 +459,7 @@ impl ProjectTools {
         if path.trim().trim_start_matches("./") == clarity_spec::guidance::FILE {
             return Err(format!("{path} is the app's guidance for agents: write it a section at a time with set_guidance, and read it with guidance"));
         }
-        // Windows, views and the app change only through the structural tools (docs/AGENT-TOOLS-PLAN.md).
+        // Windows, views and the app change only through the structural tools (docs/ledger/mcp-tools.md).
         if clarity_spec::cxaml::is_page_file(path.trim()) {
             let names: Vec<String> = crate::structural::windows::definitions().into_iter().chain(crate::structural::frame::definitions()).map(|t| t.name).collect();
             return Err(format!(
@@ -480,7 +480,7 @@ impl ProjectTools {
     }
 
     /// What a web API's description offers, and what the project picks
-    /// (DESIGN 5.23), as the API... panel shows it.
+    /// (manual/code.web-apis.md), as the API... panel shows it.
     fn api(&self, source: &str) -> Result<String, String> {
         let (file, _) = self.open()?;
         let listing = clarity_project::api_listing(file, source)?;
@@ -948,7 +948,7 @@ mod tests {
         (root, file, dir)
     }
 
-    /// An OpenAPI description in the project (DESIGN 5.23): the agent reads
+    /// An OpenAPI description in the project (manual/code.web-apis.md): the agent reads
     /// what it offers and picks what the application uses, as the API...
     /// panel does, through the project file, so one Undo takes it back.
     #[test]
@@ -1003,7 +1003,7 @@ mod tests {
     }
 
     /// The agent's model changes go into its migration step by themselves
-    /// (docs/MCP-PLAN.md): folded while no database has applied the step, a
+    /// (docs/ledger/mcp-tools.md): folded while no database has applied the step, a
     /// new step after; a rename only as the rename tool asked, never guessed.
     #[test]
     fn model_changes_go_into_the_agent_s_steps() {
@@ -1401,7 +1401,7 @@ mod tests {
         assert!(text.contains("output \"out\""), "{text}");
         std::fs::write(&file, text.replace("output \"out\"", "output \"build/app\"")).unwrap();
         let out = dir.join("build/app");
-        // Each program in its own folder of the output (DESIGN 5.20).
+        // Each program in its own folder of the output (manual/code.commands.md).
         std::fs::create_dir_all(out.join("desktop/Modules")).unwrap();
         std::fs::create_dir_all(out.join("desktop/target/debug")).unwrap();
         std::fs::write(out.join("desktop/Modules/Todo.cs"), "Lists.At(xs, 1)").unwrap();
@@ -1483,8 +1483,8 @@ mod tests {
 
     /// Windows and views are `.cxaml` files in the design folder:
     /// the agent reads them by their paths and the overview lists them, but
-    /// changes them only with the structural tools (docs/AGENT-TOOLS-PLAN.md,
-    /// "add and change only through tools"): writing one is refused, naming the tools.
+    /// changes them only with the structural tools (docs/ledger/mcp-tools.md):
+    /// writing one is refused, naming the tools.
     #[test]
     fn the_agent_reads_windows_and_views_and_changes_them_with_tools() {
         let (root, file, dir) = project("cxaml");

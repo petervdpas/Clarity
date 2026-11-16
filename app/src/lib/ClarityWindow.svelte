@@ -1,11 +1,12 @@
 <script lang="ts">
-  // A window of the project drawn by Clarity.UI (DESIGN 8.1), as the
+  // A window of the project drawn by Clarity.UI (manual/design.parts.md), as the
   // generated program draws it: in the preview it runs with sample data;
   // on the design canvas (`design`) it takes no input, and says where its
   // parts and grids are (`onlayout`) for the designer's layer over it. A
   // change of the project (`project`, a new value for each) or of what is
   // shown draws again on the same canvas, without loading the library again.
   import { onMount, untrack } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { browserFilesNotice, type BrowserFilesNotice } from "./browserFiles";
   import { browserFiles } from "./browserFilesStore.svelte";
   import { filesAddress, pageScript, previewAddress, startOptions, type Chosen, type ClarityUi, type Layout, type Shown, type Showing } from "./clarityWindow";
@@ -57,8 +58,16 @@
       base = await previewAddress();
       const page = await pageScript(base);
       if (stopped || !canvas) return;
-      ui = page.start(canvas, untrack(() => startOptions(base, shown, design, revision, showing, chosen)));
-      // A test of the IDE drives the drawing as a driven program (DESIGN 1.6) through its canvas.
+      const options = untrack(() => startOptions(base, shown, design, revision, showing, chosen));
+      ui = page.start(canvas, {
+        ...options,
+        // The library stopped: said in the canvas's place, and written to Clarity's log with what was being drawn.
+        failed: (what, stack) => {
+          problem = what;
+          invoke("log_line", { line: `[canvas] ${what} | ${design ? "design" : "preview"} of ${JSON.stringify(shown)} | ${options.files}${stack ? " | " + stack.replace(/\n/g, " < ") : ""}` }).catch(() => {});
+        },
+      });
+      // A test of the IDE drives the drawing as a driven program (manual/start.how-it-works.md) through its canvas.
       (canvas as HTMLCanvasElement & { clarityUi?: ClarityUi }).clarityUi = ui;
       await ui.started;
       if (stopped) return;

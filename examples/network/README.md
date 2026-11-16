@@ -1,6 +1,6 @@
 # Network
 
-Graphs of records, to try the graph part out (docs/GRAPH-PLAN.md). One window with two tabs.
+Graphs of records, to try the graph part out (docs/ledger/graph.md). One window with two tabs.
 
 ## What you see and can do
 

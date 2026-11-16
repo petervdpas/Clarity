@@ -1,4 +1,4 @@
-//! A program driven without a window (DESIGN 1.6): the steps a test sends,
+//! A program driven without a window (manual/start.how-it-works.md): the steps a test sends,
 //! a click, keys, typed text, a dialog's button by what it says, and what a
 //! `read` answers of the window and the screen.
 

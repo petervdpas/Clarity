@@ -50,7 +50,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>The window asks to be closed.</summary>
     public event Action? CloseRequested;
 
-    /// <summary>The window asks a question, when the handler that asks has finished (DESIGN 5.14).</summary>
+    /// <summary>The window asks a question, when the handler that asks has finished (manual/code.statements.md).</summary>
     public event Action<Question>? AskRequested;
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
@@ -90,7 +90,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
     }
 
-    /// <summary>The edits of this window (DESIGN 5.29), which Ctrl+Z takes back.</summary>
+    /// <summary>The edits of this window (manual/code.handlers.md), which Ctrl+Z takes back.</summary>
     public EditBus Edits { get; } = new();
 
     /// <summary>The window's data as the last edit left it; what an edit changed is the difference.</summary>
@@ -225,7 +225,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     }
 
     /// <summary>
-    /// The person's action on a canvas with a mode (DESIGN 5.31): the runtime
+    /// The person's action on a canvas with a mode (manual/parts.graphics.md): the runtime
     /// applies it to the window's own records, snapped to the canvas's grid
     /// (CanvasModes decides as every runtime does), chooses what it touched
     /// in <paramref name="part"/>'s selection, and runs <paramref name="changed"/>
@@ -524,7 +524,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
 
     /// <summary>
     /// Runs the app's <c>on unconnected</c> on this window, which is not shown
-    /// (DESIGN 5.27): what it says and the windows it opens go to <paramref name="unconnecting"/>.
+    /// (manual/data.settings.md): what it says and the windows it opens go to <paramref name="unconnecting"/>.
     /// </summary>
     public void RunUnconnected(Unconnecting unconnecting, Action<string> handler)
     {
@@ -688,7 +688,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         part.SelectedItem as R ?? new R();
 
     /// <summary>The row of <paramref name="rows"/> that code selects with a record
-    /// (DESIGN 5.12): the same one, else the first holding the same values; null for none.</summary>
+    /// (manual/code.engines.md): the same one, else the first holding the same values; null for none.</summary>
     protected static R? SameRow<R>(IEnumerable<R> rows, R? wanted) where R : class
     {
         if (wanted is null)
@@ -752,7 +752,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>Ends the application: the built-in <c>quit</c>.</summary>
     protected static void QuitApplication() => DesktopProgram.Current?.Quit();
 
-    /// <summary>Opens Clarity's keys window over the window the person works in: the built-in <c>keys</c> (DESIGN 5.28).</summary>
+    /// <summary>Opens Clarity's keys window over the window the person works in: the built-in <c>keys</c> (manual/app.keys.md).</summary>
     protected static void ShowKeys() => DesktopProgram.Current?.ShowKeys();
 
     /// <summary>The window has opened with its data.</summary>

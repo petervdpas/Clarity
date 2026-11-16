@@ -1,4 +1,4 @@
-//! Clarity.UI in the browser (DESIGN 7.9, round B): the entry points the
+//! Clarity.UI in the browser (manual/start.how-it-works.md, round B): the entry points the
 //! worker script (js/clarity-ui-worker.js) calls, over clarity-ui's browser
 //! host (`clarity_ui::browser::web`). Text comes in as NUL-terminated UTF-8
 //! the worker allocated (and frees); text going out is freed with
@@ -160,7 +160,7 @@ mod entry {
         web::next_wake()
     }
 
-    /// A driven step (DESIGN 1.6) as JSON; its answer as JSON.
+    /// A driven step (manual/start.how-it-works.md) as JSON; its answer as JSON.
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_step(step: *const c_char) -> *mut c_char {
         given(web::step(text(step)))

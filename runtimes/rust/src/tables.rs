@@ -1,4 +1,4 @@
-//! How a table's rows show, decided here in the runtime (DESIGN 1.7,
+//! How a table's rows show, decided here in the runtime (manual/start.how-it-works.md,
 //! conformance/table-order.json, table-pages.json): text ignoring case,
 //! numbers as numbers, a choice by the label it shows, an empty value last
 //! either way, equal rows in the order of the data; then cut into pages.

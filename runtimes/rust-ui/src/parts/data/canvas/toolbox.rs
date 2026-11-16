@@ -1,4 +1,4 @@
-//! The toolbox of a canvas (`toolbox`, docs/IMAGE-PLAN.md): a panel holding
+//! The toolbox of a canvas (`toolbox`, docs/ledger/canvas-toolbox.md): a panel holding
 //! the parts of a toolbox page (`page Painting: toolbox`, parts/tools.rs) on
 //! their grid, or the built-in toolbox of the canvas's mode. It floats over
 //! the window (`toolbox popup`), dragged by its title and folded, or lies

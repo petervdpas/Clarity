@@ -1,4 +1,4 @@
-//! The sign-in part (docs/APP-CAPABILITIES-PLAN.md step 4, "The sign-in
+//! The sign-in part (docs/ledger/signin.md, "The sign-in
 //! part"): it draws a labelled field per input of each strategy of the
 //! project's `signin` block that works here and a button per strategy, the
 //! block's `shows` orders and limits them, "Keep me signed in" sends

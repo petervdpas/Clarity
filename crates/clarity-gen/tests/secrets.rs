@@ -1,4 +1,4 @@
-//! Secret settings (DESIGN 5.27) on every stack: kept in the system's
+//! Secret settings (manual/data.settings.md) on every stack: kept in the system's
 //! protected store per program, never in the settings file. A web API signs
 //! with one and a database connects with one, each named in the project file
 //! as `setting:name` and in the program as `setting:<program>/name`.
@@ -68,7 +68,7 @@ fn the_secrets_are_named_to_the_settings() {
     assert!(cpp.contains("options.secrets = nlohmann::json::array({\"shopDb\"});"), "C++ names its secrets to the service");
 }
 
-/// The app's `on unconnected` (DESIGN 5.27) takes over from the window that
+/// The app's `on unconnected` (manual/data.settings.md) takes over from the window that
 /// keeps the connection: the start says it, with why, and it opens what shows first.
 const HANDLED: &str = "
 app Shop
@@ -105,14 +105,14 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(rust.contains("Some(clarity_runtime::unconnected_reason(&err))"));
     // The program opens them again when the person has kept their connection.
     assert!(rust.contains("    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;"));
-    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (DESIGN 7.9).
+    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (manual/start.how-it-works.md).
     assert!(rust.contains("program::Unconnected { handler: UNCONNECTED_HANDLER.map(String::from), window: CONNECTION_WINDOW.map(String::from), problem }"));
     let go = handled(Backend::Go, Ui::Clarity);
     assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: clarity.UnconnectedReason(err)}"));
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
     let csharp = handled(Backend::Csharp, Ui::Clarity);
     assert!(csharp.contains("RunUnconnected(unconnecting, reason => OnNotConnected(reason));"));
-    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (DESIGN 7.9).
+    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (manual/start.how-it-works.md).
     assert!(csharp.contains("Handler = (db, unconnecting) => new AppUnconnectedViewModel(db).Unconnected(unconnecting),"));
     assert!(csharp.contains("}, Unconnected.Reason(e));"));
 }

@@ -1,10 +1,10 @@
-//! Import for a data source that is a file (docs/FORMATS-PLAN.md, "Import,
+//! Import for a data source that is a file (docs/ledger/formats.md, "Import,
 //! and the XML Data Binding wizard made generic"): the tables Clarity.Formats
 //! finds in the file, or an XSD schema declares, written as entities. A
 //! file's columns are text (types are not guessed from values); a schema's
 //! are typed, with enums, sizes and `required`. A file source is one flat
 //! table: records inside its records stay in the file, unmapped. Beside the
-//! entity, Import writes a mapping (docs/FORMATS-PLAN.md, step 4) with the
+//! entity, Import writes a mapping (docs/ledger/formats.md) with the
 //! `at` and the paths it found, and the source is laid over it, so the
 //! paths are kept in one place and changed on the mapping page.
 

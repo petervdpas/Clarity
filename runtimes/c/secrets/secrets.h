@@ -1,4 +1,4 @@
-// Secret settings (DESIGN 5.27) in the system's protected store, per person
+// Secret settings (manual/data.settings.md) in the system's protected store, per person
 // and per application, never in settings.json: the Credential Manager on
 // Windows, the Keychain on macOS, the Secret Service over D-Bus elsewhere
 // (GNOME Keyring, KWallet). An entry is the program's name with the

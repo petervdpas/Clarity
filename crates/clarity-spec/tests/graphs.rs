@@ -1,4 +1,4 @@
-//! The graph part (docs/GRAPH-PLAN.md): nodes and edges, two lists of
+//! The graph part (docs/ledger/graph.md): nodes and edges, two lists of
 //! records of any kind the app declares; the part names which fields are
 //! a node's key, label and kind and an edge's ends, label and kind, and
 //! how each kind looks. Every other field is the node's or edge's own.

@@ -1,4 +1,4 @@
-//! The agent programs Clarity's chat panel starts (docs/ACP-PLAN.md, step 4):
+//! The agent programs Clarity's chat panel starts (docs/ledger/acp.md):
 //! where each is found, the arguments that make it speak ACP over stdio, how
 //! it is kept asking before it runs anything, how it signs in, and where the
 //! person installs it. Clarity never installs them.

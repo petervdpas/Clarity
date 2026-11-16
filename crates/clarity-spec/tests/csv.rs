@@ -1,4 +1,4 @@
-//! CSV in code (docs/FORMATS-PLAN.md, step 2): `read list<Login> from csv
+//! CSV in code (docs/ledger/formats.md): `read list<Login> from csv
 //! text separator ";"` and `csv of logins`. CSV holds one flat table, so the
 //! checker asks for records (or a list of them) without records inside.
 

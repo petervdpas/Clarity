@@ -1,4 +1,4 @@
-// Command-line programs (DESIGN 5.20): reading a command line against the
+// Command-line programs (manual/code.commands.md): reading a command line against the
 // program's commands, writing its help, printing a table and asking on a
 // terminal, as conformance/command-line.json says every runtime does. A
 // generated program describes itself as a ClarityCliProgram and runs the

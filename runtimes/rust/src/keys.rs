@@ -1,4 +1,4 @@
-//! Keys set by the person (DESIGN 5.28), as every renderer sets them
+//! Keys set by the person (manual/app.keys.md), as every renderer sets them
 //! (conformance/shortcut-keys.json): a command's keys are the person's or the
 //! design's; a key taken in a place they share swaps; Reset swaps back; the
 //! keys the system and the inputs need are refused. Keys are written as

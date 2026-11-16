@@ -1,5 +1,5 @@
 //! A file in a format as tables, for a data source that is a file
-//! (docs/FORMATS-PLAN.md, "A file as a data source"), the same for every
+//! (docs/ledger/formats.md), the same for every
 //! format. The runtime keeps the tables in an in-memory SQLite database
 //! while the program runs and writes them back after each change, so a file
 //! source finds, saves and deletes as a database does.

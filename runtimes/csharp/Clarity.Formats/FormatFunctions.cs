@@ -1,4 +1,4 @@
-// The data formats of code (docs/FORMATS-PLAN.md) through the native
+// The data formats of code (docs/ledger/formats.md) through the native
 // Clarity.Formats library (clarity_formats.h), the one implementation every
 // stack calls: `read Order from json text` reads the format and fits it to
 // the record, which Clarity's JSON then decodes; `json of value` writes the

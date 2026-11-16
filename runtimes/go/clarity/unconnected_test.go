@@ -1,4 +1,4 @@
-// Why the databases did not open (DESIGN 5.27), in Clarity's own words that
+// Why the databases did not open (manual/data.settings.md), in Clarity's own words that
 // the project translates, as every runtime says it (conformance/unconnected.json).
 
 package clarity

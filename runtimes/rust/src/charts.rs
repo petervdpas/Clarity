@@ -1,4 +1,4 @@
-//! A chart's groups (U1c), decided here in the runtime (DESIGN 1.7,
+//! A chart's groups (U1c), decided here in the runtime (manual/start.how-it-works.md,
 //! conformance/charts.json, `groups`): a list's rows grouped by a field,
 //! each group counted, summed or averaged, in the order of their values. The
 //! axis and the colors of a pie's slices are how it is drawn, the renderer's.

@@ -388,7 +388,7 @@ fn level_element(level: &TreeLevel, depth: usize, out: &mut String) {
     let _ = writeln!(out, "{pad}</Level>");
 }
 
-/// A part's menu (DESIGN 5.16): `<Menu>` with an `<Item>` per command.
+/// A part's menu (manual/design.parts.md): `<Menu>` with an `<Item>` per command.
 pub fn menu_element(menu: &Menu, depth: usize, out: &mut String, marks: &Marks) {
     let pad = "  ".repeat(depth);
     let _ = writeln!(out, "{pad}<Menu{}{}>", name_attribute(&menu.name), width_attribute(menu.width));

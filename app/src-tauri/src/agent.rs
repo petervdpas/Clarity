@@ -436,7 +436,7 @@ fn turn_budget(text: &str) -> Result<Option<u64>, String> {
 /// open project. Returns at once; the turn reports through events.
 #[tauri::command]
 pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
-    // A connection of kind codex or copilot is the person's own agent program, signed in its own way (docs/ACP-PLAN.md).
+    // A connection of kind codex or copilot is the person's own agent program, signed in its own way (docs/ledger/acp.md).
     if let Some(vendor) = crate::acp::vendor_of(&app, &connection) {
         return crate::acp::send(app, connection, vendor, text);
     }

@@ -1,5 +1,5 @@
 {
-  "about": "Which translation a renderer uses (DESIGN section 1.5, I1c): the person's locale, the languages the project has translation files for, and the project's base language. picks is the file's language, or null for the texts as written. Every renderer must pick the same.",
+  "about": "Which translation a renderer uses (manual/languages.md): the person's locale, the languages the project has translation files for, and the project's base language. picks is the file's language, or null for the texts as written. Every renderer must pick the same.",
   "picks": [
     {
       "what": "the exact language",

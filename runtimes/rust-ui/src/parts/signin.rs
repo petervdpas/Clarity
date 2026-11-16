@@ -1,4 +1,4 @@
-//! The sign-in part (docs/APP-CAPABILITIES-PLAN.md step 4, "The sign-in
+//! The sign-in part (docs/ledger/signin.md, "The sign-in
 //! part"): on the sign-in window or the app's splash, it draws itself from
 //! the project's `signin` block, never from strategies written here. Per
 //! strategy it offers (the block's `shows`, else every strategy of the

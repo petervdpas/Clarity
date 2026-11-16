@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3): where the server listens. What it serves
+// The web target (manual/project.run-build.md): where the server listens. What it serves
 // and answers is in program_test.go.
 
 package shell

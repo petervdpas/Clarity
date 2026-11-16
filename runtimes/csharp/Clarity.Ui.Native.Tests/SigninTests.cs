@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4): people
+// Who is using the program (docs/ledger/signin.md): people
 // signing in through Clarity.Auth, as every runtime does
 // (conformance/signin.json), and the program's start and wire answering it.
 

@@ -1,4 +1,4 @@
-// Reordering (DESIGN 5.30), decided here and not by the screen: a row of a
+// Reordering (manual/parts.data.md), decided here and not by the screen: a row of a
 // list, table, tree or tree table moved by a drag or by Alt and an arrow
 // key. The result is the list's new order, each row's parent (in a tree) and
 // each row's number at its level, which goes into the field of `reorder by`.

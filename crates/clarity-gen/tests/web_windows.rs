@@ -1,4 +1,4 @@
-//! The windows of a web stack as markup (DESIGN 7.8): each part an element
+//! The windows of a web stack as markup (manual/start.how-it-works.md): each part an element
 //! with what differs from its kind's defaults, written in Clarity's own
 //! words, in an XML file the screen Clarity ships reads.
 
@@ -87,7 +87,7 @@ fn the_screen_reads_the_catalog_s_defaults_and_the_fields_types() {
     assert_eq!((fields["caption"].as_str(), fields["digits"].as_str(), fields["cards"].as_str(), fields["order"].as_str()), (Some("text"), Some("number"), Some("bool"), Some("json")));
 }
 
-/// Where each part's edits are undone (DESIGN 5.29), as the project works it
+/// Where each part's edits are undone (manual/code.handlers.md), as the project works it
 /// out, goes into the markup, so a screen that reads the markup alone (C# on
 /// Clarity.UI) has it: a field in a panel undoes with the panel, a part outside
 /// one with itself, and a part with `no undo` has none.
@@ -145,7 +145,7 @@ fn a_project_s_row_height_is_on_every_window_s_root() {
     assert!(app["windows"]["Todo"].as_str().unwrap().starts_with("<Window name=\"Todo\" rowHeight=\"30\" designItem="), "{app}");
 }
 
-/// A custom part declared with `grows` (DESIGN 5.19) says so in the markup,
+/// A custom part declared with `grows` (manual/design.custom-parts.md) says so in the markup,
 /// so every Clarity.UI lays it out as a growing part; one without it keeps
 /// its rows and writes nothing.
 #[test]
@@ -158,7 +158,7 @@ fn a_custom_part_that_grows_says_so_in_the_markup() {
     assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" undoScope=\"dial\" part=\"Dial\" />"), "{markup}");
 }
 
-/// A custom part's declared description (DESIGN 7.9, A1) is in its
+/// A custom part's declared description (manual/start.how-it-works.md) is in its
 /// markup, so every Clarity.UI gives it to screen readers.
 #[test]
 fn a_custom_part_s_description_is_in_the_markup() {
@@ -169,7 +169,7 @@ fn a_custom_part_s_description_is_in_the_markup() {
     assert!(markup.contains("part=\"Dial\" description=\"@dialAbout\""), "{markup}");
 }
 
-/// A web program's browser files (round B, DESIGN 7.9): the page, titled as
+/// A web program's browser files (round B, manual/start.how-it-works.md): the page, titled as
 /// the app, and files.json with what the library draws from, the same as a
 /// desktop program carries, in the project's order.
 #[test]
@@ -239,7 +239,7 @@ fn the_library_s_browser_files_join_the_programs_served_to_a_browser() {
     assert!(missing.contains("clarity-ui.js"), "{missing}");
 }
 
-// The IDE's preview and design canvas on Clarity.UI (DESIGN 8.1, clarity_gen::preview).
+// The IDE's preview and design canvas on Clarity.UI (manual/design.parts.md, clarity_gen::preview).
 
 use clarity_gen::preview::{self, PreviewProgram, Shown};
 use serde_json::{json, Value};
@@ -491,7 +491,7 @@ impl Drop for Started {
     }
 }
 
-/// The IDE's preview and design canvas in a real browser (DESIGN 8.1): the
+/// The IDE's preview and design canvas in a real browser (manual/design.parts.md): the
 /// IDE's page run by Vite, its backend answered by this test, the window
 /// drawn by Clarity.UI's browser files (target/clarity-ui-browser, or
 /// CLARITY_UI_BROWSER) from the preview server. In the preview a click on a
@@ -727,7 +727,7 @@ fn the_designer_draws_a_slideout_as_a_window_of_its_own() {
     let project = clarity_project::load_modules(&dir).unwrap();
     let shown = Shown::Window("ChaptersPart".into());
     let whole = files(&preview::files_json(&project, "Novel", &shown, true, &BTreeMap::new()));
-    let alone = files(&preview::files_json_slideout(&project, "Novel", &shown, "properties", &BTreeMap::new()).unwrap());
+    let alone = files(&preview::files_json_own_canvas(&project, "Novel", &shown, "properties", &BTreeMap::new()).unwrap());
     let markup = alone["windows"]["ChaptersPart"].as_str().unwrap();
     let window = whole["windows"]["ChaptersPart"].as_str().unwrap();
     assert!(markup.contains("name=\"linkTabs\"") && markup.contains("name=\"titleBox\""), "its parts: {markup}");
@@ -740,5 +740,24 @@ fn the_designer_draws_a_slideout_as_a_window_of_its_own() {
         assert!(key_of(markup, name).is_some(), "{name} has a key");
     }
     assert_eq!(alone["width"], json!(420), "as wide as it slides out");
-    assert!(preview::files_json_slideout(&project, "Novel", &shown, "chapterList", &BTreeMap::new()).is_err(), "only a slide-out");
+    assert!(preview::files_json_own_canvas(&project, "Novel", &shown, "chapterList", &BTreeMap::new()).is_err(), "only a slide-out or popover");
+}
+
+/// A popover designed on a canvas of its own, as a slide-out is (a double
+/// click on it in the designer): its parts on its own grid, as big as it
+/// opens (its columns and rows), keeping their keys in the window's file.
+#[test]
+fn the_designer_draws_a_popover_as_a_window_of_its_own() {
+    let source = "module m\n\npage Albums: window\n    data onlyVinyl: bool\n    button \"Filter\" name filterButton at 1,1 span 2 on click -> filters\n    popover name filters for filterButton span 4 rows 2\n        checkbox \"Only vinyl\" name vinylBox at 1,1 span 4 bind onlyVinyl\n";
+    let project = clarity_spec::load_sources([("m.clarity", source)]);
+    // Written in the module (a window has a .cxaml of its own in a project), which only the checks mind.
+    let shown = Shown::Window("Albums".into());
+    let alone = files(&preview::files_json_own_canvas(&project, "Albums", &shown, "filters", &BTreeMap::new()).unwrap());
+    let markup = alone["windows"]["Albums"].as_str().unwrap();
+    assert!(markup.contains("name=\"vinylBox\""), "its parts: {markup}");
+    assert!(!markup.contains("name=\"filterButton\"") && !markup.contains("<Popover"), "nothing else of the window: {markup}");
+    // Four columns of 80 with three gaps of 8; two rows of the project's height with one gap.
+    assert_eq!(alone["width"], json!(4 * 80 + 3 * 8), "as wide as it opens");
+    let rows = clarity_spec::layout::ROW_HEIGHT;
+    assert_eq!(alone["height"], json!(2 * rows + 8), "as high as it opens");
 }

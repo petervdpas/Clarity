@@ -1,4 +1,4 @@
-//! A graph (docs/GRAPH-PLAN.md): the records of its list as nodes, the
+//! A graph (docs/ledger/graph.md): the records of its list as nodes, the
 //! records of its `edges` as edges between them, drawn by kind; a click
 //! picks a node (`select` once), a double click opens it; dragging a node
 //! moves it; pointing at a node or an edge tells its own fields; the zoom

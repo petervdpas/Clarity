@@ -111,7 +111,7 @@ bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps
     ClaritySourceDb* s = NULL;
     int done;
     if (!clarity_source(db, source, &s) || !version_of(s->driver, &done)) return false;
-    // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+    // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
     if (done > 0 && done < (int)count && !clarity_backup_before_migration(s->driver, done + 1)) return false;
     for (int i = done; i < (int)count; ++i)
         if (!s->driver->apply(s->driver, i + 1, &steps[i])) return false;
@@ -330,7 +330,7 @@ static bool remove_row(ClarityDb* db, const ClarityEntity* entity, int64_t id, i
     return true;
 }
 
-// Undo (DESIGN 5.29): while a step runs, every row a save or delete
+// Undo (manual/code.handlers.md): while a step runs, every row a save or delete
 // changes is kept as it was before and as it is after.
 
 /// A copy of values that outlives the scratch arena, to free with free_values.

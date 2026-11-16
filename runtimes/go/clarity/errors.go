@@ -69,7 +69,7 @@ func (e *NotKeptError) Error() string {
 }
 
 // UnconnectedReason is why the databases did not open, as the person reads
-// it (DESIGN 5.27, conformance/unconnected.json): in Clarity's own words,
+// it (manual/data.settings.md, conformance/unconnected.json): in Clarity's own words,
 // which the project translates, with this runtime's message in the slot.
 func UnconnectedReason(err error) Text {
 	var notKept *NotKeptError

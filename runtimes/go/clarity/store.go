@@ -35,7 +35,7 @@ func applied(version int) string {
 // location is where a database is: as written, or from the environment
 // variable env:NAME names, so passwords stay out of the program.
 func location(text string) (string, error) {
-	// A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+	// A secret setting (manual/data.settings.md): setting:<program>/<name>, from the system's protected store.
 	if at, found := strings.CutPrefix(text, "setting:"); found {
 		if value := settingSecret(at); value != "" {
 			return value, nil

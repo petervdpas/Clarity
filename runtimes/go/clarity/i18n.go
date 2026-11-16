@@ -1,4 +1,4 @@
-// Texts by key in the backend (DESIGN 1.5, I1c): a text code makes, such as
+// Texts by key in the backend (manual/languages.md): a text code makes, such as
 // what a function returns, takes the value of its key in the language the
 // screen picked, or the default language's when that language leaves it
 // empty (conformance/translations.json, `code`). The values come from the

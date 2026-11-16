@@ -1,4 +1,4 @@
-//! The windows of the C# backend on Clarity.UI (DESIGN 7.9): each window's
+//! The windows of the C# backend on Clarity.UI (manual/start.how-it-works.md): each window's
 //! view model, its parts bound to the data and to their state, its handlers
 //! as view model methods; the window itself as markup Clarity.UI draws.
 
@@ -235,7 +235,7 @@ fn translated() -> Vec<OutFile> {
     generate(&project, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"))
 }
 
-/// Texts as Visual Studio keeps them (DESIGN 1.5): a .resx file for the
+/// Texts as Visual Studio keeps them (manual/languages.md): a .resx file for the
 /// default language and one per other language, and a typed accessor, each
 /// key a resource by its name.
 #[test]
@@ -518,12 +518,12 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let vm = file(&files, "Windows/DialViewModel.cs");
     has(vm, "Dial.X + Dial.Y");
     // The canvas gives the window where it was clicked, then runs the handler.
-    // A click on a canvas is an edit Ctrl+Z takes back (DESIGN 5.29).
+    // A click on a canvas is an edit Ctrl+Z takes back (manual/code.handlers.md).
     has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => EditOf(\"dial\", \"dial\", ends: true, () => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    }, [at]));");
 }
 
 /// A window loads its data as it is made: there is no mirror of it any
-/// more, the browser asks the server's window itself (DESIGN 7.9, B2).
+/// more, the browser asks the server's window itself (manual/start.how-it-works.md).
 #[test]
 fn a_window_loads_its_data_as_it_is_made() {
     let files = files();
@@ -549,7 +549,7 @@ page Genres: window
     treetable name genreTree at 1,1 span 12 rows 8 bind genres children children columns name
 ";
 
-/// The facts of every field of every entity (DESIGN 7.9), which Clarity.UI's
+/// The facts of every field of every entity (manual/start.how-it-works.md), which Clarity.UI's
 /// parts read beside the values: label, format, required, range, what a
 /// reference refers to, and for records that make a tree their parent field.
 #[test]

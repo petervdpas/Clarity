@@ -1,4 +1,4 @@
-//! Custom parts (DESIGN 5.19, 7.9): a control of Clarity.UI that a crate of
+//! Custom parts (manual/design.custom-parts.md, manual/start.how-it-works.md): a control of Clarity.UI that a crate of
 //! the program brings, made the way the built-in parts are made. It draws
 //! itself in its place, takes the pointer, the wheel, keys and the focus
 //! like any element, and speaks with its window in the part's declared

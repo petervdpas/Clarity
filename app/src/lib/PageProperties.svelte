@@ -71,7 +71,7 @@
   const frameElement = $derived(selected === null || location || inner ? null : findFrameElement(page.frame, selected, page.widgets));
   const info = $derived(p ? widgetInfo(preview, p.kind) : null);
 
-  /** What has fields: the entities, and the records (DESIGN 5.12) code builds and nothing stores. */
+  /** What has fields: the entities, and the records (manual/code.engines.md) code builds and nothing stores. */
   const entities = $derived(preview.project.files.flatMap((f) => [...f.entities, ...f.records]));
   const targets = $derived([
     // A splash page is the application's to show as it starts: nothing opens it.
@@ -279,10 +279,10 @@
     if (handler) pageDesigner.showCode(handler);
   }
 
-  // A custom part's declaration (DESIGN 5.19), when the part picked is one.
+  // A custom part's declaration (manual/design.custom-parts.md), when the part picked is one.
   const declared = $derived(p?.kind === "custom" ? preview.project.files.flatMap((f) => f.parts).find((d) => d.name.name === p.part) : undefined);
 
-  // The engines a canvas can run, and the one it runs (DESIGN 5.12).
+  // The engines a canvas can run, and the one it runs (manual/code.engines.md).
   const besides = $derived(besideEngines(preview.project));
   const running = $derived(p?.runs ? besides.find((e) => e.name.name === p.runs) : undefined);
   /** Sets whether the custom part grows with its window: its declaration's `grows`, in the module that declares it, for every place it is used. */
@@ -379,7 +379,7 @@
     <div class="kind">{p.kind === "custom" ? p.part : info.name}</div>
 
     {#if p.kind === "custom"}
-      <!-- Which of the project's custom parts this is (DESIGN 5.19). -->
+      <!-- Which of the project's custom parts this is (manual/design.custom-parts.md). -->
       <label class="prop">
         <span>Custom part</span>
         <select value={p.part ?? ""} onchange={(e) => update({ part: e.currentTarget.value || null })}>
@@ -449,7 +449,7 @@
       </label>
     {/if}
 
-    <!-- A sound and a timer have no place in the grid (DESIGN 5.22, 5.26). -->
+    <!-- A sound and a timer have no place in the grid (manual/design.sound.md, manual/parts.time.md). -->
     {#if p.kind !== "sound" && p.kind !== "timer"}
     <div class="position">
       <label><span>Column</span><input type="number" min="1" value={p.col} onchange={(e) => update({ col: numberOf(e) })} /></label>
@@ -894,7 +894,7 @@
     {/if}
 
     {#if info.properties.includes("reorder")}
-      <!-- Reordering (DESIGN 5.30): the person puts the rows in their own order, kept in an integer field. -->
+      <!-- Reordering (manual/parts.data.md): the person puts the rows in their own order, kept in an integer field. -->
       {@const numbers = collectionFields.filter((f) => f.type.kind === "integer")}
       <fieldset class="checks" title="The person drags rows, or moves the chosen one with Alt and the arrows; wire 'on reorder' to save the rows">
         <legend>Order</legend>
@@ -1337,7 +1337,7 @@
       </fieldset>
     {/if}
 
-    <!-- Its place in the grid: a custom part's grows (DESIGN 5.19), and bottom for any part with a place. -->
+    <!-- Its place in the grid: a custom part's grows (manual/design.custom-parts.md), and bottom for any part with a place. -->
     {#if !UNPLACED.includes(p.kind)}
       <fieldset class="checks">
         <legend>Layout</legend>
@@ -1352,7 +1352,7 @@
       </fieldset>
     {/if}
 
-    <!-- A custom part (DESIGN 5.19): its declared properties, and its tells wired like events. -->
+    <!-- A custom part (manual/design.custom-parts.md): its declared properties, and its tells wired like events. -->
     {#if p.kind === "custom" && declared}
       {#if declared.properties.length > 0}
         <fieldset class="checks">
@@ -1854,7 +1854,7 @@
       {/if}
     </label>
     {/if}
-    <!-- Who may open it (docs/APP-CAPABILITIES-PLAN.md step 4): a condition on `me`, checked before it opens. -->
+    <!-- Who may open it (docs/ledger/signin.md): a condition on `me`, checked before it opens. -->
     {#if preview.project.signin && page.kind !== "signin" && page.kind !== "splash"}
       <label class="prop">
         <span>Allow</span>

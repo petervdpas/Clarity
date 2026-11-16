@@ -23,7 +23,7 @@ Progress: 65%
 
 ## Open
 - Engines written in Clarity: PARTIAL. "not compiled yet" for date, datetime, duration, file values (`lower.rs:25, 36`); statements other than let, assign, if, for, return, call, tell, refuse (:246); keys with values (:295); `a to b` outside `for` (:220-228); `/` giving a decimal (:405); built-ins other than count, sin, cos, round, random, progress (:432); record fields of date or ref type (:484).
-- Picture functions in engines, a video frame as a picture: NOT BUILT (VIDEO-PLAN.md:99).
+- Picture functions in engines, a video frame as a picture: NOT BUILT ([video-camera](video-camera.md)).
 - `clarity engines build`, `clarity watch`, templates for C, C++, TinyGo, Zig, AssemblyScript: PARTIAL. Only the Rust engine flow (N6).
 - WIT and the component model instead of JSON: open, not decided (N6).
 - `progress n of total` as a statement in handlers and actions: NOT BUILT. `progress(...)` outside an engine is an error (`code/check.rs:4466`).

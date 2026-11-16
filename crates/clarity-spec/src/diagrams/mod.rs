@@ -1,4 +1,4 @@
-//! Diagrams (DESIGN section 5.13): Mermaid text read into what Clarity maps
+//! Diagrams (manual/data.diagrams.md): Mermaid text read into what Clarity maps
 //! it to. A diagram is a view of the project or a proposal to change it;
 //! the data dictionary stays the one source of truth.
 //!

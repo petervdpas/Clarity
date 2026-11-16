@@ -8,7 +8,7 @@ import type { Stmt } from "./Stmt";
 import type { TypeRef } from "./TypeRef";
 
 /**
- * A `function` or `action` declared in a module (docs/DESIGN.md 5.10).
+ * A `function` or `action` declared in a module (docs/ledger/language.md).
  */
 export type FunctionDecl = { kind: FunctionKind, name: Ident, params: Array<Param>, returns: TypeRef | null, 
 /**
@@ -24,6 +24,6 @@ ensures: Array<Expr>,
  */
 effects: Array<Ident>, 
 /**
- * `allow when <condition>`: who may run an action (docs/APP-CAPABILITIES-PLAN.md step 4).
+ * `allow when <condition>`: who may run an action (docs/ledger/signin.md).
  */
 allow: Expr | null, body: Array<Stmt>, span: Span, };

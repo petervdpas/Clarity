@@ -1,5 +1,5 @@
 // The picture functions through the native Clarity.Image library, as a
-// generated program calls them (docs/IMAGE-PLAN.md).
+// generated program calls them (docs/ledger/picture-functions.md).
 
 using Clarity.Image;
 using Clarity.Runtime;

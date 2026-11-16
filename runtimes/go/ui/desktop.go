@@ -29,7 +29,7 @@ func native(p *Program) (*C.ClarityProgram, error) {
 
 // Run shows the program's windows in desktop windows until they closed,
 // on the main thread; with the environment variable CLARITY_HEADLESS set it
-// is driven from standard input instead (DESIGN 1.6). The exit code: 0 or 1.
+// is driven from standard input instead (manual/start.how-it-works.md). The exit code: 0 or 1.
 func Run(desktop Desktop) (int, error) {
 	files, err := FilesOf(desktop.Files, desktop.Options.Model, desktop.Options.Title, float64(desktop.Options.Width), float64(desktop.Options.Height))
 	if err != nil {
@@ -53,7 +53,7 @@ func Run(desktop Desktop) (int, error) {
 func Wake() { C.clarity_desktop_wake() }
 
 // Driven is a program started as the desktop does, on a screen without a
-// window, and driven step by step (DESIGN 1.6): how tests use a window
+// window, and driven step by step (manual/start.how-it-works.md): how tests use a window
 // model as a person would. Use it on one goroutine, locked to its thread.
 type Driven struct {
 	c       *C.ClarityDriven

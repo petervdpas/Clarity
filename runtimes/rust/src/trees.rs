@@ -1,4 +1,4 @@
-//! Trees of U1c, decided here in the runtime (DESIGN 1.7,
+//! Trees of U1c, decided here in the runtime (manual/start.how-it-works.md,
 //! conformance/trees.json): the rows of a list arranged by their parent, a
 //! row under its parent when that is in the list and at the top otherwise,
 //! each level in the order of the list, a closed row hiding what is under it.

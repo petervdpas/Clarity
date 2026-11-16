@@ -1,4 +1,4 @@
-// Command-line programs (DESIGN 5.20): reading a command line against the
+// Command-line programs (manual/code.commands.md): reading a command line against the
 // program's commands, writing its help, printing a table and asking on a
 // terminal, as conformance/command-line.json says every runtime does. A
 // generated program describes itself as a CliProgram and runs the command
@@ -900,7 +900,7 @@ func (s *CliSession) Choose(question Text, choices []string) int {
 
 // RunCliProgram runs a command-line program: reads the command line, writes
 // help or what is wrong with it, or runs the command it names with its
-// values, and gives the exit code its run ends with (DESIGN 5.20).
+// values, and gives the exit code its run ends with (manual/code.commands.md).
 func RunCliProgram(program CliProgram, run func(cli *CliSession, command int, values []*string) (int, error)) int {
 	parsed := ParseCommandLine(program, os.Args[1:], CliWordsIn(cliTranslated))
 	switch {
@@ -927,7 +927,7 @@ func CliKeepSettings(program string, before, after any) {
 }
 
 // CliKeepSettingsWith is CliKeepSettings with the secret settings named kept
-// in the system's protected store, never in the file (DESIGN 5.27).
+// in the system's protected store, never in the file (manual/data.settings.md).
 func CliKeepSettingsWith(program string, before, after any, secrets []string) {
 	was, _ := json.Marshal(before)
 	now, _ := json.Marshal(after)

@@ -1,7 +1,7 @@
 //! The every-part project (tests/fixtures/everything.clarity), made ready
 //! for one stack the way the IDE makes a project ready: copied into
 //! target/generated, its custom part written in the stack's own language
-//! (DESIGN 5.19), the part's starter written, and loaded again. A program
+//! (manual/design.custom-parts.md), the part's starter written, and loaded again. A program
 //! served to a browser alone has no custom part, so there the part is left out.
 
 #![allow(dead_code)]

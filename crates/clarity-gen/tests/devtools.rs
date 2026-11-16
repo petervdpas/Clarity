@@ -54,6 +54,26 @@ fn builds_run_one_at_a_time_in_the_order_pressed() {
 }
 
 #[test]
+fn a_stopped_build_ends_at_once_and_the_ones_waiting_never_start() {
+    let jobs = Jobs::default();
+    let long = if cfg!(windows) { "ping -n 60 127.0.0.1 > NUL" } else { "sleep 60" };
+    jobs.start("long", "Long", shell(long), None).unwrap();
+    jobs.start("next", "Next", shell("echo next"), None).unwrap();
+    jobs.start("other", "Other", shell("echo other"), None).unwrap();
+    while jobs.job("long").unwrap().state != JobState::Running {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let stopped = jobs.stop(&["long".to_string(), "next".to_string()]);
+    assert_eq!(stopped, 2, "the one building and the one waiting");
+    let long = jobs.wait("long", Duration::from_secs(10)).unwrap();
+    assert_eq!(long.state, JobState::Failed("stopped".into()));
+    let next = jobs.job("next").unwrap();
+    assert_eq!(next.state, JobState::Failed("stopped".into()));
+    assert!(next.started.is_none(), "it never started");
+    assert_eq!(jobs.wait("other", Duration::from_secs(10)).unwrap().state, JobState::Passed, "a build not stopped goes on");
+}
+
+#[test]
 fn every_piece_has_a_build_with_at_most_two_jobs_of_cargo() {
     let repo = repo();
     for piece in &swap::PIECES {
@@ -235,6 +255,32 @@ fn the_checks_run_in_a_fresh_checkout_between_the_guards_and_a_clean_tree() {
 }
 
 #[test]
+fn the_checks_in_the_checkout_run_as_on_github() {
+    // The IDE's own settings (dev.sh's CLARITY_RUNTIME, a chosen library) stay out, a test target gets the features it
+    // declares (GitHub tests the whole workspace, which turns them on), the library the C header's test links is built
+    // first, and a path through .. is read as the folder it is.
+    let repo = repo();
+    let changed = vec!["runtimes/rust-auth/src/lib.rs".to_string(), "runtimes/rust-ui-ffi/src/lib.rs".to_string(), "examples/orbs/orbs.clarity".to_string()];
+    let checks = release::checks(&repo.join("app").join(".."), &changed);
+    let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
+    let env = |c: &Check, name: &str| c.run.env.iter().rev().find(|(n, _)| n == name).map(|(_, v)| v.clone());
+    for c in checks.iter().filter(|c| c.fresh) {
+        assert_eq!(c.run.dir, release::fresh_checkout_dir(&repo), "{}: the folder itself", c.key);
+        assert_eq!(env(c, "CLARITY_RUNTIME").as_deref(), Some(""), "{}: the published runtimes, as on GitHub", c.key);
+        assert_eq!(env(c, "CLARITY_UI_BROWSER").as_deref(), Some(""), "{}", c.key);
+        assert_eq!(env(c, "CARGO_PROFILE_DEV_DEBUG").as_deref(), Some("0"), "{}: no debug info, which made each test target a program of 90 MB", c.key);
+    }
+    assert!(checks[at("test:clarity-auth:openid")].run.shown().ends_with("--test openid --features openid"), "{}", checks[at("test:clarity-auth:openid")].run.shown());
+    assert!(!checks[at("test:clarity-auth:--lib")].run.shown().contains("--features"));
+    let library = &checks[at("library:clarity-ui-ffi")];
+    assert_eq!(library.run.shown(), "cargo build -p clarity-ui-ffi");
+    assert!(library.fresh && at("freshCheckout") < at("library:clarity-ui-ffi") && at("library:clarity-ui-ffi") < at("test:clarity-ui-ffi:c_header"));
+    assert!(!checks[at("guard:test:clarity-spec:--lib")].fresh);
+    let none = release::checks(&repo, &["runtimes/rust-auth/src/lib.rs".to_string()]);
+    assert!(!none.iter().any(|c| c.key == "library:clarity-ui-ffi"), "built only for the library's own tests");
+}
+
+#[test]
 fn a_fresh_checkout_has_the_uncommitted_files_and_no_tags() {
     let repo = repo();
     let dir = temp("fresh").join("checkout");
@@ -244,6 +290,7 @@ fn a_fresh_checkout_has_the_uncommitted_files_and_no_tags() {
     assert_eq!(std::fs::read(dir.join(file)).unwrap(), std::fs::read(repo.join(file)).unwrap(), "the tree as it is, committed or not");
     assert!(!dir.join("target").exists(), "nothing git ignores");
     assert!(release::clean_tree(&repo, &dir).is_ok(), "the tree is as the checkout found it");
+    assert_eq!(release::checkout_state(&dir).unwrap(), release::tree_state(&repo).unwrap(), "a check in the checkout counts on the tree it was made from");
 }
 
 #[test]
@@ -282,8 +329,8 @@ fn a_check_that_ended_is_kept_for_the_agent() {
     // The IDE runs the checks; the agent reads how each ended (MCP release_state), the last run of each.
     let dir = temp("records");
     assert!(release::check_records(&dir).is_empty(), "nothing run yet");
-    let passed = CheckRecord { key: "spec:todo".into(), title: "todo: spec check".into(), passed: true, why: None, ended: 1, head: "abc".into(), lines: vec![] };
-    let failed = CheckRecord { key: "test:clarity-gen:devtools".into(), title: "clarity-gen: devtools".into(), passed: false, why: Some("exit 101".into()), ended: 2, head: "abc".into(), lines: vec!["panicked".into()] };
+    let passed = CheckRecord { key: "spec:todo".into(), title: "todo: spec check".into(), passed: true, why: None, ended: 1, head: "abc".into(), tree: "t".into(), lines: vec![] };
+    let failed = CheckRecord { key: "test:clarity-gen:devtools".into(), title: "clarity-gen: devtools".into(), passed: false, why: Some("exit 101".into()), ended: 2, head: "abc".into(), tree: "t".into(), lines: vec!["panicked".into()] };
     release::record_check(&dir, &passed).unwrap();
     release::record_check(&dir, &failed).unwrap();
     release::record_check(&dir, &CheckRecord { passed: true, why: None, ended: 3, lines: vec![], ..failed.clone() }).unwrap();
@@ -292,6 +339,7 @@ fn a_check_that_ended_is_kept_for_the_agent() {
     assert_eq!(records["spec:todo"], passed);
     assert!(records["test:clarity-gen:devtools"].passed && records["test:clarity-gen:devtools"].ended == 3, "run again, the last run counts");
     assert!(release::checks_file(&dir).starts_with(dir.join("target")), "kept under the ignored target/");
+    assert!(!release::checks_file(&dir).with_extension("json.new").exists(), "written beside it and moved over it, nothing left behind");
 }
 
 #[test]
@@ -318,4 +366,76 @@ fn an_agents_ask_to_remove_a_folder_says_so() {
     let id = dev_asks::ask_to(&dir, Action::Remove, "debug", "Claude Code").unwrap();
     let pending = dev_asks::pending(&dir);
     assert_eq!((pending[0].id.as_str(), pending[0].action, pending[0].key.as_str()), (id.as_str(), Action::Remove, "debug"));
+}
+
+#[test]
+fn a_check_counts_only_on_the_tree_it_ran_on() {
+    // The tree is the commit and its uncommitted changes, each file's content too.
+    let tree = release::fingerprint("abc", " M a.rs\t1f\n");
+    assert_eq!(tree, release::fingerprint("abc", " M a.rs\t1f\n"), "the same tree, the same fingerprint");
+    assert_ne!(tree, release::fingerprint("abd", " M a.rs\t1f\n"), "another commit");
+    assert_ne!(tree, release::fingerprint("abc", " M a.rs\t2e\n"), "a file changed again");
+    let record = |key: &str, passed: bool, tree: &str| CheckRecord { key: key.into(), title: format!("check {key}"), passed, why: None, ended: 1, head: "abc".into(), tree: tree.into(), lines: vec![] };
+    let records: std::collections::BTreeMap<String, CheckRecord> =
+        [record("a", true, &tree), record("b", false, &tree), record("c", true, "older")].into_iter().map(|r| (r.key.clone(), r)).collect();
+    let checks = [("a", "check a"), ("b", "check b"), ("c", "check c"), ("d", "check d")];
+    let held = release::held_back_of(checks.iter().map(|(k, t)| (k.to_string(), t.to_string(), tree.clone())), &records);
+    assert_eq!(held, ["check b: failed", "check c: ran on another tree", "check d: not run"]);
+    assert!(release::held_back_of([("a".to_string(), "check a".to_string(), tree.clone())].into_iter(), &records).is_empty(), "all passed on this tree: none held back");
+}
+
+#[test]
+fn a_check_counts_on_the_files_it_can_read_only() {
+    // A crate's test reads every file of the tree but the Rust code of the crates it does not build: a change there,
+    // or another crate's version, leaves its pass standing; its own code, a manual page or an example does not.
+    let repo = repo();
+    let checks = release::checks(&repo, &["runtimes/rust-image/src/lib.rs".to_string(), "crates/clarity-spec/src/check.rs".to_string()]);
+    let check = |key: &str| checks.iter().find(|c| c.key == key).unwrap_or_else(|| panic!("{key}")).clone();
+    let image = check("test:clarity-image:--lib");
+    let spec = check("test:clarity-spec:--lib");
+    let state = release::tree_state(&repo).unwrap();
+    let print = |state: &release::TreeState, c: &Check| state.fingerprint(c);
+    let changed = |file: &str| {
+        let mut s = state.clone();
+        s.files.insert(file.to_string(), "changed".into());
+        s
+    };
+    assert_eq!(print(&state, &image), print(&release::tree_state(&repo).unwrap(), &image), "the same tree, the same fingerprint");
+    let spec_code = changed("crates/clarity-spec/src/check.rs");
+    assert_ne!(print(&spec_code, &spec), print(&state, &spec), "its own code");
+    assert_eq!(print(&spec_code, &image), print(&state, &image), "code of a crate it does not build");
+    let ffi_manifest = changed("runtimes/rust-ui-ffi/Cargo.toml");
+    assert_eq!(print(&ffi_manifest, &image), print(&state, &image), "another crate's manifest (a version bump)");
+    let mut lock = changed("Cargo.lock");
+    assert_eq!(print(&lock, &image), print(&state, &image), "Cargo.lock counts by what its own crates resolve to");
+    lock.packages.iter_mut().filter(|p| p.name == "clarity-image").for_each(|p| p.version = "9.9.9".into());
+    assert_ne!(print(&lock, &image), print(&state, &image), "its own crate's version");
+    assert_ne!(print(&changed("manual/start.overview.md"), &image), print(&state, &image), "a file that is not Rust code: any test may read it");
+    let mut other = image.clone();
+    other.run = other.run.with_env("SOMETHING", "1");
+    assert_ne!(print(&state, &other), print(&state, &image), "its command");
+    let whole = check("cleanTree");
+    assert_ne!(print(&changed("runtimes/rust-ui-ffi/src/lib.rs"), &whole), print(&state, &whole), "the tree's own checks read all of it");
+}
+
+#[test]
+fn a_plan_starts_with_the_checks_on_main_and_never_overwrites_one() {
+    let dir = temp("plans");
+    let step = |title: &str, tag: Option<&str>, workflow: &str| match tag {
+        Some(tag) => serde_json::json!({ "title": title, "tag": tag, "workflow": workflow }),
+        None => serde_json::json!({ "title": title, "workflow": workflow }),
+    };
+    let good = serde_json::json!({ "title": "Clarity 1.4.0", "commit_message": "Release", "steps": [step("Checks on main", None, "checks.yml"), step("Clarity IDE 1.4.0", Some("v1.4.0"), "release.yml")] });
+    let file = release::write_plan(&dir, "2026-11-17-1200", &good).unwrap();
+    assert!(file.ends_with("releases/2026-11-17-1200.json"));
+    assert!(release::write_plan(&dir, "2026-11-17-1200", &good).is_err(), "an existing plan is not overwritten");
+    assert!(release::write_plan(&dir, "17-11-2026", &good).is_err(), "the stamp is YYYY-MM-DD-HHMM");
+    let no_checks = serde_json::json!({ "title": "t", "commit_message": "m", "steps": [step("Clarity IDE 1.4.0", Some("v1.4.0"), "release.yml")] });
+    assert!(release::write_plan(&dir, "2026-11-17-1201", &no_checks).unwrap_err().contains("checks.yml"), "the checks on main come first");
+    // The fix after a failed release: only the commit message changes.
+    release::set_commit_message(&dir, "2026-11-17-1200", "Fix the failed Clarity 1.4.0 release").unwrap();
+    let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(kept["commit_message"], "Fix the failed Clarity 1.4.0 release");
+    assert_eq!(kept["steps"], good["steps"], "the steps stay");
+    assert!(release::set_commit_message(&dir, "2026-11-17-9999", "x").is_err(), "no such plan");
 }

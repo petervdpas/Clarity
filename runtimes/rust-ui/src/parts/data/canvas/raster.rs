@@ -1,4 +1,4 @@
-//! The raster tools of a painting canvas (docs/IMAGE-PLAN.md): shapes painted
+//! The raster tools of a painting canvas (docs/ledger/canvas-toolbox.md): shapes painted
 //! with the brush (line, rectangle, ellipse), selections (rectangle, ellipse,
 //! lasso) kept as a mask of the picture's pixels, the selected pixels lifted
 //! and moved, and the transforms the toolbox asks for. Each change is one edit.

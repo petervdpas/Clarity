@@ -1,4 +1,4 @@
-//! A graph read from its two lists (docs/GRAPH-PLAN.md): each record of
+//! A graph read from its two lists (docs/ledger/graph.md): each record of
 //! the nodes' list a node, each record of the edges' list an edge between
 //! the nodes whose keys its ends hold. The part names the fields that play
 //! a role; every other field is the record's own, shown when pointed at.

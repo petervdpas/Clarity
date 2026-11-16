@@ -1,4 +1,4 @@
-//! Canvas modes (DESIGN 5.31) in the C# program: a canvas with a mode is the
+//! Canvas modes (manual/parts.graphics.md) in the C# program: a canvas with a mode is the
 //! runtime's CanvasView with its mode's options, its actions go to the view
 //! model's CanvasEvent, which runs `on change` as one edit, and handlers read
 //! and set its tool, brush, ink and selection. The build test is slow, so it

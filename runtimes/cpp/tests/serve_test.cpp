@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3): Clarity.UI runs in the browser, and the
+// The web target (manual/project.run-build.md): Clarity.UI runs in the browser, and the
 // server serves the page, the library's browser files, the program's files
 // and its resources, and answers the library's commands over HTTP as the
 // desktop answers them in-process.
@@ -131,7 +131,7 @@ std::string asked(shell::Server& server, const std::string& command) { return bo
 
 }  // namespace
 
-// A long call over the wire (DESIGN 5.12): its handler's request names its
+// A long call over the wire (manual/code.engines.md): its handler's request names its
 // watch and stays open while the page asks how far it is and stops it from
 // requests of their own; a stop sent before its handler started holds.
 TEST(a_long_call_over_the_wire_says_how_far_it_is_and_stops) {
@@ -208,7 +208,7 @@ struct PageCards : Nothing {
 
 }  // namespace
 
-// Each browser apart (DESIGN 7.9 B2): a request names its page and brings
+// Each browser apart (manual/start.how-it-works.md B2): a request names its page and brings
 // the person's settings as the page keeps them. A handler sees that page's
 // settings and language, a page that sends none keeps what it had, settings
 // a command changed and quit go back to that page alone, and a page unasked

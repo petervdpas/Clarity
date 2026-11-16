@@ -178,7 +178,7 @@ fn the_page_carries_the_renderer() {
     has(file(&files, "CMakeLists.txt"), "clarity_browser_files(shop ${CMAKE_CURRENT_SOURCE_DIR}/browser)");
 }
 
-/// The desktop program carries what Clarity.UI draws from (DESIGN 7.9): the
+/// The desktop program carries what Clarity.UI draws from (manual/start.how-it-works.md): the
 /// windows as markup, the themes resolved, the model and the facts of the
 /// fields, and hands them to the desktop.
 #[test]
@@ -357,7 +357,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(main, "            ui.begin_drawing(\"dial\");\n            w.draw_dial(db, ui);");
 }
 
-/// An application with an engine (DESIGN 5.11): the host and wasm3 copied
+/// An application with an engine (manual/code.engines.md): the host and wasm3 copied
 /// in, the engine's bytes in the program, checked at start, and a call in
 /// code that gives the value as its declared type.
 fn engine_files() -> Vec<OutFile> {
@@ -406,7 +406,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(code.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{code}");
 }
 
-/// The web target (DESIGN 7.3, round B): the program serves Clarity.UI's
+/// The web target (manual/project.run-build.md, round B): the program serves Clarity.UI's
 /// browser files and its own (browser/), compiled in, and answers the library
 /// over HTTP; beside the desktop target it serves with `--serve`.
 #[test]
@@ -449,7 +449,7 @@ fn the_web_target_serves_the_renderer() {
     has(&both, "            if (std::strcmp(argv[i], \"--serve\") == 0) return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv, \"127.0.0.1:8080\"));\n        return clarity::shell::run(options);\n");
 }
 
-// A canvas with a mode (DESIGN 5.31): its tool, brush and ink are part state
+// A canvas with a mode (manual/parts.graphics.md): its tool, brush and ink are part state
 // a handler reads and sets, as its line says until then; `selected` is the
 // record of the objects list at the chosen place, or the chosen shape from 1.
 const CANVASES: &str = "module m

@@ -27,11 +27,11 @@ Progress: 75%
 - `crates/clarity-project/tests/browse.rs`, recent.rs
 
 ## Open
-- Translations of the IDE's own words: NOT BUILT. English in the Svelte files (ACP-PLAN.md:46 and the project rule)
+- Translations of the IDE's own words: NOT BUILT. English in the Svelte files (the project rule)
 - Project-wide search: NOT BUILT. Only Ctrl+F in editors and filters in translations, vault and manual
 - The file browser starts in the open project's folder: PARTIAL (`app/src-tauri/src/browse.rs:56` starts at the last folder, then the asked one, then Home)
 - System dialog plugin: PARTIAL. No screen uses it, but `tauri-plugin-dialog` is a dependency and initialised (`app/src-tauri/Cargo.toml:36`, `app/src-tauri/src/lib.rs:921`, `app/package.json:29`)
-- Project browser manual pages (plan step 4): UNTRIED as a whole; only `manual/start.overview.md` names Recent projects and New project here
+- Project browser manual pages: UNTRIED as a whole; only `manual/start.overview.md` names Recent projects and New project here
 - No macOS IDE installer; see [release-ci](release-ci.md)
 
 ## Conflicts

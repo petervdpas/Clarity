@@ -1,4 +1,4 @@
-// The IDE's preview and design canvas draw with Clarity.UI (DESIGN 8.1),
+// The IDE's preview and design canvas draw with Clarity.UI (manual/design.parts.md),
 // the library every generated program draws with, compiled for the browser.
 // The IDE's backend serves its browser files, the project's windows
 // (files.json) and a program answering with sample data
@@ -40,13 +40,24 @@ export type Layout = { parts: LaidPart[]; grids: LaidGrid[] };
 export type Shown = { window: string } | { app: string };
 
 /** Options of the page script for one canvas. */
-export type StartOptions = { files: string; server: string; resources: string; input: boolean; access: boolean; storage: string; choices: string; chosen: Chosen };
+export type StartOptions = {
+  files: string;
+  server: string;
+  resources: string;
+  input: boolean;
+  access: boolean;
+  storage: string;
+  choices: string;
+  chosen: Chosen;
+  /** The library stopped, before its start or after: what it was doing, in its words, and where. */
+  failed?: (what: string, stack: string) => void;
+};
 
 /** The person's choices the drawing starts with, over the kept ones: the IDE's language. */
 export type Chosen = { language?: string };
 
 /** What the drawing shows beyond the saved window: the page each container shows, by its key; the draft; the popovers open. */
-export type Showing = { pages?: Record<string, number>; draft?: boolean; open?: string[]; slideout?: string };
+export type Showing = { pages?: Record<string, number>; draft?: boolean; open?: string[]; canvas?: string };
 
 /**
  * The language the IDE shows a window in, as the drawing's choice: the
@@ -119,8 +130,8 @@ export function filesAddress(base: string, shown: Shown, design: boolean, revisi
     pages ? `&pages=${pages}` : "",
     showing.draft ? "&draft=1" : "",
     showing.open?.length ? `&open=${showing.open.map(encodeURIComponent).join(",")}` : "",
-    // A slide-out designed on a canvas of its own: its parts as a window of their own.
-    showing.slideout ? `&slideout=${encodeURIComponent(showing.slideout)}` : "",
+    // A slide-out or popover designed on a canvas of its own: its parts as a window of their own.
+    showing.canvas ? `&canvas=${encodeURIComponent(showing.canvas)}` : "",
   ].join("");
   return `${base}files.json?${what}&design=${design ? 1 : 0}${more}&revision=${revision}`;
 }

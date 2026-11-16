@@ -1,4 +1,4 @@
-//! A mapping (docs/FORMATS-PLAN.md, step 4): how one kind of file is laid
+//! A mapping (docs/ledger/formats.md): how one kind of file is laid
 //! over an entity, configured per case, given in the options every stack
 //! passes. Valid for every format beside its own options:
 //! - `"at": "shop/orders/order"`, where the records are;

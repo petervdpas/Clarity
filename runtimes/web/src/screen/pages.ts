@@ -135,7 +135,7 @@ function viewOf(preview: Preview, view: string | null): { view: Page; file: Spec
 }
 
 /**
- * The page as the designer designs it (DESIGN 5.33): each line of a window's
+ * The page as the designer designs it (manual/design.windows.md): each line of a window's
  * content holds the parts of its view, as they show there, so the window is
  * designed as it looks; an edit of one of them changes the view's file.
  */
@@ -375,7 +375,7 @@ export function withProps(props: WidgetProps, changes: Partial<WidgetProps>): Wi
  * something inside it does, so a panel of inputs keeps its height.
  */
 export function widgetGrows(preview: Preview, widget: Widget): boolean {
-  // A custom part grows as its declaration says (`grows`, DESIGN 5.19).
+  // A custom part grows as its declaration says (`grows`, manual/design.custom-parts.md).
   if (widget.props.kind === "custom") return widget.props.grows;
   const info = widgetInfo(preview, widget.props.kind);
   if (!info.grows) return false;
@@ -386,7 +386,7 @@ export function widgetGrows(preview: Preview, widget: Widget): boolean {
 
 /** Every part of a page, its sidebars and footer included, nested parts too. */
 /**
- * Where a part's edits are undone (DESIGN 5.29), as the project worked it
+ * Where a part's edits are undone (manual/code.handlers.md), as the project worked it
  * out for every screen: the form or panel it is in, or the part itself.
  * None for a part without undo (`no undo`, or one that edits nothing).
  */

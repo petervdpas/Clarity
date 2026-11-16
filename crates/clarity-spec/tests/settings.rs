@@ -1,4 +1,4 @@
-//! Settings (DESIGN 5.17): one `settings` block of typed values each person
+//! Settings (manual/data.settings.md): one `settings` block of typed values each person
 //! keeps for themselves, with Clarity's own `language` and `theme`. Every
 //! window has `settings` as data of its own; parts bind it, code reads and
 //! sets it. It is a record type beside the entities, never in the database.

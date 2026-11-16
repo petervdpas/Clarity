@@ -1,4 +1,4 @@
-// HTTP calls from code (DESIGN 5.23): `http get url` and the others, through
+// HTTP calls from code (manual/code.web-apis.md): `http get url` and the others, through
 // libcurl. A call never fails: when no answer comes, the reply has status 0
 // and says why, so the handler decides what that means. Every runtime gives
 // the same replies (conformance/http.json). Only a project whose code calls
@@ -42,7 +42,7 @@ enum class HttpAuth { None, Bearer, ApiKey, Basic };
 HttpReply http_call_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
                        const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret);
 
-/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// How a web API hands out a long list (manual/code.web-apis.md, paging): the project
 /// file's `paging` line.
 enum class PagingKind { Page, Offset, Cursor, Link };
 

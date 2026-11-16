@@ -1,4 +1,4 @@
-//! Command-line programs (DESIGN 5.20) as generated code: a program of its
+//! Command-line programs (manual/code.commands.md) as generated code: a program of its
 //! own beside the desktop one, over the same records and actions. The
 //! slow tests build it and run its commands; they run only when asked:
 //! `cargo test -p clarity-gen --test commands -- --ignored --exact <name>`.

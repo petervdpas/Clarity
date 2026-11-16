@@ -1,4 +1,4 @@
-// Package secrets keeps the secret settings of a program (DESIGN 5.27) in
+// Package secrets keeps the secret settings of a program (manual/data.settings.md) in
 // the system's protected store: the Credential Manager on Windows, the
 // Keychain on macOS, the Secret Service (GNOME Keyring, KWallet) elsewhere.
 // A program with secret settings sets clarity.Secrets = secrets.System{}.

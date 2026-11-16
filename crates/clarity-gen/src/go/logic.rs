@@ -34,8 +34,8 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
         .filter(|b| file.entities.iter().any(|e| e.name.name == b.name.name))
         .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
         .collect();
-    // An entity's `readable when` and `writable when` (docs/APP-CAPABILITIES-PLAN.md
-    // step 4): a function each, which a find and a save call.
+    // An entity's `readable when` and `writable when` (docs/ledger/signin.md):
+    // a function each, which a find and a save call.
     for entity in file.entities.iter().filter(|e| !e.record && !e.settings) {
         for (word, condition) in [("readable", &entity.readable), ("writable", &entity.writable)] {
             let Some(condition) = condition else { continue };
@@ -68,7 +68,7 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// The commands of a module (DESIGN 5.20): each a function taking the
+/// The commands of a module (manual/code.commands.md): each a function taking the
 /// database, the session it prints and asks through, the settings (as
 /// `w.Settings`, as a window has them) and its arguments and options, and
 /// giving its exit code.
@@ -129,7 +129,7 @@ pub(crate) fn readable_list_check(project: &Project, entity: &str, list: &str, f
     format!("for i := range {list} {{\n{}}}\n", indent(&check, 1))
 }
 
-/// `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): the lines that refuse
+/// `allow when` (docs/ledger/signin.md): the lines that refuse
 /// with notAllowed when `condition` does not hold.
 fn allow_check(emitter: &mut Emitter, condition: &clarity_spec::code::Expr) -> String {
     let mut pre = String::new();
@@ -264,13 +264,13 @@ pub struct PartInfo {
     /// A spin box's range as its line writes it.
     pub spin: (i64, i64),
     pub dot_color: String,
-    /// A canvas's mode (DESIGN 5.31), the list of its objects, and its tool, brush and ink as its line says.
+    /// A canvas's mode (manual/parts.graphics.md), the list of its objects, and its tool, brush and ink as its line says.
     pub mode: Option<clarity_spec::model::CanvasMode>,
     pub objects: Option<String>,
     pub tool: String,
     pub brush: u32,
     pub ink: String,
-    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    /// A custom part (manual/design.custom-parts.md): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
@@ -379,7 +379,7 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their methods.
     pub draws: Vec<(String, String)>,
-    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// The handlers an answer runs (manual/code.statements.md): the Clarity name, the
     /// method, and each value's Go type, a record's by its struct.
     pub answers: Vec<(String, String, Vec<AnswerValue>)>,
     /// The function of the window's `allow when`, checked before it opens.
@@ -448,7 +448,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
         for d in data {
             let (local_name, field_name) = (local(&d.name.name), pascal(&d.name.name));
             match &d.of {
-                // A list of records starts empty: code builds it (DESIGN 5.12).
+                // A list of records starts empty: code builds it (manual/code.engines.md).
                 DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => {
                     let _ = writeln!(load, "\tw.{field_name} = []{}{{}}", entity.name);
                 }
@@ -523,7 +523,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 (h.name.name.clone(), local(&h.name.name), values)
             })
             .collect();
-        // `allow when` (docs/APP-CAPABILITIES-PLAN.md step 4): a window's, decided before it opens,
+        // `allow when` (docs/ledger/signin.md): a window's, decided before it opens,
         // and its frame's commands', checked when the handler runs or the window opens.
         let mut allows: Vec<(String, Vec<&clarity_spec::code::Expr>)> = Vec::new();
         let allow = page.and_then(|p| p.allow_condition.as_ref()).map(|condition| {
@@ -589,7 +589,7 @@ struct Emitter<'a> {
     loops: usize,
     /// Whether the ensures are being written, where `result` is the result.
     ensuring: bool,
-    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// Whether this is a command of the command-line program (manual/code.commands.md):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
     /// The entity of each record local and parameter by its name, for
@@ -957,8 +957,8 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{place} = {copied}\n"));
                     return;
                 }
-                // Text assigned to a hashed field keeps its hash (docs/APP-CAPABILITIES-PLAN.md
-                // step 4), by the field's method, refused when shorter than its minimum.
+                // Text assigned to a hashed field keeps its hash (docs/ledger/signin.md),
+                // by the field's method, refused when shorter than its minimum.
                 if let ExprKind::Member { object, member } = &target.kind
                     && let TypeInfo::Record(owner) = self.types.type_of(object)
                     && self.project.entity(&owner).and_then(|e| e.field(&member.name)).is_some_and(|f| f.modifiers.hashed)
@@ -1095,7 +1095,7 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("if {take} := {call_code}; err != nil {{\n\t{}\n}}\n", self.fail("err")));
             }
             StmtKind::Save { value, .. } | StmtKind::Delete { value } => {
-                // `save ... anyway` writes regardless of the version (docs/APP-CAPABILITIES-PLAN.md step 5).
+                // `save ... anyway` writes regardless of the version (docs/ledger/row-versions.md).
                 let verb = match stmt.kind {
                     StmtKind::Save { anyway: true, .. } => "SaveAnyway",
                     StmtKind::Save { .. } => "Save",
@@ -1160,7 +1160,7 @@ impl<'a> Emitter<'a> {
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
             // `generate` refuses a project with custom parts until CP1 builds them.
-            // A hear of a custom part (DESIGN 5.19), sent with the reply.
+            // A hear of a custom part (manual/design.custom-parts.md), sent with the reply.
             // An engine's statement; engines are compiled to WebAssembly before generating (N5b).
             StmtKind::Tell { .. } => self.errors.push("'tell' is for an engine beside the screen".into()),
             StmtKind::Hear { part, hear, args } => {
@@ -1180,7 +1180,7 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => bare(self.value(arg, &mut pre)),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
-                        // An object sends its record's id (DESIGN 5.31).
+                        // An object sends its record's id (manual/parts.graphics.md).
                         (ShapeValue::Record, Ok(arg)) => bare(self.value(&clarity_spec::code::check::object_id(arg), &mut pre)),
                         (ShapeValue::Record, Err(_)) => "nil".to_string(),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg, &mut pre),
@@ -1605,7 +1605,7 @@ impl<'a> Emitter<'a> {
         (self.types.name_of(object) == Some(&NameKind::Part)).then(|| (name.clone(), member.name.clone()))
     }
 
-    /// Whether `property` is a custom part's own (DESIGN 5.19).
+    /// Whether `property` is a custom part's own (manual/design.custom-parts.md).
     fn custom_property(&self, part: &str, property: &str) -> bool {
         let info = self.window.and_then(|w| w.parts.get(part));
         info.and_then(|i| i.custom.as_ref()).is_some_and(|(kind, _)| crate::parts::keeps(self.project, kind, property))
@@ -1646,7 +1646,7 @@ impl<'a> Emitter<'a> {
             "tool" => format!("ui.Tool({quoted}, {})", string(&info.tool)),
             "brush" => format!("ui.Brush({quoted}, {})", info.brush),
             "ink" => format!("ui.Ink({quoted}, {})", string(&info.ink)),
-            // A canvas's choice (DESIGN 5.31): the object's record, or the shape's place from 1.
+            // A canvas's choice (manual/parts.graphics.md): the object's record, or the shape's place from 1.
             "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("ui.ShapeChosen({quoted})"),
             "selected" if info.objects.is_some() => {
                 let list = info.objects.clone().unwrap_or_default();
@@ -1691,7 +1691,7 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a value.
     /// A format's options as a Go expression of their JSON object (`""` for none).
-    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    /// The format of a reading or writing and its options object (docs/ledger/formats.md).
     fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse, pre: &mut String) -> (String, String) {
         let project = self.project;
         match crate::shape::mapping_pieces(project, mapping, |v| format!("clarity.JSONOf({})", bare(self.value(v, pre)))) {
@@ -1711,7 +1711,7 @@ impl<'a> Emitter<'a> {
         }
         let ty = self.types.type_of(expr);
         match &expr.kind {
-            // A list of records (DESIGN 5.12): a copy of each, as code holds records by pointer.
+            // A list of records (manual/code.engines.md): a copy of each, as code holds records by pointer.
             ExprKind::ListOf { items } if matches!(ty, TypeInfo::List(_)) => {
                 let items: Vec<String> = items
                     .iter()
@@ -1762,7 +1762,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } if is_decimal(&ty) => format!("{}.Neg()", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand, pre)),
-            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            // A list of values, or of records, grows by a list of its items (manual/parts.data.md, manual/code.engines.md).
             ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
                 // A copy first, so the list it grows from stays as it was.
@@ -1804,7 +1804,7 @@ impl<'a> Emitter<'a> {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadBytes({file})"), pre)
             }
-            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            // A format of the catalog (docs/ledger/formats.md): a value written in it, and records read from it, through Clarity.Formats.
             ExprKind::FormatOf { value, mapping } => {
                 let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
@@ -1828,7 +1828,7 @@ impl<'a> Emitter<'a> {
                 let (format, options) = self.format_options(mapping, pre);
                 self.lift(format!("clarity.ReadFormat[{read}](formatsRead, {}, {input}, {options}, {})", string(&format), go_pieces(&kind)), pre)
             }
-            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            // A call to a web API (manual/code.web-apis.md): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = bare(self.value(url, pre));
                 let body = match body {
@@ -1839,14 +1839,14 @@ impl<'a> Emitter<'a> {
                 if from.is_none() && query.is_empty() {
                     return format!("clarity.HTTP({}, {url}, {body}, {headers})", string(method.verb()));
                 }
-                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                // A path of a web API data source (manual/code.web-apis.md): its address and auth come from the project file.
                 let query = self.http_pairs(query, pre);
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
                 let auth = match auth {
                     Some((kind, secret)) => format!("clarity.HTTPAuth{{Kind: {}, Secret: {}}}", string(kind), string(secret)),
                     None => "clarity.HTTPAuth{}".to_string(),
                 };
-                // Every page, as the source's paging says (DESIGN 5.23).
+                // Every page, as the source's paging says (manual/code.web-apis.md).
                 if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
                     return format!(
                         "clarity.HTTPPages({}, {url}, {query}, {headers}, {auth}, clarity.HTTPPaging{{Kind: {}, Param: {}, SizeParam: {}, Size: {}, Next: {}, Items: {}}})",
@@ -1861,12 +1861,12 @@ impl<'a> Emitter<'a> {
                 }
                 format!("clarity.HTTPAt({}, {}, {url}, {query}, {body}, {headers}, {auth})", string(method.verb()), string(base))
             }
-            // A function of a library, through its package (DESIGN 5.21).
+            // A function of a library, through its package (manual/code.libraries.md).
             ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
                 let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
                 format!("{}lib.{}({})", crate::libraries::go_package(&engine.name), pascal(&function.name), values.join(", "))
             }
-            // A function of an engine, through its typed function in engines.go (DESIGN 5.11).
+            // A function of an engine, through its typed function in engines.go (manual/code.engines.md).
             ExprKind::EngineCall { engine, function, args } => {
                 let params: Vec<clarity_spec::code::TypeRef> = self
                     .project
@@ -2047,7 +2047,7 @@ impl<'a> Emitter<'a> {
             let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };
             return format!("clarity.{function}({value})");
         }
-        // newToken() and newRecoveryCodes(count) (docs/APP-CAPABILITIES-PLAN.md step 4), through Clarity.Auth.
+        // newToken() and newRecoveryCodes(count) (docs/ledger/signin.md), through Clarity.Auth.
         let project = self.project;
         let own = |n: &str| project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == n);
         if name == clarity_spec::code::check::NEW_TOKEN && !own(name) {
@@ -2061,7 +2061,7 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();
             return format!("clarity.Round({})", values.join(", "));
         }
-        // A picture function (docs/IMAGE-PLAN.md), in the program's pictures.go: a
+        // A picture function (docs/ledger/picture-functions.md), in the program's pictures.go: a
         // record's picture read first, the call able to refuse.
         if let Some(built) = crate::built_in(self.project, name)
             && let Some((takes, _)) = clarity_spec::code::check::picture_function(name)

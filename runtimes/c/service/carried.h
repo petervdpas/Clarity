@@ -1,4 +1,4 @@
-// The files a program carries (DESIGN 7.9): the windows, app frames, themes
+// The files a program carries (manual/start.how-it-works.md): the windows, app frames, themes
 // and resources Clarity.UI draws from, on the desktop and in the browser,
 // and the files a browser takes from the web target (the page, Clarity.UI's
 // browser files, clarity/files.json). CMake puts them into the program as

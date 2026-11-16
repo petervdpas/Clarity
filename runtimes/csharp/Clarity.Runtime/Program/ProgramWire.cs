@@ -1,4 +1,4 @@
-// A generated C# application as the library's program (DESIGN 7.9): the
+// A generated C# application as the library's program (manual/start.how-it-works.md): the
 // library asks by command (clarity_ui.h, the web server's wire) and this
 // answers from the application's view models, which stay the truth of each
 // window. A window's state goes out as the runtime's WindowState, and what
@@ -37,7 +37,7 @@ internal sealed class ProgramWire : IDesktop
     readonly Dictionary<string, (OpenWindow Window, Question Question)> questions = [];
     readonly Dictionary<ulong, (IFrames Frames, Lock Turn)> engines = [];
     readonly Func<string, string?> markupOf;
-    /// <summary>The long engine call of the program's windows (DESIGN 5.12): the library shows its bar with Stop.</summary>
+    /// <summary>The long engine call of the program's windows (manual/code.engines.md): the library shows its bar with Stop.</summary>
     readonly LongCall calls;
     readonly bool watches;
     readonly Lock watchGate = new();
@@ -52,7 +52,7 @@ internal sealed class ProgramWire : IDesktop
     int next;
     ulong nextEngine;
 
-    // While the databases did not open (DESIGN 5.27).
+    // While the databases did not open (manual/data.settings.md).
     readonly Unconnected? unconnected;
     readonly Text? problem;
     Db? memory;

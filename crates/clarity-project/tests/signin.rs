@@ -1,4 +1,4 @@
-//! `signin` in the project file (docs/APP-CAPABILITIES-PLAN.md step 4): the
+//! `signin` in the project file (docs/ledger/signin.md): the
 //! entity of people, the targets, the strategies of Clarity.Auth's catalog
 //! with their fields, and the session, tries and remember lines.
 

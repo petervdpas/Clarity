@@ -4,7 +4,7 @@ import type { Ident } from "./Ident";
 import type { Span } from "./Span";
 
 /**
- * The `cli Shop` block (DESIGN 5.20): the command-line program of a
+ * The `cli Shop` block (manual/code.commands.md): the command-line program of a
  * project with the `cli` target.
  */
 export type CliDecl = { name: Ident, 

@@ -21,15 +21,53 @@ Progress: 70%
 - Examples: todo (`signin Person on desktop`, password, account, remember), shop (Clerk, guided window)
 
 ## Open
-- Providers `github`, `microsoft`, `openid` (register off by default, desktop and web targets): PARTIAL: built on the desktop (released 0.41.0): the catalog (`runtimes/rust-auth/src/catalog.rs:43-45`), spec, project file (`client`, `secret`, `tenant`, `issuer`, `register` lines), the IDE setup, every generator passing a provider's settings (C `crates/clarity-gen/src/c/mod.rs:707`, C++ `cpp/mod.rs:201`, R, Go, C#) and every runtime reading them (C `runtimes/c/auth/auth.h` `clarity_signin_options`, C++ `runtimes/cpp/auth/auth.cpp`, Go `signin.go:43`, C# `Signins.cs:28`), and the browser sign-in run by Clarity.UI (`runtimes/rust-ui/src/window/signin.rs:146`, called at :121, `providers::through_browser`; rust-ui turns on feature `openid`, `runtimes/rust-ui/Cargo.toml:54`). Not on: clarity-runtime's `auth` feature (`runtimes/rust/Cargo.toml:36`) and `rust-auth-ffi` (`Cargo.toml:19`) build without `openid`, so a provider decided there says "built without the feature openid" (`runtimes/rust-auth/src/lib.rs:84`). Web flow, command-line flow and a register part: NOT BUILT.
-- `maillink`: NOT BUILT (needs [mail](mail.md)). TOTP, passkeys, LDAP, strategies from a library: NOT BUILT.
-- Switching person on the desktop without a restart: NOT BUILT (open question).
-- Each generator's sign-in emitting in a module of its own: NOT BUILT (MODULAR-PLAN.md order 1, next).
-- Open questions: the hand-built way on the splash (proposed: kept); GitHub's client secret on the desktop (device flow or loopback).
+- Providers `github`, `microsoft`, `openid` (register off by default, desktop and web targets): PARTIAL: built on the desktop (released 0.41.0): the catalog (`runtimes/rust-auth/src/catalog.rs:43-45`), spec, project file (`client`, `secret`, `tenant`, `issuer`, `register` lines), the IDE setup, every generator passing a provider's settings (C `crates/clarity-gen/src/c/mod.rs:707`, C++ `cpp/mod.rs:201`, R, Go, C#) and every runtime reading them (C `runtimes/c/auth/auth.h` `clarity_signin_options`, C++ `runtimes/cpp/auth/auth.cpp`, Go `signin.go:43`, C# `Signins.cs:28`), and the browser sign-in run by Clarity.UI (`runtimes/rust-ui/src/window/signin.rs:146`, called at :121, `providers::through_browser`; rust-ui turns on feature `openid`, `runtimes/rust-ui/Cargo.toml:54`). Not on: clarity-runtime's `auth` feature (`runtimes/rust/Cargo.toml:36`) and `rust-auth-ffi` (`Cargo.toml:19`) build without `openid`, so a provider decided there says "built without the feature openid" (`runtimes/rust-auth/src/lib.rs:84`). Web flow, command-line flow and a register part: NOT BUILT; see Design "Providers on the web and the command line".
+- `maillink` and mail resets: NOT BUILT (needs [mail](mail.md)); see Design "maillink".
+- TOTP: NOT BUILT; see Design "A second factor".
+- Passkeys: NOT BUILT; see Design "Passkeys".
+- LDAP, SAML, strategies from a library: NOT BUILT; see Design "Later strategies".
+- Switching person on the desktop without a restart: NOT BUILT; see Design "Open questions".
+- Each generator's sign-in emitting in a module of its own: NOT BUILT ([modularity](modularity.md) step 1, next).
+
+## Design
+
+Each new strategy is one more entry of Clarity.Auth's catalog (`runtimes/rust-auth/src/catalog.rs`), named on a line of the `signin` block with the fields it matches; the checker, the Sign-in setup and the generators read it from the catalog.
+
+### Providers on the web and the command line
+
+- Web: the browser goes to the provider and back to the served program; Clarity.Auth exchanges the code and checks the token against the provider's keys. Then the `clarity_session` cookie as for every strategy.
+- Command line: the device code flow.
+- Both need the feature `openid` in clarity-runtime's `auth` and in `rust-auth-ffi`.
+- A register part: optional, on a sign-in view, for a provider with `register`.
+
+### maillink
+
+- `maillink email from outbox`: a link sent to the address in that field through a mail source ([mail](mail.md)); Clarity.Auth makes and checks the one-time codes.
+- Mail resets of a `password` come with it.
+
+### A second factor
+
+- TOTP by an authenticator app, with `recovery` codes as its backup. Agreed to come right after sign-in ("1, totp right after step 4").
+
+### Passkeys
+
+- The next strategy after TOTP ("passkeys come later then").
+- Web first (WebAuthn; the project names its domain; HTTPS or localhost), then the desktop (Windows Hello and macOS through their system APIs, security keys through libfido2 on Linux).
+- Several per person, so a `list<Passkey>` field, and a click target to add one once signed in.
+
+### Later strategies
+
+- LDAP for an office directory; SAML; browser sign-in through a Windows domain (Kerberos). `account` already covers the Windows user on the desktop.
+- A strategy written in a project's library, in the project's own language, as a library format is.
+
+### Open questions
+
+- Whether a signed-in desktop program keeps one person for the run, or may switch person without restarting (a shared family computer).
+- The hand-built way (inputs named after a strategy's inputs, `signin <strategy>` buttons) on the splash: proposed kept beside the sign-in part.
+- GitHub's client secret on the desktop: its device flow, or the loopback flow with the secret carried; to decide from GitHub's documentation.
 
 ## Conflicts
 - Sign-in defaults (8 h, 5 tries, 15 min) are written in `crates/clarity-spec/src/signin.rs:145-147`, `runtimes/rust-auth/src/attempt.rs:157`, `runtimes/rust/src/signin.rs:78`, `runtimes/go/clarity/signin.go:225-231`, `runtimes/cpp/clarity/people.hpp:69-72` (equal today).
-- APP-CAPABILITIES-PLAN.md:3 says step 4 is unreleased; it is before tag v0.40.0.
 
 ## Decisions
 - 2026-11-12: strategies from one catalog, several per project, each naming its fields. User: "are you going to use authentication strategies?"
@@ -44,7 +82,7 @@ Progress: 70%
 - 2026-11-12: sign-in first gets one module per layer. User: "yes, do that first... and that needs to happen for every specialized (modular) piece in the ecosystem!!!"
 
 ## Was
-- APP-CAPABILITIES-PLAN.md step 4 (all), "Steps 4, 5 and 6 as one slice" ("One person per call"), "Where the code lives" (sign-in), open questions (SSO, passkeys, strategies, switching person, guided sign-in, providers)
+- docs/APP-CAPABILITIES-PLAN.md step 4 (all), "Steps 4, 5 and 6 as one slice" ("One person per call"), "Order" 4, "Where the code lives" (sign-in), open questions (SSO, passkeys, strategies, switching person, guided sign-in, providers)
 - FOUNDRY-PLAN.md "One sign-in for apps and the IDE"; MODULAR-PLAN.md order 1
 - IMPLEMENTED.md 6 "Sign-in"; UNIMPLEMENTED.md 6 "Sign-in", 12 step 1; CONFLICTING.md 4, 5, 6, 9
 - memory: guided-signin.md, options-not-fixtures.md

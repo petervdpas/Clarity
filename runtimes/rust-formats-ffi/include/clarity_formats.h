@@ -1,5 +1,5 @@
 /*
- * clarity_formats.h: the C interface of Clarity.Formats (docs/FORMATS-PLAN.md).
+ * clarity_formats.h: the C interface of Clarity.Formats (docs/ledger/formats.md).
  * The library (libclarity_formats.so, clarity_formats.dll, libclarity_formats.dylib)
  * holds the data formats of code, one implementation for every stack: it
  * reads a format and fits it to what the program wants, and writes a value

@@ -1,4 +1,4 @@
-//! Mappings (docs/FORMATS-PLAN.md, step 4): `mapping OrderFeed of Order from
+//! Mappings (docs/ledger/formats.md): `mapping OrderFeed of Order from
 //! xml` says, for this case only, where a file holds the records and each
 //! field, for every format alike; code reads and writes `using` it.
 

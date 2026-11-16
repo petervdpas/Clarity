@@ -1,4 +1,4 @@
-//! Engines (DESIGN 5.11): processing modules compiled to WebAssembly, which
+//! Engines (manual/code.engines.md): processing modules compiled to WebAssembly, which
 //! code calls like functions; the project keeps their files in its
 //! `engines` folder.
 

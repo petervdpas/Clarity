@@ -1,4 +1,4 @@
-// What a custom part draws with on the library's canvas (DESIGN 7.9): a box
+// What a custom part draws with on the library's canvas (manual/start.how-it-works.md): a box
 // in the screen's units, a color as 0xAARRGGBB, the theme's look by its
 // roles, and the painter's commands (fill, stroke, line, oval, an SVG path,
 // text, pixels, a clip). The library draws them with its own Skia; a C# part

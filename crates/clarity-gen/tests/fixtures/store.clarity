@@ -1,5 +1,5 @@
 // A test project's second module, not an example: entities in a web API
-// (DESIGN 5.23), which tests/http_build.rs points at its test server, and
+// (manual/code.web-apis.md), which tests/http_build.rs points at its test server, and
 // the actions that read and send them with `http ... from shop`.
 module store
 source shop
@@ -8,7 +8,7 @@ entity Item
     name: text(40)
     price: money
 
-// Records inside records (DESIGN 5.25), as the service nests them.
+// Records inside records (manual/data.entities.md), as the service nests them.
 entity Buyer
     name: text
 
@@ -24,7 +24,7 @@ action itemsIn(status: text) -> list<Item>
         refuse "shop answered {reply.status}: {reply.text}"
     return read list<Item> from json reply.text at "items"
 
-// A page and an order only when asked for (DESIGN 5.24): a call may leave
+// A page and an order only when asked for (manual/data.entities.md): a call may leave
 // them out or name them, and a pair whose `when` does not hold is not sent.
 action asked(status: text, page: integer = 0, sort: text = "") -> text
     effects net

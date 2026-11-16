@@ -1,4 +1,4 @@
-//! Texts by key in the backend (DESIGN 1.5, I1c): a text code makes, such
+//! Texts by key in the backend (manual/languages.md): a text code makes, such
 //! as what a function returns, takes the value of its key in the language
 //! the screen picked, or the default language's when that language leaves
 //! it empty (conformance/translations.json, `code`). The values come from
@@ -23,7 +23,7 @@ static LANGUAGES: RwLock<Languages> = RwLock::new(Languages { values: BTreeMap::
 
 std::thread_local! {
     /// The language of the browser whose request this thread answers (a
-    /// served program, DESIGN 7.9 B2): over the one the screen picked.
+    /// served program, manual/start.how-it-works.md B2): over the one the screen picked.
     static HERE: std::cell::RefCell<Option<Option<String>>> = const { std::cell::RefCell::new(None) };
 }
 

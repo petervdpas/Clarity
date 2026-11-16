@@ -1,4 +1,4 @@
-//! A window's markup read as the parts Clarity.UI draws (DESIGN 7.8, 7.9):
+//! A window's markup read as the parts Clarity.UI draws (manual/start.how-it-works.md):
 //! the file the generator writes for each window (`windows/Main.cxaml`) and
 //! for each app its frame. Each element is a part with what differs from its
 //! kind's defaults (the catalog, part-defaults.json), each value read by its

@@ -95,7 +95,7 @@ impl Writer<'_> {
         let mut lines = vec![self.sql.key(table.key_column())];
         // A file's name has a column beside it.
         lines.extend(table.columns.iter().flat_map(|c| std::iter::once(c.clone()).chain(c.name_column())).map(|c| self.column_sql(&c)));
-        // The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5).
+        // The version a save checks (docs/ledger/row-versions.md).
         if table.version {
             lines.push(self.column_sql(&Column::version()));
         }

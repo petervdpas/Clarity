@@ -1,4 +1,4 @@
-// The data formats of code (docs/FORMATS-PLAN.md) through Clarity.Formats,
+// The data formats of code (docs/ledger/formats.md) through Clarity.Formats,
 // the one implementation every stack calls: `read Order from json text`
 // reads the format and fits it to the record, which the record's own
 // `_from_json` then decodes; `json of value` writes the value as its

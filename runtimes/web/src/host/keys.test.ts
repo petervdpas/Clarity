@@ -1,4 +1,4 @@
-// Shortcut keys of the IDE (DESIGN 5.28): what is active answers a key, the
+// Shortcut keys of the IDE (manual/app.keys.md): what is active answers a key, the
 // innermost layer first, and the person sets the keys, swapping when one is taken.
 
 import { test } from "node:test";

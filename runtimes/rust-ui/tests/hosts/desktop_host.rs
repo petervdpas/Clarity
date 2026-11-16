@@ -1,4 +1,4 @@
-//! The desktop host (DESIGN 7.9) without a window: what it gives the parts
+//! The desktop host (manual/start.how-it-works.md) without a window: what it gives the parts
 //! (sound through rodio, the system's file dialogs), a sound device that
 //! does not open leaving the program silent, and the dialog each system
 //! shows. No test plays a sound or opens a dialog (C# DesktopHostTests).

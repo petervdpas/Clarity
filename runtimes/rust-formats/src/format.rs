@@ -1,5 +1,5 @@
 //! The one interface every format of the catalog implements
-//! (docs/FORMATS-PLAN.md, "A format is its syntax only"): its entry, its
+//! (docs/ledger/formats.md): its entry, its
 //! bytes read into the document model (doc.rs) and written from it, and
 //! its schemas read into the engine's rules (describe.rs). Everything else
 //! (paths, records, fitting, file-source tables, write-back, describe) is

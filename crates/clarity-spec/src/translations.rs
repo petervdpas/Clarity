@@ -48,7 +48,7 @@ pub const FOLDER_KEYS: [(&str, &str); 2] = [("chooseFolder", "Choose a folder"),
 
 /// The buttons of a canvas that zooms: out, back to whole, in.
 pub const ZOOM_KEYS: [(&str, &str); 3] = [("zoomOut", "Zoom out"), ("zoomWhole", "Show it whole"), ("zoomIn", "Zoom in")];
-/// The toolbar of a canvas the person paints or draws on (DESIGN 5.31), and
+/// The toolbar of a canvas the person paints or draws on (manual/parts.graphics.md), and
 /// what it asks when the text tool places a text.
 pub const CANVAS_TOOL_KEYS: [(&str, &str); 15] = [
     ("toolSelect", "Select"),
@@ -68,7 +68,7 @@ pub const CANVAS_TOOL_KEYS: [(&str, &str); 15] = [
     ("canvasText", "The text"),
 ];
 
-/// The toolbox of a painting canvas (`toolbox`, docs/IMAGE-PLAN.md): its title,
+/// The toolbox of a painting canvas (`toolbox`, docs/ledger/canvas-toolbox.md): its title,
 /// its options and its colours. A canvas with a toolbox has them.
 /// Every toolbox's own words: its title, its fold arrow, and what a group of tools says.
 pub const TOOLBOX_KEYS: [(&str, &str); 3] = [("toolboxTitle", "Tools"), ("toolboxFold", "Fold the toolbox"), ("toolboxHold", "hold for more")];
@@ -126,7 +126,7 @@ pub const CALENDAR_KEYS: [(&str, &str); 8] = [
     ("nextDecade", "Next decade"),
     ("calendarZoomOut", "Show more"),
 ];
-/// The IDE's preview, which runs no handler (DESIGN 8.1): what a click on a part that runs one says.
+/// The IDE's preview, which runs no handler (manual/design.parts.md): what a click on a part that runs one says.
 pub const PREVIEW_KEYS: [(&str, &str); 1] = [("previewRunsNoHandler", "{handler} runs in the program itself: Run starts it. The preview shows the windows with sample data.")];
 
 /// Clarity's words of the desktop host when it cannot start or draws in
@@ -151,7 +151,7 @@ pub const TREE_KEYS: [(&str, &str); 4] = [("expandRow", "Expand"), ("collapseRow
 /// empty state, and on its buttons to load a picture and to remove it.
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
-/// Clarity's words of a command-line program (DESIGN 5.20): the headings of
+/// Clarity's words of a command-line program (manual/code.commands.md): the headings of
 /// its help, and what it says when a command line is wrong or an `ask`
 /// has nobody to answer it. The runtimes fill the slots.
 pub const CLI_KEYS: [(&str, &str); 20] = [
@@ -181,7 +181,7 @@ pub const CLI_KEYS: [(&str, &str); 20] = [
 /// typed, hide it again, and copy it.
 pub const SECRET_KEYS: [(&str, &str); 3] = [("showSecret", "Show"), ("hideSecret", "Hide"), ("copySecret", "Copy")];
 
-/// Clarity's words of the keys window (DESIGN 5.28), where a person sets
+/// Clarity's words of the keys window (manual/app.keys.md), where a person sets
 /// the keys of the application's commands. The runtimes fill the slots.
 pub const KEYS_WINDOW_KEYS: [(&str, &str); 17] = [
     ("keysTitle", "Keys"),
@@ -203,17 +203,17 @@ pub const KEYS_WINDOW_KEYS: [(&str, &str); 17] = [
     ("keysEscape", "{key} cannot be used: Escape cancels"),
 ];
 
-/// Clarity's words for why the databases did not open (DESIGN 5.27): the
+/// Clarity's words for why the databases did not open (manual/data.settings.md): the
 /// window that keeps the connection says it, and the app's `on unconnected`
 /// gets it. The runtimes fill the slot with their own message.
 pub const UNCONNECTED_KEYS: [(&str, &str); 2] = [("unconnectedNotKept", "The database connection is not set yet"), ("unconnectedFailed", "The database did not open: {problem}")];
 
 /// Why an engine beside the screen stopped, which its canvas shows in place
-/// of its drawing (DESIGN 5.12): the host's own message in `{problem}`.
+/// of its drawing (manual/code.engines.md): the host's own message in `{problem}`.
 pub const SCREEN_ENGINE_KEYS: [(&str, &str); 1] = [("screenEngineFailed", "The engine stopped: {problem}")];
 
-/// Why an undo or a save was refused (DESIGN 5.29, docs/APP-CAPABILITIES-PLAN.md
-/// step 5): what it would take back was changed since, or was done longer ago
+/// Why an undo or a save was refused (manual/code.handlers.md, docs/ledger/row-versions.md):
+/// what it would take back was changed since, or was done longer ago
 /// than the steps undo keeps; and a record someone else saved since it was
 /// read. Every application with windows has undo and saves records.
 pub const UNDO_KEYS: [(&str, &str); 3] = [
@@ -273,7 +273,7 @@ pub const RUNTIME_ERROR_KEYS: [(&str, &str); 3] = [
 /// Why `a div b` or `a mod b` failed: Clarity's own words, in projects whose code divides whole numbers.
 pub const DIVISION_KEYS: [(&str, &str); 1] = [("divisionByZero", "Division by zero")];
 
-/// Why a call of an engine failed (DESIGN 5.11, 5.12), in place of the
+/// Why a call of an engine failed (manual/code.engines.md), in place of the
 /// host's own message: it ran too long, the person stopped it, or it broke.
 pub const ENGINE_ERROR_KEYS: [(&str, &str); 3] = [
     ("engineTooLong", "{engine} ran longer than {seconds} seconds and was stopped"),
@@ -281,7 +281,7 @@ pub const ENGINE_ERROR_KEYS: [(&str, &str); 3] = [
     ("engineBroke", "{engine} stopped working in {function}"),
 ];
 
-/// Clarity's words of signing in (docs/APP-CAPABILITIES-PLAN.md step 4):
+/// Clarity's words of signing in (docs/ledger/signin.md):
 /// a refused sign-in, too many failed tries, a call `allow` refuses, and a
 /// record `readable` or `writable` refuses. A project whose file has
 /// `signin` has them. The English is the runtimes' own too
@@ -684,7 +684,7 @@ fn is_shown_property(target: &Expr) -> bool {
 /// Every text the project shows, by key or as written.
 /// The keys the code of an engine written in Clarity names, in order and
 /// once each: what it gives people to read, as its `says` would list them
-/// once it is a WebAssembly file (DESIGN 5.12, N5b).
+/// once it is a WebAssembly file (manual/code.engines.md).
 pub fn engine_keys(body: &crate::code::EngineBody) -> Vec<String> {
     let mut shown = Shown::default();
     for decl in &body.consts {

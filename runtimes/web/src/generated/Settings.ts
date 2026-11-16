@@ -50,7 +50,7 @@ themes: Array<string>,
  */
 filestores: Array<FileStore>, 
 /**
- * Codec libraries the project adds to Clarity.Video (docs/VIDEO-PLAN.md).
+ * Codec libraries the project adds to Clarity.Video (docs/ledger/video-camera.md).
  */
 codecs: Array<CodecLibrary>, 
 /**
@@ -67,17 +67,17 @@ out: string,
 keeps: Array<string>, 
 /**
  * Whether the people using the application set its shortcut keys
- * themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
+ * themselves, in Clarity's keys window (manual/app.keys.md): `keys editable`.
  */
 keys_editable: boolean, 
 /**
- * Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4):
+ * Who is using the program (docs/ledger/signin.md):
  * `signin Member on desktop web` with its strategies; none without it.
  */
 signin: Signin | null, 
 /**
  * Whether the engines written in Clarity are run by the interpreter
- * rather than compiled (DESIGN 5.12): `engines interpreted`.
+ * rather than compiled (manual/code.engines.md): `engines interpreted`.
  */
 engines_interpreted: boolean, 
 /**
@@ -96,7 +96,7 @@ agents_change_closed: boolean,
  */
 agents_at_most: number | null, 
 /**
- * The port a web application listens on (DESIGN 7.3): `port 8080`;
+ * The port a web application listens on (manual/project.run-build.md): `port 8080`;
  * none for DEFAULT_PORT.
  */
 port: number | null, 

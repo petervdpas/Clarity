@@ -2,7 +2,7 @@ name: Release Rust Clarity.Auth
 
 # Push a runtimes/rust-auth/v* tag (e.g. `git tag runtimes/rust-auth/v0.1.0 &&
 # git push origin runtimes/rust-auth/v0.1.0`) to publish the crate
-# clarity-auth to crates.io (docs/APP-CAPABILITIES-PLAN.md, step 4). The tag must name the
+# clarity-auth to crates.io (docs/ledger/signin.md). The tag must name the
 # version in runtimes/rust-auth/Cargo.toml: bump that first, commit, then tag.
 # clarity-runtime names a clarity-auth version (its auth feature), so
 # this release goes before the clarity-runtime release that needs it (tag runtimes/rust/v*).

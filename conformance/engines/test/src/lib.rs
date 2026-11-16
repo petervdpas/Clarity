@@ -1,5 +1,5 @@
 //! The engine every host is tested with (conformance/engines.json). It
-//! speaks Clarity's engine interface (DESIGN 5.11): the host writes the
+//! speaks Clarity's engine interface (manual/code.engines.md): the host writes the
 //! arguments as a JSON array into the engine's memory, calls the function
 //! with its place and length, and reads `{"value": ...}` or `{"error": ...}`
 //! back from the place and length the function gives, packed in an i64.

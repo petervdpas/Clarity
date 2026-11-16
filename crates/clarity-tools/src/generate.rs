@@ -17,7 +17,7 @@ pub fn generate(project_file: &Path, out: Option<&Path>) -> Result<Vec<String>, 
     let dir = clarity_project::module_dir(project_file);
     let load = || clarity_project::load_modules(&dir).map_err(|err| vec![format!("cannot read {}: {err}", dir.display())]);
     let mut lines = Vec::new();
-    // As Generate in Clarity: each part's folder follows its declaration first (DESIGN 5.19).
+    // As Generate in Clarity: each part's folder follows its declaration first (manual/design.custom-parts.md).
     let written = clarity_gen::parts::write_part_folders(&dir, &load()?).map_err(|err| vec![format!("cannot write the parts' folders: {err}")])?;
     lines.extend(written.iter().map(|path| format!("wrote {}", path.display())));
     let project = load()?;
@@ -32,7 +32,7 @@ pub fn generate(project_file: &Path, out: Option<&Path>) -> Result<Vec<String>, 
         why.extend(errors);
         why
     })?;
-    // A program served to a browser carries Clarity.UI's browser files (round B of DESIGN 7.9):
+    // A program served to a browser carries Clarity.UI's browser files (round B of manual/start.how-it-works.md):
     // CLARITY_UI_BROWSER's, the fetched ones, else the ones Clarity's repository built.
     if clarity_gen::web_browser::needs_library(&programs) {
         let repository = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

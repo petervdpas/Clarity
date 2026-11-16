@@ -55,7 +55,7 @@ fn own_file(library: &PartLibrary, name: &str) -> Option<String> {
     }
 }
 
-/// The file of a library's folder that is Clarity's (DESIGN 5.21).
+/// The file of a library's folder that is Clarity's (manual/code.libraries.md).
 fn library_own(dir: &Path, project: &clarity_spec::Project, name: &str) -> Option<String> {
     let library = clarity_gen::libraries::library(project, name)?;
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);

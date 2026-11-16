@@ -28,9 +28,9 @@ Progress: 90%
 - Files dropped from the system onto a part: NOT BUILT (DESIGN.md:1921).
 - A test that every catalog kind has a maker: NOT BUILT (kinds and makers equal today, 67 and 67; `image` is in the inputs and containers lists, and the inputs maker hands a plain image to the containers' one).
 - The C# program driven live in tests: NOT BUILT (`everything_live.rs` has go, rust, c, cpp).
-- Splitting the large files by job (MODULAR-PLAN step 4): NOT BUILT. `parts/data/table.rs` 2287, `parts/data/canvas.rs` 1956, `desktop/mod.rs` 1513, `window/mod.rs` 1347, `parts/text_editor.rs` 1261, `screen.rs` 1228, `parts/data/canvas/modes.rs` 1077, `element.rs` 1038, `access/mod.rs` 1031, `parts/data/graph.rs` 1022.
+- Splitting the large files by job ([modularity](modularity.md) step 4): NOT BUILT. `parts/data/table.rs` 2287, `parts/data/canvas.rs` 1956, `desktop/mod.rs` 1513, `window/mod.rs` 1347, `parts/text_editor.rs` 1261, `screen.rs` 1228, `parts/data/canvas/modes.rs` 1077, `element.rs` 1038, `access/mod.rs` 1031, `parts/data/graph.rs` 1022.
 - Screen readers (Orca, NVDA, VoiceOver, TalkBack) with AccessKit and the browser mirror: UNTRIED (DESIGN.md:2032-2034).
-- Go, C, C++ and C# programs on Clarity.UI on Windows and macOS; the web target in Edge: UNTRIED (WINDOWS-TESTS.md:96, 104-110, 144). See [os-checks](os-checks.md).
+- Go, C, C++ and C# programs on Clarity.UI on Windows and macOS; the web target in Edge: UNTRIED. See [os-checks](os-checks.md).
 - System file and folder pickers: see [parts-inputs](parts-inputs.md).
 
 ## Conflicts

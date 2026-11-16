@@ -1,5 +1,5 @@
 //! What the person chose to see the program in: its language and its theme
-//! (DESIGN 1.5), picked with the `language` and `theme` targets of a menu
+//! (manual/themes.md), picked with the `language` and `theme` targets of a menu
 //! or the settings, and kept for the next start in a small file of the
 //! program's own (`choices.json`); in the browser, the page keeps them in
 //! its storage (`Keeper`). The languages offered are the one the texts are

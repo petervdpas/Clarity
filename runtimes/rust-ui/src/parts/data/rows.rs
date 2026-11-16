@@ -1,7 +1,7 @@
 //! What the parts that show the records of a list share (a list, a table, a
 //! tree and a tree table), as C# DataRows.cs: the rows read from the
 //! window's data, the row the person chose, their own border unless a
-//! container frames them (DESIGN 7.9), and moving rows by hand (DESIGN 5.30,
+//! container frames them (manual/start.how-it-works.md), and moving rows by hand (manual/parts.data.md,
 //! conformance/reorder.json): a drag of a row onto another and Alt with an
 //! arrow key, written back as one edit after which `reorder` runs. The rows
 //! scroll in their own place (`Scroller`), with the wheel and a bar; evenly
@@ -621,7 +621,7 @@ impl Rows {
     }
 }
 
-/// Whether a data part draws its own border: with `frame`, or when no container frames it (DESIGN 7.9).
+/// Whether a data part draws its own border: with `frame`, or when no container frames it (manual/start.how-it-works.md).
 pub fn framed(base: &PartBase) -> bool {
     base.spec.flag("frame") || !base.spec.flag("inside")
 }

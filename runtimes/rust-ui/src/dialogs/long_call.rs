@@ -1,4 +1,4 @@
-//! A long call (DESIGN 5.12): while a handler runs off the screen's thread,
+//! A long call (manual/code.engines.md): while a handler runs off the screen's thread,
 //! the window keeps drawing and, once the call says how far it is, shows
 //! that as a note at the bottom right, clear of the messages' notes at the
 //! top: a bar, how much is done, and Stop, which ends the call at its next

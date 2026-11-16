@@ -1,4 +1,4 @@
-// What a screen knows of a program's fields and types (DESIGN 7.9): the
+// What a screen knows of a program's fields and types (manual/start.how-it-works.md): the
 // facts of each entity's field, keyed "Entity.field", found by a path in a
 // window's data as the C# host finds them, and the type at such a path.
 

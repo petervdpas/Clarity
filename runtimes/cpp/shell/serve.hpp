@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3): the application as a web server. Clarity.UI
+// The web target (manual/project.run-build.md): the application as a web server. Clarity.UI
 // runs in the browser and asks the program over HTTP: the server serves
 // the browser files the program carries (Options::browser_files, its browser/
 // folder: the page, the library's files, clarity/files.json and the
@@ -10,7 +10,7 @@
 // id per tab) and brings the person's settings as the page keeps them
 // (`"settings"`): its commands run with that page's settings and language
 // (its own set_language), and settings a command changed go back in that
-// page's answer alone (DESIGN 7.9 B2).
+// page's answer alone (manual/start.how-it-works.md B2).
 
 #pragma once
 

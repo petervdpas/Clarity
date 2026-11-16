@@ -31,7 +31,7 @@ public:
     virtual std::optional<std::string> handler(const std::string& window, const std::string& event) = 0;
     /// Runs a handler on a window's state.
     virtual Reply dispatch(Db& db, const WindowState& state, const std::string& handler) = 0;
-    /// Runs the handler the answer to a question goes to (DESIGN 5.14),
+    /// Runs the handler the answer to a question goes to (manual/code.statements.md),
     /// with the values written for it and the answer last.
     virtual Reply answer(Db& db, const WindowState& state, const std::string& handler, const nlohmann::json& values) = 0;
     /// Draws the canvases of the window `reply` shows anew, each by its draw
@@ -56,7 +56,7 @@ struct Size {
 /// The size a window opens at: `size`, or the standard size when it says none.
 Size window_size(Size size);
 
-/// A file the program carries (DESIGN 7.9): for Clarity.UI on the desktop
+/// A file the program carries (manual/start.how-it-works.md): for Clarity.UI on the desktop
 /// kind "window", "app", "theme" or "resource"; for the web server kind
 /// "browser", named by its path below browser/ ("index.html",
 /// "clarity/files.json"). Its name and its bytes. A list of them ends with
@@ -80,7 +80,7 @@ struct Options {
     Windows* windows = nullptr;
     /// The size the main window opens at; zero for the standard size.
     Size size;
-    /// Why the databases did not open (DESIGN 5.27), with `db` an empty one in
+    /// Why the databases did not open (manual/data.settings.md), with `db` an empty one in
     /// memory until `connect` opens them; none when they opened. What the
     /// screen shows first then: the app's `on unconnected` handler, or else
     /// the window that keeps the connection; empty for none.
@@ -88,7 +88,7 @@ struct Options {
     std::string unconnected_handler;
     std::string unconnected_window;
     std::function<std::unique_ptr<Db>()> connect;
-    /// The names of the secret settings (DESIGN 5.27), as a JSON array: kept
+    /// The names of the secret settings (manual/data.settings.md), as a JSON array: kept
     /// in the system's protected store, never in the settings file; null for none.
     nlohmann::json secrets;
     /// The desktop's files (windows and app frames as markup, themes,
@@ -99,14 +99,14 @@ struct Options {
     /// ended by one without a kind; none on the desktop.
     const UiFile* browser_files = nullptr;
     /// What the program knows of its fields and types, as JSON (the
-    /// runtime's facts, DESIGN 7.9); empty for none.
+    /// runtime's facts, manual/start.how-it-works.md); empty for none.
     std::string facts;
-    /// Whether an engine says how far a long call is (DESIGN 5.12): the
+    /// Whether an engine says how far a long call is (manual/code.engines.md): the
     /// desktop then runs handlers on a worker thread with Stop.
     bool watches = false;
     /// Registers the program's custom parts with Clarity.UI; none without.
     std::function<void()> register_parts;
-    /// Engines beside the screen, in the program on the desktop and the web (DESIGN 5.12): answers
+    /// Engines beside the screen, in the program on the desktop and the web (manual/code.engines.md): answers
     /// Clarity.UI's engine commands (engine_open, engine_hears, engine_frame,
     /// engine_close), from several threads; none for no engine.
     std::function<std::optional<nlohmann::json>(const std::string& command, const nlohmann::json& args)> screen_engines;
@@ -152,20 +152,20 @@ private:
     Reply drawn(const WindowState& state);
     /// Runs a handler, then draws the window's canvases anew.
     Reply dispatch(const WindowState& state, const std::string& handler);
-    /// Runs a handler as one database step (DESIGN 5.29): the reply carries
+    /// Runs a handler as one database step (manual/code.handlers.md): the reply carries
     /// the step's id when it changed the database, and `steps` gets it.
     Reply stepped(const WindowState& state, const std::string& handler, std::vector<int64_t>* steps = nullptr);
-    /// A change of `part` the runtime made to `state` (DESIGN 1.7), ended as
+    /// A change of `part` the runtime made to `state` (manual/start.how-it-works.md), ended as
     /// edit_event ends one: its handler runs as one database step and, with
     /// a scope, the change goes on the window's edits; without a handler the
     /// window is drawn as it is.
     Reply edited(const WindowState& state, const std::string& part, const std::string& scope, const std::string& handler);
-    /// What the person changed, refused (DESIGN 1.7): the window's data as
+    /// What the person changed, refused (manual/start.how-it-works.md): the window's data as
     /// its edit baseline had it, no handler run, no edit kept.
     Reply taken_back(const WindowState& state);
 };
 
-/// One browser page of a served program (DESIGN 7.9 B2): its person's
+/// One browser page of a served program (manual/start.how-it-works.md B2): its person's
 /// settings as the page keeps them, and the language its set_language chose.
 struct Page {
     nlohmann::json settings = nlohmann::json::object();
@@ -187,7 +187,7 @@ private:
     const Page* was_;
 };
 
-/// Long calls (DESIGN 5.12, clarity_ui.h "Long calls"): what the screen sees
+/// Long calls (manual/code.engines.md, clarity_ui.h "Long calls"): what the screen sees
 /// of a handler that runs long and how the person stops it, by the number
 /// the screen gave the call. The desktop asks from the screen's thread while
 /// the handler runs on another; the web server from one request while the

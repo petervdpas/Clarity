@@ -1,4 +1,4 @@
-// A question a handler asks: ask ... then handler(values) (DESIGN 5.14).
+// A question a handler asks: ask ... then handler(values) (manual/code.statements.md).
 // The screen asks it in Clarity's own dialog when the handler has finished;
 // the answer runs the handler named, with the values written for it and,
 // for a value, the answer last. The JSON is the Rust runtime's.

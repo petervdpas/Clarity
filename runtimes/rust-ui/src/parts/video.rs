@@ -1,4 +1,4 @@
-//! The video part (docs/VIDEO-PLAN.md): a video in its place in the grid,
+//! The video part (docs/ledger/video-camera.md): a video in its place in the grid,
 //! a file of the program's resources or one from disk, told by code what to
 //! do as a sound is (play, pause, resume, seek, stop, volume). Its pictures
 //! come from Clarity.Video when the program carries it (`set_videos`); its

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The tells of the view a content's view line shows (DESIGN 5.33), each
+  // The tells of the view a content's view line shows (manual/design.windows.md), each
   // wired to a handler of the window that takes the tell's values, as a
   // custom part's tells are.
 

@@ -1,4 +1,4 @@
-//! The program a generated application is (DESIGN 7.9): everything its screen
+//! The program a generated application is (manual/start.how-it-works.md): everything its screen
 //! asks of it, as one trait in plain Rust types. The generated code
 //! implements it once, on a struct over its databases. Clarity.UI calls it in
 //! the program's own process on the desktop, with no JSON between them; the
@@ -31,14 +31,14 @@ pub type Answer<T> = std::result::Result<T, Text>;
 pub struct Started {
     /// The name of the main window.
     pub main: String,
-    /// Set while the databases are not open (DESIGN 5.27).
+    /// Set while the databases are not open (manual/data.settings.md).
     pub unconnected: Option<Unconnected>,
     /// The sign-in window, when people sign in before the main window
-    /// opens (docs/APP-CAPABILITIES-PLAN.md step 4; `Db::signin_first`).
+    /// opens (docs/ledger/signin.md; `Db::signin_first`).
     pub signin: Option<String>,
 }
 
-/// What the screen shows when the databases did not open (DESIGN 5.27).
+/// What the screen shows when the databases did not open (manual/data.settings.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unconnected {
     /// The app's `on unconnected` handler, which runs with why.
@@ -49,7 +49,7 @@ pub struct Unconnected {
     pub problem: Text,
 }
 
-/// The person ended an edit of a part (DESIGN 5.29).
+/// The person ended an edit of a part (manual/code.handlers.md).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Edit {
     /// The part's `on change` handler, if any.
@@ -66,7 +66,7 @@ pub struct Edit {
     pub editable: Option<Vec<String>>,
 }
 
-/// A row moved by a drag or a key (DESIGN 1.7).
+/// A row moved by a drag or a key (manual/start.how-it-works.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reorder {
     pub part: String,
@@ -82,7 +82,7 @@ pub struct Reorder {
     pub readonly: bool,
 }
 
-/// An item typed for a list field (DESIGN 1.7).
+/// An item typed for a list field (manual/start.how-it-works.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemEdit {
     pub part: String,
@@ -97,7 +97,7 @@ pub struct ItemEdit {
     pub readonly: bool,
 }
 
-/// A key, a drag or typed text on a slider or spin box (DESIGN 1.7).
+/// A key, a drag or typed text on a slider or spin box (manual/start.how-it-works.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct RangeEdit {
     pub part: String,
@@ -112,7 +112,7 @@ pub struct RangeEdit {
     pub readonly: bool,
 }
 
-/// The person's action on a canvas (DESIGN 5.31).
+/// The person's action on a canvas (manual/parts.graphics.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasEdit {
     pub canvas: CanvasArgs,
@@ -123,7 +123,7 @@ pub struct CanvasEdit {
     pub readonly: bool,
 }
 
-/// Next, Back or Finish on a wizard (DESIGN 1.7).
+/// Next, Back or Finish on a wizard (manual/start.how-it-works.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepPress {
     pub part: String,
@@ -228,14 +228,14 @@ pub trait Program: Send + Sync + 'static {
     /// A file of a store: a picture linked from a file before its record is saved.
     fn store_file(&self, store: &str, path: &str) -> Answer<Vec<u8>>;
 
-    /// The settings the person kept (DESIGN 5.17).
+    /// The settings the person kept (manual/data.settings.md).
     fn read_settings(&self) -> Map<String, Value>;
 
     /// Keeps the person's settings, as the screen has them now.
     fn keep_settings(&self, settings: Map<String, Value>) -> Answer<()>;
 
     /// Opens the databases again, as when the person has kept their
-    /// connection (DESIGN 5.27). A program whose databases always open has
+    /// connection (manual/data.settings.md). A program whose databases always open has
     /// nothing to do.
     fn connect(&self) -> Answer<()> {
         Ok(())
@@ -300,7 +300,7 @@ pub trait Program: Send + Sync + 'static {
         let _ = id;
     }
 
-    /// What the program knows of its fields and types (DESIGN 7.9), as
+    /// What the program knows of its fields and types (manual/start.how-it-works.md), as
     /// plain JSON (`fields::Facts::to_json`): each field's label, format and
     /// range, and the type of each window's values, which the screen's parts
     /// read beside the values. A program that carries none gives null.

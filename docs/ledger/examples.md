@@ -31,6 +31,7 @@ Progress: 90%
 - none
 
 ## Decisions
+- 2026-11-13: the maintenance example, moved from [windows-dialogs](windows-dialogs.md): the entry is a Markdown memo (Write and Preview) saved into its ledger file with Save entry; the memo has a draggable scroll bar (`TextEditor::bar`, the shared `geometry::Thumb`); Main was 2 pixels taller than its window (16 rows of 36 with gaps under a 38-pixel toolbar in 756 pixels), so everything is 15 rows (window test `the_maintenance_window_fits_its_rows_and_its_memo_ends_inside`); a Dark and a Light theme (user: "add light and dark theme while you are at it!").
 - 2026-11-03: build an example only for the stack its project file names; "all examples" means every one. (memory: examples-own-stack.md)
 - 2026-11-06: a slice is done only when every example builds on its own stack. (CLAUDE.md)
 - 2026-11-12: maintenance, a Clarity app to review ledgers. User: "make a clarity app so we can review everything in there! call it \"maintenance\"... and clarity is 'just' one project in the app"; the list "as an orderly list (left sidebar)", on the right "a review page with slideout for properties like reviewed and references"; the page a "markdown text widget".

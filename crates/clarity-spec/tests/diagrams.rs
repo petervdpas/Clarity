@@ -1,4 +1,4 @@
-//! Diagrams (DG1, DESIGN section 5.13): Mermaid text read into what Clarity
+//! Diagrams (manual/data.diagrams.md): Mermaid text read into what Clarity
 //! maps it to. An ERD's entities become entities, its attributes fields in
 //! Clarity's types, and its relationships refs and lists.
 

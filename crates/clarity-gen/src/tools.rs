@@ -320,9 +320,9 @@ const CMAKE: &str = "CMake, from https://cmake.org/download (Windows, in MSYS2's
 const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org; Windows: pacman -S mingw-w64-ucrt-x86_64-ninja)";
 const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-sqlite3; elsewhere https://sqlite.org/download.html)";
 const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-nlohmann-json; elsewhere https://github.com/nlohmann/json)";
-/// HTTP calls from C and C++ code (DESIGN 5.23) go through libcurl.
+/// HTTP calls from C and C++ code (manual/code.web-apis.md) go through libcurl.
 pub const LIBCURL: &str = "the libcurl development files, as the code calls web APIs (Debian and Ubuntu: libcurl4-openssl-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-curl; macOS brings it)";
-/// The library C, C++ and Go desktop programs draw with (DESIGN 7.9).
+/// The library C, C++ and Go desktop programs draw with (manual/start.how-it-works.md).
 pub const CLARITY_UI_LIBRARY: &str = "Clarity.UI's library, for a desktop program: Clarity carries it, or its build fetches it from its release on GitHub (clarity-ui-<version>-<system>.tar.gz), or the environment variable CLARITY_UI names a folder with include/clarity_ui.h and, in lib/, the library for the system";
 
 fn dotnet() -> String {
@@ -431,7 +431,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
     }
 }
 
-/// Clarity.UI's library for a Go, C or C++ desktop program (DESIGN 7.9):
+/// Clarity.UI's library for a Go, C or C++ desktop program (manual/start.how-it-works.md):
 /// the folder CLARITY_UI names, else the one the installed Clarity carries,
 /// else the one Clarity fetched or fetches on the first build; missing only
 /// where none of these works.

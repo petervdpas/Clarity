@@ -1,4 +1,4 @@
-//! The ERD designer's model (DG1, DESIGN section 5.13): what the canvas
+//! The ERD designer's model (manual/data.diagrams.md): what the canvas
 //! edits (entities with their place, fields, relations), read from Mermaid
 //! text and written back as plain Mermaid. Places are `%% clarity:` lines,
 //! which Mermaid ignores. Writing what was read loses nothing.

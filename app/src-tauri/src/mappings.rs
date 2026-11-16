@@ -1,4 +1,4 @@
-//! The mapping page (docs/FORMATS-PLAN.md, step 4): the project's mappings
+//! The mapping page (docs/ledger/formats.md): the project's mappings
 //! as forms, saving one back into its module through the printer as one
 //! designer edit (checked, written, one Undo), deleting one that nothing
 //! uses, and a sample file laid over one, read through Clarity.Formats as a

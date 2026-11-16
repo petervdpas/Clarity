@@ -1,5 +1,5 @@
 //! Clarity.UI draws with Clarity's own theme until a project gives its own
-//! (DESIGN 7.9): it carries that theme as Rust resolves it, for light and
+//! (manual/start.how-it-works.md): it carries that theme as Rust resolves it, for light and
 //! dark mode, so the look stays defined in Clarity. The library carries it
 //! in runtimes/rust-ui/themes, which is written and checked.
 //! `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test clarity_ui_theme` writes them again.

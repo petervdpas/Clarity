@@ -126,7 +126,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
 - For C applications: CMake 3.25 or newer, a C17 compiler, pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
-- For Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header. Clarity's installer carries it; a Clarity built from source fetches it from its GitHub release on the first build (as a generated C or C++ project's CMake does, built without Clarity); the environment variable `CLARITY_UI` names a folder of your own instead (`include/` and `lib/`)
+- For Rust, Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header. Clarity's installer carries it; a Clarity built from source fetches it from its GitHub release on the first build (as a generated C or C++ project's CMake does, built without Clarity); the environment variable `CLARITY_UI` names a folder of your own instead (`include/` and `lib/`)
 - For C# applications: the .NET 10 SDK (a web application gets Clarity.UI's browser files from Clarity, as the other languages do)
 
 ### Setting up the tools
@@ -176,7 +176,7 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
-An agent working in this repository uses this checkout's Clarity: `.mcp.json` names `./mcp.sh`, which builds the `clarity` command when it is behind its source and serves `clarity mcp` from it. Claude Code offers it when started here; an installed Clarity added for every folder (`--scope user`) stays in use elsewhere.
+An agent working in this repository uses this checkout's Clarity: `.mcp.json` names `./mcp.sh` as the server `clarity-cdev`, which builds the `clarity` command when it is behind its source and serves `clarity mcp` from it, with the tools for working on Clarity itself (`build_piece`, `release_state`, `disk_state`, `remove_folder`). Claude Code offers it when started here, beside an installed Clarity added for every folder as `clarity` (`--scope user`); the two names never hide each other.
 
 In an IDE started with `./dev.sh`, Clarity settings > **DevTools** has a tab per piece of Clarity that apps use, choosing between the release and your own build from the repository, with **Build** to make your own (shown in the tab while it builds, one build at a time). By default it shows the Disk and Release planning tabs and the pieces whose own build is behind their source; add the tab of any other piece. Its **Release planning** tab is for review: the checks a release needs with one button (run in a fresh checkout as on GitHub, and last that they left the tree clean), the chain of steps a release would start, and what changed since each release; an agent reads it through Clarity's MCP server (`release_state`) and writes the Release Helper's plan. Its **Disk** tab shows how big each build folder is and removes one. An agent presses a Build through Clarity's MCP server (`build_piece`). An installed Clarity has no DevTools and always uses the release.
 

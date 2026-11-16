@@ -1,5 +1,5 @@
-// The sign-in of the programs Clarity generates (docs/APP-CAPABILITIES-PLAN.md,
-// step 4) through the native Clarity.Auth library (clarity_auth.h), the one
+// The sign-in of the programs Clarity generates (docs/ledger/signin.md)
+// through the native Clarity.Auth library (clarity_auth.h), the one
 // implementation every stack calls: one operation by name, its arguments and
 // result as JSON.
 

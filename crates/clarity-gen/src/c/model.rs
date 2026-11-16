@@ -31,7 +31,7 @@ pub fn emit(project: &Project) -> (String, String) {
         let _ = writeln!(header, "/// Records of {name}, in the scratch arena.\ntypedef struct {{\n    {name}* items;\n    size_t count;\n}} {};", list_type(name));
     }
     header.push('\n');
-    // A record held inside another is declared first (DESIGN 5.25).
+    // A record held inside another is declared first (manual/data.entities.md).
     for entity in crate::holding_order(project) {
         let (h, s) = record(project, entity);
         header.push_str(&h);
@@ -45,7 +45,7 @@ pub fn emit(project: &Project) -> (String, String) {
     (header, source)
 }
 
-/// A record (DESIGN 5.12): a struct of its fields, a new one with their
+/// A record (manual/code.engines.md): a struct of its fields, a new one with their
 /// defaults, its JSON and lists of it; never stored, so it has no id, no
 /// description for the database and no calls that store it.
 fn plain_record(project: &Project, record: &Entity) -> (String, String) {
@@ -129,7 +129,7 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
-        // A record held inside starts as a new one (DESIGN 5.25).
+        // A record held inside starts as a new one (manual/data.entities.md).
         (FieldType::Record { entity }, _) => Some(format!("{}_new()", prefix(&entity.name))),
         _ => None,
     }
@@ -275,7 +275,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     for f in &entity.fields {
         let _ = writeln!(fields, "    {} {};", field_type(&f.ty), ident(&f.name.name));
     }
-    // The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5), kept
+    // The version a save checks (docs/ledger/row-versions.md), kept
     // beside the fields; none where saves are not checked.
     let version = project.version_column(name);
     if version.is_some() {

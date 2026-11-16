@@ -2,7 +2,7 @@
 //! files, the windows' markup and what the runtimes send. A dependency that
 //! switches on serde_json's `preserve_order` changes that for the whole
 //! workspace when it builds together (as the checks do), and once changed
-//! the key order of every file Clarity wrote (docs/ACP-PLAN.md). This test
+//! the key order of every file Clarity wrote (docs/ledger/acp.md). This test
 //! fails in such a build, naming the cause, before the files do.
 
 #[test]

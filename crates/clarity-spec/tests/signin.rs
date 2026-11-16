@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4), the
+//! Who is using the program (docs/ledger/signin.md), the
 //! language side: the project file's `signin` block checked against the
 //! entity of people, the field modifier `hashed`, `me`, `newToken()`, `allow
 //! when` on actions, commands, windows and frame commands, an entity's

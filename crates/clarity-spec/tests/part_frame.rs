@@ -1,6 +1,6 @@
 //! A list, table or tree in a container (a tab page, a pane, a panel, a form,
 //! a section, a step, a scroll box) shows no border of its own, its
-//! container framing it; `frame` gives it one anyway (DESIGN 5.6, 7.8).
+//! container framing it; `frame` gives it one anyway (manual/design.parts.md, manual/start.how-it-works.md).
 
 use clarity_spec::keyed::load_keyed;
 use clarity_spec::parser::parse;

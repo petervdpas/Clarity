@@ -51,7 +51,7 @@ internal static class Store
     /// </summary>
     internal static string Location(string text)
     {
-        // A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+        // A secret setting (manual/data.settings.md): setting:<program>/<name>, from the system's protected store.
         if (text.StartsWith("setting:", StringComparison.Ordinal))
         {
             var at = text[8..].Split('/', 2);

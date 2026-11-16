@@ -1,4 +1,4 @@
-//! A window's markup read as every stack reads it (DESIGN 7.8): each part
+//! A window's markup read as every stack reads it (manual/start.how-it-works.md): each part
 //! its kind's defaults with what the markup changes, its handlers as written
 //! calls, its pages and menu; markup as the generator writes it
 //! (crates/clarity-gen/src/web_windows.rs); a kind Clarity.UI does not draw

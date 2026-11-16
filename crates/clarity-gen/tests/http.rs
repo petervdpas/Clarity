@@ -1,4 +1,4 @@
-//! HTTP calls from code (DESIGN 5.23) on every stack: each calls its
+//! HTTP calls from code (manual/code.web-apis.md) on every stack: each calls its
 //! runtime's client with the method, the url, the body and the headers, and
 //! reads the reply's status, ok and text. Only a project that calls out
 //! brings the client along.

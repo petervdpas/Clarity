@@ -1,4 +1,4 @@
-//! What an engine written in Rust stands on (DESIGN 5.11). An engine is a
+//! What an engine written in Rust stands on (manual/code.engines.md). An engine is a
 //! plain WebAssembly module, built as a `cdylib` for
 //! `wasm32-unknown-unknown`, that speaks Clarity's engine interface: the host
 //! writes a call's arguments as a JSON array into the engine's memory, and

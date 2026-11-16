@@ -1,4 +1,4 @@
-//! Views (DESIGN 5.33): a view shows only in a window's content (`content`
+//! Views (manual/design.windows.md): a view shows only in a window's content (`content`
 //! with a `view X` line); a slide-out, tab, step or section that shows one
 //! holds a content. The view's parts and data join the window's, so the
 //! window's code sets what it shows, and the generators get the view placed.

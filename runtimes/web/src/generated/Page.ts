@@ -46,12 +46,12 @@ frame: Frame,
 handlers: Array<Handler>, 
 /**
  * What a dialog gives when it closes with a value (`page X: dialog
- * gives Friend`), for the handler that asked for it (DESIGN 5.14).
+ * gives Friend`), for the handler that asked for it (manual/code.statements.md).
  */
 gives: TypeRef | null, 
 /**
  * What a view tells the window it shows in (`tells saved(name: text)`,
- * DESIGN 5.33): its code says `tell saved(name)`, and the window hears
+ * manual/design.windows.md): its code says `tell saved(name)`, and the window hears
  * it on the slide-out or section that shows it (`on saved: handler`).
  */
 tells: Array<PartMessage>, 

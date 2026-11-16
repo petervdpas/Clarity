@@ -1,4 +1,4 @@
-// Which language an application shows its texts in (DESIGN section 1.5,
+// Which language an application shows its texts in (manual/languages.md,
 // I1c), by the same rules as the web renderer (runtimes/web/src/screen/translate.ts):
 // the person's locale picks among the languages the project has
 // translations for; the language chosen with the `language` click target

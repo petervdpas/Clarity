@@ -20,11 +20,12 @@ Progress: 75%
 ## Open
 - `while`, `break`, `continue`, `match`: NOT BUILT. Not in `code/parse.rs` or the lexer.
 - Date arithmetic and date members (`d + 1`, `d.year`): NOT BUILT. Dates only compare: arithmetic takes durations and numbers only (`code/check.rs:5007-5025`, `is_numeric` :863).
+- Durations scaled by a decimal (`duration * 1.5`): NOT BUILT. Only a whole number scales a duration (`crates/clarity-spec/src/code/check.rs:5101-5102`; manual code.expressions.md:135 says so). Promised by the old LANGUAGE.md:2884.
 - `computed` with a formula: PARTIAL. The word only skips the required check (`crates/clarity-gen/src/lib.rs:271`).
 - `old(expr)`, `sum(list.field)`, `all(...)`, `any(...)`: NOT BUILT (DESIGN 5.4).
 - `require`/`ensure` as generated tests: NOT BUILT. Run-time checks only (`crates/clarity-gen/src/rust/logic.rs:202-221`).
 - A context object exposing only declared effects: NOT BUILT. Effects are checked by the checker only.
-- `encoded(text)`, `plainText(html)`: NOT BUILT (APP-CAPABILITIES-PLAN.md:43).
+- `encoded(text)`, `plainText(html)`: NOT BUILT (see [formats](formats.md)).
 - C generator gaps: PARTIAL. List literals other than records or values (`c/logic.rs:1905`), a position in them (:1929), window data `list<bool>`/`list<Enum>` (:437), a list of values given to a window (:1624), `json of` a `list<bool>` (:2030).
 - `files f in store where` with a condition that can fail: PARTIAL, missing on Go (`go/logic.rs:701`).
 - Reading a stored `list<Entity>`: see [entities](entities.md). `progress n of total`: see [engines](engines.md).
@@ -50,5 +51,5 @@ Progress: 75%
 - DESIGN 5 (intro), 5.1, 5.3, 5.4, 5.9, 5.10, 5.24, 5.38; 5.12 "Records in app code (built 2026-11-05)"; 20 question 2 (syntax)
 - Roadmap S1, L1, L2, E1, X2 (duration, none, today, checked)
 - CXAML-SOURCE-PLAN.md (the decision that pages live in `.cxaml`)
-- IMPLEMENTED.md section 3 (Loading, Declarations, Pages and events, Statements, Expressions, Built-in functions, Effects and access, What the generators still refuse); UNIMPLEMENTED.md section 1; CONFLICTING.md section 2 (comparisons, division, overflow, range), section 1 (empty values), section 6
+- IMPLEMENTED.md section 3 (Loading, Declarations, Pages and events, Statements, Expressions, Built-in functions, Effects and access, What the generators still refuse); UNIMPLEMENTED.md section 1 (durations scaled by a decimal, :34); CONFLICTING.md section 2 (comparisons, division, overflow, range), section 1 (empty values), section 6
 - memory: camel-case-names.md, braces-not-indentation.md

@@ -217,7 +217,7 @@ static bool connect_later(ClarityDb** out) {
     return clarity_db_memory(out);
 }
 
-/// The databases did not open (DESIGN 5.27): start says what to show and
+/// The databases did not open (manual/data.settings.md): start says what to show and
 /// why, and connect opens them once the person has kept their connection.
 void an_unconnected_start_says_why_and_connects_later(void) {
     ClarityDb* db;
@@ -247,7 +247,7 @@ static size_t memos(ClarityDb* db) {
     return count;
 }
 
-// Undo (DESIGN 5.29): the runtime keeps the window's edits, each with the
+// Undo (manual/code.handlers.md): the runtime keeps the window's edits, each with the
 // database steps its handler made, and Ctrl+Z takes them back together.
 void the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back(void) {
     ClarityDb* db;
@@ -292,7 +292,7 @@ static const cJSON* data_of(const cJSON* answer) {
 
 static const char* const tasks = "{\"window\":\"Card\",\"instance\":9,\"data\":{\"tasks\":[{\"id\":1,\"position\":1},{\"id\":2,\"position\":2},{\"id\":3,\"position\":3}]}}";
 
-// Reordering (DESIGN 1.7, 5.30): the screen sends the move, and the runtime
+// Reordering (manual/start.how-it-works.md, manual/parts.data.md): the screen sends the move, and the runtime
 // gives the list its order and numbers, chooses the moved row, and keeps the
 // move as an edit that Ctrl+Z takes back.
 void the_runtime_reorders_a_list_and_ctrl_z_puts_it_back(void) {
@@ -322,7 +322,7 @@ void the_runtime_reorders_a_list_and_ctrl_z_puts_it_back(void) {
     clarity_db_close(db);
 }
 
-// A list field's typed item (DESIGN 1.7, U1c): the runtime adds it, or
+// A list field's typed item (manual/start.how-it-works.md): the runtime adds it, or
 // refuses it and says so, so the screen keeps the typed text.
 void the_runtime_adds_a_typed_item_or_refuses_it(void) {
     ClarityDb* db;
@@ -347,7 +347,7 @@ void the_runtime_adds_a_typed_item_or_refuses_it(void) {
     clarity_db_close(db);
 }
 
-// A slider's and a spin box's value (DESIGN 1.7, U1c): after a key, a drag
+// A slider's and a spin box's value (manual/start.how-it-works.md): after a key, a drag
 // or typed text, the runtime keeps it within its range and steps.
 void the_runtime_moves_a_value_within_its_range(void) {
     ClarityDb* db;
@@ -367,7 +367,7 @@ void the_runtime_moves_a_value_within_its_range(void) {
     clarity_db_close(db);
 }
 
-// A canvas (DESIGN 1.7, 5.31): the screen sends what the person did, and the
+// A canvas (manual/start.how-it-works.md, manual/parts.graphics.md): the screen sends what the person did, and the
 // runtime snaps it, chooses what it touched, runs on change as one edit that
 // Ctrl+Z takes back, and refuses an action that changes nothing.
 void the_runtime_moves_an_object_and_edits_a_drawing(void) {
@@ -404,7 +404,7 @@ static const cJSON* step_of(const cJSON* answer) {
     return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answer, "value"), "state"), "parts"), "wizard"), "step");
 }
 
-// A wizard's buttons (DESIGN 1.7, 5.15): the runtime runs on next and on
+// A wizard's buttons (manual/start.how-it-works.md, manual/parts.containers.md): the runtime runs on next and on
 // finish and decides the step.
 void the_runtime_walks_a_wizard(void) {
     ClarityDb* db;
@@ -448,7 +448,7 @@ static bool city_values(ClarityDb* db, const char* entity, const char* field, cJ
 
 static const ClarityWindows customers = {open_card, handler_of, dispatch, search_options, picture, redraw, answer, city_values};
 
-// A dropdown's options (DESIGN 1.7, U1c): the runtime picks what it offers for typed text.
+// A dropdown's options (manual/start.how-it-works.md): the runtime picks what it offers for typed text.
 void the_runtime_finds_a_dropdowns_options(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
@@ -478,7 +478,7 @@ static const char* const planner =
     "\"outline\":{\"kind\":\"tree\",\"list\":\"tasks\",\"parent\":\"up\",\"key\":\"id\",\"open\":[]},"
     "\"chart\":{\"kind\":\"chart\",\"list\":\"sales\",\"by\":\"city\",\"byKind\":\"text\",\"measure\":\"sum\",\"of\":\"amount\"}}}";
 
-// The shown rows (DESIGN 1.7): every reply fills what the window's tables,
+// The shown rows (manual/start.how-it-works.md): every reply fills what the window's tables,
 // trees and charts show from its data, so a handler's change shows at once.
 void a_reply_fills_the_shown_rows_of_its_views(void) {
     ClarityDb* db;
@@ -547,7 +547,7 @@ void a_view_event_sorts_pages_opens_and_closes(void) {
 /// The window Card's data a command is answered with.
 static cJSON* answer_data(ClarityService* s, const char* command, const char* args) { return (cJSON*)data_of(invoked(s, command, args)); }
 
-// A readonly part (DESIGN 1.7): the runtime takes back what the screen
+// A readonly part (manual/start.how-it-works.md): the runtime takes back what the screen
 // changed, runs no handler and records no edit, and says it refused.
 void a_readonly_part_takes_back_what_the_screen_changed(void) {
     ClarityDb* db;
@@ -580,7 +580,7 @@ void a_readonly_part_takes_back_what_the_screen_changed(void) {
     clarity_db_close(db);
 }
 
-// A table edits only the columns of its `edit` (DESIGN 1.7): a change to
+// A table edits only the columns of its `edit` (manual/start.how-it-works.md): a change to
 // any other field of its rows, or rows added, removed or moved, is taken back.
 void a_table_takes_back_a_change_to_a_column_it_does_not_edit(void) {
     ClarityDb* db;

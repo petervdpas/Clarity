@@ -1,4 +1,4 @@
-// Undo (DESIGN 5.29): every edit of a part goes over its window's edit bus
+// Undo (manual/code.handlers.md): every edit of a part goes over its window's edit bus
 // as a message: the part, the scope it is undone in (the form or panel it is
 // in, or the part itself), what changed in the window's data (each name with
 // its value before and after), and the id of the database step its handler

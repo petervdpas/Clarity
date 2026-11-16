@@ -1,4 +1,4 @@
-// A wizard, the steps part (DESIGN 5.15, conformance/steps.json), walked by
+// A wizard, the steps part (manual/parts.containers.md, conformance/steps.json), walked by
 // the runtime: the step it shows, the buttons it has, and what Next and Back
 // do. Next runs the handler of `on next` on the step shown, then moves one
 // step on, unless the handler refused (the step stays) or set the step

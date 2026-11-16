@@ -1,6 +1,6 @@
 # Outside agents in the panel (ACP)
 
-Status: partial. Codex and Copilot run in the IDE's agent panel on the person's own subscription and login, through the Agent Client Protocol, with Clarity's tools.
+Status: partial. The outside agents Codex and Copilot run in the IDE's agent panel on the person's own subscription and login, through the Agent Client Protocol, with Clarity's tools.
 
 Progress: 70%
 
@@ -22,10 +22,15 @@ Progress: 70%
 - conformance: none
 
 ## Open
-- Codex and Copilot checked by hand against the real programs: UNTRIED. Open notes in `crates/clarity-acp/src/vendors.rs:84`.
-- Claude Code as an outside agent: NOT BUILT, waits on Anthropic's position on subscription sign-in. Until then Claude works through `clarity mcp` in Claude Code, or as [agent](agent.md) with an API key.
+- Codex and Copilot checked by hand against the real programs: UNTRIED; see Design.
+- Claude Code as an outside agent: NOT BUILT; see Design.
 - A missing program links to Clarity's manual page: PARTIAL. It links the vendor's install page (`vendors.rs:42-51`).
 - Panel, picker and dialog texts from translations: NOT BUILT (see [ide-shell](ide-shell.md)).
+
+## Design
+The hand check. Codex and Copilot, each with its start command, its ask-first mode and its sign-in, tried against the real programs (the tests use a fake agent program). The open notes are in `crates/clarity-acp/src/vendors.rs:84`.
+
+Claude Code as an outside agent. Not offered until Anthropic's position on subscription sign-in allows it (or Anthropic approves): its Agent SDK page says other products may not offer claude.ai login without approval, while signing in to an unmodified Claude Code is allowed, and reports on embedding disagree. Until then Claude works through `clarity mcp` in Claude Code's own window, or as [agent](agent.md) with an API key. Once allowed, it joins the agent picker as Codex and Copilot did, with the same refusals and Allow/Deny.
 
 ## Conflicts
 - none
@@ -33,7 +38,7 @@ Progress: 70%
 ## Decisions
 - 2026-11-09: the panel talks to an agent the person already pays for, with that vendor's login, no API key in Clarity. User: "but I asked for an easier way to use ai in clarity, without and api key!!!!!!!!", and "but I want it inside the ide!!"
 - 2026-11-09: ACP spoken by Clarity itself with serde_json, no ACP crate (the `agent-client-protocol` crate turned on serde_json `preserve_order` workspace-wide and failed eight test targets in v0.36.0). User: first "use the crate, standards are better", then "go non standard use json_something then!"
-- 2026-11-09: outside agents get `clarity mcp`'s tools plus show window and show diagram; their own edits allowed inside the project, checked and undone with the turn; Claude not offered yet. User: "also preview and diagrams, edits allowed, wait for anthropic (api-key for now)"
+- 2026-11-09: outside agents get `clarity mcp`'s tools plus show window and show diagram; their own file edits inside the project, checked and undone with the turn, nothing outside it; Claude not offered yet. Since 2026-11-10 (below) their own writes of `.clarity`, `.cxaml`, README.md and `resources/*.md` are refused (`clarity_s_own`, `crates/clarity-acp/src/lib.rs:636`, checked at :458 and :483); other files in the project they may write. User: "also preview and diagrams, edits allowed, wait for anthropic (api-key for now)"
 - 2026-11-09: a setting to turn outside agents off, and an activity list fed by the log `clarity mcp` writes (no file contents). User: "Is it something I turn on and off in the ide settings? Can I monitor it somehow?", then "yes, add both to the plan and build them"
 - 2026-11-12: a writer of the activity log (`crates/clarity-project/src/activity.rs`, `turn`) waits for its turn until nothing was written to the log for `LOCK_WAIT`, not 2 seconds from when it asked: under the checks' load a busy log was taken for a hung one and a call left out (`calls_at_the_same_moment_each_get_their_own_number` failed in the Workspace job). Test `a_writer_waits_while_the_log_keeps_being_written`. User: "why does this always happen at this step in this job?????"
 - 2026-11-09: the IDE must run; an agent works only on the project the running IDE has open (see [mcp-tools](mcp-tools.md)). User: "the clarity project that is currently open in the ide!"
@@ -41,5 +46,5 @@ Progress: 70%
 - 2026-11-10: every AI changes Clarity's own files only through the tools; outside agents are refused when they write them and get no mode that writes past the tools. User: "all ai must use tools!"
 
 ## Was
-- ACP-PLAN.md steps 1-7, "How it is built", "Decided"
+- ACP-PLAN.md: Goal, "How it works", "Agents", "How it is built", order steps 1-3, 5, 6, "Decided" (built; manual ai.your-agent.md); step 4 (hand check) and step 7 with the Claude row (now Design)
 - memory: acp-plan.md

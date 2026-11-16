@@ -1,4 +1,4 @@
-//! XML (docs/FORMATS-PLAN.md, "XML"), syntax only: bytes become a document
+//! XML (docs/ledger/formats.md), syntax only: bytes become a document
 //! of element nodes (markup.rs) and a document becomes bytes again. Bytes
 //! become text by a byte order mark (UTF-8, UTF-16), else the declaration's
 //! encoding (utf-8, windows-1252, iso-8859-1), else UTF-8. A document read

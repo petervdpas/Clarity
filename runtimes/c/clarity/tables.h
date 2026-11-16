@@ -1,4 +1,4 @@
-// The rows a table or list shows (DESIGN 1.7), decided here and not by the
+// The rows a table or list shows (manual/start.how-it-works.md), decided here and not by the
 // screen: their order (conformance/table-order.json), text ignoring case,
 // numbers as numbers, a choice by the label it shows, an empty value last
 // either way and equal rows in the order of the data; and the page shown

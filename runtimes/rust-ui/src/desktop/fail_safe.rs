@@ -1,4 +1,4 @@
-//! The desktop's fail safe (DESIGN 7.9): whatever goes wrong on the screen's
+//! The desktop's fail safe (manual/start.how-it-works.md): whatever goes wrong on the screen's
 //! thread (what the person did, drawing, laying out on a resize, a sidebar
 //! growing the window, time going on) is said as Clarity's error message in
 //! the window, and the program goes on. A failure that comes again every

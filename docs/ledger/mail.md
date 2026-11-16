@@ -5,20 +5,80 @@ Status: not built. Mail servers as data sources of one Internet family: `smtp` t
 Progress: 0%
 
 ## Code
-- none. Designed in APP-CAPABILITIES-PLAN.md step 3. Planned places: `runtimes/rust-mail` (crate `clarity-mail`), `runtimes/rust-mail-ffi` (`clarity_mail.h`, `libclarity_mail`), C# NuGet `Clarity.Mail`, release tag `runtimes/rust-mail/v*`, the native library beside Clarity.UI's; Rust crates `lettre`, `imap`, `mail-parser`, `rustls`.
-- What it builds on: `rest` sources with `auth` ([web-apis](web-apis.md)), secret settings ([settings-secrets](settings-secrets.md)), `files f in store` ([files-pictures](files-pictures.md)), formats for attachments ([formats](formats.md)).
+- none. What it builds on: `rest` sources with `auth` ([web-apis](web-apis.md)), secret settings ([settings-secrets](settings-secrets.md)), `files f in store` ([files-pictures](files-pictures.md)), formats for attachments ([formats](formats.md)).
 - Docs: none.
 
 ## Tests
-- none. Planned: a fake SMTP and IMAP server in the suites, offline; `conformance/mail.json`.
+- none.
 
 ## Open
-- Sending: `datasource outbox smtp "smtp://..."` with `auth basic "setting:..."` and `from "setting:..."`; `send mail to a subject t body b from source` with `cc`, `bcc`, `replyTo`, `html body`, `attach f` (a store's file, or bytes `named`), `header`; a reply with `ok`, `text`, `messageId` that never stops the code: NOT BUILT (step 3a).
-- Reading: `datasource inbox imap "imap://..."`; `mails m in source` with `folder`, `where`, `order by`, `limit`; a mail's `id`, `from`, `to`, `cc`, `subject`, `date`, `text`, `html`, `messageId`, `inReplyTo`, `seen`, `attachments` (`read bytes of`); `where` on from, subject, date, seen, messageId sent as an IMAP search; bodies fetched only when read; `mark m seen`, `move m to "Archive"`, `delete m`: NOT BUILT (step 3b).
-- TLS by default (`smtps://`, `imaps://`, STARTTLS), plain only to localhost, `trust "certs/bridge.pem"` for a local bridge: NOT BUILT.
-- The `maillink` sign-in strategy and mail resets: NOT BUILT; see [signin](signin.md).
-- Later on the same line, noted only: `pop3`; file stores on a server (`sftp`). Message streams (`tcp`, `mqtt`, `websocket`) belong to [hardware](hardware.md).
-- Open questions: mail login with OAuth (Gmail, Outlook) now or later; Proton through Bridge needs only `basic`.
+- Sending: NOT BUILT; see Design "Sending".
+- Reading: NOT BUILT; see Design "Reading".
+- TLS and `trust`: NOT BUILT; see Design "Both".
+- The `maillink` sign-in strategy and mail resets: NOT BUILT; see [signin](signin.md) Design.
+
+## Design
+
+### The sources
+
+```
+datasource outbox smtp "smtp://127.0.0.1:1025"
+    auth basic "setting:mailLogin"
+    from "setting:mailAddress"
+
+datasource inbox imap "imap://127.0.0.1:1143"
+    auth basic "setting:mailLogin"
+```
+
+### Sending
+
+```clarity
+let sent = send mail to site.privacyEmail subject @erasureSubject body letter from outbox
+if not sent.ok
+    message @notSent(why = sent.text)
+```
+
+- `send mail to address subject text body text from source`, with optional `cc`, `bcc`, `replyTo`, `html body`, `attach f` and `header "Name": value`.
+- `attach` takes a file of a file store, or bytes with a name (`attach csv of requests named "requests.csv"`, any format of [formats](formats.md)).
+- The reply is like an HTTP reply: `ok`, `text` (why not), `messageId` (stored to match replies later). It never stops the code.
+
+### Reading
+
+```clarity
+for m in mails in inbox folder "INBOX" where m.inReplyTo == request.messageId
+    request.status = Answered
+    request.reply = m.text
+    save request
+```
+
+- `mails m in source` with `folder`, `where`, `order by`, `limit`: the shape of `files f in store`.
+- A mail has `id`, `from`, `to`, `cc`, `subject`, `date`, `text`, `html`, `messageId`, `inReplyTo`, `seen` and `attachments` (each with `name`, `size`, and `read bytes of`).
+- `where` on `from`, `subject`, `date`, `seen` and `messageId` goes to the server as an IMAP search; the rest is filtered after fetching.
+- Bodies and attachments are fetched only when code reads them.
+- `mark m seen`, `move m to "Archive"`, `delete m`.
+
+### Both
+
+- TLS by default (`smtps://`, `imaps://`, or STARTTLS on `smtp://` and `imap://`); plain only to localhost.
+- A local bridge with its own certificate names it: `trust "certs/bridge.pem"`.
+- Login is `auth basic` from a secret setting.
+- The agent never sends mail itself; sending is the built program's.
+
+### Where the code lives
+
+- `runtimes/rust-mail` (crate `clarity-mail`, release tag `runtimes/rust-mail/v*`), used directly by the Rust stack through a clarity-runtime feature.
+- `runtimes/rust-mail-ffi` (`include/clarity_mail.h`, `clarity_mail_api()`, `libclarity_mail` beside Clarity.UI's library) for C#, Go, C and C++; C# NuGet `Clarity.Mail`.
+- Rust crates `lettre`, `imap`, `mail-parser`, `rustls`, vendored for offline builds; safe for threads, the problem text kept per thread (see [background-jobs](background-jobs.md)).
+- What a new C-interface library touches, as Clarity.Formats did: its release workflow, the -ffi build in `release-clarity-ui.yml`, `checks.yml`, `.github/scripts/stage-clarity-ui.sh`, `release-csharp-runtime.yml`; `BASE_LIBRARIES` and the wiring in `crates/clarity-gen`; `runtimes/c/clarity.cmake`, `runtimes/cpp/clarity.cmake`; `Clarity.slnx`; `clarity libraries`.
+- Tests: a small fake SMTP and IMAP server in the suites, offline; `conformance/mail.json`.
+
+### Later on the same line
+
+Noted so the shape fits them: `pop3`; a file store on a server (`filestore shared sftp "sftp://..."`). Message streams (`tcp`, `mqtt`, `websocket`) belong to [hardware](hardware.md).
+
+### Open questions
+
+- Mail login with OAuth (Gmail, Outlook) now or later; Proton through Bridge needs only `basic`.
 
 ## Conflicts
 - none.
@@ -32,6 +92,6 @@ Progress: 0%
 - 2026-11-10: per-stack mail libraries (MailKit, libcurl) dropped for the one Rust library.
 
 ## Was
-- APP-CAPABILITIES-PLAN.md step 3 (3a, 3b, "Both", "Later on the same line"), "Order" 3, "Where the code lives" (mail column), "Overlap with what exists" (`mails m in inbox`, tcp/mqtt/websocket), open questions (mail OAuth)
+- docs/APP-CAPABILITIES-PLAN.md step 3 (3a, 3b, "Both", "Later on the same line"), "Order" 3, "Where the code lives" (mail column), "Overlap with what exists" (`mails m in inbox`, tcp/mqtt/websocket), open questions (mail OAuth)
 - UNIMPLEMENTED.md 6 "Encrypted storage, mail, jobs" (mail)
 - memory: app-capabilities-plan.md (step 3)

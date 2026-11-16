@@ -26,7 +26,7 @@ Progress: 75%
 
 ## Conflicts
 - HTTP timeout text: C# says "no answer within 30 seconds" (`runtimes/csharp/Clarity.Runtime/Http.cs:260`); the others pass the library's text; `http.json` checks only the start.
-- The 30-second timeout is written in each runtime (CONFLICTING.md 4; equal today).
+- The 30-second timeout is written in each runtime (equal today).
 - manual `code.web-apis.md` uses snake_case action names (:117-121; OpenAPI actions are camelCase, `crates/clarity-project/src/openapi.rs:260-283`) and a quoted text in `message` (:16), which must be a key.
 
 ## Decisions

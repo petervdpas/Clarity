@@ -1,4 +1,4 @@
-//! The C# backend with Clarity.UI (DESIGN 7.9): one C# file per Clarity
+//! The C# backend with Clarity.UI (manual/start.how-it-works.md): one C# file per Clarity
 //! module with its enums, records, functions, actions and data events; each
 //! window's view model, and the window itself as markup (`Windows/*.cxaml`)
 //! that Clarity.UI draws; the app frames (`Apps/*.cxaml`); the themes as
@@ -92,26 +92,26 @@ mod version_tests {
 
 /// The package a desktop program draws its windows with: Clarity.UI, the C#
 /// layer over the native library that runs the system's own window, and
-/// through it Clarity.Runtime (DESIGN 7.9).
+/// through it Clarity.Runtime (manual/start.how-it-works.md).
 const DESKTOP_PACKAGE: &str = "Clarity.Ui";
 
-/// The package that plays a desktop program's songs (docs/AUDIO-PLAN.md),
+/// The package that plays a desktop program's songs (docs/ledger/audio.md),
 /// carried only when its sound parts play them.
 const AUDIO_PACKAGE: &str = "Clarity.Audio";
 
-/// The package that plays a desktop program's videos (docs/VIDEO-PLAN.md),
+/// The package that plays a desktop program's videos (docs/ledger/video-camera.md),
 /// carried only when it has video parts, with Clarity.Audio for their sound.
 const VIDEO_PACKAGE: &str = "Clarity.Video";
 
-/// The package of the picture functions of code (docs/IMAGE-PLAN.md), with
+/// The package of the picture functions of code (docs/ledger/picture-functions.md), with
 /// Clarity.Image's native library, carried only when code calls one.
 pub(crate) const IMAGE_PACKAGE: &str = "Clarity.Image";
-/// Clarity.Formats' native library (docs/FORMATS-PLAN.md), carried only when code reads or writes a format.
+/// Clarity.Formats' native library (docs/ledger/formats.md), carried only when code reads or writes a format.
 pub(crate) const FORMATS_PACKAGE: &str = "Clarity.Formats";
 
 /// Clarity.AppMcp's native library (docs/ledger/app-mcp.md), carried only when a command is for agents.
 pub(crate) const APP_MCP_PACKAGE: &str = "Clarity.AppMcp";
-/// Clarity.Auth's native library (docs/APP-CAPABILITIES-PLAN.md step 4), carried only when the project signs people in.
+/// Clarity.Auth's native library (docs/ledger/signin.md), carried only when the project signs people in.
 pub(crate) const AUTH_PACKAGE: &str = "Clarity.Auth";
 
 /// What a kind of database brings into a project: the runtime's package of
@@ -142,7 +142,7 @@ pub fn project_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 /// The program of the project: the desktop program, or with the web target
-/// alone the web application (DESIGN 7.6). With both targets the desktop
+/// alone the web application (manual/stacks.csharp.md). With both targets the desktop
 /// program; `crate::programs` asks for each target on its own.
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
@@ -156,7 +156,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 /// The desktop program, its windows drawn by the package `ui`.
 fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
-    // What the parts' code lacks of Clarity's files, read without building it (DESIGN 5.19).
+    // What the parts' code lacks of Clarity's files, read without building it (manual/design.custom-parts.md).
     let mismatches = parts::code_mismatches(project);
     if !mismatches.is_empty() {
         return Err(mismatches);
@@ -178,7 +178,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
-    // The empty database in memory the windows work on while the databases do not open is SQLite's (DESIGN 5.27).
+    // The empty database in memory the windows work on while the databases do not open is SQLite's (manual/data.settings.md).
     let mut packaged = drivers.clone();
     if crate::unconnected(project).is_some() && !packaged.iter().any(|d| d.sql == Sql::Sqlite) {
         packaged.push(&DRIVERS[0]);
@@ -216,7 +216,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
             }
         }
     }
-    // The app's `on unconnected` (DESIGN 5.27) runs on a window of its own that
+    // The app's `on unconnected` (manual/data.settings.md) runs on a window of its own that
     // is never shown, made of the app's frame and code: its ViewModel alone.
     if let Some((app, handler)) = crate::unconnected(project).and_then(|u| u.handler)
         && let Some(file) = project.files.iter().find(|f| f.apps.iter().any(|a| a.name.name == app))
@@ -253,16 +253,16 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         files.extend(crate::screen_engine_files(project, "Engines"));
         files.push(text("ScreenEngines.cs", screen_engines_cs(project, &name)));
     }
-    // The custom parts, Clarity.UI's custom controls: each adapter, and the half generated from its declaration (DESIGN 7.9).
+    // The custom parts, Clarity.UI's custom controls: each adapter, and the half generated from its declaration (manual/start.how-it-works.md).
     files.extend(parts::files(project));
-    // The libraries: each adapter, and the half generated from its declaration (DESIGN 5.21).
+    // The libraries: each adapter, and the half generated from its declaration (manual/code.libraries.md).
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
         let own = crate::libraries::own_file(library, false);
         files.extend(crate::libraries::adapter_files(project, n, &own));
         files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::csharp_half(project, library)));
     }
-    // The windows and the app frames as markup, which Clarity.UI draws (DESIGN 7.8, 7.9).
+    // The windows and the app frames as markup, which Clarity.UI draws (manual/start.how-it-works.md).
     for file in crate::web_windows::window_files(project).into_iter().chain(crate::web_windows::app_files(project)) {
         let path = file.path.replace("ui/windows/", "Windows/").replace("ui/apps/", "Apps/");
         files.push(OutFile { path, ..file });
@@ -270,7 +270,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     files.push(text("Labels.cs", labels_cs(project, &name)));
     files.push(text("Fields.cs", fields_cs(project, &name)));
     // The model as JSON, which Clarity.UI reads on the desktop and in the browser: the
-    // windows' facts, the fields', the translations, the themes and the keys (DESIGN 7.9).
+    // windows' facts, the fields', the translations, the themes and the keys (manual/start.how-it-works.md).
     files.push(text("model.json", crate::web::model_json(project)));
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(text("Icons.cs", icons_cs(project, &name)));
@@ -282,7 +282,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     for (language, values) in project.translations.iter().filter(|(l, _)| **l != default) {
         files.push(text(&format!("Texts.{language}.resx"), texts.language_resx(values)));
     }
-    // The themes offered, as Clarity resolves them for light and dark mode (DESIGN 7.9).
+    // The themes offered, as Clarity resolves them for light and dark mode (manual/start.how-it-works.md).
     files.extend(themes::theme_files(project, &name));
     files.extend(crate::web::resource_files(project, "resources"));
     // The program file's icon on Windows, as C# takes it.
@@ -348,7 +348,7 @@ fn csproj(name: &str, ui: &str, media: &[&str], drivers: &[&Driver], carried: bo
     <ClarityRuntime Condition=\"'$(ClarityRuntime)' == ''\">$(CLARITY_RUNTIME)</ClarityRuntime>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The windows and app frames as markup, and the themes, which Clarity.UI draws (DESIGN 7.9). -->
+    <!-- The windows and app frames as markup, and the themes, which Clarity.UI draws (manual/start.how-it-works.md). -->
     <EmbeddedResource Include=\"Windows/*.cxaml\" LogicalName=\"Windows/%(Filename)%(Extension)\" />
     <EmbeddedResource Include=\"Apps/*.cxaml\" LogicalName=\"Apps/%(Filename)%(Extension)\" />
     <EmbeddedResource Include=\"Themes/*.json\" LogicalName=\"Themes/%(Filename)%(Extension)\" />
@@ -363,7 +363,7 @@ fn csproj(name: &str, ui: &str, media: &[&str], drivers: &[&Driver], carried: bo
     )
 }
 
-/// The libraries' packages and assemblies, in an item group (DESIGN 5.21).
+/// The libraries' packages and assemblies, in an item group (manual/code.libraries.md).
 fn library_references(project: &Project) -> String {
     let lines = crate::libraries::csharp_references(project);
     if lines.is_empty() { lines } else { format!("  <ItemGroup>\n{lines}  </ItemGroup>\n") }
@@ -421,10 +421,10 @@ public static class Schema
 
 /// The program: it opens the database of every data source, brings Clarity's
 /// own up to date, and starts the windows; `--check` stops after the databases.
-/// The package that hosts engines (DESIGN 5.11).
+/// The package that hosts engines (manual/code.engines.md).
 const ENGINES_PACKAGE: &str = "Clarity.Runtime.Engines";
 
-/// The engines of the application (DESIGN 5.11): each loaded once from its
+/// The engines of the application (manual/code.engines.md): each loaded once from its
 /// embedded file, and every one checked when the application starts.
 fn engines_cs(project: &Project, name: &str) -> String {
     let mut members = String::new();
@@ -452,7 +452,7 @@ fn engines_cs(project: &Project, name: &str) -> String {
         ));
         checks.push_str(&format!("        _ = {member};\n"));
     }
-    // An engine that says how far a long call is (DESIGN 5.12): Clarity.UI runs the
+    // An engine that says how far a long call is (manual/code.engines.md): Clarity.UI runs the
     // handlers off the screen's thread, so the window shows the bar with Stop.
     let watches = crate::engines(project).iter().any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
     format!(
@@ -460,7 +460,7 @@ fn engines_cs(project: &Project, name: &str) -> String {
     )
 }
 
-/// The engines beside the screen (DESIGN 5.12): for each, what makes a new
+/// The engines beside the screen (manual/code.engines.md): for each, what makes a new
 /// instance for a canvas that runs it, from its embedded file.
 fn screen_engines_cs(project: &Project, name: &str) -> String {
     let mut members = String::new();
@@ -539,7 +539,7 @@ pub(super) fn readable(project: &Project, entity: &str, db: &str, read: String) 
 }
 
 /// The people of the program and how they sign in, named to the database
-/// handle once its databases are open (docs/APP-CAPABILITIES-PLAN.md step 4);
+/// handle once its databases are open (docs/ledger/signin.md);
 /// none without a `signin` block.
 pub(super) fn add_signin(project: &Project, settings: &Settings) -> Option<String> {
     let plan = crate::signin::signin_plan(project)?;
@@ -585,9 +585,9 @@ fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)]
     // Engines ask for the language the person picked.
     let engines_language = if engines { "        Clarity.Runtime.Engine.Language = () => Locale.Language?.Name;\n" } else { "" };
     let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
-    // The person's settings, after the language and theme they may name (DESIGN 5.17).
+    // The person's settings, after the language and theme they may name (manual/data.settings.md).
     let settings_start = if project.entities().any(|e| e.settings) { "        Settings.Start();\n" } else { "" };
-    // The person's keys and the keys window's commands (DESIGN 5.28).
+    // The person's keys and the keys window's commands (manual/app.keys.md).
     let keys_start = if project.keys_editable {
         format!("        PersonKeys.Start({});\n", string(&crate::settings_program(settings)))
     } else {
@@ -643,7 +643,7 @@ public static class Program
     )
 }
 
-/// What Program.cs does when the databases did not open (DESIGN 5.27): with a
+/// What Program.cs does when the databases did not open (manual/data.settings.md): with a
 /// window that keeps the connection or the app's `on unconnected`, Clarity.UI's
 /// unconnected flow shows what keeps the connection first, on an empty
 /// database in memory; without either, the program says why and stops.
@@ -659,12 +659,12 @@ fn unconnected_start(project: &Project, main_window: &str) -> String {
     };
     let settings = if project.entities().any(|e| e.settings) { "                Settings = Settings.Current,\n" } else { "" };
     format!(
-        "            // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {{\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new {main_window}ViewModel(db),\n{window}{handler}{settings}            }}, Unconnected.Reason(e));\n            return 0;\n"
+        "            // The databases did not open (manual/data.settings.md): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {{\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new {main_window}ViewModel(db),\n{window}{handler}{settings}            }}, Unconnected.Reason(e));\n            return 0;\n"
     )
 }
 
 /// The window the app's `on unconnected` runs on: empty, with the app's frame,
-/// never shown (DESIGN 5.27).
+/// never shown (manual/data.settings.md).
 fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
     use clarity_spec::model::{Frame, Ident, Page, PageKind};
     let taken = |n: &str| project.pages().any(|p| p.name.name == n);
@@ -714,7 +714,7 @@ public static partial class Labels
 }
 
 /// The facts of every field of every entity, which Clarity.UI's parts read
-/// beside the values (DESIGN 7.9): `Fields.All["Order.total"]`, keyed by the
+/// beside the values (manual/start.how-it-works.md): `Fields.All["Order.total"]`, keyed by the
 /// entity's type name and the field as Clarity writes it.
 fn fields_cs(project: &Project, name: &str) -> String {
     use clarity_spec::model::Literal;

@@ -45,11 +45,11 @@ themeCatalog: ThemeCatalog,
 icons: { [key in string]: string }, 
 /**
  * The commands a person gives keys in the keys window, where the
- * project lets them (DESIGN 5.28); empty where it does not.
+ * project lets them (manual/app.keys.md); empty where it does not.
  */
 keys: Array<KeyLayer>, 
 /**
- * The engines beside the screen (DESIGN 5.12), which the renderer runs itself.
+ * The engines beside the screen (manual/code.engines.md), which the renderer runs itself.
  */
 screenEngines: Array<ScreenEngine>, 
 /**

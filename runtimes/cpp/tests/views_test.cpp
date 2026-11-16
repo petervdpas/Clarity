@@ -1,4 +1,4 @@
-// The shown rows of a window's tables, trees and charts (DESIGN 1.7): the
+// The shown rows of a window's tables, trees and charts (manual/start.how-it-works.md): the
 // runtime fills each view of the window's state after every reply.
 
 #include "check.hpp"

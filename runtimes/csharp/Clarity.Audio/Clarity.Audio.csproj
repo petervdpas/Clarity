@@ -1,4 +1,4 @@
-<!-- Clarity.Audio for C# (docs/AUDIO-PLAN.md): the native Clarity.Audio
+<!-- Clarity.Audio for C# (docs/ledger/audio.md): the native Clarity.Audio
      library, which plays the songs (mp3, flac, wav, ogg) of a program's sound
      parts, and the one call that hands it to Clarity.UI. Clarity's generator
      adds it to a program whose sound parts play songs. -->

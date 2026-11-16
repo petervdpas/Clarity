@@ -1,4 +1,4 @@
-//! HTTP calls from code (DESIGN 5.23, HC1): `http get`, `post`, `put` and
+//! HTTP calls from code (manual/code.web-apis.md): `http get`, `post`, `put` and
 //! `delete` with headers, giving a reply with `status`, `ok` and `text`; in
 //! handlers, commands and actions that declare `effects net`, never in a
 //! function, an engine or a data event; a key written in the code is a

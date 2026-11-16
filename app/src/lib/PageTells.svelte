@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A view's tells (DESIGN 5.33): what it tells the window it shows in,
+  // A view's tells (manual/design.windows.md): what it tells the window it shows in,
   // `saved(name: text)`, each declared on the view and changed or taken away
   // here; the view's code says `tell saved(name)`.
 

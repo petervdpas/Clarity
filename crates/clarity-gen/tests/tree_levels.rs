@@ -1,4 +1,4 @@
-//! A tree of several kinds of records on every stack (DESIGN 5.33): placed,
+//! A tree of several kinds of records on every stack (manual/design.windows.md): placed,
 //! it is a tree of its rows arranged by key, with the handlers that load the
 //! rows and run the handler of the kind of row picked.
 

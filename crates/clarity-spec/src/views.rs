@@ -1,4 +1,4 @@
-//! Views shown in a window's parts (DESIGN 5.33): `slideout "Class" name
+//! Views shown in a window's parts (manual/design.windows.md): `slideout "Class" name
 //! classPanel view ClassEditor` shows the view `page ClassEditor: view` in
 //! the slide-out, and `section "Class" view ClassEditor` in an accordion's
 //! section (a tab or a wizard's step alike). A view is designed as a window

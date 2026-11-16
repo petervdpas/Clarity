@@ -13,6 +13,7 @@ Progress: 90%
 
 ## Open
 - The name: "Clarity" is also the Stacks smart-contract language; keep it or rename before publishing (DESIGN 20 question 1). Not decided.
+- Usability rules as checker warnings (DESIGN 5.18): NOT BUILT, needs decision whether it stays. Named rules (confirm-delete, say-what-happens, label-every-input, keyboard-order, default-and-cancel, long-form, long-list, empty-state, slow-work-shown, small-target, contrast, menu-has-key) with thresholds, turned off with a reason, shown on the canvas and read by the agent; and usability from use (noting where people struggle in a running app). No code names any of them. Not part of the struck first design (Decisions, 2026-11-12).
 
 ## Conflicts
 - README.md:5 still states the first goal, keeping humans in control of AI-assisted codebases; the built product is the language, the designer and the transpiler; the rule engine was struck (Decisions, 2026-11-12).
@@ -36,4 +37,5 @@ Progress: 90%
 ## Was
 - DESIGN 1 (Purpose: the Clarion and Turbo C++ model), 1.1, 1.7 (the rule; the message list is [clarity-ui](clarity-ui.md)), 2 (Goals: one language, transpilation, designer, deterministic); DESIGN 20 question 1
 - DESIGN 1 (the directive layer and rule engine paragraphs), 2 (rule, gate and tuning goals; non-goals), 3, 4, 5.8, 6.1, 6.3, 6.4, 8 (init, stub and LSP lines), 9, 9.1, 9.2, 9.3, 10, 11, 11.1-11.6, 12, 13, 14, 15, 15.1-15.3, 16, 17, 17.1-17.4, 18; DESIGN 20 questions 3, 6, 7, 8, 9, 10; roadmap M0-M10 (all struck)
+- DESIGN 5.18 (usability rules), via UNIMPLEMENTED.md section 4 (removed 2026-11-16)
 - memory: clarity-direction.md, principles.md, think-generic-builder.md, determinism.md, cpp-builder-ide.md, fail-safe-code.md

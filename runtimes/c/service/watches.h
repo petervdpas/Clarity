@@ -1,4 +1,4 @@
-// Long calls (DESIGN 5.12, clarity_ui.h "Long calls"): what the screen sees
+// Long calls (manual/code.engines.md, clarity_ui.h "Long calls"): what the screen sees
 // of a handler that runs long and how the person stops it, by the number
 // the screen gave the call. The desktop asks from the screen's thread while
 // the handler runs on another; the web server asks from one request while

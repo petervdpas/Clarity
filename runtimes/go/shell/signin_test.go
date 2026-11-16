@@ -1,6 +1,6 @@
 //go:build clarityauth
 
-// Signing in through the wire (docs/APP-CAPABILITIES-PLAN.md, step 4): the
+// Signing in through the wire (docs/ledger/signin.md): the
 // start says when sign-in comes first, signin and signout answer, and a
 // served call runs as the person of its clarity_session cookie, a call
 // without one reaching only the sign-in window.

@@ -1,4 +1,4 @@
-//! Records inside records (DESIGN 5.25): an entity of a web API holds
+//! Records inside records (manual/data.entities.md): an entity of a web API holds
 //! another record, `owner: User`, and records, `lines: list<Line>`, as a
 //! service's JSON nests them. Code reads them as any record and list:
 //! `template.owner.name`, `for line in order.lines`. A stored entity refers

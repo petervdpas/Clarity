@@ -1,6 +1,6 @@
 # Clarity.Auth
 
-The sign-in of the programs Clarity generates (docs/APP-CAPABILITIES-PLAN.md, step 4): one catalog of strategies, one implementation of each, used by every stack.
+The sign-in of the programs Clarity generates (docs/ledger/signin.md): one catalog of strategies, one implementation of each, used by every stack.
 
 - `catalog()` lists the strategies: the fields of the project's entity of people each one matches (by role), the inputs it takes, the targets it works on. The checker, the designer and the generators read it.
 - `find(strategy, inputs)` says which field to look the person up by and the value; `check(strategy, inputs, stored)` says whether the person found is signed in. A runtime does only that, for every strategy.

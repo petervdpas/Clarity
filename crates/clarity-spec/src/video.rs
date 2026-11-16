@@ -1,4 +1,4 @@
-//! The video part (docs/VIDEO-PLAN.md): what code can tell it and read of
+//! The video part (docs/ledger/video-camera.md): what code can tell it and read of
 //! it, as a sound's songs (crate::sound), with no tones or melodies.
 
 use crate::code::check::TypeInfo;

@@ -311,7 +311,7 @@ pub struct PartState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<i64>,
     /// A painting or vector canvas's tool, brush and ink, as a handler or the
-    /// person set them (DESIGN 5.31).
+    /// person set them (manual/parts.graphics.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -384,7 +384,7 @@ pub struct WindowState {
     #[serde(default)]
     pub selected: BTreeMap<String, usize>,
     /// What the screen shows of the list of each table, tree and chart, by
-    /// the part's name (DESIGN 1.7): the screen sends how, the runtime fills
+    /// the part's name (manual/start.how-it-works.md): the screen sends how, the runtime fills
     /// in what shows after every reply (`views::replied`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub views: BTreeMap<String, Map<String, Value>>,
@@ -451,7 +451,7 @@ pub struct OpenRequest {
     pub new_window: bool,
 }
 
-/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen
+/// `ask ... then handler(values)` (manual/code.statements.md): a question the screen
 /// asks in Clarity's own dialog when the handler has finished. Its answer
 /// runs `handler` with `values` and, for a value, the answer last;
 /// cancelling runs nothing.
@@ -527,7 +527,7 @@ pub struct Reply {
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<Text>,
-    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// The id of the database step the handler made (manual/code.handlers.md), which
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub step: u64,
@@ -903,7 +903,7 @@ impl Ui {
     }
 
     /// The shape a vector canvas's person touched last, its place in the
-    /// drawing counted from 1; 0 when none (DESIGN 5.31).
+    /// drawing counted from 1; 0 when none (manual/parts.graphics.md).
     pub fn selected_place(&self, part: &str) -> i64 {
         self.selected.get(part).map_or(0, |at| *at as i64 + 1)
     }

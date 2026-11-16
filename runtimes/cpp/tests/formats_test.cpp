@@ -67,7 +67,7 @@ TEST(formats_read_decode_and_write_as_every_stack_does) {
     }
 }
 
-// A data source that is a file in a format (docs/FORMATS-PLAN.md): a CSV
+// A data source that is a file in a format (docs/ledger/formats.md): a CSV
 // read into a table its entity finds, saves and deletes in, each change
 // written back to the file with its own column order and the columns no
 // entity maps kept.

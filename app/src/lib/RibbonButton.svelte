@@ -19,7 +19,7 @@
     title?: string;
     disabled?: boolean;
     active?: boolean;
-    /** The keys that run it too (DESIGN 5.28). */
+    /** The keys that run it too (manual/app.keys.md). */
     keys?: string[];
     onclick: () => void;
   } = $props();

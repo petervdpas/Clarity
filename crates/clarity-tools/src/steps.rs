@@ -1,4 +1,4 @@
-//! The agent's migration steps (docs/MCP-PLAN.md): when a tool changes the
+//! The agent's migration steps (docs/ledger/mcp-tools.md): when a tool changes the
 //! project's data model, the change goes into a step at once, so the model
 //! and the steps are never out of step. While no database has applied the
 //! agent's latest step, a change folds into it, so a task leaves one step.

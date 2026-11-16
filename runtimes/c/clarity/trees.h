@@ -1,4 +1,4 @@
-// The rows a tree shows (DESIGN 1.7, conformance/trees.json), decided here
+// The rows a tree shows (manual/start.how-it-works.md, conformance/trees.json), decided here
 // and not by the screen: a list's rows arranged by their parent, a row
 // whose parent is in the list under it and any other at the top, in the
 // order of the list. A loop of parents breaks at its row that comes first.

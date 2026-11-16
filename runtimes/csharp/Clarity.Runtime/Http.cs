@@ -1,4 +1,4 @@
-// HTTP calls from code (DESIGN 5.23): `http get url` and the others, through
+// HTTP calls from code (manual/code.web-apis.md): `http get url` and the others, through
 // HttpClient. A call never fails: when no answer comes, the reply has status
 // 0 and says why, so the handler decides what that means. The other runtimes
 // give the same replies (conformance/http.json).
@@ -10,7 +10,7 @@ namespace Clarity.Runtime;
 /// <summary>What a web API answered: its status (0 when no answer came), whether it is ok (200 to 299), and its text, or why no answer came.</summary>
 public sealed record HttpReply(long Status, bool Ok, string Text);
 
-/// <summary>How a web API hands out a long list (DESIGN 5.23, paging): the project file's paging line. Kind is page, offset,
+/// <summary>How a web API hands out a long list (manual/code.web-apis.md, paging): the project file's paging line. Kind is page, offset,
 /// cursor or link; Items is where a page's items are in its JSON, empty when a page is a list.</summary>
 public sealed record HttpPaging(string Kind, string Param, string SizeParam, int Size, string Next, string Items);
 
@@ -70,7 +70,7 @@ public static class Http
     /// a secret setting; empty when it is not there.</summary>
     static string Secret(string location) =>
         location.StartsWith("env:", StringComparison.Ordinal) ? Environment.GetEnvironmentVariable(location[4..]) ?? ""
-        // A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+        // A secret setting (manual/data.settings.md): setting:<program>/<name>, from the system's protected store.
         : location.StartsWith("setting:", StringComparison.Ordinal) && location[8..].Split('/', 2) is [var program, var name] ? Secrets.Get(program, name) ?? ""
         : location;
 

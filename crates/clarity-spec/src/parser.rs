@@ -467,7 +467,7 @@ fn parse_variant(node: &Node) -> ParseResult<EnumVariant> {
     Ok(EnumVariant { name, label })
 }
 
-/// `record Dot` and its fields (DESIGN 5.12): as an entity's, but values
+/// `record Dot` and its fields (manual/code.engines.md): as an entity's, but values
 /// only, so a decimal needs no precision and scale.
 fn parse_record(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
@@ -629,7 +629,7 @@ fn parse_access(node: &Node, word: &str, slot: &mut Option<crate::code::Expr>) -
     Ok(())
 }
 
-/// The `settings` block (DESIGN 5.17): fields as an entity's, and Clarity's
+/// The `settings` block (manual/data.settings.md): fields as an entity's, and Clarity's
 /// own `language`, `theme`, `agentReadsWhileClosed` and `agentChangesWhileClosed`
 /// without a type; read as the record type `Settings`.
 fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
@@ -1162,7 +1162,7 @@ fn data_decl(name: Ident, ty: crate::code::TypeRef, default: Option<Literal>, sp
     use crate::code::TypeRefKind;
     use crate::model::DataKind;
     let of = match ty.kind {
-        // A list of values is a plain value of the window, starting empty (DESIGN 5.26).
+        // A list of values is a plain value of the window, starting empty (manual/parts.data.md).
         TypeRefKind::List { ref item } if crate::code::parse::is_type_word(item) => {
             if crate::model::ListItem::of_word(item).is_none() {
                 return Err(Diagnostic::error("a list of values holds text, integer, decimal or date, as in 'list<decimal>'; a list of records 'list<Order>'", ty.span));
@@ -1200,7 +1200,7 @@ fn data_decl(name: Ident, ty: crate::code::TypeRef, default: Option<Literal>, sp
 }
 
 // ---------------------------------------------------------------------------
-// Values written in a design file's attributes (DESIGN 5.33): read by the
+// Values written in a design file's attributes (manual/design.windows.md): read by the
 // rules Clarity's own lines are read by, each where it is in the markup.
 
 /// `text`, an attribute's value at `at`, as one line of Clarity there: each
@@ -1764,7 +1764,7 @@ fn parse_widgets(nodes: &[Node], diagnostics: &mut Vec<Diagnostic>) -> Vec<Widge
 fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Widget> {
     let mut cursor = Cursor::new(node.line);
     let keyword = cursor.expect_ident("a widget")?;
-    // A word in capitals is a custom part, by the name it is declared by (DESIGN 5.19).
+    // A word in capitals is a custom part, by the name it is declared by (manual/design.custom-parts.md).
     let custom = keyword.name.starts_with(|c: char| c.is_ascii_uppercase());
     let Some(kind) = widgets::by_keyword(&keyword.name).or(custom.then_some(WidgetKind::Custom)) else {
         return Err(Diagnostic::error(
@@ -1786,7 +1786,7 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
         selects: Vec::new(),
         span: node.span(),
     };
-    // A `menu` block under a part is its context menu (DESIGN 5.16); the rest is its content.
+    // A `menu` block under a part is its context menu (manual/design.parts.md); the rest is its content.
     let (menus, content): (Vec<&Node>, Vec<&Node>) = node.children.iter().partition(|c| Cursor::new(c.line).peek().is_some_and(|t| t.text == "menu"));
     for (i, menu) in menus.iter().enumerate() {
         if i > 0 {
@@ -2192,7 +2192,7 @@ fn parse_widget_props(
             props.tells.push(crate::model::TellHandler { tell, handler });
             continue;
         }
-        // A tell of the view a slide-out shows (DESIGN 5.33): the view's `tells` say which there are.
+        // A tell of the view a slide-out shows (manual/design.windows.md): the view's `tells` say which there are.
         if kind == WidgetKind::Slideout && word == "on" && Event::by_keyword(event_word).is_none() {
             let tell = cursor.expect_ident("a tell of the view the slide-out shows")?.name;
             cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on saved: recipeSaved'")?;
@@ -2200,7 +2200,7 @@ fn parse_widget_props(
             props.tells.push(crate::model::TellHandler { tell, handler });
             continue;
         }
-        // A tell of the engine beside the screen a canvas runs (DESIGN 5.12):
+        // A tell of the engine beside the screen a canvas runs (manual/code.engines.md):
         // the engine's declaration says which there are.
         if kind == WidgetKind::Canvas && word == "on" && Event::by_keyword(event_word).is_none() {
             let tell = cursor.expect_ident("a tell of the engine the canvas runs")?.name;
@@ -2481,7 +2481,7 @@ fn parse_widget_props(
                 let desc = cursor.eat_keyword("desc");
                 props.order = Some(crate::model::TableOrder { field, desc });
             }
-            // `mode objects types at x, y`, `mode paint`, `mode vector` (DESIGN 5.31).
+            // `mode objects types at x, y`, `mode paint`, `mode vector` (manual/parts.graphics.md).
             "mode" => {
                 applies(WidgetProperty::Mode)?;
                 let word = cursor.expect_ident("objects, paint or vector, as in mode paint")?;
@@ -2619,7 +2619,7 @@ fn parse_widget_props(
                     }
                 });
             }
-            // Graphics an outside library draws are a custom part now (DESIGN 5.19).
+            // Graphics an outside library draws are a custom part now (manual/design.custom-parts.md).
             "renderer" => {
                 return Err(Diagnostic::error("a canvas is drawn by its draw handler; graphics an outside library draws are a custom part (part Name with native \"folder\")", clause.span));
             }
@@ -2814,7 +2814,7 @@ fn parse_widget_props(
                 applies(WidgetProperty::Readonly)?;
                 props.readonly = true;
             }
-            // `no undo`: the part has no undo of its own (DESIGN 5.29).
+            // `no undo`: the part has no undo of its own (manual/code.handlers.md).
             "no" => {
                 applies(WidgetProperty::NoUndo)?;
                 let word = cursor.expect_ident("undo, as in no undo")?;

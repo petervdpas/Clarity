@@ -4,9 +4,9 @@
 //! actions, data events and windows are in `src/modules/<module>.c`,
 //! declared together in `src/app.h`. The runtime is copied in as
 //! `clarity-runtime/`, with cJSON. The desktop target draws with
-//! Clarity.UI's library (DESIGN 7.9), which the build takes from the folder
+//! Clarity.UI's library (manual/start.how-it-works.md), which the build takes from the folder
 //! CLARITY_UI names; the web target is a web server for Clarity.UI in the
-//! browser, carrying the browser files of `browser/` (DESIGN 7.9, round B).
+//! browser, carrying the browser files of `browser/` (manual/start.how-it-works.md, round B).
 //! `CMakePresets.json` lets one command configure and build it:
 //! `cmake --workflow --preset debug`.
 
@@ -109,7 +109,7 @@ const RUNTIME_FILES: [(&str, &str); 74] = [
     ("third_party/cjson/README.md", include_str!("../../../../runtimes/c/third_party/cjson/README.md")),
 ];
 
-/// The data formats of code on Clarity.Formats' library (docs/FORMATS-PLAN.md),
+/// The data formats of code on Clarity.Formats' library (docs/ledger/formats.md),
 /// carried only when the code reads or writes a format (clarity_use_formats links it).
 pub(crate) const FORMATS_FILES: [(&str, &str); 4] = [
     ("formats/formats.h", include_str!("../../../../runtimes/c/formats/formats.h")),
@@ -123,30 +123,30 @@ pub(crate) const FORMATS_FILES: [(&str, &str); 4] = [
 /// line (clarity_use_agents links it).
 pub(crate) const AGENTS_FILES: [(&str, &str); 2] = [("agents/agents.h", include_str!("../../../../runtimes/c/agents/agents.h")), ("agents/agents.c", include_str!("../../../../runtimes/c/agents/agents.c"))];
 
-/// Signing people in on Clarity.Auth's library (docs/APP-CAPABILITIES-PLAN.md
-/// step 4), carried only when the project signs people in (clarity_use_auth links it).
+/// Signing people in on Clarity.Auth's library (docs/ledger/signin.md),
+/// carried only when the project signs people in (clarity_use_auth links it).
 pub(crate) const AUTH_FILES: [(&str, &str); 2] = [
     ("auth/auth.h", include_str!("../../../../runtimes/c/auth/auth.h")),
     ("auth/auth.c", include_str!("../../../../runtimes/c/auth/auth.c")),
 ];
 
-/// The picture functions on Clarity.Image's library (docs/IMAGE-PLAN.md),
+/// The picture functions on Clarity.Image's library (docs/ledger/picture-functions.md),
 /// carried only when the code calls one (clarity_use_image links them).
 pub(crate) const PICTURE_FILES: [(&str, &str); 2] = [
     ("pictures/pictures.h", include_str!("../../../../runtimes/c/pictures/pictures.h")),
     ("pictures/pictures.c", include_str!("../../../../runtimes/c/pictures/pictures.c")),
 ];
 
-/// Engines (DESIGN 5.11): the host, copied with wasm3 only into an
+/// Engines (manual/code.engines.md): the host, copied with wasm3 only into an
 /// application that declares an engine.
-/// HTTP calls (DESIGN 5.23): the client on libcurl, copied only into an
+/// HTTP calls (manual/code.web-apis.md): the client on libcurl, copied only into an
 /// application whose code calls out.
 pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
     ("http/http.c", include_str!("../../../../runtimes/c/http/http.c")),
     ("http/http.h", include_str!("../../../../runtimes/c/http/http.h")),
 ];
 
-/// Secret settings (DESIGN 5.27): the system's protected store, copied only
+/// Secret settings (manual/data.settings.md): the system's protected store, copied only
 /// into an application with a secret setting.
 pub(crate) const SECRET_FILES: [(&str, &str); 2] = [
     ("secrets/secrets.c", include_str!("../../../../runtimes/c/secrets/secrets.c")),
@@ -158,7 +158,7 @@ const ENGINE_FILES: [(&str, &str); 2] = [
     ("engine/engine.h", include_str!("../../../../runtimes/c/engine/engine.h")),
 ];
 
-/// Engines beside the screen (DESIGN 5.12): one instance per canvas, copied
+/// Engines beside the screen (manual/code.engines.md): one instance per canvas, copied
 /// only into a desktop program with such an engine.
 const SCREEN_FILES: [(&str, &str); 2] = [
     ("engine/screen.c", include_str!("../../../../runtimes/c/engine/screen.c")),
@@ -213,7 +213,7 @@ const SERVICE_FILES: [(&str, &str); 9] = [
     ("service/serve.h", include_str!("../../../../runtimes/c/service/serve.h")),
 ];
 
-/// The thin C layer on Clarity.UI's library (DESIGN 7.9): the desktop target.
+/// The thin C layer on Clarity.UI's library (manual/start.how-it-works.md): the desktop target.
 const DESKTOP_FILES: [(&str, &str); 3] = [
     CLARITY_UI_CMAKE,
     ("desktop/desktop.c", include_str!("../../../../runtimes/c/desktop/desktop.c")),
@@ -241,7 +241,7 @@ pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
-    // What the parts' code lacks of Clarity's files, read without building it (DESIGN 5.19).
+    // What the parts' code lacks of Clarity's files, read without building it (manual/design.custom-parts.md).
     let mismatches = parts::code_mismatches(project);
     if !mismatches.is_empty() {
         return Err(mismatches);
@@ -266,12 +266,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let engines = !crate::engines(project).is_empty();
     let desktop = settings.stack.has(clarity_project::Target::Desktop);
     let web = settings.stack.has(clarity_project::Target::Web);
-    // Engines beside the screen run in the program, on the runtime's engine host (DESIGN 5.12): the web's too, asked over the wire.
+    // Engines beside the screen run in the program, on the runtime's engine host (manual/code.engines.md): the web's too, asked over the wire.
     let screen_engines = (desktop || web) && !crate::screen_engines(project).is_empty();
-    // The desktop's windows, app frames, themes and resources, which Clarity.UI reads (DESIGN 7.9).
+    // The desktop's windows, app frames, themes and resources, which Clarity.UI reads (manual/start.how-it-works.md).
     let carried = if desktop { crate::rust::clarity_files(project) } else { Vec::new() };
     let links = Links { engines: engines || screen_engines, http: project.calls_out(), secrets: keeps_secrets(project, settings), desktop, web };
-    // Custom parts are kinds of part of Clarity.UI, built into the program (DESIGN 7.9): on the desktop only.
+    // Custom parts are kinds of part of Clarity.UI, built into the program (manual/start.how-it-works.md): on the desktop only.
     let custom = if desktop { parts::parts(project) } else { Vec::new() };
     let mut files = vec![
         text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program) + &formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { agents_cmake_lines(project, &program) } else { String::new() })),
@@ -299,11 +299,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let (records_h, records_c) = model::emit(project);
     let (accesses_h, accesses_c) = accesses(project, &types)?;
     let (records_h, records_c) = (records_h + &accesses_h, records_c + &accesses_c);
-    // Each library's header, so every module calls it (DESIGN 5.21).
+    // Each library's header, so every module calls it (manual/code.libraries.md).
     let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.h\"\n", l.name.name)).collect();
-    // The HTTP client, for code that calls out (DESIGN 5.23).
+    // The HTTP client, for code that calls out (manual/code.web-apis.md).
     let http_include = if project.calls_out() { "#include \"http/http.h\"\n" } else { "" };
-    // The picture functions, for code that calls one (docs/IMAGE-PLAN.md).
+    // The picture functions, for code that calls one (docs/ledger/picture-functions.md).
     let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.h\"\n" } else { "" };
     let formats_include = if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" };
     let formats_include = format!("{formats_include}{}", auth_include(project));
@@ -356,7 +356,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !errors.is_empty() {
         return Err(errors);
     }
-    // What every command has as data of its own: the settings (DESIGN 5.17).
+    // What every command has as data of its own: the settings (manual/data.settings.md).
     let command_data = match (agents, cli::command_parts(project).kept) {
         (false, _) => String::new(),
         (true, Some(entity)) => format!("#include \"clarity/cli.h\"\n\n/// What every command has as data of its own: the settings.\ntypedef struct {{\n    {} settings;\n}} CommandData;\n", entity.name.name),
@@ -391,7 +391,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.extend(crate::web_browser::site(project, settings));
     }
     if desktop || web {
-        // What the parts read beside the values (DESIGN 7.9).
+        // What the parts read beside the values (manual/start.how-it-works.md).
         files.push(text("src/facts.h", format!("{HEADER}\n{FACTS_H}")));
         files.push(text("src/facts.c", facts_c(project)));
     }
@@ -416,7 +416,7 @@ pub fn engine_function(engine: &str, function: &str) -> String {
     format!("{}_{}", snake(engine), snake(function))
 }
 
-/// The engines of the application (DESIGN 5.11): each file as bytes, loaded
+/// The engines of the application (manual/code.engines.md): each file as bytes, loaded
 /// once and checked at start, and a typed function for each of their
 /// functions, whose values cross as JSON. Returns the header and the source.
 fn engines_c(project: &Project) -> (String, String) {
@@ -510,7 +510,7 @@ fn engines_c(project: &Project) -> (String, String) {
 
 const SCREEN_ENGINES_H: &str = "#pragma once\n\n#include \"engine/screen.h\"\n\n/// Makes the instances of the engines beside the screen, before the window opens.\nvoid screen_engines_start(void);\n\n/// Answers Clarity.UI's commands of engines beside the screen (ClarityDesktopOptions.screen_engines).\ncJSON* screen_engines_answer(const char* command, const cJSON* args);\n";
 
-/// The engines beside the screen (DESIGN 5.12): each file as bytes in the
+/// The engines beside the screen (manual/code.engines.md): each file as bytes in the
 /// program, and `make`, which loads a new instance of one by its name for a
 /// canvas; none for a name the program has no engine of. Each canvas's
 /// instance is kept by its number.
@@ -571,7 +571,7 @@ fn cmake_lists(program: &str, links: &Links, carried: &[OutFile]) -> String {
     let shell = if links.desktop { "clarity_desktop" } else { "clarity_service" };
     let engine = if links.engines { " clarity_engine" } else { "" };
     let http = if links.http { " clarity_http" } else { "" };
-    // Secret settings (DESIGN 5.27): the system's protected store.
+    // Secret settings (manual/data.settings.md): the system's protected store.
     let http = if links.secrets { format!("{http} clarity_secrets") } else { http.to_string() };
     let mut out = format!(
         "# Generated by Clarity. Do not edit: change the project in Clarity instead.
@@ -622,7 +622,7 @@ clarity_beside({program})
                 "
 # The files a browser takes from the web server, carried in the program: the
 # page, Clarity.UI's browser files, clarity/files.json and the resources
-# (browser/, DESIGN 7.9).
+# (browser/, manual/start.how-it-works.md).
 clarity_carry({program}{browser})
 "
             )
@@ -633,7 +633,7 @@ clarity_carry({program}{browser})
 }
 
 /// The CMake lines that link Clarity.Formats when the code reads or writes a
-/// format (docs/FORMATS-PLAN.md), on any target; C's and C++'s. Its library lies
+/// format (docs/ledger/formats.md), on any target; C's and C++'s. Its library lies
 /// in Clarity.UI's folder, which a build with no CLARITY_UI fetches by the version named here.
 pub(crate) fn formats_cmake_lines(project: &Project, settings: &Settings, target: &str) -> String {
     if !crate::carries_formats(project, settings) {
@@ -643,7 +643,7 @@ pub(crate) fn formats_cmake_lines(project: &Project, settings: &Settings, target
 }
 
 /// The CMake lines that link Clarity.Auth when the project signs people in
-/// (docs/APP-CAPABILITIES-PLAN.md step 4), on any target; its library lies
+/// (docs/ledger/signin.md), on any target; its library lies
 /// in Clarity.UI's folder, which a build with no CLARITY_UI fetches by the version named here.
 pub(crate) fn auth_cmake_lines(project: &Project, target: &str) -> String {
     if !crate::carries_auth(project) {
@@ -698,7 +698,7 @@ pub(crate) fn keeps_secrets(project: &Project, settings: &Settings) -> bool {
 pub(crate) fn signin_source(project: &Project, program: &str, fail: &str) -> (String, String) {
     let Some(plan) = crate::signin::signin_plan(project) else { return (String::new(), String::new()) };
     let list = |items: &[String]| items.iter().map(|i| string(i)).collect::<Vec<_>>().join(", ");
-    let mut data = String::from("/// The people who sign in, and how (docs/APP-CAPABILITIES-PLAN.md step 4).\n");
+    let mut data = String::from("/// The people who sign in, and how (docs/ledger/signin.md).\n");
     let _ = writeln!(data, "static const char* const signin_targets[] = {{{}}};", list(&plan.targets));
     let mut strategies = Vec::new();
     for (name, columns) in &plan.strategies {
@@ -736,7 +736,7 @@ pub(crate) fn signin_source(project: &Project, program: &str, fail: &str) -> (St
     (data, format!("    if (!clarity_db_add_signin(db, &signin_source)) {fail}\n"))
 }
 
-/// The CMake line that links Clarity.Audio when the desktop program plays songs (docs/AUDIO-PLAN.md); C's and C++'s.
+/// The CMake line that links Clarity.Audio when the desktop program plays songs (docs/ledger/audio.md); C's and C++'s.
 pub(crate) fn audio_cmake_lines(project: &Project, settings: &Settings, program: &str) -> String {
     if !crate::uses_clarity_ui(settings) {
         return String::new();
@@ -815,7 +815,7 @@ fn schema_c(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec<
 const MODEL_H: &str = "#pragma once\n\n/// The model: the windows, frame, data dictionary and translations, as JSON.\nconst char* program_model(void);\n\n/// Pieces of text joined, in memory that lasts as long as the program.\nchar* joined(const char* const* parts);\n";
 
 /// The facts of the fields and types (the desktop and web targets).
-const FACTS_H: &str = "#pragma once\n\n/// What the parts read beside the values (DESIGN 7.9): each window's values and\n/// their types, each record's fields, the facts of every entity's field, each\n/// enum's values, as JSON.\nconst char* program_facts(void);\n";
+const FACTS_H: &str = "#pragma once\n\n/// What the parts read beside the values (manual/start.how-it-works.md): each window's values and\n/// their types, each record's fields, the facts of every entity's field, each\n/// enum's values, as JSON.\nconst char* program_facts(void);\n";
 
 /// Text as C source: pieces small enough for every compiler's limit on
 /// one string literal, joined once when the program first asks for it.
@@ -855,7 +855,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     } else {
         ""
     };
-    // The databases did not open (DESIGN 5.27): the windows work on an empty one in
+    // The databases did not open (manual/data.settings.md): the windows work on an empty one in
     // memory, and the screen shows what keeps the connection first.
     let unconnected = crate::unconnected(project);
     let (not_opened, unconnected_options) = match &unconnected {
@@ -871,13 +871,13 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     };
     let unconnected_decl = if unconnected.is_some() { "    ClarityError unconnected_error;\n    const ClarityError* unconnected = NULL;\n" } else { "" };
     let not_opened = if unconnected.is_some() { format!("        // Why they did not open, which the screen says.\n{not_opened}") } else { not_opened };
-    // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
+    // Secret settings (manual/data.settings.md): the system's protected store, before anything reads a setting.
     let (secrets_include, use_secrets) = if !keeps_secrets(project, settings) {
         (String::new(), String::new())
     } else {
         ("#include \"secrets/secrets.h\"\n\n".to_string(), "    clarity_secrets_use();\n".to_string())
     };
-    // Songs play through Clarity.Audio, whose library lies beside Clarity.UI's (docs/AUDIO-PLAN.md).
+    // Songs play through Clarity.Audio, whose library lies beside Clarity.UI's (docs/ledger/audio.md).
     let (secrets_include, use_secrets) = if crate::uses_clarity_ui(settings) && clarity_spec::resources::carries_audio(project) {
         (
             format!("{secrets_include}#include \"clarity_audio.h\"\n#include \"clarity_ui.h\"\n\n"),
@@ -886,7 +886,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     } else {
         (secrets_include, use_secrets)
     };
-    // Videos play through Clarity.Video, whose library lies beside Clarity.UI's (docs/VIDEO-PLAN.md).
+    // Videos play through Clarity.Video, whose library lies beside Clarity.UI's (docs/ledger/video-camera.md).
     let (secrets_include, use_secrets) = if crate::uses_clarity_ui(settings) && clarity_spec::resources::plays_videos(project) {
         (
             format!("{secrets_include}#include \"clarity_video.h\"\n"),
@@ -993,7 +993,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
             w.prefix
         );
     }
-    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    // The handlers an answer runs, with the values written for them and the answer (manual/code.statements.md).
     let mut answers = String::new();
     for w in windows.iter().filter(|w| !w.answers.is_empty()) {
         let _ = write!(
@@ -1043,7 +1043,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         answers.push_str("    }\n");
     }
     // The app's `on unconnected` runs with why the databases did not open, on
-    // empty app data: there are no records to load (DESIGN 5.27).
+    // empty app data: there are no records to load (manual/data.settings.md).
     if let Some((app, handler)) = unconnected.as_ref().and_then(|u| u.handler.clone())
         && let Some(a) = apps.iter().find(|a| a.name == app)
     {
@@ -1119,7 +1119,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     let desktop = settings.stack.has(clarity_project::Target::Desktop);
     let web = settings.stack.has(clarity_project::Target::Web);
     let mut includes = "#include \"model.h\"\n".to_string();
-    // Engines beside the screen: each canvas's instance by its number (DESIGN 5.12).
+    // Engines beside the screen: each canvas's instance by its number (manual/code.engines.md).
     let screen_engines = (desktop || web) && !crate::screen_engines(project).is_empty();
     if desktop || web {
         includes.push_str("#include \"facts.h\"\n");
@@ -1140,7 +1140,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     if agents {
         includes.push_str("#include \"commands.h\"\n");
     }
-    // The secret settings, which never go to the settings file (DESIGN 5.27).
+    // The secret settings, which never go to the settings file (manual/data.settings.md).
     let secrets_json = if project.secret_settings().is_empty() { "NULL".to_string() } else { string(&serde_json::to_string(&project.secret_settings()).unwrap_or_default()) };
     let title = string(&clarity_project::title(settings));
     // An engine whose file does not fit its declaration stops the application at start.
@@ -1186,7 +1186,7 @@ static bool windows_dispatch(ClarityDb* db, const ClarityWindowState* state, con
 {dispatch}    return clarity_fail(CLARITY_INVALID, "%s has no handler %s", state->window, handler);
 }}
 
-/// Runs the handler the answer to a question goes to (DESIGN 5.14), with
+/// Runs the handler the answer to a question goes to (manual/code.statements.md), with
 /// the values written for it and the answer last.
 static bool windows_answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {{
 {hold}    ClarityUi* ui = clarity_ui(state);
@@ -1313,7 +1313,7 @@ static bool open_databases(ClarityDb** out) {{
     )
 }
 
-/// How main runs the program by its targets (DESIGN 7.3): a web server, a
+/// How main runs the program by its targets (manual/project.run-build.md): a web server, a
 /// desktop window, or the window with `--serve` running the server instead.
 /// Each statement sets `status`.
 pub(crate) fn web_run(settings: &Settings, serve: &str, run: &str) -> String {

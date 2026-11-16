@@ -1,4 +1,4 @@
-//! The web APIs of the open project (DESIGN 5.23): what a description holds
+//! The web APIs of the open project (manual/code.web-apis.md): what a description holds
 //! and what the project picks of it, and a description brought into the
 //! project's apis folder. Clarity writes each API's module from them when
 //! the project loads and whenever its file or a description changes.

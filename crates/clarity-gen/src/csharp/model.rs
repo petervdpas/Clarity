@@ -29,7 +29,7 @@ pub fn emit(project: &Project, file: &SpecFile, namespace: &str, program: &str, 
     out
 }
 
-/// A record (DESIGN 5.12): a class of its fields with their defaults; never
+/// A record (manual/code.engines.md): a class of its fields with their defaults; never
 /// stored, so it has no id and is no `IRecord`.
 fn plain_record(project: &Project, record: &Entity) -> String {
     let name = &record.name.name;
@@ -62,7 +62,7 @@ fn plain_record(project: &Project, record: &Entity) -> String {
         })
         .collect();
     let copy = format!(
-        "\n    /// <summary>A copy of its values: a record is a value, so what keeps or gets one has its own (DESIGN 5.12).</summary>\n    public {name} Copy() => new()\n    {{\n{copied}    }};\n"
+        "\n    /// <summary>A copy of its values: a record is a value, so what keeps or gets one has its own (manual/code.engines.md).</summary>\n    public {name} Copy() => new()\n    {{\n{copied}    }};\n"
     );
     format!("/// <summary>A record of values, made in code and never stored.</summary>\npublic sealed partial class {name} : ObservableObject\n{{\n{properties}{copy}}}\n\n")
 }
@@ -124,13 +124,13 @@ fn initial(field: &Field) -> Option<String> {
             .map(|d| format!("new DateTime({}, {}, {}, {}, {}, {})", d.year, d.month, d.day, d.hour, d.minute, d.second)),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
         (FieldType::List { .. } | FieldType::Values { .. }, _) => Some("[]".into()),
-        // A record held inside starts as a new one (DESIGN 5.25).
+        // A record held inside starts as a new one (manual/data.entities.md).
         (FieldType::Record { entity }, _) => Some(format!("new {}()", entity.name)),
         _ => None,
     }
 }
 
-/// The person's settings (DESIGN 5.17) as one shared object: every
+/// The person's settings (manual/data.settings.md) as one shared object: every
 /// window's `Settings` is `Settings.Current`. `Start` takes back what was
 /// kept and still fits (the runtime's KeptSettings), shows its language
 /// and theme, keeps every change, and follows the pickers.
@@ -164,7 +164,7 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
             FieldType::Language => ("language", "Locale.Offered".into()),
             FieldType::Theme => ("theme", "[.. Themes.Offered.Select(t => t.Name)]".into()),
             FieldType::DateTime => ("datetime", "null".into()),
-            // A secret is text, kept apart from the file (DESIGN 5.27).
+            // A secret is text, kept apart from the file (manual/data.settings.md).
             FieldType::Secret => ("text", "null".into()),
             other => (clarity_spec::widgets::field_type_tag(other), "null".into()),
         };
@@ -231,12 +231,12 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
     // The command-line program takes them back when it starts, and keeps
     // them when a command changed them: it shows no language or theme of
     // its own and has no windows to follow.
-    // Secret settings (DESIGN 5.27): kept in the system's protected store, never in the file.
+    // Secret settings (manual/data.settings.md): kept in the system's protected store, never in the file.
     let secret_names: Vec<String> = entity.fields.iter().filter(|f| f.ty == FieldType::Secret).map(|f| string(&f.name.name)).collect();
     let (secrets_arg, secrets_field) = if secret_names.is_empty() {
         (String::new(), String::new())
     } else {
-        (", Secrets".to_string(), format!("    /// <summary>The settings kept in the system's protected store (DESIGN 5.27).</summary>\n    static readonly string[] Secrets = [{}];\n", secret_names.join(", ")))
+        (", Secrets".to_string(), format!("    /// <summary>The settings kept in the system's protected store (manual/data.settings.md).</summary>\n    static readonly string[] Secrets = [{}];\n", secret_names.join(", ")))
     };
     let watch = if cli {
         String::new()
@@ -263,7 +263,7 @@ public sealed partial class {name} : ObservableObject, ISettings
 {taken}        Current = settings;
 {watch}    }}
 
-    /// <summary>Takes the settings a person's browser sent, those that still fit (DESIGN 7.6).</summary>
+    /// <summary>Takes the settings a person's browser sent, those that still fit (manual/stacks.csharp.md).</summary>
     public void Apply(JsonObject sent)
     {{
         var settings = this;
@@ -283,7 +283,7 @@ public sealed partial class {name} : ObservableObject, ISettings
 
 ",
         program = string(program),
-        // The person's keys are kept beside the settings (DESIGN 5.28).
+        // The person's keys are kept beside the settings (manual/app.keys.md).
         keys_json = if project.keys_editable { "        [\"keys\"] = PersonKeys.Json(),\n" } else { "" }
     )
 }

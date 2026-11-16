@@ -1,4 +1,4 @@
-//! A small XML reader for `.cxaml` (DESIGN 7.8): elements, attributes and
+//! A small XML reader for `.cxaml` (manual/start.how-it-works.md): elements, attributes and
 //! text, with where each element and attribute is in the file, so a part read
 //! from markup has its span as a part read from Clarity has. Comments, the
 //! XML declaration and whitespace between elements are passed over.

@@ -6,7 +6,7 @@ import (
 	"github.com/petervdpas/Clarity/runtimes/go/shell"
 )
 
-// Engines are the engines beside the screen of a program (DESIGN 5.12),
+// Engines are the engines beside the screen of a program (manual/code.engines.md),
 // each instance by its number; package engine's Screens is one.
 type Engines = shell.Engines
 

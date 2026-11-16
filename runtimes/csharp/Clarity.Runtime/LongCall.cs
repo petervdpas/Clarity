@@ -1,4 +1,4 @@
-// A long engine call (DESIGN 5.12): the handler that runs is watched, and
+// A long engine call (manual/code.engines.md): the handler that runs is watched, and
 // while one of its engine calls runs on another thread the screen waits as
 // it says (Waiter): on the desktop the windows' loop goes on, so the window keeps
 // painting, shows how far the call is with a bar and Stop, and takes no other

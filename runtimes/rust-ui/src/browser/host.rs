@@ -387,7 +387,7 @@ impl BrowserHost {
         self.tell_access();
     }
 
-    /// A step as a driven program takes it (DESIGN 1.6: `read`, `click`, `type`...): how a test looks at the page's screen.
+    /// A step as a driven program takes it (manual/start.how-it-works.md: `read`, `click`, `type`...): how a test looks at the page's screen.
     pub fn step(&mut self, step: &Value) -> Value {
         let answer = self.driven.step(step);
         self.after();

@@ -1,4 +1,4 @@
-// The shown rows of a window's tables, lists, trees and charts (DESIGN 1.7):
+// The shown rows of a window's tables, lists, trees and charts (manual/start.how-it-works.md):
 // the window's state carries a view per such part, by its name, saying what
 // it shows of which list and how. The runtime fills in what shows after
 // every reply: a table's `shown` places and `pages`, a tree's `shown` rows,

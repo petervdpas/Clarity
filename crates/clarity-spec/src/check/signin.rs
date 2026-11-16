@@ -1,4 +1,4 @@
-//! The checker's rules of signing in (docs/APP-CAPABILITIES-PLAN.md step 4):
+//! The checker's rules of signing in (docs/ledger/signin.md):
 //! the sign-in window and its sign-in views, guided (window, content, views
 //! holding only the sign-in parts and decoration, each part fitting the
 //! project's signin block), the sign-in part on the app's splash, and the
@@ -8,7 +8,7 @@
 use super::*;
 
 impl<'a> Checker<'a> {
-    /// The guided sign-in (docs/APP-CAPABILITIES-PLAN.md, "The sign-in
+    /// The guided sign-in (docs/ledger/signin.md, "The sign-in
     /// window is designed, and guided"): the sign-in window holds its
     /// content and decoration, a sign-in view the sign-in parts and
     /// decoration, and a sign-in part stands on a sign-in view only, fitting

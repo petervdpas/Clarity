@@ -18,30 +18,48 @@ Progress: 70%
 - `crates/clarity-spec/tests/versions.rs`, `undo.rs`; per-runtime undo tests (`runtimes/rust/tests/edits.rs`, `undo.rs`, Go `undo_test.go`, C `runtimes/c/tests/undo_test.c`, C++ `runtimes/cpp/tests/undo_test.cpp`, C# `UndoTests.cs`)
 
 ## Open
-- The IDE's data browser saves through the version check: NOT BUILT (no data browser; APP-CAPABILITIES-PLAN.md:229, :248).
-- ETag and `If-Match` on web API writes: NOT BUILT (APP-CAPABILITIES-PLAN.md:241, open question :400).
-- Other windows reload a record saved elsewhere: NOT BUILT (APP-CAPABILITIES-PLAN.md "Later: other screens follow").
-- Whether an owned entity may turn the check off: open question (APP-CAPABILITIES-PLAN.md:401).
-- Shared Rust core for row versions and undo: NOT BUILT; five copies (MODULAR-PLAN.md order 2).
+- The IDE's data browser saves through the version check: NOT BUILT (no data browser); see Design "The data browser".
+- ETag and `If-Match` on web API writes: NOT BUILT; see Design "Web API sources".
+- Other windows reload a record saved elsewhere: NOT BUILT; see Design "Other windows follow".
+- Shared Rust core for row versions and undo: NOT BUILT; five copies ([modularity](modularity.md) step 2).
 - A background save refused by the version is a failed call: waits on [background-jobs](background-jobs.md).
+
+## Design
+
+### The data browser
+
+- When the IDE gets a data browser, its saves go through the same check, so an edit in Clarity while the program runs is refused rather than lost. The data browser itself is not designed anywhere yet.
+
+### Web API sources
+
+- A service that hands out an ETag gets `If-Match` on its writes, refused with the same `savedSince`.
+
+### Other windows follow
+
+- When a record is saved, other windows that show it reload by themselves, so stale screens and refusals become rare.
+- Desktop: the windows of one program. Served: the server tells the browsers' windows that show the record.
+
+### Open questions
+
+- ETag and `If-Match` now or later.
+- Whether an entity of an owned source may turn the version check off, or it is always on there.
 
 ## Conflicts
 - Edit bus size: R, Go, C, C++ keep 500 edits per window (`runtimes/rust/src/edits.rs:37`, `go/clarity/edits.go:40`, `c/clarity/edits.c:44`, `cpp/clarity/edits.cpp:15`); C# drops none (`runtimes/csharp/Clarity.Runtime/EditBus.cs:29-35`). `conformance/edit-bus.json` has no limit case.
-- The 100-step undo cap is written in each runtime (CONFLICTING.md 4; equal today).
-- APP-CAPABILITIES-PLAN.md:3 says steps 4 and 5 are unreleased; they are before tag v0.40.0.
+- The 100-step undo cap is written in each runtime (equal today).
 
 ## Decisions
 - 2026-10-30: undo is part of the language on every stack; every part the person edits has undo unless it says `no undo`; history lasts until the program closes (DESIGN 5.29).
 - 2026-10-31: the edit record is kept by each runtime, never by the screen. User: "ctrl+z over a messagebus and processed stack ... should message back the previous state ... a track record of the thing that's changed and what's changed"
 - 2026-11-10: a version column and checked UPDATE/DELETE as step 5. User: "yes, add the version check as a step"
-- 2026-11-10: one record is one unit, no field merging; overwriting on purpose is `save x anyway`, never guessed (APP-CAPABILITIES-PLAN.md step 5).
+- 2026-11-10: one record is one unit, no field merging; overwriting on purpose is `save x anyway`, never guessed.
 - 2026-11-10: external databases name their column (`version "Col"`) or say `version none`; without either a warning. File sources: the file is the unit.
 - 2026-11-10: who changed is the project's own `before save`, no built-in `changed_by`; `savedSince @key` may use `{current.field}` slots.
 - 2026-11-11: a handler is one transaction per source; Ctrl+Z on a multi-step edit is all or none; 100 steps kept, older refused with `undoTooOld`. User chose "all 3" after "check how stable ctrl+z / undo is ... (transaction log and rollback?)"
-- Undo compares the version where an entity has one, the whole row where it has none (APP-CAPABILITIES-PLAN.md "Undo, made one with the version check").
+- Undo compares the version where an entity has one, the whole row where it has none.
 
 ## Was
-- APP-CAPABILITIES-PLAN.md step 5 (all subsections, "Undo, made one with the version check", "Later: other screens follow"), "Steps 4, 5 and 6 as one slice" ("One notion of changed since", "Who changed")
+- docs/APP-CAPABILITIES-PLAN.md step 5 (all subsections, "Undo, made one with the version check", "Later: other screens follow"), "Steps 4, 5 and 6 as one slice" ("One notion of changed since", "Who changed")
 - DESIGN 5.29 (database side and edit bus; the parts' undo scope belongs with [clarity-ui](clarity-ui.md))
 - MODULAR-PLAN.md order 2 (row versions and undo)
 - IMPLEMENTED.md 6 "Row versions, undo, backups" (versions, undo)

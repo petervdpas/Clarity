@@ -1,4 +1,4 @@
-//! A dialog shown over the window that opened it (DESIGN 7.9), where the
+//! A dialog shown over the window that opened it (manual/start.how-it-works.md), where the
 //! host opens no desktop window of its own for it: the window under it
 //! dimmed, the dialog's title, and its window in a panel sized to the
 //! dialog, as its own desktop window would be. Its keys are its own: its
@@ -166,7 +166,7 @@ impl Element for DialogOverlay {
         if crate::window::undo_key(self, host.as_ref(), key, cx) {
             return true;
         }
-        // Escape that nothing in it took closes it, as its close does (DESIGN 5.14).
+        // Escape that nothing in it took closes it, as its close does (manual/code.statements.md).
         if key.key == crate::input::Key::Escape && key.modifiers == crate::input::Modifiers::NONE {
             cx.close(self.node.id());
             return true;

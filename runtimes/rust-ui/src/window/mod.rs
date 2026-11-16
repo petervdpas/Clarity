@@ -15,8 +15,8 @@
 //! messages belong to the stack, so one said just before a window closes
 //! shows in the window below. When the language changes every window is
 //! made again, so its texts show in it. When the databases did not open,
-//! what keeps the connection shows first (DESIGN 5.27); when people sign
-//! in first, the sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4).
+//! what keeps the connection shows first (manual/data.settings.md); when people sign
+//! in first, the sign-in window (docs/ledger/signin.md).
 
 pub mod address;
 pub mod history;
@@ -202,7 +202,7 @@ struct Asking {
     host: Rc<ProgramHost>,
 }
 
-/// While the databases are not open (DESIGN 5.27): what to show, and the settings when it showed.
+/// While the databases are not open (manual/data.settings.md): what to show, and the settings when it showed.
 struct Unconnecting {
     unconnected: Unconnected,
     settings: Map<String, Value>,
@@ -1279,7 +1279,7 @@ impl Element for WindowStack {
                 return true;
             }
         }
-        // A dialog in a desktop window of its own closes on Escape that nothing in it took, as its close does (DESIGN 5.14).
+        // A dialog in a desktop window of its own closes on Escape that nothing in it took, as its close does (manual/code.statements.md).
         if self.dialog && key.key == Key::Escape && key.modifiers == Modifiers::NONE {
             if self.stack.len() > 1 {
                 self.close_top(cx);

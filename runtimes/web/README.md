@@ -1,6 +1,6 @@
 # @clarity/ui
 
-What the IDE's front end (`app/`) shares of Clarity's model: its types, what it reads of a project (pages, frames, themes, formats, translations) and a few parts of its own pages. The designer and the preview no longer draw windows with it: they draw with Clarity.UI's browser build, as every generated program does (DESIGN 8.1, 7.9).
+What the IDE's front end (`app/`) shares of Clarity's model: its types, what it reads of a project (pages, frames, themes, formats, translations) and a few parts of its own pages. The designer and the preview no longer draw windows with it: they draw with Clarity.UI's browser build, as every generated program does (manual/design.parts.md, manual/start.how-it-works.md).
 
 | Folder | What it holds |
 |---|---|

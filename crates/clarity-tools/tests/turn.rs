@@ -1,4 +1,4 @@
-//! A turn of an outside agent (docs/ACP-PLAN.md): the project's text files
+//! A turn of an outside agent (docs/ledger/acp.md): the project's text files
 //! before and after it, compared as one change for Undo however they were
 //! written, and what the turn asked Clarity to show.
 

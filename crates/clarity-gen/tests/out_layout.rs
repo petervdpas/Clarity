@@ -1,4 +1,4 @@
-//! The output folder holds one program per target (DESIGN 5.20):
+//! The output folder holds one program per target (manual/code.commands.md):
 //! `out/desktop/` and `out/cli/`, each a project of its own. Output written
 //! before, with the desktop program in `out/` itself, moves: the build
 //! tools' folders and the data go to `out/desktop/`, the rest is made again.

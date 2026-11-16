@@ -1,4 +1,4 @@
-// The guided sign-in in the designer (docs/APP-CAPABILITIES-PLAN.md, "The
+// The guided sign-in in the designer (docs/ledger/signin.md, "The
 // sign-in window is designed, and guided"): which views are sign-in views
 // (the views the sign-in window's content shows), and the palette of a
 // sign-in view, made from the project's sign-in setup: a field per input of

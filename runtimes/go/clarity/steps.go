@@ -1,6 +1,6 @@
 package clarity
 
-// A wizard, the steps part (DESIGN 5.15, conformance/steps.json), decided
+// A wizard, the steps part (manual/parts.containers.md, conformance/steps.json), decided
 // here in the runtime: the step it shows, the buttons it has, and where Next
 // and Back go. Next runs `on next` on the step shown, then moves one step
 // on, unless the handler refused (the step stays) or set the step itself

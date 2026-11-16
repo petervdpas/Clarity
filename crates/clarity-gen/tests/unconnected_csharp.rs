@@ -1,4 +1,4 @@
-//! The C# program on Clarity.UI when its databases do not open (DESIGN 5.27):
+//! The C# program on Clarity.UI when its databases do not open (manual/data.settings.md):
 //! Program.cs starts Clarity.UI's unconnected flow through the desktop host,
 //! with the window that keeps the connection, the app's `on unconnected`,
 //! the settings and an empty database in memory.
@@ -54,7 +54,7 @@ fn the_window_that_keeps_the_connection_shows_when_the_databases_do_not_open() {
     let files = files(SHOP, true);
     let program = file(&files, "Program.cs");
     assert!(program.contains("using Clarity.Ui;\n"), "{program}");
-    assert!(program.contains("        catch (Exception e)\n        {\n            // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new MainViewModel(db),\n                Window = db => new MainViewModel(db),\n                Settings = Settings.Current,\n            }, Unconnected.Reason(e));\n            return 0;\n        }\n"), "{program}");
+    assert!(program.contains("        catch (Exception e)\n        {\n            // The databases did not open (manual/data.settings.md): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new MainViewModel(db),\n                Window = db => new MainViewModel(db),\n                Settings = Settings.Current,\n            }, Unconnected.Reason(e));\n            return 0;\n        }\n"), "{program}");
     assert!(!program.contains("Handler ="), "{program}");
     // The empty database in memory is SQLite's, even when the data sources are not.
     let csproj = file(&files, "Shop.csproj");

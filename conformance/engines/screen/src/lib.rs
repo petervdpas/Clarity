@@ -1,6 +1,6 @@
 //! The engine beside the screen every renderer is tested with
 //! (conformance/screen-engines.json). It speaks Clarity's engine interface
-//! (DESIGN 5.11) and its frame loop (DESIGN 5.12): at every frame the
+//! (manual/code.engines.md) and its frame loop (manual/code.engines.md): at every frame the
 //! renderer calls `clarity_tick` with the milliseconds since the last
 //! frame, then `clarity_draw`, which answers the canvas's shapes.
 //!

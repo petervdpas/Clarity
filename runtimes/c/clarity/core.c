@@ -9,7 +9,7 @@
 #include "clarity/text.h"
 
 // Each thread has its own arena and last error: the desktop shell runs a
-// handler on a thread of its own, so the window keeps painting (DESIGN 5.12).
+// handler on a thread of its own, so the window keeps painting (manual/code.engines.md).
 #if defined(_MSC_VER) && !defined(__clang__)
 #define THREAD_LOCAL __declspec(thread)
 #else

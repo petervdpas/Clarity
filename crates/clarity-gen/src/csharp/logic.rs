@@ -61,7 +61,7 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
     Ok(format!("public static partial class Logic\n{{\n{}}}\n\n", out.trim_end_matches('\n').to_string() + "\n"))
 }
 
-/// The commands of a module (DESIGN 5.20): each a method of `Logic`
+/// The commands of a module (manual/code.commands.md): each a method of `Logic`
 /// taking the database, the session it prints and asks through, and its
 /// arguments and options, and giving its exit code.
 pub fn emit_commands(project: &Project, file: &clarity_spec::model::SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
@@ -111,9 +111,9 @@ pub fn command_method(command: &clarity_spec::code::CommandDecl) -> String {
 pub struct PartInfo {
     /// The data a table or list shows, for its selected row.
     pub bind: Option<String>,
-    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    /// A custom part (manual/design.custom-parts.md): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
-    /// A canvas's mode (DESIGN 5.31); a canvas of objects has its list as `bind`.
+    /// A canvas's mode (manual/parts.graphics.md); a canvas of objects has its list as `bind`.
     pub mode: Option<clarity_spec::model::CanvasMode>,
 }
 
@@ -245,7 +245,7 @@ struct Emitter<'a> {
     window: Option<&'a WindowCtx>,
     /// The database: a parameter of `Logic`, a property of a ViewModel.
     db: &'static str,
-    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// Whether this is a command of the command-line program (manual/code.commands.md):
     /// it prints, asks and says through `cli`, and gives its exit code.
     command: bool,
     /// The parameters and locals in scope, each with the entity of the
@@ -586,7 +586,7 @@ impl<'a> Emitter<'a> {
             }
             // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
             // `generate` refuses a project with custom parts until CP1 builds them.
-            // A hear of a custom part (DESIGN 5.19), which the part hears when it shows.
+            // A hear of a custom part (manual/design.custom-parts.md), which the part hears when it shows.
             // An engine's statement; engines are compiled to WebAssembly before generating (N5b).
             StmtKind::Tell { .. } => self.errors.push("'tell' is for an engine beside the screen".into()),
             StmtKind::Hear { part, hear, args } => {
@@ -620,7 +620,7 @@ impl<'a> Emitter<'a> {
                         // A text left out is an empty one (a link's label).
                         (ShapeValue::Text, Err(default)) => format!("Clarity.Runtime.Text.Plain({})", string(default)),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
-                        // An object sends its record's id (DESIGN 5.31).
+                        // An object sends its record's id (manual/parts.graphics.md).
                         (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
                         (ShapeValue::Record, Err(_)) => "null".to_string(),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg),
@@ -936,7 +936,7 @@ impl<'a> Emitter<'a> {
         Some((member(name), part_property(&prop.name)?))
     }
 
-    /// A custom part's own property (DESIGN 5.19): the part's `PartState`,
+    /// A custom part's own property (manual/design.custom-parts.md): the part's `PartState`,
     /// the property, the part's kind and the values written on its line.
     fn custom_property(&self, expr: &Expr) -> Option<(String, String, String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
         let ExprKind::Member { object, member: prop } = &expr.kind else { return None };
@@ -964,7 +964,7 @@ impl<'a> Emitter<'a> {
         }
         let ExprKind::Member { object, .. } = &expr.kind else { return String::new() };
         let ExprKind::Name { name } = &object.kind else { return String::new() };
-        // A vector canvas's chosen shape, its place from 1 (DESIGN 5.31).
+        // A vector canvas's chosen shape, its place from 1 (manual/parts.graphics.md).
         if self.window.and_then(|w| w.parts.get(name)).and_then(|p| p.mode) == Some(clarity_spec::model::CanvasMode::Vector) {
             return format!("{part}.SelectedShape");
         }
@@ -1086,7 +1086,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// A format's options as a C# expression of their JSON object (`""` for none).
-    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    /// The format of a reading or writing and its options object (docs/ledger/formats.md).
     fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse) -> (String, String) {
         let project = self.project;
         match crate::shape::mapping_pieces(project, mapping, |v| format!("JsonValues.Of({})", self.value(v))) {
@@ -1105,7 +1105,7 @@ impl<'a> Emitter<'a> {
             return self.value(&literal);
         }
         let code = self.shared_value(expr);
-        // A record is a value (DESIGN 5.12): what keeps or gets one read from
+        // A record is a value (manual/code.engines.md): what keeps or gets one read from
         // a name, a field, a list or a part takes a copy of its own, as a
         // struct is copied on the other stacks.
         let place = matches!(expr.kind, ExprKind::Name { .. } | ExprKind::Member { .. } | ExprKind::Index { .. });
@@ -1144,7 +1144,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            // A list of values, or of records, grows by a list of its items (manual/parts.data.md, manual/code.engines.md).
             ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 format!("System.Linq.Enumerable.ToList(System.Linq.Enumerable.Concat({}, {}))", self.value(left), self.value(right))
             }
@@ -1177,7 +1177,7 @@ impl<'a> Emitter<'a> {
                 let db = self.db;
                 format!("{db}.ReadBytes({})", self.value(file))
             }
-            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            // A format of the catalog (docs/ledger/formats.md): a value written in it, and records read from it, through Clarity.Formats.
             ExprKind::FormatOf { value, mapping } => {
                 let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
@@ -1199,17 +1199,17 @@ impl<'a> Emitter<'a> {
                 let (format, options) = self.format_options(mapping);
                 format!("Clarity.Formats.FormatFunctions.Read<{read}>({}, {}, {options}, {})", string(&format), self.value(input), cs_pieces(&kind))
             }
-            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            // A call to a web API (manual/code.web-apis.md): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let headers = self.http_pairs(headers);
                 if from.is_some() || !query.is_empty() {
-                    // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                    // A path of a web API data source (manual/code.web-apis.md): its address and auth come from the project file.
                     let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
                     let query = self.http_pairs(query);
                     let body = body.as_ref().map_or("null".to_string(), |b| self.value(b));
                     let (kind, secret) = auth.map_or(("null".to_string(), "null".to_string()), |(k, s)| (string(k), string(s)));
-                    // Every page, as the source's paging says (DESIGN 5.23).
+                    // Every page, as the source's paging says (manual/code.web-apis.md).
                     if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
                         return format!(
                             "Http.Pages({}, {url}, {query}, {headers}, {kind}, {secret}, new HttpPaging({}, {}, {}, {}, {}, {}))",
@@ -1230,12 +1230,12 @@ impl<'a> Emitter<'a> {
                     None => format!("Http.{call}({url}, {headers})"),
                 }
             }
-            // A function of a library, through its adapter (DESIGN 5.21).
+            // A function of a library, through its adapter (manual/code.libraries.md).
             ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
                 let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
                 format!("{}.{}.{}({})", crate::libraries::CSHARP_NAMESPACE, engine.name, pascal(&function.name), values.join(", "))
             }
-            // A function of an engine, through the runtime's host (DESIGN 5.11).
+            // A function of an engine, through the runtime's host (manual/code.engines.md).
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self
                     .project

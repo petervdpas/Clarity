@@ -58,7 +58,7 @@ pub enum WidgetKind {
     Memo,
     Password,
     /// Signs in with the project's `signin` block: per strategy its inputs
-    /// and button, in Clarity's own words (docs/APP-CAPABILITIES-PLAN.md step 4).
+    /// and button, in Clarity's own words (docs/ledger/signin.md).
     Signin,
     /// A field of the sign-in view for one input of a strategy (`input password`), labelled in Clarity's words.
     SigninField,
@@ -96,11 +96,11 @@ pub enum WidgetKind {
     Tabs,
     /// A window's content that shows one view at a time, picked by code
     /// (`main.view = X`): `view X` blocks, each a view it can show; no look
-    /// of its own, as the view brings its heading, buttons and tabs (DESIGN 5.33).
+    /// of its own, as the view brings its heading, buttons and tabs (manual/design.windows.md).
     Content,
-    /// A wizard: `step "Title"` blocks shown one at a time, with Back, Next and Finish (DESIGN 5.15).
+    /// A wizard: `step "Title"` blocks shown one at a time, with Back, Next and Finish (manual/parts.containers.md).
     Steps,
-    /// Parts on their own grid, outside the window's, opened next to the part in `for` (DESIGN 5.16).
+    /// Parts on their own grid, outside the window's, opened next to the part in `for` (manual/parts.containers.md).
     Popover,
     /// Parts on their own grid, outside the window's, sliding in over the
     /// window from its right or left edge; pinned, beside the window's parts.
@@ -113,29 +113,29 @@ pub enum WidgetKind {
     /// A table whose rows are a tree, its first column indented.
     TreeTable,
     /// Bars, a line or a pie of a list's rows grouped by a field, or of a
-    /// list of numbers as they are (DESIGN 5.26).
+    /// list of numbers as they are (manual/parts.data.md).
     Chart,
     /// The last values of one number, taken every so many seconds, as a
-    /// line (DESIGN 5.26).
+    /// line (manual/parts.data.md).
     Trend,
     /// Nodes joined by edges, two lists of records of any kind, laid out
-    /// and drawn by kind (docs/GRAPH-PLAN.md).
+    /// and drawn by kind (docs/ledger/graph.md).
     Graph,
     Image,
     Display,
     Canvas,
     /// Sound files of the resources, tones and melodies, which code tells
-    /// it to play; it shows nothing and has no place in the grid (DESIGN 5.22).
+    /// it to play; it shows nothing and has no place in the grid (manual/design.sound.md).
     Sound,
     /// Plays a video, a file of the resources or one from disk, which code
     /// tells to play, pause and seek; it shows the pictures in its place in
-    /// the grid (docs/VIDEO-PLAN.md).
+    /// the grid (docs/ledger/video-camera.md).
     Video,
     /// Runs its `tick` handler every so many seconds while its window is
-    /// open; it shows nothing and has no place in the grid (DESIGN 5.26).
+    /// open; it shows nothing and has no place in the grid (manual/parts.time.md).
     Timer,
     /// A part an outside library draws, placed by the name it is declared by
-    /// (`Arena`, DESIGN 5.19); `props.part` names its declaration.
+    /// (`Arena`, manual/design.custom-parts.md); `props.part` names its declaration.
     Custom,
 }
 
@@ -202,20 +202,20 @@ pub enum Event {
     Next,
     /// Finish is pressed on a wizard's last step.
     Finish,
-    /// The person moved a row of a part that reorders (DESIGN 5.30).
+    /// The person moved a row of a part that reorders (manual/parts.data.md).
     Reorder,
     /// The person pressed the Add button above a table (`add`).
     Add,
     /// The person pressed the trash button of a table's row (`remove`), which picked the row.
     Remove,
-    /// A timer's time has come round again (DESIGN 5.26).
+    /// A timer's time has come round again (manual/parts.time.md).
     Tick,
-    /// A sound's song played to its end (docs/AUDIO-PLAN.md); not when stopped.
+    /// A sound's song played to its end (docs/ledger/audio.md); not when stopped.
     End,
     /// A sound's song could not play: missing, not a sound; its `problem` says why.
     Fail,
     /// The app's databases did not open, as when a connection kept as a
-    /// secret setting is not kept yet (DESIGN 5.27).
+    /// secret setting is not kept yet (manual/data.settings.md).
     Unconnected,
     /// A link into the application (`clarity:fragment/412`) of a markdown
     /// part or memo was clicked; its `link` says where.
@@ -257,7 +257,7 @@ pub const ALL_EVENTS: [Event; 28] = [
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
 
-/// The events the app has: `unconnected` when its databases did not open (DESIGN 5.27).
+/// The events the app has: `unconnected` when its databases did not open (manual/data.settings.md).
 pub const APP_EVENTS: [Event; 2] = [Event::Start, Event::Unconnected];
 
 impl Event {
@@ -379,7 +379,7 @@ pub enum WidgetProperty {
     For,
     Placeholder,
     Readonly,
-    /// `no undo`: a part the person edits without its own undo (DESIGN 5.29).
+    /// `no undo`: a part the person edits without its own undo (manual/code.handlers.md).
     NoUndo,
     TabOrder,
     Shortcut,
@@ -421,9 +421,9 @@ pub enum WidgetProperty {
     ReadingWidth,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
-    /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
+    /// `reorder by position`: the person puts the rows in their own order (manual/parts.data.md).
     Reorder,
-    /// `mode objects ... | paint | vector`: what the person does on a canvas (DESIGN 5.31).
+    /// `mode objects ... | paint | vector`: what the person does on a canvas (manual/parts.graphics.md).
     Mode,
     /// `tools pen, eraser`: the tools of a canvas's mode.
     Tools,
@@ -735,7 +735,7 @@ const ENTRIES: &[Entry] = &[
         // Only its place and look: the project's signin block says what it offers.
         properties: &[],
     },
-    // The parts of a sign-in view (docs/APP-CAPABILITIES-PLAN.md, "The sign-in window is designed, and guided"):
+    // The parts of a sign-in view (docs/ledger/signin.md):
     // each keeps its place and look; what it signs in with is the project's signin block.
     signin_part(WidgetKind::SigninField, "signinField", "Field", (6, 2), &[WidgetProperty::Input]),
     signin_part(WidgetKind::SigninButton, "signinButton", "Sign-in button", (6, 1), &[WidgetProperty::Strategy]),
@@ -1170,7 +1170,7 @@ const ENTRIES: &[Entry] = &[
         events: &[],
         properties: &[WidgetProperty::By, WidgetProperty::Measure, WidgetProperty::Points, WidgetProperty::Max],
     },
-    // Nodes and edges of any kind, laid out and drawn by kind (docs/GRAPH-PLAN.md).
+    // Nodes and edges of any kind, laid out and drawn by kind (docs/ledger/graph.md).
     Entry {
         kind: WidgetKind::Graph,
         keyword: "graph",
@@ -1187,7 +1187,7 @@ const ENTRIES: &[Entry] = &[
         events: &[Event::Click, Event::Select, Event::Open],
         properties: &[WidgetProperty::Edges, WidgetProperty::Nodes, WidgetProperty::Layout, WidgetProperty::Looks, WidgetProperty::Limit, WidgetProperty::Show, WidgetProperty::Lists, WidgetProperty::Hops, WidgetProperty::Legend],
     },
-    // One number's last values as a line, taken every so many seconds (DESIGN 5.26).
+    // One number's last values as a line, taken every so many seconds (manual/parts.data.md).
     Entry {
         kind: WidgetKind::Trend,
         keyword: "trend",
@@ -1298,7 +1298,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: true,
         events: &[Event::Click],
-        // A picture loaded or removed is an edit Ctrl+Z takes back (DESIGN 5.29).
+        // A picture loaded or removed is an edit Ctrl+Z takes back (manual/code.handlers.md).
         properties: &[WidgetProperty::Source, WidgetProperty::NoUndo],
     },
     Entry {
@@ -1308,7 +1308,7 @@ const ENTRIES: &[Entry] = &[
         category: Category::Graphics,
         size: (6, 4),
         caption: None,
-        // A painted canvas binds its picture, a vector one its drawing as SVG text (DESIGN 5.31).
+        // A painted canvas binds its picture, a vector one its drawing as SVG text (manual/parts.graphics.md).
         bind: BindTarget::Field,
         field_types: &["image", "text"],
         input: false,
@@ -1317,7 +1317,7 @@ const ENTRIES: &[Entry] = &[
         // Drawn by its draw handler (`on draw`);
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
-        // `on change`: an edit of a canvas with a mode ended (DESIGN 5.31).
+        // `on change`: an edit of a canvas with a mode ended (manual/parts.graphics.md).
         events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Connect, Event::Resize, Event::Pointer, Event::Key, Event::Change],
         properties: &[
             WidgetProperty::Units,
@@ -1399,7 +1399,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Change],
-        // What it binds the person changes through it: an edit, which Ctrl+Z takes back (DESIGN 5.29).
+        // What it binds the person changes through it: an edit, which Ctrl+Z takes back (manual/code.handlers.md).
         properties: &[WidgetProperty::TabOrder, WidgetProperty::NoUndo],
     },
 ];
@@ -1547,7 +1547,7 @@ pub fn has_event(kind: WidgetKind, event: Event) -> bool {
     entry(kind).events.contains(&event)
 }
 
-/// Where the edits of part `name` are undone (DESIGN 5.29): the form or
+/// Where the edits of part `name` are undone (manual/code.handlers.md): the form or
 /// panel it is in, so Ctrl+Z there walks back its fields one by one, or else
 /// the part itself. None for a part without undo (one that edits nothing,
 /// or says `no undo`) or not among `widgets`.
@@ -1555,7 +1555,7 @@ pub fn undo_scope(widgets: &[crate::model::Widget], name: &str) -> Option<String
     fn find(widgets: &[crate::model::Widget], name: &str, scope: Option<&str>) -> Option<Option<String>> {
         for w in widgets {
             if w.props.name.as_deref() == Some(name) {
-                // A list or tree only selects, unless it reorders (DESIGN 5.30).
+                // A list or tree only selects, unless it reorders (manual/parts.data.md).
                 let selects_only = matches!(w.props.kind, WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) && w.props.reorder.is_none();
                 let has = has_property(w.props.kind, WidgetProperty::NoUndo) && !w.props.no_undo && !selects_only;
                 return Some(has.then(|| scope.unwrap_or(name).to_string()));
@@ -1838,7 +1838,7 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 }
 
 pub fn widget_line(props: &WidgetProps) -> String {
-    // A timer has no place: its name, how often it ticks, its handler (DESIGN 5.26).
+    // A timer has no place: its name, how often it ticks, its handler (manual/parts.time.md).
     if props.kind == WidgetKind::Timer {
         let mut parts = vec![keyword(props.kind).to_string()];
         if let Some(name) = &props.name {
@@ -1852,7 +1852,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
         }
         return parts.join(" ");
     }
-    // A sound has no place: its name, its source, its volume, whether it repeats (DESIGN 5.22).
+    // A sound has no place: its name, its source, its volume, whether it repeats (manual/design.sound.md).
     if props.kind == WidgetKind::Sound {
         let mut parts = vec![keyword(props.kind).to_string()];
         if let Some(name) = &props.name {
@@ -2121,7 +2121,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(source) = &props.source {
         parts.push(format!("source {}", quote(source)));
     }
-    // A video's volume and repeat, as a sound's (docs/VIDEO-PLAN.md).
+    // A video's volume and repeat, as a sound's (docs/ledger/video-camera.md).
     if props.kind == WidgetKind::Video {
         if let Some(volume) = props.volume {
             parts.push(format!("volume {volume}"));
@@ -2605,7 +2605,7 @@ mod tests {
             WidgetKind::Textbox
         );
         assert_eq!(widget_for(&FieldType::DateTime), WidgetKind::Date);
-        // A secret shows only as dots (DESIGN 5.27).
+        // A secret shows only as dots (manual/data.settings.md).
         assert_eq!(widget_for(&FieldType::Secret), WidgetKind::Password);
     }
 }

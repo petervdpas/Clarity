@@ -1,4 +1,4 @@
-//! Songs on the desktop (docs/AUDIO-PLAN.md): a project whose sound parts
+//! Songs on the desktop (docs/ledger/audio.md): a project whose sound parts
 //! play more than WAV carries Clarity.Audio and hands it to Clarity.UI as
 //! it starts, on every stack; one that plays only WAV carries nothing more.
 

@@ -28,7 +28,6 @@ Progress: 80%
 - `runtimes/rust/README.md:26` shows `clarity-runtime = "0.10.0"`; the crate is 0.59.0.
 - `release-csharp-runtime.yml:4` says eleven packages; it publishes 14.
 - `editors/vscode/README.md:34` installs 0.1.3; the extension is 0.1.38.
-- Plans say unreleased for work in tags: FORMATS-PLAN.md:3 (steps 2-5 in v0.39.0), APP-CAPABILITIES-PLAN.md:3 (sign-in and row versions before v0.40.0), GRAPH-PLAN.md:3 and AGENT-TOOLS-PLAN.md:3 (in v0.39.0).
 
 ## Decisions
 - 2026-10-21: crates publish by tag through GitHub Actions, never by hand. User: "sure, but I didnt do this for nothing eh!!!!!"

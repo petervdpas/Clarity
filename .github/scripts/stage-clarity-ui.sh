@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds Clarity.UI's library (clarity-ui-ffi) in release for this system and
 # puts it where the IDE's installer takes it from (tauri.clarity-ui.conf.json):
-# app/src-tauri/clarity-ui/, the folder CLARITY_UI names (DESIGN 7.9):
+# app/src-tauri/clarity-ui/, the folder CLARITY_UI names (manual/start.how-it-works.md):
 #   include/clarity_ui.h, include/clarity_audio.h
 #   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
 #   lib/ the same of clarity_audio: Clarity.Audio, for programs that play songs
@@ -9,7 +9,7 @@
 #   lib/ the same of clarity_image, include/clarity_image.h: Clarity.Image,
 #        for programs whose code calls picture functions
 #   lib/ Cisco's openh264 for this system, which every app with video carries
-#        (fetched from Cisco and checked, docs/VIDEO-PLAN.md)
+#        (fetched from Cisco and checked, docs/ledger/video-camera.md)
 # The installed Clarity hands it to Go, C and C++ builds. Beside it, the
 # browser files every language's web server serves (round B) go to
 # app/src-tauri/clarity-ui-browser/:

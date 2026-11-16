@@ -1,4 +1,4 @@
-//! Screen readers (DESIGN 7.9, A1): the accessibility tree of a screen, made
+//! Screen readers (manual/start.how-it-works.md): the accessibility tree of a screen, made
 //! from its elements. Every part, the window's frame, dialogs and what lies
 //! over the window become nodes with a role, a name (a part's caption or the
 //! text of its label, translated as drawn), a value, states, a place and the
@@ -48,7 +48,7 @@ pub fn owner_of(id: u64) -> Option<ElementId> {
 
 /// What a node is, by the names ARIA gives roles where it has one (the
 /// browser mirrors the tree with them); `window`, `label`, `textarea`,
-/// `password`, `date` and `color` are Clarity's own (DESIGN 7.9).
+/// `password`, `date` and `color` are Clarity's own (manual/start.how-it-works.md).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Window,
@@ -348,7 +348,7 @@ impl AccessTree {
         self.nodes.iter().find(|n| n.role == role && n.name == name)
     }
 
-    /// The tree as JSON (DESIGN 7.9): `root`, `focus` and `nodes` in tree order, every id as text.
+    /// The tree as JSON (manual/start.how-it-works.md): `root`, `focus` and `nodes` in tree order, every id as text.
     pub fn json(&self) -> Value {
         json!({ "root": ROOT.to_string(), "focus": self.focus.to_string(), "nodes": self.nodes.iter().map(AccessNode::json).collect::<Vec<_>>() })
     }

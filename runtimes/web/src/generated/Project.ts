@@ -40,12 +40,12 @@ translations: { [key in string]: { [key in string]: string } },
 resource_keys: { [key in string]: { [key in string]: string } }, 
 /**
  * Whether the people using the application set its keys themselves,
- * as the project file says (`keys editable`, DESIGN 5.28).
+ * as the project file says (`keys editable`, manual/app.keys.md).
  */
 keysEditable: boolean, 
 /**
  * Who is using the program, as the project file says (`signin Member
- * ...`, docs/APP-CAPABILITIES-PLAN.md step 4); none without the block.
+ * ...`, docs/ledger/signin.md); none without the block.
  */
 signin: Signin | null, 
 /**

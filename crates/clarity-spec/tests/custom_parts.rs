@@ -1,4 +1,4 @@
-//! Custom parts (DESIGN 5.19): a part an outside library draws, declared
+//! Custom parts (manual/design.custom-parts.md): a part an outside library draws, declared
 //! in Clarity with `part Name`, its library (`native`, `nuget`, `dll`),
 //! what it `binds`, typed properties, `tells`, `hears` and `size`, and
 //! placed in a window by its name like a built-in part.
@@ -379,7 +379,7 @@ fn the_ide_sets_whether_a_part_grows() {
 }
 
 /// `description @key` is what a screen reader says of the part besides its
-/// name (DESIGN 7.9, A1); `description: text` stays a property, and each
+/// name (manual/start.how-it-works.md); `description: text` stays a property, and each
 /// placed part takes the declaration's description.
 #[test]
 fn a_part_declares_its_description_for_screen_readers() {

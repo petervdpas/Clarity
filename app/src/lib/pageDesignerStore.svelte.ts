@@ -36,8 +36,8 @@ class PageDesigner {
   selected = $state<DesignKey | null>(null);
   /** The page each tabs, steps or accordion part shows, by the part's key. */
   activeTabs = $state<Record<DesignKey, number>>({});
-  /** The slide-out designed on a canvas of its own (Views, marked slideout), by its name; null for the whole window. */
-  slideout = $state<string | null>(null);
+  /** The slide-out or popover designed on a canvas of its own (Views, marked so; a double click on it), by its name; null for the whole window. */
+  canvas = $state<string | null>(null);
   error = $state<string | null>(null);
   /** An edit is being written. */
   saving = $state(false);

@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4) in C:
+//! Who is using the program (docs/ledger/signin.md) in C:
 //! the program carries Clarity.Auth only when its project signs people in,
 //! names its people after the databases open (and again on `connect`),
 //! reads `me` through the runtime, refuses what `allow when`, `readable

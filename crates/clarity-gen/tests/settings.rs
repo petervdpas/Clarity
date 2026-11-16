@@ -1,4 +1,4 @@
-//! Settings (DESIGN 5.17) on every stack: a record type beside the
+//! Settings (manual/data.settings.md) on every stack: a record type beside the
 //! entities, never in a database; every window has `settings`. The web
 //! stacks' shells read and keep them (the Rust commands are generated);
 //! C# shares one `Settings.Current`, started with the application.

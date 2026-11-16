@@ -1,4 +1,4 @@
-//! An engine's source (DESIGN 5.11): a Rust crate next to its file in the
+//! An engine's source (manual/code.engines.md): a Rust crate next to its file in the
 //! engines folder, `engines/board/` for `board.wasm`. Clarity makes one from
 //! a template with a stub for each declared function, tells when the file is
 //! older than its source, builds it with cargo for WebAssembly and reads the

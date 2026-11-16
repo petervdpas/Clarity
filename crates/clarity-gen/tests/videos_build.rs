@@ -1,6 +1,6 @@
 //! A small video player, built on each desktop stack as the IDE builds it,
 //! without a warning: Clarity.Video and Clarity.Audio linked and handed to
-//! Clarity.UI (docs/VIDEO-PLAN.md). Each is a whole build, so they are
+//! Clarity.UI (docs/ledger/video-camera.md). Each is a whole build, so they are
 //! ignored: run one at a time,
 //! `cargo test -p clarity-gen --test videos_build -- --ignored --exact <name>`.
 //! Go, C and C++ want Clarity.Audio's library beside Clarity.UI's:

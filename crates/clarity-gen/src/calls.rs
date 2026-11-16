@@ -1,4 +1,4 @@
-//! Calls in full (DESIGN 5.24): before a stack is written, every call to a
+//! Calls in full (manual/data.entities.md): before a stack is written, every call to a
 //! function or action is given all its values in order, those given by
 //! name put in their place and those left out filled in from the defaults.
 //! So no stack needs default or named parameters of its own language.

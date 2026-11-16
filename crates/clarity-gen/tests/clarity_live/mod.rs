@@ -733,7 +733,7 @@ fn gallery(d: &mut Driver) {
         d.undo_in("dial")
     });
 
-    // Canvas modes (DESIGN 5.31): each gesture is one edit the runtime makes.
+    // Canvas modes (manual/parts.graphics.md): each gesture is one edit the runtime makes.
     let places = |d: &Driver| d.rows("SELECT id || ':' || copies || ',' || position FROM album ORDER BY id");
     d.step("an object dragged on a board lands on the grid, saved; Ctrl+Z takes it back", |d| {
         let before = places(d);

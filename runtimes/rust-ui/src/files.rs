@@ -1,4 +1,4 @@
-//! The system's file dialogs as the parts use them (DESIGN 7.9): choose a
+//! The system's file dialogs as the parts use them (manual/start.how-it-works.md): choose a
 //! file to open, choose where a copy of a file is saved, choose a folder,
 //! and open a file in the program the system uses for its kind. The desktop
 //! host gives the system's own (`desktop::files`), a test gives one of its

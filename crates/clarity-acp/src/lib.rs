@@ -1,4 +1,4 @@
-//! Clarity as an ACP client (docs/ACP-PLAN.md): the chat panel talks to the
+//! Clarity as an ACP client (docs/ledger/acp.md): the chat panel talks to the
 //! person's own agent program (Codex, Copilot), signed in with that
 //! program's own login, so no API key is typed into Clarity.
 //!

@@ -7,4 +7,8 @@ export type CheckLast = { passed: boolean, why: string | null,
 /**
  * When it ended, in milliseconds since 1970.
  */
-ended: number, };
+ended: number, 
+/**
+ * It ran on the tree as it is now; a result of another tree counts as not run.
+ */
+current: boolean, };

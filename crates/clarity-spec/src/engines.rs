@@ -1,4 +1,4 @@
-//! The engines of a project (DESIGN 5.11): the files of its `engines`
+//! The engines of a project (manual/code.engines.md): the files of its `engines`
 //! folder, checked against the engines its modules declare. The files are
 //! read here as WebAssembly only far enough to list what they import and
 //! export; every stack's host checks them again when the application starts
@@ -29,10 +29,10 @@ pub const MAX_MEGABYTES: u32 = 4096;
 pub const INTERFACE: [&str; 2] = ["clarity_alloc", "clarity_free"];
 
 /// What an engine beside the screen exports besides the engine interface:
-/// its frame loop (DESIGN 5.12, conformance/screen-engines.json).
+/// its frame loop (manual/code.engines.md, conformance/screen-engines.json).
 pub const SCREEN_INTERFACE: [&str; 2] = ["clarity_tick", "clarity_draw"];
 
-/// An engine beside the screen as the renderer runs it (DESIGN 5.12): its
+/// An engine beside the screen as the renderer runs it (manual/code.engines.md): its
 /// file, the services it uses and its limits per frame.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
 #[ts(export)]

@@ -1,5 +1,5 @@
 /*
- * clarity_audio.h: the C interface of Clarity.Audio (docs/AUDIO-PLAN.md).
+ * clarity_audio.h: the C interface of Clarity.Audio (docs/ledger/audio.md).
  * The library (libclarity_audio.so, clarity_audio.dll,
  * libclarity_audio.dylib) plays songs: mp3, flac, wav and ogg files, read
  * as they play, with pause, seek, the position and the length.

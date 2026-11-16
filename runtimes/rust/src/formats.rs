@@ -1,4 +1,4 @@
-//! The data formats of code (docs/FORMATS-PLAN.md): `read Order from json
+//! The data formats of code (docs/ledger/formats.md): `read Order from json
 //! text` and `json of value`, through Clarity.Formats, the one
 //! implementation every stack calls. The library reads the format and fits
 //! it to what the program wants; the record's own decoder (serde) reads

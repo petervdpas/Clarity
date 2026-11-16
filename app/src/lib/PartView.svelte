@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A custom part (DESIGN 5.19): what it is declared as, as a form, and its
+  // A custom part (manual/design.custom-parts.md): what it is declared as, as a form, and its
   // folder as a file tree with tabs. Its declaration is Clarity, also edited
   // as text in the first tab; the file Clarity writes from it is shown to read.
 

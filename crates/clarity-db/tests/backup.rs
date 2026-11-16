@@ -1,4 +1,4 @@
-//! Backups of a project's SQLite databases (docs/BACKUP-PLAN.md): a copy
+//! Backups of a project's SQLite databases (docs/ledger/backups.md): a copy
 //! beside the database, named for when and why, the automatic ones pruned
 //! to the newest ten, and a restore that first backs up what it replaces.
 

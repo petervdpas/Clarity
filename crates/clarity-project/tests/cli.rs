@@ -1,4 +1,4 @@
-//! A command-line program (DESIGN 5.20): the `cli` target and the `cli`
+//! A command-line program (manual/code.commands.md): the `cli` target and the `cli`
 //! block and commands of the modules go together.
 
 use clarity_project::{parse, target_problems};

@@ -196,7 +196,7 @@ public sealed class ViewModelWireTests
         Assert.NotEqual(state["instance"]!.GetValue<long>(), Opened(wire)["state"]!["instance"]!.GetValue<long>());
     }
 
-    // -- Unconnected (DESIGN 5.27) --------------------------------------------------------
+    // -- Unconnected (manual/data.settings.md) --------------------------------------------------------
 
     sealed class Counted
     {

@@ -1,4 +1,4 @@
-//! Custom parts of a C++ program (DESIGN 5.19 and 7.9): a part is a library
+//! Custom parts of a C++ program (manual/design.custom-parts.md, manual/start.how-it-works.md): a part is a library
 //! of the project (`native "parts/OrbField"`, C++ with its CMakeLists.txt)
 //! that implements the class Clarity writes from the declaration into its
 //! `clarity/<Name>.h`: a control of Clarity.UI, drawing on the canvas the
@@ -84,7 +84,7 @@ pub fn parts(project: &Project) -> Vec<&PartDecl> {
 pub fn header(part: &PartDecl) -> String {
     let n = &part.name.name;
     let mut out = String::new();
-    let _ = writeln!(out, "// Custom part {n} (DESIGN 5.19 and 7.9): the class its library implements, a");
+    let _ = writeln!(out, "// Custom part {n} (manual/design.custom-parts.md, manual/start.how-it-works.md): the class its library implements, a");
     let _ = writeln!(out, "// control of Clarity.UI. Written by Clarity from the part's declaration, and");
     let _ = writeln!(out, "// written again when the declaration changes; the files beside this folder");
     let _ = writeln!(out, "// are yours.");
@@ -171,7 +171,7 @@ pub fn glue(program: &str, parts: &[&PartDecl]) -> String {
         .map(|p| format!("    clarity::ui::register_part(\"{n}\", [] {{ return std::unique_ptr<clarity::ui::CustomPart>(make_{n}()); }});\n", n = p.name.name))
         .collect();
     format!(
-        "{}\n// The program's custom parts, controls of Clarity.UI (DESIGN 7.9).\n\n{includes}\nnamespace {program} {{\n\n/// Tells Clarity.UI about every kind of part the program has, by its name.\nvoid register_parts() {{\n{registers}}}\n\n}}  // namespace {program}\n",
+        "{}\n// The program's custom parts, controls of Clarity.UI (manual/start.how-it-works.md).\n\n{includes}\nnamespace {program} {{\n\n/// Tells Clarity.UI about every kind of part the program has, by its name.\nvoid register_parts() {{\n{registers}}}\n\n}}  // namespace {program}\n",
         super::HEADER
     )
 }
@@ -181,7 +181,7 @@ pub fn cmake_lines(program: &str, parts: &[&PartDecl]) -> String {
     if parts.is_empty() {
         return String::new();
     }
-    let mut out = String::from("\n# The custom parts (DESIGN 5.19), each a library of its own folder, built into\n# the program; they draw with Clarity.UI (the runtime's ui/ui.hpp).\n");
+    let mut out = String::from("\n# The custom parts (manual/design.custom-parts.md), each a library of its own folder, built into\n# the program; they draw with Clarity.UI (the runtime's ui/ui.hpp).\n");
     for part in parts {
         let n = &part.name.name;
         let _ = writeln!(out, "add_subdirectory(parts/{n})\ntarget_link_libraries({n} PUBLIC clarity_desktop)\ntarget_link_libraries({program} PRIVATE {n})");

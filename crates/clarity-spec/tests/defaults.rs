@@ -1,5 +1,5 @@
 //! Parameters with a default, named arguments, and `when` on a query or
-//! header pair (DESIGN 5.24): an action or function may give a parameter a
+//! header pair (manual/data.entities.md): an action or function may give a parameter a
 //! default, `limit: integer = 0`; a call may leave such parameters out or
 //! name them, `list_templates("published", limit: 10)`; and an http pair
 //! is left out of the call when its condition does not hold.

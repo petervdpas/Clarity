@@ -1,4 +1,4 @@
-//! OpenAPI descriptions in the project (DESIGN 5.23, D2). A web API data
+//! OpenAPI descriptions in the project (manual/code.web-apis.md). A web API data
 //! source names its description with `openapi "forms.yaml"`, a file of the
 //! project's `apis` folder, and picks the operations it uses with `pick`
 //! (and schemas of its own with `pick schema`). Clarity writes the module
@@ -322,7 +322,7 @@ enum FieldOf {
     Type(String),
     Enum(String, Vec<String>),
     NotRead(String),
-    /// A record that would hold itself (DESIGN 5.25), named for the developer.
+    /// A record that would hold itself (manual/data.entities.md), named for the developer.
     Circle(String),
 }
 
@@ -347,17 +347,17 @@ fn field_of(entity: &str, property: &str, shape: &Shape) -> FieldOf {
             Shape::Integer => FieldOf::Type("list<integer>".into()),
             Shape::Number => FieldOf::Type("list<decimal>".into()),
             Shape::Date => FieldOf::Type("list<date>".into()),
-            // Records inside the record (DESIGN 5.25); a list may hold its own kind.
+            // Records inside the record (manual/data.entities.md); a list may hold its own kind.
             Shape::Named(name) => FieldOf::Type(format!("list<{}>", pascal(name))),
             _ => FieldOf::NotRead("a list of objects without a schema of their own".into()),
         },
-        // A record inside the record (DESIGN 5.25), unless it would hold itself: see `module`.
+        // A record inside the record (manual/data.entities.md), unless it would hold itself: see `module`.
         Shape::Named(name) => FieldOf::Type(pascal(name)),
         _ => FieldOf::NotRead("an object without a schema of its own".into()),
     }
 }
 
-/// What a picked `get` gives when its source pages (DESIGN 5.23, paging):
+/// What a picked `get` gives when its source pages (manual/code.web-apis.md, paging):
 /// the list of a schema it answers with, directly when a page is a list, or
 /// under the paging's `items` in the schema a page is. None when the
 /// operation does not read pages.
@@ -425,7 +425,7 @@ pub fn module(source: &str, file: &str, description: &Description, picks: &[Stri
             warnings.push(format!("data source '{source}' picks schema '{pick}', which {about} does not have"));
         }
     }
-    // And the schemas those hold, nested any depth (DESIGN 5.25).
+    // And the schemas those hold, nested any depth (manual/data.entities.md).
     let mut at = 0;
     while at < wanted.len() {
         if let Some(schema) = description.schemas.iter().find(|s| s.name == wanted[at]) {
@@ -579,7 +579,7 @@ fn action(source: &str, op: &Operation, pages: Option<&Shape>, paged: &[&str]) -
         out.push_str(&format!("// {}\n", summary.lines().next().unwrap_or_default()));
     }
     let mut params = Vec::new();
-    // Optional parameters have a default, so they come last (DESIGN 5.24).
+    // Optional parameters have a default, so they come last (manual/data.entities.md).
     let mut optional = Vec::new();
     let mut path = op.path.clone();
     let mut clauses = String::new();

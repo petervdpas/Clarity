@@ -1,5 +1,5 @@
 /*
- * clarity_ui.h: the C interface of Clarity.UI (DESIGN 7.9, "One Clarity.UI
+ * clarity_ui.h: the C interface of Clarity.UI (manual/start.how-it-works.md, "One Clarity.UI
  * for all five languages"). The library (libclarity_ui.so, clarity_ui.dll,
  * libclarity_ui.dylib) draws, lays out, takes the person's input and runs
  * the desktop host. The program keeps its window model in its own language
@@ -19,7 +19,7 @@
  *   with its bytes (the library copies them). A callback that sets nothing
  *   answers "none". The answer is only valid during the callback.
  * - JSON is used where a value is a tree (a window's value, a part's state,
- *   a reply). The shapes are the ones of the web server's wire (DESIGN 7.3)
+ *   a reply). The shapes are the ones of the web server's wire (manual/project.run-build.md)
  *   and of clarity_runtime::ui (WindowState, Reply, PartState, Text).
  * - Handles (ClarityProgram, ClarityFiles, ClarityScreen, ClarityDriven) are
  *   opaque. A ClarityScreen and a ClarityDriven are used on the thread that
@@ -257,7 +257,7 @@ CLARITY_API ClarityStatus clarity_ui_use_video(const struct ClarityVideoApi *api
 /* Runs the program's windows in desktop windows until they closed (the
  * desktop host of clarity-ui), on the calling thread (the main thread on
  * macOS). With the environment variable CLARITY_HEADLESS set it is driven
- * from standard input instead (DESIGN 1.6). `exit_code` gets 0 or 1. */
+ * from standard input instead (manual/start.how-it-works.md). `exit_code` gets 0 or 1. */
 CLARITY_API ClarityStatus clarity_desktop_run(const ClarityProgram *program, const ClarityFiles *files, int32_t *exit_code);
 
 /* Wakes the running desktop from any thread: every window reads its values
@@ -265,7 +265,7 @@ CLARITY_API ClarityStatus clarity_desktop_run(const ClarityProgram *program, con
 CLARITY_API void clarity_desktop_wake(void);
 
 /* ------------------------------------------------------------------------
- * A driven program (headless, DESIGN 1.6)
+ * A driven program (headless, manual/start.how-it-works.md)
  * ------------------------------------------------------------------------ */
 
 typedef struct ClarityDriven ClarityDriven;
@@ -332,7 +332,7 @@ typedef struct ClarityPartHostCallbacks {
     int64_t (*selected)(void *user, const char *part, size_t part_len);
     void (*select)(void *user, const char *part, size_t part_len, int64_t place);
     void (*window_name)(void *user, ClarityAnswer *name);
-    /* Engines beside the screen, by number (DESIGN 5.12). engine_start answers {"id": n} or {"error": "why"}; nothing: no engines. */
+    /* Engines beside the screen, by number (manual/code.engines.md). engine_start answers {"id": n} or {"error": "why"}; nothing: no engines. */
     void (*engine_start)(void *user, const char *name, size_t name_len, ClarityAnswer *started);
     /* Bit 1: it takes the pointer; bit 2: it takes keys. */
     int32_t (*engine_hears)(void *user, uint64_t id);
@@ -405,7 +405,7 @@ CLARITY_API ClarityStatus clarity_screen_parts_json(ClarityScreen *screen, char 
 CLARITY_API ClarityStatus clarity_screen_step(ClarityScreen *screen, const char *step, size_t step_len, char **answer);
 
 /* ------------------------------------------------------------------------
- * Custom parts (DESIGN 5.19, 7.9)
+ * Custom parts (manual/design.custom-parts.md, manual/start.how-it-works.md)
  * ------------------------------------------------------------------------
  *
  * A program's own kind of part, as a table of callbacks. `make` gives a new

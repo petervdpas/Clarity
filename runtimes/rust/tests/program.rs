@@ -1,4 +1,4 @@
-// The program a generated application is (DESIGN 7.9): what its screen asks
+// The program a generated application is (manual/start.how-it-works.md): what its screen asks
 // of it, in plain Rust types. The webview's commands and Clarity.UI both call
 // it; what goes wrong is text the screen shows, the same on both.
 

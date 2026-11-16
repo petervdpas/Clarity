@@ -29,13 +29,13 @@ private:
     std::string problem_;
 };
 
-/// A database connects with a secret setting (DESIGN 5.27) the person has not kept yet.
+/// A database connects with a secret setting (manual/data.settings.md) the person has not kept yet.
 class NotKeptError : public StorageError {
 public:
     explicit NotKeptError(const std::string& setting) : StorageError("the secret setting " + setting + " is not kept yet: the settings name the connection") {}
 };
 
-/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// Why the databases did not open, as the person reads it (manual/data.settings.md,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.
 inline Text unconnected_reason(const std::exception& e) {

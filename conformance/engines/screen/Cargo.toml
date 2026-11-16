@@ -1,5 +1,5 @@
 # The engine beside the screen every renderer is tested with
-# (conformance/screen-engines.json, DESIGN 5.12): plain WebAssembly with
+# (conformance/screen-engines.json, manual/code.engines.md): plain WebAssembly with
 # Clarity's engine interface and its frame loop, built with
 #   cargo build --release --target wasm32-unknown-unknown
 # and copied to conformance/engines/screen.wasm.

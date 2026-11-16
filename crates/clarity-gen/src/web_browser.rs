@@ -1,4 +1,4 @@
-//! The browser files of a generated web program (round B, DESIGN 7.9): every
+//! The browser files of a generated web program (round B, manual/start.how-it-works.md): every
 //! language's web server serves the same page, on which Clarity.UI's
 //! library, compiled once for the browser, draws the program's windows and
 //! asks the program on the server over the wire (`/clarity/invoke`).

@@ -1,4 +1,4 @@
-//! Reordering (DESIGN 5.30): `reorder by field` lets the person put the rows
+//! Reordering (manual/parts.data.md): `reorder by field` lets the person put the rows
 //! of a list, a table, a tree or a tree table in their own order, by dragging
 //! a row or with Alt and the arrow keys. The screen numbers the rows in the
 //! integer field and `on reorder` saves them. It is an option: without it the

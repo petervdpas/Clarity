@@ -1,4 +1,4 @@
-//! The Go command-line program (DESIGN 5.20): a module of its own in
+//! The Go command-line program (manual/code.commands.md): a module of its own in
 //! `out/cli`, on the runtime module without Clarity.UI, with the project's
 //! records, actions and commands, and a main that reads the command line
 //! and runs the command it names.
@@ -105,11 +105,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text("engines.go", super::engines_go(project, &[])));
     }
     files.push(text("main.go", main_go(project, settings, &databases, &servers)));
-    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats through cgo, only when used.
+    // The data formats of code (docs/ledger/formats.md): Clarity.Formats through cgo, only when used.
     if crate::carries_formats(project, settings) {
         files.push(text("formats.go", super::FORMATS_GO.to_string()));
     }
-    // Signing people in (docs/APP-CAPABILITIES-PLAN.md step 4): Clarity.Auth through cgo.
+    // Signing people in (docs/ledger/signin.md): Clarity.Auth through cgo.
     if crate::carries_auth(project) {
         files.push(text("auth.go", super::AUTH_GO.to_string()));
     }
@@ -164,11 +164,11 @@ pub(crate) fn command_parts(project: &Project) -> CommandParts {
                 .map(|f| format!("\tif data.Settings.{field} != \"\" {{\n\t\tlanguage := data.Settings.{field}\n\t\tclarity.SetLanguage(&language)\n\t}}\n", field = pascal(&f.name.name)))
                 .unwrap_or_default();
             (
-                "// CommandData is what every command has as data of its own: the settings (DESIGN 5.17).\ntype CommandData struct {\n\tSettings *Settings\n}\n",
+                "// CommandData is what every command has as data of its own: the settings (manual/data.settings.md).\ntype CommandData struct {\n\tSettings *Settings\n}\n",
                 if secret_names.is_empty() {
                     format!("\tsettings := clarity.CliKeptSettings(clarity.ReadSettings(program), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}")
                 } else {
-                    format!("\t// The secret settings are kept in the system's protected store (DESIGN 5.27).\n\tclarity.Secrets = secrets.System{{}}\n\tsettings := clarity.CliKeptSettings(clarity.ReadSettingsWith(program, {secrets_list}), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}")
+                    format!("\t// The secret settings are kept in the system's protected store (manual/data.settings.md).\n\tclarity.Secrets = secrets.System{{}}\n\tsettings := clarity.CliKeptSettings(clarity.ReadSettingsWith(program, {secrets_list}), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}")
                 },
                 if secret_names.is_empty() {
                     "\t// A command that changed a setting keeps it, as a window does.\n\tclarity.CliKeepSettings(program, before, *data.Settings)\n".to_string()
@@ -209,7 +209,7 @@ pub(crate) fn agents_file(project: &Project, settings: &Settings) -> String {
 fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)], servers: &[&Server]) -> String {
     let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new())];
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
-    // Secret settings (DESIGN 5.27): read and kept through the system's protected store.
+    // Secret settings (manual/data.settings.md): read and kept through the system's protected store.
     let secret_names = crate::secret_names(project);
     if !secret_names.is_empty() {
         imports.push((format!("{RUNTIME_MODULE}/secrets"), String::new()));
@@ -230,7 +230,7 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let CommandParts { listed, data, start, keep, dispatch } = command_parts(project);
-    // People sign in on the command line (docs/APP-CAPABILITIES-PLAN.md step 4):
+    // People sign in on the command line (docs/ledger/signin.md):
     // --user and --token are taken out first, and a command signs in before it runs.
     let signs_in = crate::signin::signin_plan(project).is_some_and(|p| p.targets.iter().any(|t| t == "cli"));
     let (flags, signs) = if signs_in {

@@ -1,5 +1,5 @@
 // Package shell answers the commands of a generated Go application's
-// screen: the web wire (DESIGN 7.3), the same on every stack. Clarity.UI's
+// screen: the web wire (manual/project.run-build.md), the same on every stack. Clarity.UI's
 // desktop asks them through package ui, and in a browser the web target's
 // page asks them over HTTP (serve.go); Program (program.go) answers both.
 package shell
@@ -63,11 +63,11 @@ type Options struct {
 	Db      *clarity.Db
 	Windows Windows
 	// Unconnected is what the screen shows when the databases did not open
-	// (DESIGN 5.27), with Db an empty one in memory until Connect opens them;
+	// (manual/data.settings.md), with Db an empty one in memory until Connect opens them;
 	// nil when they opened.
 	Unconnected *Unconnected
 	Connect     func() (*clarity.Db, error)
-	// Secrets are the names of the secret settings (DESIGN 5.27), kept in
+	// Secrets are the names of the secret settings (manual/data.settings.md), kept in
 	// the system's protected store, never in the settings file.
 	Secrets []string
 }
@@ -114,7 +114,7 @@ type Desktop interface {
 }
 
 // Screen is a desktop that runs a script on the screen of the window a
-// command came from: how a long call says how far it is (DESIGN 5.12).
+// command came from: how a long call says how far it is (manual/code.engines.md).
 type Screen interface {
 	Eval(ctx context.Context, js string)
 }
@@ -134,7 +134,7 @@ type Service struct {
 	logLine func(line string)
 	// toScreen is whether the title bar's close of the main window goes to
 	// the screen: while the databases are not open, closing it connects again
-	// (DESIGN 5.27). Not behind mu: a command that holds mu waits on the
+	// (manual/data.settings.md). Not behind mu: a command that holds mu waits on the
 	// desktop's thread, where the close arrives.
 	toScreen atomic.Bool
 }
@@ -238,12 +238,12 @@ func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.R
 	return c.options.Windows.Redraw(c.options.Db, reply)
 }
 
-// Page is one browser tab of a served program (DESIGN 7.9 B2): its
+// Page is one browser tab of a served program (manual/start.how-it-works.md B2): its
 // person's settings as the page keeps them and the language its
 // set_language chose. A command asked with one in its context runs in that
 // language, and a window it opens starts from those settings.
 //
-// Signing in (docs/APP-CAPABILITIES-PLAN.md, step 4): Session is the token
+// Signing in (docs/ledger/signin.md): Session is the token
 // of the request's clarity_session cookie and Address where it came from;
 // SetCookie is what the command sets of that cookie, for the server to send.
 type Page struct {
@@ -333,7 +333,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 
 // InvokeWatched runs a command as Invoke does, with watch as the watch of
 // every engine call its handler makes: how a desktop on Clarity.UI shows how
-// far a long call is and stops it (DESIGN 5.12).
+// far a long call is and stops it (manual/code.engines.md).
 func (c *Service) InvokeWatched(ctx context.Context, command string, args json.RawMessage, watch clarity.Watch) Answer {
 	var out Answer
 	clarity.Watching(watch, func() { out = c.Invoke(ctx, command, args) })
@@ -356,7 +356,7 @@ type Args struct {
 	Field    string              `json:"field"`
 	Store    string              `json:"store"`
 	Path     string              `json:"path"`
-	// Scope is where an edit is taken back (DESIGN 5.29): its form or panel,
+	// Scope is where an edit is taken back (manual/code.handlers.md): its form or panel,
 	// or the part itself; Ends says whether the edit ended (a drag goes on
 	// to its drop); Back whether Ctrl+Z takes it back or Ctrl+Y does it again.
 	Scope    string         `json:"scope"`
@@ -365,7 +365,7 @@ type Args struct {
 	Address  string         `json:"address"`
 	Line     string         `json:"line"`
 	Settings map[string]any `json:"settings"`
-	// The secret settings by name (DESIGN 5.27): kept in the system's protected store, never in the file.
+	// The secret settings by name (manual/data.settings.md): kept in the system's protected store, never in the file.
 	Secrets  []string        `json:"secrets"`
 	Name     string          `json:"name"`
 	Data     string          `json:"data"`
@@ -377,7 +377,7 @@ type Args struct {
 	Y        int             `json:"y"`
 	Shown    bool            `json:"shown"`
 	Value    json.RawMessage `json:"value"`
-	// A row moved (reorder_event, DESIGN 5.30): the list at List, numbered in
+	// A row moved (reorder_event, manual/parts.data.md): the list at List, numbered in
 	// By, a tree's parent field Parent (nil in a list), and the move.
 	List   string       `json:"list"`
 	By     string       `json:"by"`
@@ -406,12 +406,12 @@ type Args struct {
 	// Action is what the person did to a part's view (view_event): sort,
 	// page, open or close, with its field, page or row id.
 	Action map[string]json.RawMessage `json:"action"`
-	// Readonly is the part's readonly as the screen has it (DESIGN 1.7): the
+	// Readonly is the part's readonly as the screen has it (manual/start.how-it-works.md): the
 	// runtime takes back what the person changed. Editable are the fields a
 	// table's cells edit (edit_event, its list at Path); nil when not given.
 	Readonly bool     `json:"readonly"`
 	Editable []string `json:"editable"`
-	// A canvas's mode and its parameters (canvas_event, DESIGN 5.31), with
+	// A canvas's mode and its parameters (canvas_event, manual/parts.graphics.md), with
 	// List, Path, At (an object's x and y fields) and Action.
 	Mode  string  `json:"mode"`
 	Units *[2]int `json:"units"`
@@ -542,7 +542,7 @@ func (c *Service) watchedAnswer(ctx context.Context, command string, a Args) (an
 }
 
 // answer runs a command, holding mu. A window's reply is where its edits
-// start (DESIGN 5.29): what a handler changed is never the person's edit.
+// start (manual/code.handlers.md): what a handler changed is never the person's edit.
 func (c *Service) answer(ctx context.Context, command string, a Args) Answer {
 	// The chosen rows as the screen sent them: a handler may change the map itself.
 	sent := maps.Clone(a.State.Selected)
@@ -613,7 +613,7 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		c.toScreen.Store(false)
 		return Answer{}
 	case "read_settings":
-		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+		// The settings the person kept (manual/data.settings.md); the screen takes back those that still fit.
 		return Answer{Value: clarity.ReadSettingsWith(c.options.Name, c.secrets(a))}
 	case "keep_settings":
 		// The person's settings, as the screen has them now; its secrets go to the protected store.
@@ -648,7 +648,7 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 	case "start_app":
 		return answer(c.onEvent(clarity.NewWindowState("", nil), "start"))
 	case "dispatch_event":
-		// One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+		// One undo step (manual/code.handlers.md): the reply carries its id when the handler changed the database.
 		before := db.LastStep()
 		var reply clarity.Reply
 		err := db.Step(func() error {
@@ -661,7 +661,7 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		}
 		return answer(reply, err)
 	case "edit_event":
-		// The person ended an edit of a part (DESIGN 5.29): its handler runs as
+		// The person ended an edit of a part (manual/code.handlers.md): its handler runs as
 		// one database step, and the edit goes on the window's record with
 		// what it changed. A drag goes on until its drop.
 		if a.Readonly || !c.keptToEditable(a) {
@@ -679,7 +679,7 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		}
 		return answer(reply, nil)
 	case "reorder_event", "item_event", "range_event", "canvas_event":
-		// The person's action, which the runtime decides (DESIGN 1.7), then
+		// The person's action, which the runtime decides (manual/start.how-it-works.md), then
 		// ends as an edit does.
 		if a.Readonly {
 			return c.takenBack(a.State)
@@ -796,7 +796,7 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 	return Answer{Error: "there is no command " + command}
 }
 
-// edited ends a person's action as edit_event does (DESIGN 5.29): with a
+// edited ends a person's action as edit_event does (manual/code.handlers.md): with a
 // scope, the handler runs as one database step and the whole goes on the
 // window's edit record; without one, the handler runs as dispatch_event
 // does; without a handler, the window is drawn as it is.
@@ -814,7 +814,7 @@ func (c *Service) edited(state clarity.WindowState, part, scope, handler string)
 // reordered moves a row of the list at a.List (conformance/reorder.json):
 // the list in its new order, each row's number in a.By and, in a tree, its
 // parent, and the moved row chosen. False when the move changes nothing.
-// canvasChanged applies the person's action on a canvas (DESIGN 5.31).
+// canvasChanged applies the person's action on a canvas (manual/parts.graphics.md).
 func canvasChanged(a Args) (bool, bool, error) {
 	canvas := clarity.CanvasArgs{Part: a.Part, Mode: a.Mode, List: a.List, Path: a.Path, Units: a.Units, Grid: a.Grid, Snap: a.Snap}
 	if a.Mode == "objects" {
@@ -1069,7 +1069,7 @@ func (c *Service) findOptions(a Args) Answer {
 	return Answer{Error: "a dropdown finds its options by typed or search, not " + a.Kind}
 }
 
-// takenBack refuses what the person changed (DESIGN 1.7): the window's data
+// takenBack refuses what the person changed (manual/start.how-it-works.md): the window's data
 // as its edit baseline had it, no handler run, no edit recorded, and the
 // reply refused.
 func (c *Service) takenBack(state clarity.WindowState) Answer {

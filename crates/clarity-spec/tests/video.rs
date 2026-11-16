@@ -1,4 +1,4 @@
-//! The video part (docs/VIDEO-PLAN.md): a part of a window's grid that plays
+//! The video part (docs/ledger/video-camera.md): a part of a window's grid that plays
 //! a video, a file of the resources or one from disk, told by code as a
 //! sound is told, with what plays read back and `on end` and `on fail`.
 

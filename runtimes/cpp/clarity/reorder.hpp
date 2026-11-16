@@ -1,4 +1,4 @@
-// Reordering (DESIGN 5.30), decided by the runtime (conformance/reorder.json):
+// Reordering (manual/parts.data.md), decided by the runtime (conformance/reorder.json):
 // a row of a list, table, tree or tree table moved by a drag or by Alt and
 // an arrow key. The result is the list's new order, each row's parent (in a
 // tree) and each row's number at its level, which the part writes into the

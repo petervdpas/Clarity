@@ -1,4 +1,4 @@
-// Signing in on the command line (docs/APP-CAPABILITIES-PLAN.md, step 4):
+// Signing in on the command line (docs/ledger/signin.md):
 // when cli is among the signin block's targets, a command signs in before it
 // runs: account by itself when the computer's user has a record, --token
 // (or CLARITY_TOKEN) for token, --user name with the password read from the

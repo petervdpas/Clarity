@@ -90,12 +90,12 @@ typedef enum {
     /// A statement broke a reference between records; the database turns
     /// it into CLARITY_INVALID or CLARITY_IN_USE.
     CLARITY_REFERENCE,
-    /// An engine could not load, or failed while it ran (DESIGN 5.11).
+    /// An engine could not load, or failed while it ran (manual/code.engines.md).
     CLARITY_ENGINE,
     /// A value in code that does not fit where it is used: a position
     /// outside its list, a highest number below 1 (conformance/lists.json).
     CLARITY_VALUE,
-    /// A database connects with a secret setting (DESIGN 5.27) the person
+    /// A database connects with a secret setting (manual/data.settings.md) the person
     /// has not kept yet; its message reads as a storage error's.
     CLARITY_NOT_KEPT,
 } ClarityErrorKind;

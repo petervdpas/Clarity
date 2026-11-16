@@ -1,5 +1,5 @@
-//! A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md
-//! step 5): which entities carry a version, in which column, and the checks
+//! A save never overwrites someone else's change (docs/ledger/row-versions.md):
+//! which entities carry a version, in which column, and the checks
 //! of the entity lines that say so.
 //!
 //! - An entity of a database Clarity owns has `row_version` once its steps

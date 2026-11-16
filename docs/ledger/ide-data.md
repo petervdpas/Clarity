@@ -25,11 +25,11 @@ Progress: 75%
 - `app/src/lib/paging.test.ts`, stackTools.test.ts, fieldType.test.ts
 
 ## Open
-- A data browser (rows of a source, file sources, saves through the version check): NOT BUILT (FORMATS-PLAN.md:262, APP-CAPABILITIES-PLAN.md:229)
+- A data browser (rows of a source, file sources, saves through the version check): NOT BUILT (see [formats](formats.md), [row-versions](row-versions.md))
 - Testing a data source's connection from the Project tab: NOT BUILT (DESIGN 1.3, :131)
 - Import, live-table checks and baselines for server databases: NOT BUILT ("importing is for SQLite and files only for now", `crates/clarity-project/src/lib.rs:1480`)
-- "Back up before a migration" checkbox for `backups off`: NOT BUILT (BACKUP-PLAN.md:45); see [backups](backups.md)
-- For a server database the IDE has no backup (BACKUP-PLAN.md:39)
+- "Back up before a migration" checkbox for `backups off`: NOT BUILT; see [backups](backups.md)
+- For a server database the IDE has no backup (see [backups](backups.md))
 
 ## Conflicts
 - Port 8080 written twice: `crates/clarity-project/src/lib.rs:349` and `app/src/lib/ProjectSettings.svelte:416, 422` (equal today)
@@ -38,8 +38,8 @@ Progress: 75%
 - Project settings show the UI as a select (`StackFields.svelte:61-65`) while every backend offers only Clarity.UI; the plan says the settings keep it as text
 
 ## Decisions
-- 2026-11-05: backups are taken, listed, restored and deleted from the Database section of the Project tab, each confirmed through Clarity's own dialogs (BACKUP-PLAN.md step 1)
-- 2026-11-10: Project settings keeps showing the UI as text, so an older project still says what it uses (PROJECT-BROWSER-PLAN.md, Decided)
+- 2026-11-05: backups are taken, listed, restored and deleted from the Database section of the Project tab, each confirmed through Clarity's own dialogs (see [backups](backups.md))
+- 2026-11-10: Project settings keeps showing the UI as text, so an older project still says what it uses
 
 ## Was
 - FORMATS-PLAN.md step 4 (the mapping page, IDE half)

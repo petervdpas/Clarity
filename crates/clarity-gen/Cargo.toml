@@ -20,7 +20,7 @@ base64 = "0.22"
 sha2 = "0.10"
 tar = "0.4"
 flate2 = "1"
-# Cisco serves openh264 compressed with bzip2 (docs/VIDEO-PLAN.md); pure Rust.
+# Cisco serves openh264 compressed with bzip2 (docs/ledger/video-camera.md); pure Rust.
 bzip2 = "0.6"
 # The program file's icon on Windows, drawn from the project's picture at every size (windows_icon.rs).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }

@@ -171,7 +171,7 @@ order: TableOrder | null,
 /**
  * `reorder by position`: the person puts the rows of a list, table,
  * tree or tree table in their own order, numbered in this integer field
- * (DESIGN 5.30). Without it the rows stay where the data has them.
+ * (manual/parts.data.md). Without it the rows stay where the data has them.
  */
 reorder: string | null, 
 /**
@@ -180,7 +180,7 @@ reorder: string | null,
 reorderFrom: number | null, 
 /**
  * `mode objects types at x, y`, `mode paint`, `mode vector`: what the
- * person does on a canvas (DESIGN 5.31); none: its draw handler draws it.
+ * person does on a canvas (manual/parts.graphics.md); none: its draw handler draws it.
  */
 mode: CanvasMode | null, 
 /**
@@ -193,7 +193,7 @@ objects: CanvasObjects | null,
 tools: Array<string>, 
 /**
  * `toolbox popup` or `toolbox slideout`: a painting canvas's tools in a
- * toolbox (docs/IMAGE-PLAN.md) instead of the strip on the canvas.
+ * toolbox (docs/ledger/canvas-toolbox.md) instead of the strip on the canvas.
  */
 toolbox: ToolboxKind | null, 
 /**
@@ -246,7 +246,7 @@ by: string | null,
  */
 measure: ChartMeasure | null, 
 /**
- * A graph's edges (docs/GRAPH-PLAN.md): the list of records that join
+ * A graph's edges (docs/ledger/graph.md): the list of records that join
  * its nodes, the records of the list it binds.
  */
 edges: string | null, 
@@ -420,7 +420,7 @@ background: string | null,
 dotSize: number | null, dotColor: string | null, 
 /**
  * `runs Screen`: the engine beside the screen that draws the canvas
- * (DESIGN 5.12), in place of a draw handler.
+ * (manual/code.engines.md), in place of a draw handler.
  */
 runs: string | null, 
 /**
@@ -457,7 +457,7 @@ split: boolean,
  */
 labels: number | null, 
 /**
- * A sound's volume, 0 to 100: `volume 80`; 100 without it (DESIGN 5.22).
+ * A sound's volume, 0 to 100: `volume 80`; 100 without it (manual/design.sound.md).
  */
 volume: number | null, 
 /**
@@ -466,7 +466,7 @@ volume: number | null,
 repeat: boolean, 
 /**
  * How many values a trend keeps, or a chart of numbers shows: `points 60`
- * (DESIGN 5.26); a trend keeps 60 without it, a chart shows all.
+ * (manual/parts.time.md); a trend keeps 60 without it, a chart shows all.
  */
 points: number | null, 
 /**
@@ -488,7 +488,7 @@ style: string | null,
  */
 readonly: boolean, 
 /**
- * A part the person edits without an undo of its own (DESIGN 5.29):
+ * A part the person edits without an undo of its own (manual/code.handlers.md):
  * `no undo`. Every other one takes back its own edits with Ctrl+Z.
  */
 noUndo: boolean, 
@@ -530,7 +530,7 @@ cancel: boolean,
  */
 bottom: boolean, 
 /**
- * A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
+ * A custom part (manual/design.custom-parts.md): the name it is declared by, as in `Arena`.
  */
 part: string | null, 
 /**

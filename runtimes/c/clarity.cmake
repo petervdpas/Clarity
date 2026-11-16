@@ -66,7 +66,7 @@ macro(clarity_ui_folder)
   endif()
 endmacro()
 
-# The desktop (DESIGN 7.9): Clarity.UI's library draws the windows, takes
+# The desktop (manual/start.how-it-works.md): Clarity.UI's library draws the windows, takes
 # the person's input and runs the window; the program answers it. The
 # library comes from the folder CLARITY_UI names (by default the environment
 # variable of that name): its include/clarity_ui.h, and in lib/ the library
@@ -112,7 +112,7 @@ function(clarity_beside target)
   endif()
 endfunction()
 
-# Clarity.Audio (docs/AUDIO-PLAN.md) for a program whose sound parts play
+# Clarity.Audio (docs/ledger/audio.md) for a program whose sound parts play
 # songs: its library lies beside Clarity.UI's in the folder CLARITY_UI names
 # (include/clarity_audio.h and lib/). Linked to `target` and put beside it.
 function(clarity_use_audio target)
@@ -136,7 +136,7 @@ function(clarity_use_audio target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
-# Clarity.Formats (docs/FORMATS-PLAN.md) for a program whose code reads or
+# Clarity.Formats (docs/ledger/formats.md) for a program whose code reads or
 # writes a format, on any target: its library lies beside Clarity.UI's in
 # the folder CLARITY_UI names (include/clarity_formats.h and lib/), and the
 # runtime's formats/formats.c calls it, and formats/file_source.c reads a
@@ -201,7 +201,7 @@ function(clarity_use_agents target)
   endif()
 endfunction()
 
-# Clarity.Auth (docs/APP-CAPABILITIES-PLAN.md, step 4) for a program whose
+# Clarity.Auth (docs/ledger/signin.md) for a program whose
 # project signs people in, on any target: its library lies beside
 # Clarity.UI's in the folder CLARITY_UI names (include/clarity_auth.h and
 # lib/), and the runtime's auth/auth.c calls it. Linked to `target` and
@@ -234,7 +234,7 @@ function(clarity_use_auth target)
   endif()
 endfunction()
 
-# Clarity.Image (docs/IMAGE-PLAN.md) for a program whose code calls a
+# Clarity.Image (docs/ledger/picture-functions.md) for a program whose code calls a
 # picture function: its library lies beside Clarity.UI's in the folder
 # CLARITY_UI names (include/clarity_image.h and lib/), and the runtime's
 # pictures/pictures.c calls it. Linked to `target` and put beside it.
@@ -260,7 +260,7 @@ function(clarity_use_image target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_image> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
-# Clarity.Video (docs/VIDEO-PLAN.md) for a program with video parts: its
+# Clarity.Video (docs/ledger/video-camera.md) for a program with video parts: its
 # library and Cisco's openh264 lie beside Clarity.UI's in the folder CLARITY_UI
 # names. Linked to `target` and put beside it, openh264 too, so videos play
 # offline.
@@ -307,7 +307,7 @@ function(clarity_bytes out file)
   endif()
 endfunction()
 
-# The files a program carries (DESIGN 7.9), put into the program as C
+# The files a program carries (manual/start.how-it-works.md), put into the program as C
 # arrays in the order given, by their names: for Clarity.UI on the desktop
 # the windows and app frames as markup (WINDOWS, APPS: windows/Main.cxaml
 # is "Main"), the resolved themes (THEMES: themes/shop.light.json is
@@ -365,7 +365,7 @@ function(clarity_carry target)
   target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/carried.c)
 endfunction()
 
-# HTTP calls from code (DESIGN 5.23), through libcurl: only in a project
+# HTTP calls from code (manual/code.web-apis.md), through libcurl: only in a project
 # whose runtime copy has them, that is, one whose code calls out.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.c)
   find_package(CURL REQUIRED)
@@ -377,7 +377,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.c)
   endif()
 endif()
 
-# Secret settings (DESIGN 5.27) in the system's protected store: only in a
+# Secret settings (manual/data.settings.md) in the system's protected store: only in a
 # project whose runtime copy has them, that is, one with a secret setting.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.c)
   add_library(clarity_secrets STATIC ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.c)
@@ -397,7 +397,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.c)
   endif()
 endif()
 
-# Engines (DESIGN 5.11), hosted by wasm3: only in a project whose runtime
+# Engines (manual/code.engines.md), hosted by wasm3: only in a project whose runtime
 # copy has them, that is, one that declares an engine.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.c)
   file(GLOB WASM3_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/third_party/wasm3/*.c)
@@ -409,7 +409,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.c)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/engine/engine.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
   endif()
-  # Engines beside the screen (DESIGN 5.12): one instance per canvas, held by number.
+  # Engines beside the screen (manual/code.engines.md): one instance per canvas, held by number.
   if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/screen.c)
     target_sources(clarity_engine PRIVATE ${CMAKE_CURRENT_LIST_DIR}/engine/screen.c)
     find_package(Threads REQUIRED)

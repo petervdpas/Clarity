@@ -23,7 +23,7 @@ Progress: 80%
 ## Open
 - Ctrl means Cmd on macOS, in matching and in what is shown: NOT BUILT (DESIGN.md:1504; `runtimes/rust-ui/src/shortcuts.rs:135-138` matches Cmd only as Meta).
 - A view that brings its own ribbon tab and menu items: NOT BUILT (DESIGN.md:1502, 1506). A frame on a non-window page is an error (`crates/clarity-spec/src/check.rs:467`).
-- AltGr on a European layout not running commands: UNTRIED (WINDOWS-TESTS.md:51).
+- AltGr on a European layout not running commands: UNTRIED ([os-checks](os-checks.md)).
 
 ## Conflicts
 - The person's keys in C# have two writers: Clarity.UI keeps them through the program's settings (`runtimes/rust-ui/src/window/mod.rs:103-109`), and the C# program writes `keys` from `PersonKeys`, read once at start (`crates/clarity-gen/src/csharp/model.rs:287`, `runtimes/csharp/Clarity.Runtime/PersonKeys.cs:25`). A save after a key change may write the old keys back.
@@ -39,4 +39,4 @@ Progress: 80%
 ## Was
 - DESIGN 5.6 (Frame regions), 5.28
 - Roadmap: S3c, U1a (menu item keys)
-- WINDOWS-TESTS.md section 5; section 6
+- WINDOWS-TESTS.md (removed 2026-11-16) section 5; section 6 (Ctrl means Cmd, a view's own ribbon tab)

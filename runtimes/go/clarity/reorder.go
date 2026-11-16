@@ -1,6 +1,6 @@
 package clarity
 
-// Reordering (DESIGN 5.30), decided here in the runtime, not in the screen
+// Reordering (manual/parts.data.md), decided here in the runtime, not in the screen
 // (conformance/reorder.json): a row of a list, table, tree or tree table
 // moved by a drag or by Alt and an arrow key. The result is the list's new
 // order, each row's parent (in a tree) and each row's number at its level,

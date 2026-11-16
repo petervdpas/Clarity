@@ -1,5 +1,5 @@
 // What the screen sees of a long engine call and how the person stops it
-// (DESIGN 5.12, `uses progress`): the shell watches the handler it runs, and
+// (manual/code.engines.md, `uses progress`): the shell watches the handler it runs, and
 // every engine call the handler makes reports to that watch.
 
 namespace Clarity.Runtime;

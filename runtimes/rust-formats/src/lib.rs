@@ -1,4 +1,4 @@
-//! Clarity.Formats (docs/FORMATS-PLAN.md): the data formats of the
+//! Clarity.Formats (docs/ledger/formats.md): the data formats of the
 //! programs Clarity generates, one catalog and one implementation of every
 //! format, used by every stack. `read` parses what a program reads and fits
 //! it to what it wants (`fit`); `write` writes a value, given as the JSON

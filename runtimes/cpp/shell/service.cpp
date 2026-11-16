@@ -54,9 +54,9 @@ std::optional<std::string> number_text(const json& v) {
 
 std::optional<std::string> number_of(const json& args, const char* key) { return args.contains(key) ? number_text(args[key]) : std::nullopt; }
 
-/// A window's reply, which is where its edits start (DESIGN 5.29): what a
+/// A window's reply, which is where its edits start (manual/code.handlers.md): what a
 /// handler changed is never the person's edit. Its views show what its
-/// lists are now (DESIGN 1.7); `sent`, for a view_event, the chosen rows
+/// lists are now (manual/start.how-it-works.md); `sent`, for a view_event, the chosen rows
 /// the screen sent.
 json answered(Reply reply, const std::map<std::string, int>* sent = nullptr) {
     fill_views(reply.state, sent);
@@ -216,13 +216,13 @@ json Service::answer(const std::string& command, const json& args) {
             options_.unconnected.reset();
             return value(nullptr);
         }
-        // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+        // The settings the person kept (manual/data.settings.md); the screen takes back those that still fit.
         if (command == "read_settings") return value(read_settings_with(options_.name, args.value("secrets", options_.secrets)));
         // The person's settings, as the screen has them now.
         if (command == "keep_settings") {
             const auto& settings = args.contains("settings") ? args["settings"] : json(nullptr);
             if (!settings.is_object()) throw InvalidError("keep_settings takes the settings as an object");
-            // Its secret settings go to the system's protected store, never the file (DESIGN 5.27).
+            // Its secret settings go to the system's protected store, never the file (manual/data.settings.md).
             keep_settings_with(options_.name, settings, args.value("secrets", options_.secrets));
             return value(nullptr);
         }
@@ -236,15 +236,15 @@ json Service::answer(const std::string& command, const json& args) {
         }
         if (command == "return_to") return answered(on_event(state, "return"));
         if (command == "start_app") return answered(on_event(WindowState{}, "start"));
-        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        // One undo step (manual/code.handlers.md): the reply carries its id when the handler changed the database.
         if (command == "dispatch_event") return answered(stepped(state, text_of(args, "handler")));
-        // A readonly part changes nothing (DESIGN 1.7), and a table's edit keeps
+        // A readonly part changes nothing (manual/start.how-it-works.md), and a table's edit keeps
         // to its editable fields: what the screen changed is taken back.
         static const std::set<std::string> edits{"edit_event", "reorder_event", "item_event", "range_event", "canvas_event"};
         if (edits.contains(command) && args.contains("readonly") && args["readonly"] == json(true)) return answered(taken_back(state));
         if (command == "edit_event" && !kept_to_editable(state, args)) return answered(taken_back(state));
         if (command == "edit_event") {
-            // The person ended an edit of a part (DESIGN 5.29): its handler runs as
+            // The person ended an edit of a part (manual/code.handlers.md): its handler runs as
             // one database step, and the edit goes on the window's record with
             // what it changed. A drag goes on until its drop.
             std::string handler = text_of(args, "handler");
@@ -255,13 +255,13 @@ json Service::answer(const std::string& command, const json& args) {
             else bus->drag(text_of(args, "part"), text_of(args, "scope"), steps);
             return answered(reply);
         }
-        // The person's actions the runtime decides (DESIGN 1.7): it changes the
+        // The person's actions the runtime decides (manual/start.how-it-works.md): it changes the
         // window's data, and the change ends as an edit does.
         std::string part = text_of(args, "part");
         std::string scope = text_of(args, "scope");
         std::string handler = text_of(args, "handler");
         if (command == "reorder_event") {
-            // A row moved (DESIGN 5.30): the list's new order, each row's number
+            // A row moved (manual/parts.data.md): the list's new order, each row's number
             // in `by` and, in a tree, its parent; the moved row is chosen.
             std::string list = text_of(args, "list"), by = text_of(args, "by"), parent = text_of(args, "parent");
             json rows = value_at(state.data, list);
@@ -326,7 +326,7 @@ json Service::answer(const std::string& command, const json& args) {
             return answered(edited(changed, part, scope, handler));
         }
         if (command == "canvas_event") {
-            // A canvas's action (DESIGN 5.31): an object moved, a stroke painted or
+            // A canvas's action (manual/parts.graphics.md): an object moved, a stroke painted or
             // a shape drawn, snapped to the grid, with what it touched chosen.
             // Refused or the same: the window as it is, running nothing.
             WindowState changed = state;
@@ -338,7 +338,7 @@ json Service::answer(const std::string& command, const json& args) {
             return answered(edited(changed, part, scope, handler));
         }
         if (command == "step_event") {
-            // Next, Back or Finish on a wizard (DESIGN 5.15): Next runs on next on
+            // Next, Back or Finish on a wizard (manual/parts.containers.md): Next runs on next on
             // the step shown and moves on, unless it refused or set the step itself.
             std::string button = text_of(args, "button");
             int64_t count = args.value("steps", int64_t(1));
@@ -362,7 +362,7 @@ json Service::answer(const std::string& command, const json& args) {
             return answered(reply);
         }
         if (command == "view_event") {
-            // The person sorted, turned a page or opened a tree row (DESIGN 1.7):
+            // The person sorted, turned a page or opened a tree row (manual/start.how-it-works.md):
             // the part's view changes and the window is answered. Never an edit.
             WindowState changed = state;
             view_action(changed, part, args.value("action", json::object()));

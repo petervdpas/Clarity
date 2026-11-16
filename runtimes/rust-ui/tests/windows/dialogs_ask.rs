@@ -1,4 +1,4 @@
-//! A question a handler asks (DESIGN 5.14), as the C# tests have it
+//! A question a handler asks (manual/code.statements.md), as the C# tests have it
 //! (AskDialogTests, AskParityTests, AskSizeTests and CheckFixWindowTests'
 //! yes or no question): asked once the handler has finished, in Clarity's
 //! own dialog over the window; the input its form needs, OK and Cancel; the

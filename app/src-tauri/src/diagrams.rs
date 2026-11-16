@@ -1,4 +1,4 @@
-//! Diagrams in the project tree (DESIGN 5.13): the Data model view written
+//! Diagrams in the project tree (manual/data.diagrams.md): the Data model view written
 //! from the dictionary, and the `.mermaid` files of the `diagrams` folder,
 //! which are design and no generated application carries. A written
 //! diagram proposes edits; Apply makes the ticked ones as one undo step,

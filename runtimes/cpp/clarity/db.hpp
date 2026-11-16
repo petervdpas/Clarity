@@ -217,7 +217,7 @@ public:
         }
     }
 
-    /// Runs a handler as one step, which undo takes back whole (DESIGN 5.29):
+    /// Runs a handler as one step, which undo takes back whole (manual/code.handlers.md):
     /// its id, when it changed anything, is last_step. Everything it changes
     /// is one transaction in each source it changes: kept when it ends, left
     /// whole when it fails, so it leaves nothing behind. A step inside a step

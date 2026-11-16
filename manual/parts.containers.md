@@ -187,7 +187,7 @@ The checker refuses fewer than two steps: `steps need at least two 'step' blocks
 
 ### `popover`
 
-Parts on their own grid, outside the window's grid, opened next to the part its `for` names. It has no place, only a size (`span` and `rows`). It is closed until a click opens it (`opens="filters"` on a button or a menu item) or code sets `filters.visible = true`; a click outside it or Escape closes it. In the designer it waits in the tray under the canvas and shows while it is picked.
+Parts on their own grid, outside the window's grid, opened next to the part its `for` names. It has no place, only a size (`span` and `rows`). It is closed until a click opens it (`opens="filters"` on a button or a menu item) or code sets `filters.visible = true`; a click outside it or Escape closes it. In the designer it waits in the tray under the canvas and shows while it is picked. Each named popover is also listed under **Views** in the Elements tree, marked **popover** with its window: picked there, or double-clicked, it is designed on a canvas of its own, as big as it opens, as a slide-out is.
 
 - `for` (a part name): the part it opens next to, any part of the window; **Next to** in the properties.
 
@@ -202,7 +202,7 @@ The checker refuses a popover without `for` (`a popover opens next to a part: wr
 
 ### `slideout`
 
-Parts on their own grid that slide in over the window from its right, left, top or bottom edge, as an IDE's side and bottom panels do. It has no place in the window's grid: in the designer it waits in the tray under the canvas, marked hidden, and shows on the window while it is picked. Each named slide-out is also listed under **Views** in the Elements tree, marked **slideout** with its window or view: picked there, it is designed on a canvas of its own, its parts as a window as wide as it slides out, each picked and set in Properties and kept in its window's file; the button with the window's name in its title bar goes back to the whole window.
+Parts on their own grid that slide in over the window from its right, left, top or bottom edge, as an IDE's side and bottom panels do. It has no place in the window's grid: in the designer it waits in the tray under the canvas, marked hidden, and shows on the window while it is picked. Each named slide-out is also listed under **Views** in the Elements tree, marked **slideout** with its window or view: picked there, or double-clicked on the canvas or in the tray, it is designed on a canvas of its own, its parts as a window as wide as it slides out, each picked and set in Properties and kept in its window's file; the button with the window's name in its title bar goes back to the whole window.
 
 At the right (or the left) it is as high as the window's content, below the menu bar, toolbar and ribbon and above the footer, with a shadow, and what is under it stays where it is. At the top or bottom it slides down from the top of the content or up from its bottom, as wide as the content. `span` and `rows` give its own grid; its rows are no more than the window holds under its bars, and an edit that makes it taller cuts it to fit (see [Windows](design.windows.md#size)). Its rows take no room in the window, so it never makes the window scroll.
 

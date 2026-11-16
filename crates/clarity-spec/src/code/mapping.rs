@@ -1,4 +1,4 @@
-//! Mappings (docs/FORMATS-PLAN.md, step 4): how one kind of file is laid
+//! Mappings (docs/ledger/formats.md): how one kind of file is laid
 //! over an entity, per case. The checker holds a mapping to its entity and to
 //! the catalog's entry for its format; nothing here is particular to a format.
 

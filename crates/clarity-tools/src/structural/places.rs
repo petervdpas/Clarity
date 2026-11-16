@@ -56,7 +56,7 @@ pub fn entity_names(project: &clarity_spec::Project) -> Vec<&str> {
     model_entities(project).map(|(_, e)| e.name.name.as_str()).collect()
 }
 
-/// The names of the project's records (DESIGN 5.12).
+/// The names of the project's records (manual/code.engines.md).
 pub fn record_names(project: &clarity_spec::Project) -> Vec<&str> {
     project.files.iter().flat_map(|f| f.records.iter().map(|r| r.name.name.as_str())).collect()
 }
@@ -306,7 +306,7 @@ pub fn module_for_page(dir: &std::path::Path, module: Option<&str>) -> Result<st
     }
 }
 
-/// The custom part declared as `name` (DESIGN 5.19): its module's file and where it starts.
+/// The custom part declared as `name` (manual/design.custom-parts.md): its module's file and where it starts.
 pub fn part_decl(dir: &std::path::Path, name: &str) -> Result<(std::path::PathBuf, u32), String> {
     let project = model_project(dir)?;
     let found = project.files.iter().find_map(|f| f.parts.iter().find(|d| d.name.name == name).map(|d| (std::path::PathBuf::from(&f.path), d.span.start)));

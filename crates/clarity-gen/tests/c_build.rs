@@ -231,7 +231,7 @@ fn board_runs_in_c(interpreted: bool) {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// A window that asks each kind of question (DESIGN 5.14) builds without a
+/// A window that asks each kind of question (manual/code.statements.md) builds without a
 /// warning in its own code.
 #[test]
 #[ignore]
@@ -251,7 +251,7 @@ fn questions_and_their_answers_build_in_c() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// Records in app code and a tree by key (DESIGN 5.12) build without a
+/// Records in app code and a tree by key (manual/code.engines.md) build without a
 /// warning in their own code.
 #[test]
 #[ignore]
@@ -271,7 +271,7 @@ fn an_outline_of_records_builds_in_c() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The web target (DESIGN 7.3, round B): a project whose only target is the
+/// The web target (manual/project.run-build.md, round B): a project whose only target is the
 /// web builds into a web server that serves Clarity.UI's page and browser
 /// files, the program's files.json, and answers the library's commands.
 #[test]

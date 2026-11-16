@@ -16,18 +16,24 @@ Progress: 0%
 - none (planned: conformance/network.json run by every stack; two real nodes in one test, no mocks)
 
 ## Open
-The goal: recreate the reference app (one collection per peer, grants, rows that carry who may read and write them, chat, a meeting point) as an example written in Clarity. Each step adds a generic piece that example needs.
-- Step 1, node and identity: a `network` declaration on the app; a persistent Ed25519 key in the app's data folder; the peer id readable in code. A corrupt key stops the app; a new key is never made without the person knowing: NOT BUILT.
-- Step 2, discovery and presence: mDNS (a tag the app names), dialling an address, `on peer found` / `on peer lost`; presence announced on a timer and again when someone joins, and leaving is announced: NOT BUILT.
-- Step 3, topics: broadcast messages typed from the app's entities, `on <topic> message`: NOT BUILT.
-- Step 4, protocols: requests with replies, a verb and a path routed to a handler; paging by cursor; error codes; size limits checked before anything is allocated; "busy" as an answer. The handler is given the caller's proven peer id, never one from the message body: NOT BUILT.
-- Step 5, blobs: files and pictures sent in ranges over their own protocol, so a large one cannot block a small request: NOT BUILT.
-- Step 6, outside the LAN: a rendezvous meeting point (register under a namespace, look up a namespace; a roster that is a blocklist when public and an allowlist when invite-only), circuit relay v2 and hole punching: NOT BUILT.
-- Step 7, signing: sign and verify with the node's key in code, for key handover from an old key to a new one: NOT BUILT.
-- Step 8, a peers part in Clarity.UI (a live list), network settings in the designer, the checker's rules, a manual topic, translations: NOT BUILT.
-- Step 9, the example app built from steps 1-8, on its own stack, joining `EXAMPLES` once it checks clean and builds: NOT BUILT.
+- Steps 1-9 (Design, "Steps"): NOT BUILT.
+- Open questions (Design, "Open questions"): needs decision.
 
-Open questions (my reading, to confirm):
+## Design
+The goal: recreate the reference app (one collection per peer, grants, rows that carry who may read and write them, chat, a meeting point) as an example written in Clarity. Each step adds a generic piece that example needs. The core is one Rust crate with a C interface, as the other shared libraries are ([modularity](modularity.md)).
+
+Steps
+- Step 1, node and identity: a `network` declaration on the app; a persistent Ed25519 key in the app's data folder; the peer id readable in code. A corrupt key stops the app; a new key is never made without the person knowing.
+- Step 2, discovery and presence: mDNS (a tag the app names), dialling an address, `on peer found` / `on peer lost`; presence announced on a timer and again when someone joins, and leaving is announced.
+- Step 3, topics: broadcast messages typed from the app's entities, `on <topic> message`.
+- Step 4, protocols: requests with replies, a verb and a path routed to a handler; paging by cursor; error codes; size limits checked before anything is allocated; "busy" as an answer. The handler is given the caller's proven peer id, never one from the message body.
+- Step 5, blobs: files and pictures sent in ranges over their own protocol, so a large one cannot block a small request.
+- Step 6, outside the LAN: a rendezvous meeting point (register under a namespace, look up a namespace; a roster that is a blocklist when public and an allowlist when invite-only), circuit relay v2 and hole punching.
+- Step 7, signing: sign and verify with the node's key in code, for key handover from an old key to a new one.
+- Step 8, a peers part in Clarity.UI (a live list), network settings in the designer, the checker's rules, a manual topic, translations.
+- Step 9, the example app built from steps 1-8, on its own stack, joining `EXAMPLES` once it checks clean and builds.
+
+Open questions (my reading, to confirm)
 - Does "recreate" cover only the network and the shared data (collection, grants, row flags, chat, meeting point), or also the reference app's form templates, plugins and sites?
 - Which stack the example is written for.
 - Messages to a peer that is not there: an outbox kept by the runtime (replayed in order when the peer appears) as an option on a protocol, or written by the app in Clarity code?
@@ -36,7 +42,7 @@ Open questions (my reading, to confirm):
 - The crates (rust-libp2p and what it pulls in), asked for first; vendored for offline builds ([offline](offline.md)).
 
 ## Conflicts
-- none
+- The word network already names the graph example, `examples/network` ("Graphs of records, to try the graph part out"; see [graph](graph.md)). Step 9's example needs another name, or the graph example does (needs decision).
 
 ## Decisions
 - 2026-11-13, user: "What I want is a generic network (including distributed) component in Clarity, for that apps it might create."

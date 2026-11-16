@@ -1,4 +1,4 @@
-//! HTTP calls (DESIGN 5.23) in a built program on every stack: the command
+//! HTTP calls (manual/code.web-apis.md) in a built program on every stack: the command
 //! line program of tests/fixtures/calls.clarity calls a small server of the
 //! test's own, with each method and a header, and prints what came back.
 //! Slow (each stack's build), so it runs only when asked:
@@ -20,9 +20,9 @@ fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
     let sources = [
         clarity_spec::SourceRef::sql("main"),
         clarity_spec::SourceRef::web("shop").at(server, Some(("bearer", "env:CALLS_TOKEN"))),
-        // Signed with a secret setting, from the system's protected store (DESIGN 5.27).
+        // Signed with a secret setting, from the system's protected store (manual/data.settings.md).
         clarity_spec::SourceRef::web("vault").at(server, Some(("bearer", "setting:apiToken"))),
-        // Hands out its lists two at a time (DESIGN 5.23, paging).
+        // Hands out its lists two at a time (manual/code.web-apis.md, paging).
         clarity_spec::SourceRef {
             paging: Some(clarity_spec::Paging {
                 kind: clarity_spec::PagingKind::Page,
@@ -145,7 +145,7 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert_eq!(printed(program, dir, &["numbers"]), "[1,2,3,4,5]");
     let refused = printed(program, dir, &["fetch", "http://127.0.0.1:1/"]);
     assert!(refused.starts_with("0 no cannot reach 127.0.0.1: "), "{refused}");
-    // JSON through Clarity.Formats (docs/FORMATS-PLAN.md): a service's list read into
+    // JSON through Clarity.Formats (docs/ledger/formats.md): a service's list read into
     // records, a record sent as JSON, the same bytes on every stack.
     assert_eq!(printed(program, dir, &["orders", &format!("{server}/orders")]), "A-1 19.99 3 yes Person 2026-10-25 2\nA-2 5 0 no Business  0");
     assert_eq!(
@@ -155,8 +155,8 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     let broken = Command::new(program).args(["broken", &format!("{server}/missing")]).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).output().unwrap();
     assert!(!broken.status.success());
     assert!(String::from_utf8_lossy(&broken.stderr).contains("the text is no JSON"), "{}", String::from_utf8_lossy(&broken.stderr));
-    // A web API data source (DESIGN 5.23): its entities read from its paths, its query encoded, its calls signed.
-    // A secret setting (DESIGN 5.27): kept in the system's protected store, never in the
+    // A web API data source (manual/code.web-apis.md): its entities read from its paths, its query encoded, its calls signed.
+    // A secret setting (manual/data.settings.md): kept in the system's protected store, never in the
     // settings file, and signing the calls of the web API that names it. Needs a store,
     // such as a desktop session's Secret Service; CLARITY_SECRET_STORE=1 says there is one.
     if std::env::var("CLARITY_SECRET_STORE").as_deref() == Ok("1") {

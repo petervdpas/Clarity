@@ -1,4 +1,4 @@
-//! A program driven without a window (DESIGN 1.6, "Used as a person uses
+//! A program driven without a window (manual/start.how-it-works.md, "Used as a person uses
 //! it"): the generated program's own `Program` and files on a screen drawn
 //! on Skia's raster surface, in the program's own process, with no display.
 //! A test sends what a person does (a click, keys, typed text, a drag) and
@@ -29,7 +29,7 @@
 //! - `dark`: the system shows dark when `dark` is true.
 //! - `file`: the next file or folder a picker asks for is `path`.
 //! - `read`: what shows (below).
-//! - `access`: the accessibility tree as screen readers get it (DESIGN 7.9,
+//! - `access`: the accessibility tree as screen readers get it (manual/start.how-it-works.md,
 //!   A1), as `access`: `root`, `focus` and `nodes`, each with its `id`,
 //!   `role`, `name`, `value`, `description`, `states`, place `at`,
 //!   `actions` and `children`.

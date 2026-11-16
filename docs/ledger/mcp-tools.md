@@ -1,33 +1,44 @@
 # Shared tools and the MCP server
 
-Status: partial. One set of design-and-generate tools for every agent (the IDE's, Codex and Copilot over ACP, any MCP client through `clarity mcp`); the questionnaire is not built.
+Status: partial. One set of design-and-generate tools for every agent (Clarity's own agent, the outside agents Codex and Copilot over ACP, any MCP client through `clarity mcp`); the questionnaire is not built.
 
 Progress: 70%
 
 ## Code
 - Spec: structural edits shared with the designer (`clarity_spec::edit`); field renames `crates/clarity-spec/src/field_rename.rs`; window and view renames `page_rename.rs` (`rename` kinds window and view, `crates/clarity-tools/src/lib.rs:341-348`); every edit fitted, parts cut to what holds them (`fit.rs`, called from `crates/clarity-tools/src/edits.rs:166-177`)
 - Tools: `crates/clarity-tools/src/lib.rs` (64 tools, none builds, runs or touches a database; general tools :818-941; `write_file` refuses `.cxaml`, declaration-written files and `agent/guidance.md` :500-514; `manual` reads the manual's pages, the only documentation agents read; the `design` and `reference` tools went with DESIGN.md and LANGUAGE.md on 2026-11-13), `structural/model.rs`, `structural/windows.rs`, `structural/frame.rs`, `structural/guidance.rs` (`guidance`, `set_guidance`; see [app-mcp](app-mcp.md)), `structural/places.rs` (names to places), `edits.rs` (one edit path with the designer), `steps.rs` (automatic migration steps, folded while the local SQLite has applied fewer), `manual.rs`, `diagrams.rs`, `generate.rs`, `turn.rs`
-- MCP server: `crates/clarity-mcp/src/lib.rs` on `rmcp` over stdio (`LEFT_OUT` :27, `WITHOUT_PROJECT` :31, `WHEN_OFF` :35, `for_turn` :101, call log without file contents :125-131)
-- CLI: `clarity mcp [--turn <file>]` (`crates/clarity-cli/src/main.rs:320`); the open project from `ide.json` (`crates/clarity-project/src/ide.rs`)
-- Repo setup: `.mcp.json` names `./mcp.sh`, which builds `clarity-cli` when behind and runs `clarity mcp` (README.md:125)
+- MCP server: `crates/clarity-mcp/src/lib.rs` on `rmcp` over stdio (`LEFT_OUT` :52, `WITHOUT_PROJECT` :56, `WHEN_OFF` :60, `for_turn` :144, call log without file contents :191-201)
+- CLI: `clarity mcp [--turn <file>]` (`crates/clarity-cli/src/main.rs:121`, :339); the open project from `ide.json` (`crates/clarity-project/src/ide.rs`)
+- Repo setup: `.mcp.json` names `./mcp.sh` as `clarity-cdev` (everything the repository builds, the DevTools tools too), beside the installed Clarity's `clarity` (user scope); it builds `clarity-cli` when behind and runs `clarity mcp`. Two names since 2026-11-16: one shared name let hidden settings decide which ran (user: "isnt it better to make two... clarity and clarity-cdev?"); the debug build also names itself `clarity-cdev` in its server info and instructions (`ClarityServer::name`, `devtools::NAME`), a chat turn and the release stay `clarity` (test `the_developers_build_names_itself_clarity_cdev`)
+- The repo build (clarity-cdev) also has the DevTools tools `build_piece`, `release_state`, `disk_state`, `remove_folder` and `write_release_plan` (`crates/clarity-mcp/src/devtools.rs:20-28`, compiled only with `debug_assertions`, `lib.rs:24-30`): the one exception to design and generate only, never in the installed `clarity`; see [devtools](devtools.md)
 - Claude Code hook: `~/.claude/hooks/clarity-tools-only.sh`, user-level, outside the repository; denies Write/Edit/MultiEdit on `.clarity` and `.cxaml` outside the Clarity repo
 - IDE: `app/src-tauri/src/agent.rs` keeps only build, backups, show window, show diagram
 - Docs: manual/ai.mcp.md, manual/ai.agent.md
 
 ## Tests
-- `crates/clarity-tools/src/lib.rs:1462` (`the_shared_tools_design_and_generate_only`); unit tests in `structural/model.rs`, `windows.rs`, `frame.rs`, `steps.rs`
+- `crates/clarity-tools/src/lib.rs:1463` (`the_shared_tools_design_and_generate_only`); unit tests in `structural/model.rs`, `windows.rs`, `frame.rs`, `steps.rs`
 - `crates/clarity-tools/tests/turn.rs`, `crates/clarity-mcp/tests/server.rs`, `crates/clarity-cli/tests/mcp.rs`
 - conformance: none
 
 ## Open
-- Questionnaire (MCP-PLAN step 7): NOT BUILT. A tool the agent calls for a new app; a separate form program on Clarity.UI started by `clarity mcp`; answers into README.md under fixed headings; same form in the IDE agent; texts from translations.
-- Forms to clarify with decision trees: NOT BUILT. Simple questions as the protocol's own form (MCP elicitation, ACP's equivalent); rich form in Clarity's own centered pop-up when Clarity runs.
-- Who writes the decision trees (Clarity per kind of question, or the agent per case): needs decision.
-- Whether clarify-form answers are kept in the project or only go back to the agent: needs decision.
-- Where the questionnaire falls beside clarity-pdf ([reports-pdf](reports-pdf.md)): the user's choice.
-- Tool schemas listing existing entities, windows and parts as choices: PARTIAL. Only fixed lists are enums.
+- The questionnaire: NOT BUILT; see Design.
+- Tool schemas listing the project's own entities, windows and parts as choices: PARTIAL, only fixed lists are enums; see Design.
 - `diagram_view` gives the class view too: PARTIAL; see [diagrams](diagrams.md).
 - The Claude Code hook: PARTIAL. Nothing in the repository installs or documents it; a shell write still slips past it.
+
+## Design
+The questionnaire. User: "a questionaire to tell the ai what components to use and a first explaining what the app should do?!", "agent asks the question to get its optimized prompt and it also saved in project. So a form pops up when a user asks to make him a new app."
+- When the person asks an agent for a new app, the agent calls the questionnaire tool before it designs anything.
+- The form asks first what the app should do, then which components to use. Components are everything Clarity offers (parts, custom parts, data sources, engines, devices, sound, video, pictures), read from Clarity's own catalog, so the form grows with Clarity.
+- The form is Clarity's own window ("mcp opens clarity own window"): `clarity mcp` starts a separate form program on Clarity.UI and waits for its answers, so the CLI links no UI library. The IDE's agent shows the same form. Defined once in Clarity, its texts from translations.
+- The tool turns the answers into the prompt it gives back to the agent, and saves them in the project's README.md under fixed headings, which `project_overview` reads.
+- Only for new apps. A later change of goal is an edit of README.md (or an extra document) like any other file.
+- The questionnaire also clarifies other things, with decision trees. User: "I want to offer forms (from the chat inside clarity or the mpc client (claude terminal)) to clarify things and fill out decision tree(s)". Any agent calls it when it needs to clarify something; a decision tree picks the next question from the answers so far.
+- Where it shows: both. A simple question goes as the protocol's own form (MCP elicitation, ACP's equivalent), drawn by the client: flat fields (text, number, yes or no, a choice), one form per step of a tree, reaching a client without Clarity. When Clarity runs, the rich form opens in Clarity's own window as a centered pop-up over the IDE, like Clarity's dialogs, one step of a tree at a time, with the catalog and pictures. User: "follows standards and within clarity it can be front-runner by using centered popup screens/forms".
+- The guidance wizard of [app-mcp](app-mcp.md) (step 5) is built on the same form.
+- Open questions: who writes the decision trees (Clarity per kind of question: a new app, a new window, data; or the agent per case); whether the answers of a clarifying form are kept in the project or only go back to the agent; where the questionnaire falls beside [reports-pdf](reports-pdf.md) in the order of work (the user's choice).
+
+Tool schemas that list the project's names. Each structural tool's schema lists what exists as an enum (the entities, windows and parts of the open project, besides the fixed part kinds and field types), so a small model picks a name instead of typing one. A name outside the list is refused with the names there are, never a guess.
 
 ## Conflicts
 - The plain types window data can hold are written twice: `PLAIN_DATA_TYPES` in `crates/clarity-tools/src/structural/windows.rs` and `PLAIN_TYPES` in `runtimes/web/src/screen/windowData.ts`; equal today.
@@ -57,10 +68,10 @@ Progress: 70%
 - 2026-11-13: a view's tells BUILT in the designer (`app/src/lib/PageTells.svelte`, `ViewLineTells.svelte` in `PageProperties.svelte`; test `app/src/lib/viewTells.test.ts`); see [by-hand](by-hand.md).
 - 2026-11-14: the server tells Clarity's icon in its info (`icons`: the 128x128 PNG and the SVG of `app/src-tauri/icons`, embedded as data URIs; `crates/clarity-mcp/src/lib.rs` `icons`; test `the_server_tells_clarity_s_icon` in `crates/clarity-mcp/tests/server.rs`), so a client such as VS Code shows it. User: "can a mcp server get an icon?", "yes, add it after the release".
 - 2026-11-14: four tool fixes found reworking the maintenance example, each with a test: `add_enum` leaves no key of its starting value (`structural/model.rs` `without_key`); renaming an entity renames it where code names it as a type (`clarity-spec/src/rename.rs` `type_uses`, test `renames_an_entity_where_code_names_it_as_a_type`); an edit is refused only for an error in a file it writes, what it leaves elsewhere is made and reported (`edits.rs`, test `a_removal_that_leaves_code_behind_is_made_and_reported`); a step Clarity wrote with `migrate` under a title folds while no database ran it (`steps.rs` `written_by_clarity`, test `a_titled_step_takes_the_next_change_while_no_database_ran_it`). User: "fix 'em felix".
+- 2026-11-14: a value of an enum is renamed everywhere it is named (`crates/clarity-spec/src/value_rename.rs`): its declaration, the defaults of fields, settings and command options, code typed as the value (bare or `Enum.Value`), a window's data default and a value a part's event gives a handler. The rename tool takes `kind: value`, `change_enum_value` with a new name is the same rename, and the IDE's enum editor renames through `rename_value`. The step says `rename value Enum.Old to New` and gives every stored record the new name, in a column of the enum and inside a list of its values (`crates/clarity-gen/src/schema.rs`, `crates/clarity-gen/tests/value_renames.rs`); the IDE keeps its value renames for the next step (`app/src-tauri/src/migrations.rs`).
 
 ## Was
 - DESIGN 17.3, roadmap A1, M8 (MCP half)
-- MCP-PLAN.md steps 1-7, "The questionnaire", "Forms to clarify, with decision trees", "Decided at their step"
-- AGENT-TOOLS-PLAN.md step 1, "Decided"
+- MCP-PLAN.md: Goal, Decisions, Tools in the first version, Order of work steps 1-6, "Decided at their step" (built); step 7, "The questionnaire", "Forms to clarify, with decision trees" (now Design)
+- AGENT-TOOLS-PLAN.md: step 1, "How it is checked", "Decided" (built); step 1's schemas listing existing names (now Design)
 - memory: mcp-plan.md, agent-tools-plan.md, all-ai-use-tools.md
-- 2026-11-14: a value of an enum is renamed everywhere it is named (`crates/clarity-spec/src/value_rename.rs`): its declaration, the defaults of fields, settings and command options, code typed as the value (bare or `Enum.Value`), a window's data default and a value a part's event gives a handler. The rename tool takes `kind: value`, `change_enum_value` with a new name is the same rename, and the IDE's enum editor renames through `rename_value`. The step says `rename value Enum.Old to New` and gives every stored record the new name, in a column of the enum and inside a list of its values (`crates/clarity-gen/src/schema.rs`, `crates/clarity-gen/tests/value_renames.rs`); the IDE keeps its value renames for the next step (`app/src-tauri/src/migrations.rs`).

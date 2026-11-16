@@ -1,4 +1,4 @@
-//! Custom parts (DESIGN 5.19, 7.9), as the C# CustomPartTests check them: a
+//! Custom parts (manual/design.custom-parts.md, manual/start.how-it-works.md), as the C# CustomPartTests check them: a
 //! part a crate of the program brings, found by its declared name, drawn in
 //! its place. Values come in (what it binds, its properties, enabled), code's
 //! hears come in, the person's change goes out and runs `on change`, and its

@@ -1,4 +1,4 @@
-//! The link (DESIGN 7.9, conformance/small-parts.json): underlined text in
+//! The link (manual/start.how-it-works.md, conformance/small-parts.json): underlined text in
 //! the accent color. It opens its address (`to`), or the address its bound
 //! field holds (an email address to write to, one with a scheme as it is),
 //! or runs its click when it has neither. The host opens an address in the

@@ -1,4 +1,4 @@
-//! The system's own file dialogs on the desktop (DESIGN 7.9): choose a file
+//! The system's own file dialogs on the desktop (manual/start.how-it-works.md): choose a file
 //! to open, where a copy is saved, a folder; and a file opened in the
 //! program the system uses for its kind. Each system its own way, with no
 //! crate of its own: Linux asks the desktop portal over D-Bus

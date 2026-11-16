@@ -1,4 +1,4 @@
-//! Wizards (DESIGN 5.15) on every stack: the web stacks read and set the
+//! Wizards (manual/parts.containers.md) on every stack: the web stacks read and set the
 //! step in the part's state and the shared renderer draws the steps part;
 //! C# keeps the step in the part's state, and Next asks the handler
 //! whether it refused.

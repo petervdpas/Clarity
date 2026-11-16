@@ -1,4 +1,4 @@
-//! A program answered over the web server's wire (DESIGN 7.3 and 7.9):
+//! A program answered over the web server's wire (manual/project.run-build.md, manual/start.how-it-works.md):
 //! every call of `clarity_runtime::program::Program` becomes a command with
 //! its arguments as JSON, which the program answers `{"value": ...}` or
 //! `{"error": Text}`. The C interface asks through its callbacks, the

@@ -251,7 +251,7 @@ app Shop
 }
 
 /// `-> Window in new window`: the one way a design asks for a desktop window
-/// of its own (DESIGN.md, Page kinds); without it, a window opens in place.
+/// of its own (manual/design.windows.md); without it, a window opens in place.
 #[test]
 fn a_click_target_can_open_in_a_new_window() {
     let app = "module shop
@@ -285,7 +285,7 @@ page CustomerCard: window
     assert!(errors(quit).iter().any(|e| e == "only a window opens in a new window"), "{:?}", errors(quit));
 }
 
-/// Ribbon and toolbar buttons have keys too (DESIGN 5.28), as menu items do.
+/// Ribbon and toolbar buttons have keys too (manual/app.keys.md), as menu items do.
 #[test]
 fn ribbon_and_toolbar_buttons_have_keys() {
     let app = APP
@@ -298,7 +298,7 @@ fn ribbon_and_toolbar_buttons_have_keys() {
     assert_eq!(frame.ribbon.as_ref().unwrap().tabs[0].groups[0].items[0].props.shortcut.as_deref(), Some("Ctrl+Shift+N"));
 }
 
-/// One key runs one command where it is active (DESIGN 5.28): in a window's
+/// One key runs one command where it is active (manual/app.keys.md): in a window's
 /// frame, and among its own buttons. The same target on a menu item and a
 /// toolbar button is one command; a window's own button may reuse a frame's
 /// key on purpose, since what is innermost goes first.

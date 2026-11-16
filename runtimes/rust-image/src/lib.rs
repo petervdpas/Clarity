@@ -1,4 +1,4 @@
-//! Clarity.Image: the picture functions of code (docs/IMAGE-PLAN.md), on
+//! Clarity.Image: the picture functions of code (docs/ledger/canvas-toolbox.md), on
 //! pictures as their encoded bytes, giving PNG. The pixel work is in
 //! `ops`, on decoded RGBA pictures, which Clarity.UI's painting canvas uses too.
 

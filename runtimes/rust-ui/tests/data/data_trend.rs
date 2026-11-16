@@ -1,4 +1,4 @@
-//! The trend (DESIGN 5.26), as on the web: the last values of one number,
+//! The trend (manual/parts.data.md), as on the web: the last values of one number,
 //! taken every so many seconds on the screen's clock while it shows, drawn
 //! as the line chart with the newest at the right.
 

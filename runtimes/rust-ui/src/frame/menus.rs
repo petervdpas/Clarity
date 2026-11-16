@@ -1,4 +1,4 @@
-//! A menu opened over the window (DESIGN 5.16): a menu bar's menu, the
+//! A menu opened over the window (manual/design.parts.md): a menu bar's menu, the
 //! choices of a toolbar button that picks the language or theme, and the
 //! flyout of a sub menu. Each item shows its check mark, icon, caption and
 //! key, an arrow for a sub menu; a line between items for a separator. An

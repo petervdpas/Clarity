@@ -1,4 +1,4 @@
-// The settings each person keeps for themselves (DESIGN 5.17): one JSON
+// The settings each person keeps for themselves (manual/data.settings.md): one JSON
 // file per application in the folder for application settings of the
 // person's system (conformance/settings.json, `file`). The screen decides
 // which kept values still fit; this only reads and keeps the file.
@@ -40,7 +40,7 @@ nlohmann::json settings_merged(const nlohmann::json& on_file, const nlohmann::js
 /// (settings_merged), written whole and then put in place.
 void keep_settings(const std::string& program, const nlohmann::json& values);
 
-/// The system's protected store of secret settings (DESIGN 5.27): `get`
+/// The system's protected store of secret settings (manual/data.settings.md): `get`
 /// gives a secret or none, `set` keeps one ("" forgets it). Empty in a
 /// program without secret settings; one with them calls secrets_use
 /// (secrets/secrets.hpp) to fill it.

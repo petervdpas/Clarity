@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4): the
+// Who is using the program (docs/ledger/signin.md): the
 // generated program names its entity of people and its strategies once,
 // after its databases open (db.AddSignin); the database handle then signs
 // people in through it (Db.Signin, Db.SigninFirst, Db.SigninCli). The

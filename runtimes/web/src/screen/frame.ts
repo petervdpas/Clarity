@@ -112,7 +112,7 @@ export function findFrameElement(frame: Frame, offset: number, widgets: Widget[]
     if (frame.footer.span.start === offset) return { kind: "footer", footer: frame.footer };
     if (frame.footer.statusSpan?.start === offset) return { kind: "status", footer: frame.footer };
   }
-  // A part's context menu and its items are edited as the frame's menu is (DESIGN 5.16).
+  // A part's context menu and its items are edited as the frame's menu is (manual/design.parts.md).
   const inParts = (list: Widget[]): FrameElement | null => {
     for (const w of list) {
       if (w.menu) {

@@ -1,4 +1,4 @@
-// A wizard's steps (DESIGN 5.15), walked by the runtime, against the cases
+// A wizard's steps (manual/parts.containers.md), walked by the runtime, against the cases
 // every runtime shares (conformance/steps.json, `walk`).
 
 #include <algorithm>

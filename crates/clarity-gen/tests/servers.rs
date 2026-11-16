@@ -410,7 +410,7 @@ fn unique_text_needs_a_length_where_the_database_asks_for_one() {
     assert!(clarity_gen::migration_sql(&project, "main", SourceKind::Mssql).is_err());
 }
 
-/// The version a save checks (docs/APP-CAPABILITIES-PLAN.md step 5): in a
+/// The version a save checks (docs/ledger/row-versions.md): in a
 /// new table from its first step, added to an existing one at 1 for the
 /// records there, and kept when SQLite builds a table again.
 #[test]

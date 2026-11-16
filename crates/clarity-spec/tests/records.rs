@@ -1,4 +1,4 @@
-//! Records that belong to no table (DESIGN 5.12): `record Shape` with its
+//! Records that belong to no table (manual/code.engines.md): `record Shape` with its
 //! fields, made with `new`, read and set by field, in lists, and given out
 //! by an engine as JSON objects of their fields. App code uses them too:
 //! window data, functions and actions, tables and trees of them.

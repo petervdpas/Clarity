@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The backups of a data source's database (docs/BACKUP-PLAN.md): take one,
+  // The backups of a data source's database (docs/ledger/backups.md): take one,
   // and restore or delete one, each confirmed in Clarity's own dialog. The
   // backend decides which databases are backed up and does the work; this
   // only shows it.

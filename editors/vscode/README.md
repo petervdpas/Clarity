@@ -21,7 +21,7 @@ engine Dice
         return random(sides)
 ```
 
-The language is described in the [language reference](https://github.com/petervdpas/Clarity/blob/main/docs/LANGUAGE.md).
+The language is described in [the manual](https://github.com/petervdpas/Clarity/blob/main/manual/README.md), a page for every declaration, part, statement and expression.
 
 ## Install
 

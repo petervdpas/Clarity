@@ -1,4 +1,4 @@
-//! The parts of a window (DESIGN 7.9): elements made from their spec in the
+//! The parts of a window (manual/start.how-it-works.md): elements made from their spec in the
 //! window's markup, which read and change the window's values through their
 //! host. Each kind of part is a module of its own; `make` finds it by its
 //! kind's name, and a kind not drawn yet shows that in its place.
@@ -261,8 +261,8 @@ pub trait PartHost {
         None
     }
 
-    /// Signs in with `strategy` and its `inputs` (docs/APP-CAPABILITIES-PLAN.md
-    /// step 4), as a `signin <strategy>` button does: on success the sign-in
+    /// Signs in with `strategy` and its `inputs` (docs/ledger/signin.md),
+    /// as a `signin <strategy>` button does: on success the sign-in
     /// window closes and the main window opens; a refusal is given back, for
     /// the part to show. A host without a program refuses.
     /// The last refused sign-in of the window, which a sign-in view's refusal shows; none before one or after one that worked.

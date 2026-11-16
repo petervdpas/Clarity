@@ -1,4 +1,4 @@
-# Clarity.UI's library for a desktop program (DESIGN 7.9) when CLARITY_UI
+# Clarity.UI's library for a desktop program (manual/start.how-it-works.md) when CLARITY_UI
 # names no folder: the archive of the version the project names
 # (CLARITY_UI_VERSION) is downloaded from the library's release on GitHub,
 # checked against the release's SHA256SUMS and unpacked into the build

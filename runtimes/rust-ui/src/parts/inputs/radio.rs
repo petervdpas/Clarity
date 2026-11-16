@@ -1,4 +1,4 @@
-//! The radio group (DESIGN 7.9, conformance/forms.json): one round button
+//! The radio group (manual/start.how-it-works.md, conformance/forms.json): one round button
 //! per choice of its bound field (an enum's values, or what the host
 //! offers), side by side or one under the other. Only the person picking
 //! another choice is a change; what code sets is not. Each button is a Tab

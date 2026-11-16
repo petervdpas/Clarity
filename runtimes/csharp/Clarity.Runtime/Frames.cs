@@ -1,4 +1,4 @@
-// What draws a canvas frame by frame (DESIGN 5.12): an engine beside the
+// What draws a canvas frame by frame (manual/code.engines.md): an engine beside the
 // screen, which Clarity.Runtime.Engines hosts and Clarity.UI's canvas
 // runs at the screen's pace. Pointer, keys and what handlers tell the engine
 // (hears) wait for the next frame and go with it; what the engine tells

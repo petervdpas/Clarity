@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4). The
+//! Who is using the program (docs/ledger/signin.md). The
 //! generated program names its entity of people and its strategies once,
 //! after its databases open (`Db::add_signin`); `Db::signin` then finds the
 //! person by what Clarity.Auth says, checks them and makes them the current
@@ -524,7 +524,7 @@ fn block_of(people: &SigninSource) -> clarity_auth::attempt::Block {
 }
 
 /// A provider's settings as Clarity.Auth takes them, the secret read from
-/// the program's protected store (DESIGN 5.27); empty when it is not kept.
+/// the program's protected store (manual/data.settings.md); empty when it is not kept.
 fn options_of(people: &SigninSource, strategy: &SigninStrategy) -> Map<String, Value> {
     strategy
         .options

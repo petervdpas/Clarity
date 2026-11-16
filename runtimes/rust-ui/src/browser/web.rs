@@ -286,7 +286,7 @@ pub fn next_wake() -> f64 {
     with(|web| web.host.next_wake().map(|d| d.as_secs_f64() * 1000.0).unwrap_or(-1.0))
 }
 
-/// A driven step (DESIGN 1.6) on the page's screen, answered as JSON.
+/// A driven step (manual/start.how-it-works.md) on the page's screen, answered as JSON.
 pub fn step(step: &str) -> String {
     let step: Value = match serde_json::from_str(step) {
         Ok(step) => step,

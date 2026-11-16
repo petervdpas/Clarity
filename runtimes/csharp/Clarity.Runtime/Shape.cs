@@ -31,7 +31,7 @@ public abstract record Shape
     /// a label halfway along it and its style ("dashed", "dotted").</summary>
     public sealed record Link(string Name, double X1, double Y1, double X2, double Y2, IReadOnlyList<long> Via, string Color, double Width = 1, string Start = "", string End = "", Text? Label = null, string Style = "") : Shape;
 
-    /// <summary>The box of an object of a canvas in mode objects (DESIGN 5.31), by its record's id:
+    /// <summary>The box of an object of a canvas in mode objects (manual/parts.graphics.md), by its record's id:
     /// it draws nothing itself; what is drawn after it, until the next object, moves with it while it is dragged.</summary>
     public sealed record Object(object? Record, double X, double Y, double Width, double Height) : Shape;
 

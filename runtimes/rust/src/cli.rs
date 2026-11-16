@@ -1,4 +1,4 @@
-//! Command-line programs (DESIGN 5.20): reading a command line against the
+//! Command-line programs (manual/code.commands.md): reading a command line against the
 //! program's commands, writing its help, printing a table and asking on a
 //! terminal, as conformance/command-line.json says every runtime does.
 //! A generated program describes itself as a `Program` and runs the
@@ -857,7 +857,7 @@ pub fn run_line(program: &Program, line: &[String], ask: &mut dyn FnMut(&str, &s
 
 /// Runs a command-line program: reads the command line, writes help or
 /// what is wrong with it, or runs the command it names with its values
-/// and gives the exit code its run ends with (DESIGN 5.20).
+/// and gives the exit code its run ends with (manual/code.commands.md).
 pub fn run_program(program: &Program, run: impl FnOnce(&mut Session, usize, Vec<Option<String>>) -> crate::Result<i32>) -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match parse(program, &args, &Session::words()) {

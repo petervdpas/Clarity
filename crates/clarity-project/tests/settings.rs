@@ -183,7 +183,7 @@ fn problems_of(change: impl FnOnce(&mut Settings)) -> Vec<String> {
     validate(&settings)
 }
 
-// Every language draws with Clarity.UI (DESIGN 7.9): settings that still
+// Every language draws with Clarity.UI (manual/start.how-it-works.md): settings that still
 // carry the shared web screen say what to write instead.
 #[test]
 fn every_language_draws_with_clarity_ui() {
@@ -196,7 +196,7 @@ fn every_language_draws_with_clarity_ui() {
 }
 
 // Rust draws its desktop with Clarity.UI only, unnamed as C#'s; the
-// webview desktop (Tauri) is gone (DESIGN 7.9, G8c).
+// webview desktop (Tauri) is gone (manual/start.how-it-works.md).
 #[test]
 fn rust_draws_its_desktop_with_clarity_ui_only() {
     let clarity = SHOP.replace("    stack csharp desktop", "    stack rust desktop");
@@ -261,7 +261,7 @@ fn clarity_ui_is_not_named_in_the_stack_line() {
     // A UI word is no target: C# draws with Clarity.UI only.
     let named = parse(&SHOP.replace("    stack csharp desktop", "    stack csharp wpf desktop")).unwrap_err();
     assert!(named.contains("wpf"), "{named}");
-    // Go, C and C++ draw with Clarity.UI too (DESIGN 7.9): the shared web screen is named no more.
+    // Go, C and C++ draw with Clarity.UI too (manual/start.how-it-works.md): the shared web screen is named no more.
     for (language, label) in [("go", "Go"), ("c", "C"), ("cpp", "C++")] {
         let line = format!("    stack {language} desktop");
         let settings = parse(&SHOP.replace("    stack csharp desktop", &line)).unwrap();
@@ -315,7 +315,7 @@ fn secrets_stay_out_of_the_project_file() {
     );
 }
 
-/// The system's keychain is reached through a secret setting (DESIGN 5.27),
+/// The system's keychain is reached through a secret setting (manual/data.settings.md),
 /// which the person keeps; `keychain:` is no way of its own.
 #[test]
 fn a_keychain_reference_is_a_secret_setting() {
@@ -456,7 +456,7 @@ fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     let rust = catalog.backends.iter().find(|b| b.id == Backend::Rust).unwrap();
     assert_eq!(rust.uis, [Ui::Clarity]);
     assert_eq!(catalog.starter, Stack { backend: Backend::Rust, ui: Ui::Clarity, targets: vec![Target::Desktop] });
-    // Go, C and C++ draw with Clarity.UI only too (DESIGN 7.9).
+    // Go, C and C++ draw with Clarity.UI only too (manual/start.how-it-works.md).
     assert!(catalog.backends.iter().all(|b| b.uis == [Ui::Clarity]));
     assert_eq!(catalog.sources.len(), 5);
 }
@@ -678,7 +678,7 @@ fn each_target_has_its_own_output_folder() {
     assert_eq!(target_dir(out, Target::Cli), Path::new("/work/examples/shop/out/cli"));
 }
 
-/// A web API's key may be a secret setting of the person (DESIGN 5.27),
+/// A web API's key may be a secret setting of the person (manual/data.settings.md),
 /// which the system's protected store keeps.
 #[test]
 fn a_web_api_signs_with_a_secret_setting() {
@@ -689,7 +689,7 @@ fn a_web_api_signs_with_a_secret_setting() {
     assert!(validate(&parse(&bare).unwrap()).iter().any(|p| p.contains("must be a reference")));
 }
 
-/// A server database's connection may be a secret setting too (DESIGN 5.27):
+/// A server database's connection may be a secret setting too (manual/data.settings.md):
 /// the person keeps it, with its password, in the system's protected store.
 /// A SQLite file is no secret.
 #[test]
@@ -711,7 +711,7 @@ fn a_database_connects_with_a_secret_setting() {
 }
 
 /// Whether the people using the application set its keys themselves
-/// (DESIGN 5.28): `keys editable`, off without the line.
+/// (manual/app.keys.md): `keys editable`, off without the line.
 #[test]
 fn the_project_says_whether_people_set_the_keys() {
     let text = format!("{SHOP}    keys editable\n");
@@ -727,7 +727,7 @@ fn the_project_says_whether_people_set_the_keys() {
     assert_eq!(parse(&format!("{SHOP}    keys mine\n")).unwrap_err(), "line 11: write 'keys editable' to let the people using the application set the keys");
 }
 
-/// `-> keys` opens the keys window, which the project file allows (DESIGN 5.28).
+/// `-> keys` opens the keys window, which the project file allows (manual/app.keys.md).
 #[test]
 fn the_keys_window_opens_where_the_project_allows_it() {
     let module = "module shop\n\napp Shop\n    main Card\n    menu name mainMenu\n        item \"Keys\" name keysItem on click -> keys\n\npage Card: window\n    title \"Card\"\n";
@@ -771,7 +771,7 @@ fn an_old_ui_line_is_read_and_left_out() {
     assert!(parse(&format!("{SHOP}    ui skia\n")).is_err());
 }
 
-/// How the project's engines written in Clarity run (DESIGN 5.12):
+/// How the project's engines written in Clarity run (manual/code.engines.md):
 /// `engines interpreted`, or compiled without the line (`engines compiled`
 /// says so too).
 #[test]
@@ -789,7 +789,7 @@ fn the_project_says_how_its_clarity_engines_run() {
     assert_eq!(parse(&format!("{SHOP}    engines fast\n")).unwrap_err(), "line 11: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run");
 }
 
-/// Where a web application listens (DESIGN 7.3): `port 8080`; without the
+/// Where a web application listens (manual/project.run-build.md): `port 8080`; without the
 /// line, port 8080. `--address` and CLARITY_ADDRESS still say otherwise.
 #[test]
 fn the_project_says_which_port_it_serves_on() {
@@ -835,7 +835,7 @@ fn the_project_says_how_high_a_row_is() {
 }
 
 /// How a web API hands out a long list, said once under its data source
-/// (DESIGN 5.23, paging): each kind reads and writes back as written.
+/// (manual/code.web-apis.md, paging): each kind reads and writes back as written.
 #[test]
 fn a_web_api_says_how_it_pages() {
     use clarity_project::{Paging, PagingKind};
@@ -981,7 +981,7 @@ fn a_database_beside_the_project_stays_there() {
     assert_eq!(None, clarity_project::data_folder(&dir, &settings));
 }
 
-/// A data source that is a file in a format of the catalog (docs/FORMATS-PLAN.md):
+/// A data source that is a file in a format of the catalog (docs/ledger/formats.md):
 /// its kind is the format's name, its options indented lines under it.
 #[test]
 fn a_data_source_is_a_file_in_a_format() {
@@ -1007,7 +1007,7 @@ fn a_data_source_is_a_file_in_a_format() {
     }
 }
 
-/// A file source laid over by a mapping (docs/FORMATS-PLAN.md, step 4): its
+/// A file source laid over by a mapping (docs/ledger/formats.md): its
 /// kind is `file`, and the mapping says the format and the options.
 #[test]
 fn a_file_source_names_its_mapping() {

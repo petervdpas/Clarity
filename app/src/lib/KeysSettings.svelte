@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's keys, set by the person (DESIGN 5.28): every command per layer
+  // Clarity's keys, set by the person (manual/app.keys.md): every command per layer
   // with its keys. Change, then press the new key; a key another command has
   // in the same layer offers a swap; Reset puts the design's key back.
 

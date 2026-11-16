@@ -1,4 +1,4 @@
-//! The agent programs Clarity's chat panel starts (docs/ACP-PLAN.md, step 4):
+//! The agent programs Clarity's chat panel starts (docs/ledger/acp.md):
 //! found on the PATH or at the path the person set, with the arguments that
 //! make them speak ACP.
 

@@ -1,4 +1,4 @@
-//! A custom part is written in the project's own language (DESIGN 5.19):
+//! A custom part is written in the project's own language (manual/design.custom-parts.md):
 //! a library line that does not fit the stack is a problem at the part.
 
 use clarity_project::{parse, target_problems};

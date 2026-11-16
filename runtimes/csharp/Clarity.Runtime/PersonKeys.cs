@@ -1,4 +1,4 @@
-// The person's keys (DESIGN 5.28), where the project file says `keys
+// The person's keys (manual/app.keys.md), where the project file says `keys
 // editable`: by command, only where they differ from the design's, kept in
 // the settings file as `keys`, beside the settings. A command of the app's
 // frame is known by its name, a window's own by `Window.name`.

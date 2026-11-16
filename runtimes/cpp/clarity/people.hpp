@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4). The
+// Who is using the program (docs/ledger/signin.md). The
 // generated program names its entity of people and its strategies once,
 // after its databases open (`db.add_signin`, in auth/auth.cpp, carried with
 // clarity_use_auth); `db.signin` then finds the person by what Clarity.Auth

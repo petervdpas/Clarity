@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4) on the
+//! Who is using the program (docs/ledger/signin.md) on the
 //! C# stack: the program carries Clarity.Auth, names its people after the
 //! databases open, reads `me` from the database handle, checks `allow when`,
 //! `readable when` and `writable when`, hashes text given to a hashed field,

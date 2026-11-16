@@ -1,6 +1,6 @@
 package clarity
 
-// Canvas modes (DESIGN 5.31), decided here in the runtime: the screen sends
+// Canvas modes (manual/parts.graphics.md), decided here in the runtime: the screen sends
 // what the person did on a canvas (an object dropped, a stroke painted, a
 // shape added, changed, moved or deleted) and the runtime changes the
 // window's data, snapped to the canvas's grid, and chooses what it touched.

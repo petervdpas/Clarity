@@ -208,11 +208,11 @@ fn project_paths(path: &str) -> Result<(PathBuf, PathBuf), String> {
 
 fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistoryState) -> Result<Preview, String> {
     let (file, dir) = project_paths(path)?;
-    // The modules of the web APIs, as their descriptions and picks are now (DESIGN 5.23).
+    // The modules of the web APIs, as their descriptions and picks are now (manual/code.web-apis.md).
     let _ = clarity_project::refresh_apis(&file);
     let preview = load(&dir)?;
     let watcher = watch(&file, &dir, app)?;
-    // `clarity mcp` works on the project open here (docs/MCP-PLAN.md).
+    // `clarity mcp` works on the project open here (docs/ledger/mcp-tools.md).
     if let Err(err) = clarity_project::ide::set_open_project(&file) {
         logging::line(&err);
     }
@@ -379,7 +379,7 @@ fn try_decl(path: String, item: u32, text: String, state: State<WatchState>, ser
     let after = if is_page_file(&file) { text.clone() } else { clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())? };
     let project = clarity_project::load_modules_with(&dir, &file, &after)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    // The design canvas draws the window as this text makes it (DESIGN 8.1).
+    // The design canvas draws the window as this text makes it (manual/design.parts.md).
     if let Some(server) = &server.0 {
         server.set_draft(Some(project.clone()));
     }
@@ -608,7 +608,7 @@ fn open_project_of(state: &WatchState) -> Result<(PathBuf, PathBuf), String> {
         .ok_or_else(|| "no project is open".to_string())
 }
 
-/// The server the IDE's preview and design canvas draw from (DESIGN 8.1,
+/// The server the IDE's preview and design canvas draw from (manual/design.parts.md,
 /// `clarity_gen::preview`): Clarity.UI's browser files, the open project's
 /// windows and a program answering with sample data. None when it could not start.
 struct PreviewServer(Option<clarity_gen::preview::Server>);
@@ -865,7 +865,7 @@ pub fn run() {
             fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
             system::start(app.handle().clone());
-            // Clarity.UI's library and browser files (DESIGN 7.9): the release's, which the installer
+            // Clarity.UI's library and browser files (manual/start.how-it-works.md): the release's, which the installer
             // carries or a build fetches. A run from the repository fetches them too, unless the cDdev
             // swapped in their own builds (swap.rs): only there do the swaps count.
             let os = std::env::consts::OS;
@@ -878,7 +878,7 @@ pub fn run() {
             if repository().is_some() {
                 clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
             }
-            // The preview and the design canvas draw with the same browser files (DESIGN 8.1).
+            // The preview and the design canvas draw with the same browser files (manual/design.parts.md).
             splash::status(app.handle(), "Starting the preview");
             app.manage(preview_server(app.handle().clone()));
             // DevTools' builds, and the agents' asks to press a Build (a Clarity run from its repository).
@@ -938,6 +938,7 @@ pub fn run() {
             devtools::devtools_refuse,
             devtools::release::release_view,
             devtools::release::release_run,
+            devtools::release::release_stop,
             devtools::disk::disk_view,
             devtools::disk::disk_remove,
             splash::main_drawn,

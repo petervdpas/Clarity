@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 # ACP is JSON-RPC lines over the program's stdin and stdout, spoken with serde_json
-# itself: no ACP crate (docs/ACP-PLAN.md, "go non standard use json_something then!").
+# itself: no ACP crate (docs/ledger/acp.md).
 serde_json.workspace = true
 # The version the workspace already has through the IDE: the program, its pipes, the channels.
 tokio = { version = "1.53.3", features = ["rt", "sync", "process", "io-util"] }

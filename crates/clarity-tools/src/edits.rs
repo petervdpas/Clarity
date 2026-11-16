@@ -1,5 +1,5 @@
 //! The designer's way of changing a project, shared by the IDE and every
-//! agent's tools (docs/AGENT-TOOLS-PLAN.md): a structural edit
+//! agent's tools (docs/ledger/mcp-tools.md): a structural edit
 //! (`clarity_spec::edit::Edit`) made on the file it is asked of, split
 //! between a window's `.cxaml` and its module where it must be, a new
 //! window's files added, the keys it writes given to every language, and

@@ -1,4 +1,4 @@
-// The service of C applications: the commands of the web wire (DESIGN 7.3),
+// The service of C applications: the commands of the web wire (manual/project.run-build.md),
 // answered by the program's windows. Clarity.UI asks them, in the program
 // on the desktop (desktop/desktop.h) and from the browser on the web
 // (serve.h), through service/wire.h; the commands and their JSON are every
@@ -27,7 +27,7 @@ typedef struct {
     /// handler (conformance/drawing.json). The service redraws after a window
     /// opens and after every handler.
     bool (*redraw)(ClarityDb* db, ClarityReply* reply);
-    /// Runs the handler the answer to a question goes to (DESIGN 5.14),
+    /// Runs the handler the answer to a question goes to (manual/code.statements.md),
     /// with the values written for it and the answer last.
     bool (*answer)(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out);
     /// The values text field `field` of `entity` already has, which a typed
@@ -47,7 +47,7 @@ typedef struct {
     const ClarityWindows* windows;
     /// The size the main window's desktop window opens at; zero for the library's own.
     int width, height;
-    /// Why the databases did not open (DESIGN 5.27), with `db` an empty one in
+    /// Why the databases did not open (manual/data.settings.md), with `db` an empty one in
     /// memory until `connect` opens them; NULL when they opened. What the
     /// screen shows first then: the app's `on unconnected` handler, or else
     /// the window that keeps the connection; NULL for none.
@@ -66,7 +66,7 @@ void clarity_service_free(ClarityService* service);
 /// `{"value": ...}` or `{"error": ...}`, in the scratch arena.
 cJSON* clarity_service_invoke(ClarityService* service, const char* command, const cJSON* args);
 /// The settings of the browser page whose commands run next on a server
-/// (DESIGN 7.9 B2), an object: a window that opens starts its settings
+/// (manual/start.how-it-works.md B2), an object: a window that opens starts its settings
 /// record from them (each setting it has, of the same kind), so its
 /// handlers see that page's settings. NULL off a page, as on the desktop.
 void clarity_service_page(ClarityService* service, const cJSON* settings);

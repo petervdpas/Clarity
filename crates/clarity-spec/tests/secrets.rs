@@ -1,4 +1,4 @@
-//! Secret settings (DESIGN 5.27): a setting of type `secret`, such as a
+//! Secret settings (manual/data.settings.md): a setting of type `secret`, such as a
 //! web API's token, kept per person and per application in the system's
 //! protected store (Windows' Credential Manager, macOS's Keychain, the
 //! Secret Service elsewhere), never in settings.json. Only a password input
@@ -100,7 +100,7 @@ fn the_window_that_shows_a_secret_connection_is_found() {
     assert_eq!(errors, ["database main connects with setting 'shopDb', which no window shows and no 'on unconnected' handles; add a password input bound to settings.shopDb, such as in a settings window, or an app handler on unconnected"]);
 }
 
-/// An app may take over (DESIGN 5.27): `on unconnected` runs instead of the
+/// An app may take over (manual/data.settings.md): `on unconnected` runs instead of the
 /// window that shows the secret, with why the databases did not open.
 #[test]
 fn an_app_handles_its_databases_not_opening() {

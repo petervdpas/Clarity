@@ -3,7 +3,7 @@
 //! averaged (`groups::groups`), drawn as bars or a line on an
 //! axis in steps of 1, 2, 2.5 or 5 times a power of ten, or as the slices of
 //! a pie in the palette's colors with a legend beside it. Bound to a list of
-//! numbers instead (DESIGN 5.26), it draws them as they are, the last
+//! numbers instead (manual/parts.data.md), it draws them as they are, the last
 //! `points` of them, on an axis up to `max` when it has one. Each bar, point
 //! and slice tells its group and number when pointed at. It reads its rows
 //! again every time it draws. A trend (`trend.rs`) draws its values with the
@@ -176,7 +176,7 @@ const RIGHT: f64 = 8.0;
 /// How near a point of the line the pointer is on it.
 pub const POINT_REACH: f64 = 6.0;
 
-/// How many points a line draws with a dot each; more draw as a line alone (DESIGN 5.26).
+/// How many points a line draws with a dot each; more draw as a line alone (manual/parts.data.md).
 pub const MOST_DOTS: usize = 30;
 
 fn scale_of(groups: &[ChartShown], max: Option<f64>) -> ChartScale {

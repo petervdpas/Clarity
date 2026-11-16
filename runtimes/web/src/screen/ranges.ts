@@ -8,7 +8,7 @@ import type { Literal } from "../generated/Literal";
 /** A range as `clarity_spec::widgets::number_range` gives it: null is no end. */
 export type Range = { min: string | null; max: string | null; step: string };
 
-/** What the person did to a slider or spin box, which the runtime makes a value of (DESIGN 1.7): a key, a drag to a place, or a typed number. */
+/** What the person did to a slider or spin box, which the runtime makes a value of (manual/start.how-it-works.md): a key, a drag to a place, or a typed number. */
 export type RangeMove = { key: RangeKey } | { at: string } | { typed: string };
 
 /** The keys a slider and a spin box answer to. */

@@ -1,4 +1,4 @@
-//! A canvas drawn by code (DESIGN 5.7, conformance/drawing.json): the shapes
+//! A canvas drawn by code (manual/parts.graphics.md, conformance/drawing.json): the shapes
 //! its draw handler drew (its state's `drawing`), in the canvas's own units
 //! (`units`, 100 x 100 without them), scaled to fit its place in proportion
 //! and centered. A color is the theme's by name or written out (#rrggbb).

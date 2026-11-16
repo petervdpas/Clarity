@@ -1,7 +1,7 @@
 //! Data parts: list (with cards), table (with pages, order, columns, edited
 //! cells and reordering), tree and tree table, chart (of rows or of numbers),
 //! trend, canvas (drawn by code, with its modes, or by an engine), and
-//! graph (nodes and edges of any records, docs/GRAPH-PLAN.md).
+//! graph (nodes and edges of any records, docs/ledger/graph.md).
 //! Each kind is a module in the folder of this group; KINDS lists the kinds
 //! the group draws with the function that makes each.
 

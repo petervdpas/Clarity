@@ -67,7 +67,7 @@ fn the_source_must_be_a_source_of_the_project() {
         "{:#?}",
         unknown.diagnostics
     );
-    // Entities in a web API are allowed (DESIGN 5.23): a service keeps them, so no database stores them.
+    // Entities in a web API are allowed (manual/code.web-apis.md): a service keeps them, so no database stores them.
     let web = load(&ERP.replace("source erp", "source payments"), &[]);
     assert!(errors(&web).iter().all(|e| !e.contains("payments")), "{:#?}", web.diagnostics);
     assert!(web.in_web_api("Invoice"));

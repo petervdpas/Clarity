@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DISK_TAB, RELEASE_TAB, bytesText, changeText, checkState, cycle, stateText, tabOrder, verdict } from "./devtools.ts";
 
-const check = (title: string, last: boolean | null = null) => ({ job: `check:${title}`, title, last: last === null ? null : { passed: last } });
+const check = (title: string, last: boolean | null = null, current = true) => ({ job: `check:${title}`, title, last: last === null ? null : { passed: last, current } });
 
 test("a check's build in this run wins over how it last ended", () => {
   assert.equal(checkState(check("a", false), { state: "passed" }), "passed");
@@ -59,4 +59,12 @@ test("the arrows cycle through the tabs, round at both ends", () => {
   assert.equal(cycle(order, "c", 1), "a");
   assert.equal(cycle(order, "a", -1), "c");
   assert.equal(cycle(order, "gone", 1), "b", "a tab that went: from the first");
+});
+
+test("a result of another tree counts as not run, and holds the plan back", () => {
+  assert.equal(checkState(check("a", true, false), undefined), "notRun", "ran on another tree");
+  const held = verdict([check("A", true), check("B", true, false), check("C", false)], {});
+  assert.equal(held.planText, "Held back: 2 checks not passed on this tree");
+  assert.equal(verdict([check("A", true), check("B", true)], {}).planText, "A plan can be written");
+  assert.equal(verdict([check("A", true), check("B", false)], { "check:B": { state: "running" } }).planText, "Held back: 1 check not passed on this tree");
 });

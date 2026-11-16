@@ -1,4 +1,4 @@
-//! Reordering (DESIGN 5.30), decided here, not in the screen (DESIGN 1.7):
+//! Reordering (manual/parts.data.md), decided here, not in the screen (manual/start.how-it-works.md):
 //! a row of a list, table, tree or tree table moved by a drag or by Alt and
 //! an arrow key. The result is the list's new order, each row's parent (in a
 //! tree) and each row's number at its level, which goes into the field of
@@ -191,7 +191,7 @@ pub fn reorder(given: &[Row], mv: &Move, tree: bool) -> Option<Reordered> {
     Some(Reordered { parents: order.iter().map(|i| moved[*i].parent.clone()).collect(), order, numbers })
 }
 
-/// `reorder_event` (DESIGN 1.7): the rows of `list` in the window's data,
+/// `reorder_event` (manual/start.how-it-works.md): the rows of `list` in the window's data,
 /// moved by `mv`. The list takes its new order, each row its number in `by`
 /// and, when `parent` names a field, its parent; the moved row is selected
 /// in `part`. Then `run` runs the handler as an edit ends (`edits::ended`).

@@ -1,4 +1,4 @@
-// The shown rows of a window (DESIGN 1.7): its state carries `views`, for
+// The shown rows of a window (manual/start.how-it-works.md): its state carries `views`, for
 // each table, list, tree or chart by its name what the screen shows of its
 // list and how. The runtime fills in what shows after every reply, so a
 // handler that changed a list is shown at once; the screen only draws it.

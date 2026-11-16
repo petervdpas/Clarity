@@ -1,6 +1,6 @@
 /*
  * clarity_codec.h: what a codec library gives Clarity.Video
- * (docs/VIDEO-PLAN.md, "Codecs people add"). A project names the library in
+ * (docs/ledger/video-camera.md). A project names the library in
  * its project file, `codec vp9 from "codecs/libvp9"`; Clarity carries it
  * beside the program and Clarity.Video loads it as the program starts. For
  * the formats it takes it wins over the system's decoder and openh264.

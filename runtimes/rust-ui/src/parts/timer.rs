@@ -1,4 +1,4 @@
-//! The timer (DESIGN 5.26), as on the web: it shows nothing and has no place
+//! The timer (manual/parts.time.md), as on the web: it shows nothing and has no place
 //! in the window. While its window is on the screen and it is enabled, it
 //! runs its tick handler every so many seconds (`every`, 1 unless given,
 //! kept between a tenth of a second and a day). It starts as its window

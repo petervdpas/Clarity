@@ -1,4 +1,4 @@
-//! The parts of a sign-in view (docs/APP-CAPABILITIES-PLAN.md, "The
+//! The parts of a sign-in view (docs/ledger/signin.md, "The
 //! sign-in window is designed, and guided"): a field for an input of a
 //! strategy (a label over a text box, a password box for `password`), a
 //! sign-in button for a strategy, "keep me signed in", the language

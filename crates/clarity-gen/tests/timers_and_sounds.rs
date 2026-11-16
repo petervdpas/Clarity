@@ -1,4 +1,4 @@
-//! Timers and sounds in a window's markup (DESIGN 5.22, 5.26, 7.9): they have
+//! Timers and sounds in a window's markup (manual/design.sound.md, manual/parts.time.md, manual/start.how-it-works.md): they have
 //! no place on the screen, but a screen that reads only the markup (Clarity.UI)
 //! runs a timer's ticks and plays a sound from there, so each is written
 //! as any part of the window, and the grid leaves it out.

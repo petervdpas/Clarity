@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4), as every
+//! Who is using the program (docs/ledger/signin.md), as every
 //! stack's generator writes it: the people's table and the columns each
 //! strategy names, the sign-in page, the session and tries, and how a
 //! hashed field is kept. One description, so the five stacks pass the same.

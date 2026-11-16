@@ -1,6 +1,6 @@
 package clarity
 
-// The shown rows of tables, lists, trees and charts (DESIGN 1.7), decided
+// The shown rows of tables, lists, trees and charts (manual/start.how-it-works.md), decided
 // here in the runtime: the window's state carries a view per such part,
 // how it shows its list as the screen sends it, and after every reply the
 // runtime fills in what shows. A view event (a sort, a page, a tree row

@@ -1,4 +1,4 @@
-//! The C# command-line program (DESIGN 5.20): a console project of its own
+//! The C# command-line program (manual/code.commands.md): a console project of its own
 //! in `out/cli`, on Clarity.Runtime alone, with the project's
 //! records, actions and commands, and a Main that reads the command line
 //! and runs the command it names.

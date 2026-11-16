@@ -1,4 +1,4 @@
-//! A wizard (DESIGN 5.15) against the cases every runtime shares
+//! A wizard (manual/parts.containers.md) against the cases every runtime shares
 //! (conformance/steps.json): `step_event` walks it as the person presses
 //! Next, Back and Finish.
 

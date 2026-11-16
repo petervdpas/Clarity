@@ -1,4 +1,4 @@
-//! The interpreter (DESIGN 5.12): an engine written in Clarity run from its
+//! The interpreter (manual/code.engines.md): an engine written in Clarity run from its
 //! IR, which the engine's file carries as data, with the values of
 //! `values` and the call, kept values and answer of the compiled engines.
 //! Each export of the engine's file calls `rt_run` with the place of the

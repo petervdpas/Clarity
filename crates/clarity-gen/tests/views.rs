@@ -1,4 +1,4 @@
-//! Views in a window's content on every stack (DESIGN 5.33): the view's
+//! Views in a window's content on every stack (manual/design.windows.md): the view's
 //! parts are written in the content of the window's markup, its handlers in
 //! the window's code, so every stack shows them as the window's own;
 //! `main.swap(X)` opens the page of X.

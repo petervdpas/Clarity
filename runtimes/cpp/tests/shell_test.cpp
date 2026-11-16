@@ -1,5 +1,5 @@
 // The service's commands, run without a window: the commands and JSON of
-// the screen's wire (DESIGN 7.3).
+// the screen's wire (manual/project.run-build.md).
 
 #include <functional>
 
@@ -163,7 +163,7 @@ TEST(a_closed_window_is_reported) {
     CHECK_EQ(closed, state["instance"].get<uint64_t>());
 }
 
-// The databases did not open (DESIGN 5.27): start says what to show and why,
+// The databases did not open (manual/data.settings.md): start says what to show and why,
 // and connect opens them once the person has kept their connection.
 TEST(an_unconnected_start_says_why_and_connects_later) {
     Db db = Db::memory();
@@ -185,7 +185,7 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
 }
 
-// Undo (DESIGN 5.29): the runtime keeps the window's edits, each with the
+// Undo (manual/code.handlers.md): the runtime keeps the window's edits, each with the
 // database steps its handler made, and Ctrl+Z takes them back together.
 TEST(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back) {
     Db db = Db::memory();
@@ -231,7 +231,7 @@ json card_with(json data) { return {{"window", "Card"}, {"instance", 8}, {"data"
 
 }  // namespace
 
-// A dragged row (DESIGN 5.30): the runtime gives the list its new order and
+// A dragged row (manual/parts.data.md): the runtime gives the list its new order and
 // numbers, chooses the moved row and runs on reorder, as one edit.
 TEST(the_runtime_reorders_a_list_as_one_edit) {
     Running app;
@@ -263,7 +263,7 @@ TEST(the_runtime_reorders_a_list_as_one_edit) {
     CHECK_EQ(under["state"]["selected"]["taskTree"], json(1));
 }
 
-// A canvas (DESIGN 5.31): the runtime moves an object to its grid and edits
+// A canvas (manual/parts.graphics.md): the runtime moves an object to its grid and edits
 // a drawing, chooses what it touched and runs on change, as one edit.
 TEST(the_runtime_moves_an_object_and_edits_a_drawing) {
     Running app;
@@ -358,7 +358,7 @@ TEST(the_runtime_moves_a_value_within_its_range) {
     CHECK(app.service.invoke("range_event", none).contains("error"));
 }
 
-// A wizard's Next, Back and Finish (DESIGN 5.15), decided by the runtime.
+// A wizard's Next, Back and Finish (manual/parts.containers.md), decided by the runtime.
 TEST(the_runtime_walks_a_wizard) {
     Running app;
     auto on_step = [](int64_t step) {
@@ -415,7 +415,7 @@ const json tree_view = json::parse(R"({"kind":"tree","list":"tasks","parent":"up
 
 }  // namespace
 
-// The person sorts, turns a page or opens a tree row (DESIGN 1.7): the runtime
+// The person sorts, turns a page or opens a tree row (manual/start.how-it-works.md): the runtime
 // changes the part's view and answers the window, never as an edit.
 TEST(the_runtime_changes_a_view_for_the_person) {
     Running app;
@@ -458,7 +458,7 @@ TEST(a_handlers_reply_fills_the_views) {
     CHECK_EQ(again["views"]["taskTable"]["shown"], json::parse("[2,3]"));
 }
 
-// A readonly part (DESIGN 1.7): whatever the screen changed is taken back to
+// A readonly part (manual/start.how-it-works.md): whatever the screen changed is taken back to
 // the window's data as the last reply left it, no handler runs, no edit is
 // kept, and the reply says refused.
 TEST(the_runtime_takes_back_a_change_of_a_readonly_part) {

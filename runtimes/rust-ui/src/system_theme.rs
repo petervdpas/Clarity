@@ -1,4 +1,4 @@
-//! The system's light or dark choice (DESIGN 7.9), for a desktop where the
+//! The system's light or dark choice (manual/start.how-it-works.md), for a desktop where the
 //! window system does not say it (winit on X11 answers nothing), read as the
 //! C# version reads it: on Linux `GTK_THEME` (as GTK programs honour it), the
 //! desktop portal (org.freedesktop.appearance color-scheme), else GNOME's

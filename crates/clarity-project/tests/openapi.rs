@@ -1,4 +1,4 @@
-//! An OpenAPI description in the project (DESIGN 5.23, D2): a web API data
+//! An OpenAPI description in the project (manual/code.web-apis.md): a web API data
 //! source names it with `openapi "forms.yaml"` (in the project's `apis`
 //! folder) and picks the operations it uses with `pick`, and schemas of
 //! their own with `pick schema`. Clarity writes `apis/<source>.clarity` from
@@ -241,7 +241,7 @@ fn the_module_holds_what_the_picks_need() {
     ] {
         assert!(text.contains(line), "no {line:?} in\n{text}");
     }
-    // A nested object and a list of them are records inside the record (DESIGN 5.25).
+    // A nested object and a list of them are records inside the record (manual/data.entities.md).
     assert!(text.contains("    owner: User\n"), "{text}");
     assert!(text.contains("    sections: list<Section>\n"), "{text}");
     // A record that would hold itself, and an object without a schema of its own, are named, not left out silently.
@@ -329,7 +329,7 @@ fn the_picking_lists_the_description() {
 }
 
 /// A patch changes part of a record: picked as any operation, it sends its
-/// body (DESIGN 5.23).
+/// body (manual/code.web-apis.md).
 #[test]
 fn a_patch_is_picked_as_any_operation() {
     let description = openapi::read(FORMS).unwrap();
@@ -344,7 +344,7 @@ fn a_patch_is_picked_as_any_operation() {
 }
 
 /// On a source that pages, a picked get that lists reads every page, and the
-/// parameters paging sends are not the action's (DESIGN 5.23, paging).
+/// parameters paging sends are not the action's (manual/code.web-apis.md, paging).
 #[test]
 fn a_list_on_a_source_that_pages_reads_every_page() {
     use clarity_project::{Paging, PagingKind};
@@ -378,7 +378,7 @@ fn a_list_on_a_source_that_pages_reads_every_page() {
 }
 
 /// A source that pages, its picked list written to read every page, checks
-/// clean as the project loads it (DESIGN 5.23, paging).
+/// clean as the project loads it (manual/code.web-apis.md, paging).
 #[test]
 fn a_paged_module_checks_clean() {
     let paged = PROJECT.replace("        pick \"listTemplates\"", "        paging page \"page\" size \"limit\" 100\n        pick \"listTemplates\"");

@@ -1,4 +1,4 @@
-//! The web target of C# on Clarity.UI (DESIGN 7.6, 7.9): the windows' view
+//! The web target of C# on Clarity.UI (manual/stacks.csharp.md, manual/start.how-it-works.md): the windows' view
 //! models live on a server, where their handlers run against the server's
 //! databases; in the browser runs Clarity.UI's library, compiled once for
 //! every language (the browser files), which draws each window and asks the
@@ -128,7 +128,7 @@ using Clarity.Ui.Server;
 namespace {name}.Server;
 
 /// <summary>
-/// The application as a web server (DESIGN 7.6, 7.9): Clarity.UI runs in the
+/// The application as a web server (manual/stacks.csharp.md, manual/start.how-it-works.md): Clarity.UI runs in the
 /// browser and asks the windows here, where their handlers run against the
 /// databases. The server serves the browser files and the program's files,
 /// which the application carries.

@@ -1,4 +1,4 @@
-// A program driven without a window (DESIGN 1.6, clarity_driven_*): the
+// A program driven without a window (manual/start.how-it-works.md, clarity_driven_*): the
 // library shows the program's windows on a screen with no display and takes
 // steps as JSON (`{"do":"click","part":"save"}`), answering each with what
 // shows. Tests use it to drive a C# window model through the library as a

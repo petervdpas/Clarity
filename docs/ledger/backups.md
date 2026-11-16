@@ -10,22 +10,43 @@ Progress: 60%
 - Runtimes (back up before applying steps to a database that has a schema, refuse to migrate when they cannot): R `runtimes/rust/src/backup.rs`; Go `runtimes/go/clarity/backup.go`; C `runtimes/c/clarity/backup.c`; C++ `runtimes/cpp/clarity/backup.cpp`; C# `runtimes/csharp/Clarity.Runtime/Backup.cs`
 - IDE: `app/src/lib/BackupPanel.svelte` (Back up now, Restore, Delete, each confirmed with Clarity's dialogs; Restore stops the running app), `app/src-tauri/src/backups.rs`; agent tools `list_backups`, `backup_data`, `restore_backup` (the last two ask first) in `app/src-tauri/src/agent.rs`; not served by `clarity mcp`
 - CLI: `clarity data backup | backups | restore` (`crates/clarity-cli/src/main.rs:97-182`)
-- Docs: manual `data.migrations.md`, `data.sources.md` ("Running the steps": a backup first)
+- Docs: manual `data.sources.md:322` (the backup before a migration, by hand in the Project tab, `clarity data backup | backups | restore`, server databases)
 
 ## Tests
 - `conformance/backups.json`: run by R (`runtimes/rust/tests/backups.rs`), Go (`backup_test.go`), C (`backup_test.c`), C++ (`backup_test.cpp`), C# (`BackupTests.cs`), core (`crates/clarity-db/tests/backup.rs`)
 - `crates/clarity-project/tests/backups.rs`; `crates/clarity-mcp/tests/server.rs` (backup tools not served)
 
 ## Open
-- Server databases (PostgreSQL, MySQL, SQL Server) in Clarity's own portable form, one file per backup, restorable into another kind: NOT BUILT (BACKUP-PLAN.md step 3). The IDE says a server database is backed up by its administrator.
-- `backups off` on a data source, a "Back up before a migration" checkbox in project settings, every example's SQLite source with it: NOT BUILT (BACKUP-PLAN.md "Next: backups off for a data source").
-- `back up main "name"` from app code: NOT BUILT (BACKUP-PLAN.md "Later").
-- Backups kept in a folder the person picks: NOT BUILT (BACKUP-PLAN.md "Later").
+- Server databases: NOT BUILT; see Design "Server databases". The IDE says a server database is backed up by its administrator.
+- `backups off` on a data source: NOT BUILT; see Design "Backups off".
+- A backup from the program's own code: NOT BUILT; see Design "Later".
+- Backups kept in a folder the person picks: NOT BUILT; see Design "Later".
 - Encrypted backups: NOT BUILT; see [encrypted-storage](encrypted-storage.md).
-- Shared Rust core for backups: NOT BUILT; each runtime has its own (MODULAR-PLAN.md order 2).
+- Shared Rust core for backups: NOT BUILT; each runtime has its own ([modularity](modularity.md) step 2).
+
+## Design
+
+### Server databases
+
+- PostgreSQL, MySQL and SQL Server have no `VACUUM INTO`, and their dump tools are not on every machine.
+- A backup of one is Clarity's own portable form: every owned table's rows, read through the runtime that already connects to it, written as one file per backup.
+- It restores into the same database or into another kind, which also gives the copy tool between kinds of databases.
+
+### Backups off
+
+- A word on the data source: `datasource main sqlite "data/novel.db" backups off`, read and written by the project file's reader; a checkbox "Back up before a migration" (on by default) on the data source in the project's Settings.
+- With it, the program migrates without the backup before it, on every stack, desktop and web; `clarity data migrate` follows it too. Backups by hand and restores stay as they are.
+- Every example's SQLite source gets `backups off`, so running an example never fills its `data/backups/`.
+- Checks: the project file's tests (read, write, refused on a web API source, which has no database of its own), and each runtime's migration test with and without the backup.
+- It changes what the runtimes do, so it goes out with a release of the runtimes and the generators together.
+
+### Later
+
+- The program backs up from its own code, as the modelling example's import should before it replaces domains: a statement such as `back up main "before-import"`.
+- A setting that keeps backups in a folder the person picks instead of beside the database.
 
 ## Conflicts
-- "Keep 10 automatic backups" is written in each runtime and in clarity-db (CONFLICTING.md 4; equal today).
+- "Keep 10 automatic backups" is written in each runtime and in clarity-db (equal today).
 
 ## Decisions
 - 2026-11-05: Clarity owns backups of the databases it owns; an `external` source is neither backed up nor restored by it. User: "back up the database... the ide should be able to do by itself"
@@ -38,7 +59,7 @@ Progress: 60%
 - 2026-11-10: a project option to turn off the backup before a migration. User: "dont keep backups for the examples", "is it a project option? backup?", "yes, add it to the backup plan"
 
 ## Was
-- BACKUP-PLAN.md "Decisions", steps 1, 2, 3, "Next: backups off for a data source", "Later"
+- docs/BACKUP-PLAN.md "Decisions", steps 1, 2, step 3 (Design "Server databases"), "Next: backups off for a data source" (Design "Backups off"), "Later" (Design "Later")
 - DESIGN 1.3 "Migrations", Backups bullet (DESIGN.md:157)
 - MODULAR-PLAN.md order 2 (backups)
 - IMPLEMENTED.md 6 "Row versions, undo, backups" (backups)

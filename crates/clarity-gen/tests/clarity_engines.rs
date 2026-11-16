@@ -1,5 +1,5 @@
 //! Engines written in Clarity (the Board of tests/fixtures/board.clarity)
-//! become WebAssembly files when the project is generated (DESIGN 5.12,
+//! become WebAssembly files when the project is generated (manual/code.engines.md,
 //! N5b): every stack carries `board.wasm` and calls it as any engine file,
 //! and no stack writes engine code of its own.
 
@@ -83,7 +83,7 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
     assert!(!carries_ir(&board(false)), "the compiled engine carries code, not IR");
 }
 
-/// An engine that says how far a long call is (DESIGN 5.12): the program
+/// An engine that says how far a long call is (manual/code.engines.md): the program
 /// watches its long calls, so Clarity.UI runs a handler off the screen's
 /// thread, keeps painting its bar, and Stop reaches the call.
 #[test]

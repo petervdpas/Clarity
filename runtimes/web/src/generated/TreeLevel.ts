@@ -2,7 +2,7 @@
 import type { Span } from "./Span";
 
 /**
- * A level of a tree of several kinds of records (DESIGN 5.33): `level
+ * A level of a tree of several kinds of records (manual/design.windows.md): `level
  * Domain under project show name order by name`, the records of Domain
  * whose `project` is the row of the level around it; or `group
  * @dataObjectsNode`, a heading over the levels inside it, shown when they

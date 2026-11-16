@@ -1,4 +1,4 @@
-//! Constants written out (DESIGN 5.12): before a stack is written, every
+//! Constants written out (manual/code.engines.md): before a stack is written, every
 //! use of a constant becomes its value, so no stack needs constants of its
 //! own. Like a call's default (crate::calls), the value is copied with
 //! places of its own, past the end of every file, since generation checks

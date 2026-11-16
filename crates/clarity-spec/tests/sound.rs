@@ -1,4 +1,4 @@
-//! The sound part (DESIGN 5.22): a part of a window without a place in its
+//! The sound part (manual/design.sound.md): a part of a window without a place in its
 //! grid, which plays the project's sound files and makes tones and melodies,
 //! told by code as a custom part is told.
 

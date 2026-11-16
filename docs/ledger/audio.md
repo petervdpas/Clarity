@@ -19,14 +19,25 @@ Progress: 90%
 - Example: `examples/mp3player` (csharp desktop)
 
 ## Open
-- `conformance/sound.json` for play, pause and seek: NOT BUILT (AUDIO-PLAN.md:63).
-- `soundTags(path)` (tags of many files): NOT BUILT, deferred (AUDIO-PLAN.md:70).
-- AAC (m4a) playback: NOT BUILT (AUDIO-PLAN.md:19). The decoder is compiled in (`runtimes/rust-audio/Cargo.toml:20-22`, for video's sound); m4a is not a sound resource (`resources.rs:29`).
+- `conformance/sound.json` for play, pause and seek: NOT BUILT; see Design "Shared cases".
+- `soundTags(path)` (tags of many files): NOT BUILT, deferred; see Design "Tags of many files".
+- AAC (m4a) playback: NOT BUILT; see Design "AAC".
 - Played by a person on every stack and OS: UNTRIED (DESIGN SD1 "Not yet heard on every stack by a person").
+
+## Design
+
+### Shared cases
+- `conformance/sound.json`: the sound part's calls (`play(path)`, `pause()`, `resume()`, `seek(seconds)`, `stop()`), the values code reads after each (`playing`, `paused`, `position`, `length`, `file`, `problem`) and the events (`on end`, `on fail`), run by R, Go, C, C++, C# and Clarity.UI.
+
+### Tags of many files
+- `soundTags(path)`: title, artist, album and track of any sound file, for a list of songs, not only the one that plays (`player.title` and the rest are built).
+- It wants a tag reader per stack's runtime, or Clarity.Audio's C table (`tag`) called from each; which one is open.
+
+### AAC
+- m4a (AAC) songs play through the sound part. The Symphonia AAC and MP4 decoders are already compiled in for video's sound (`runtimes/rust-audio/Cargo.toml:20-22`); m4a becomes a sound resource (`crates/clarity-spec/src/resources.rs:29`) and a song `resources::plays_songs` counts.
 
 ## Conflicts
 - Melodies are written three times: `crates/clarity-spec/src/sound.rs:73`, `runtimes/rust-ui/src/melodies.rs:16`, `runtimes/csharp/Clarity.Runtime/Melodies.cs:20` (equal today; the C# copy has no callers outside tests).
-- AUDIO-PLAN.md:40 writes a page block, which the loader refuses.
 
 ## Decisions
 - 2026-10-24: a built-in `sound` part with no place in the grid, kept in the designer's tray.
@@ -37,5 +48,5 @@ Progress: 90%
 
 ## Was
 - DESIGN 5.22, roadmap SD1
-- AUDIO-PLAN.md steps 1-5, "Decisions", "The libraries", "The language" ("The agent" section: see [agent](agent.md))
+- AUDIO-PLAN.md steps 1-5 (step 3's `conformance/sound.json`: now Design "Shared cases"), "Where it stands" (outdated), "Decisions" (AAC: now Design "AAC"), "The libraries", "The language" (`soundTags`: now Design "Tags of many files"), "The agent" (built in `crates/clarity-tools/src/lib.rs`; see [agent](agent.md))
 - memory: audio-plan.md

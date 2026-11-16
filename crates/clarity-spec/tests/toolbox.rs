@@ -1,4 +1,4 @@
-//! `toolbox popup` / `toolbox slideout`: a painting canvas's tools in a toolbox (docs/IMAGE-PLAN.md).
+//! `toolbox popup` / `toolbox slideout`: a painting canvas's tools in a toolbox (docs/ledger/canvas-toolbox.md).
 
 use clarity_spec::{Severity, load_converted};
 

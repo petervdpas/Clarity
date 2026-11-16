@@ -1,4 +1,4 @@
-//! The frame around a window (DESIGN 7.9): the menu bar, toolbar and ribbon
+//! The frame around a window (manual/start.how-it-works.md): the menu bar, toolbar and ribbon
 //! at the top, the sidebars at the sides, the footer at the bottom, and the
 //! window's own parts in between. Each region is the window's own where its
 //! markup has one, else the app's; a dialog shows no app frame. Clicking an

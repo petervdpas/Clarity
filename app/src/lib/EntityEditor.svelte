@@ -49,7 +49,7 @@
 
   /** The module file the entity is declared in. */
   const declaredIn = $derived(entity ? preview.project.files.find((f) => f.entities.some((e) => e.name.name === entity.name.name)) : undefined);
-  /** In a module of a data source (`source shop`), the other entities can be held inside as records (DESIGN 5.25). */
+  /** In a module of a data source (`source shop`), the other entities can be held inside as records (manual/data.entities.md). */
   const held = $derived(
     declaredIn?.source && entity ? declaredIn.entities.filter((e) => e.name.name !== entity.name.name && !e.settings).map((e) => e.name.name) : [],
   );
@@ -372,7 +372,7 @@
     </table>
   </div>
   {#if entity?.keptVersion}
-    <!-- The version is Clarity's, never a field (docs/APP-CAPABILITIES-PLAN.md step 5). -->
+    <!-- The version is Clarity's, never a field (docs/ledger/row-versions.md). -->
     <p class="muted">Clarity keeps a version of each record in <code>{entity.keptVersion}</code>: a save of a record someone else saved since it was read is refused, and <code>save ... anyway</code> writes regardless.</p>
   {/if}
 

@@ -4,7 +4,7 @@
 
 use super::*;
 
-/// The sign-in window to start from (docs/APP-CAPABILITIES-PLAN.md, "The
+/// The sign-in window to start from (docs/ledger/signin.md, "The
 /// sign-in window is designed, and guided"): window, content, views. Each
 /// way of signing in that takes typed inputs (password, recovery code,
 /// token) gets a view of its own: the language dropdown, a field per input,

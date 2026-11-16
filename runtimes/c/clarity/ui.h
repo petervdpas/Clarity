@@ -41,7 +41,7 @@ typedef struct {
     /// A spin box's range, as a handler set it; without `has_min` and `has_max` it is as its line writes it.
     bool has_min, has_max;
     int64_t min, max;
-    /// A painting or vector canvas's tool in hand, brush and ink, as a handler set them (DESIGN 5.31); NULL keeps the design.
+    /// A painting or vector canvas's tool in hand, brush and ink, as a handler set them (manual/parts.graphics.md); NULL keeps the design.
     const char* tool;
     bool has_brush;
     int64_t brush;
@@ -93,7 +93,7 @@ typedef struct {
     ClaritySelected* selected;
     size_t selected_count;
     /// What the window's tables, lists, trees and charts show, by part name
-    /// (DESIGN 1.7, clarity/views.h): an object, NULL when it has none.
+    /// (manual/start.how-it-works.md, clarity/views.h): an object, NULL when it has none.
     cJSON* views;
 } ClarityWindowState;
 
@@ -133,7 +133,7 @@ typedef struct {
     bool new_window;
 } ClarityOpen;
 
-/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
+/// `ask ... then handler(values)` (manual/code.statements.md): a question the screen asks
 /// in Clarity's own dialog when the handler has finished. Its answer runs
 /// `handler` with `values` and, for a value, the answer last.
 typedef struct {
@@ -178,7 +178,7 @@ typedef struct {
     cJSON* hears;
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard; NULL: none.
     const ClarityText* copy;
-    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// The id of the database step the handler made (manual/code.handlers.md), which
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     int64_t step;
     /// The runtime refused what the person gave (a list field's typed item):

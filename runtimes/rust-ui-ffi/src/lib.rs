@@ -1,4 +1,4 @@
-//! The C interface of Clarity.UI (DESIGN 7.9, "One Clarity.UI for all five
+//! The C interface of Clarity.UI (manual/start.how-it-works.md, "One Clarity.UI for all five
 //! languages"): `extern "C"` functions over plain numbers, UTF-8 text and
 //! opaque handles, which C#, Go, C and C++ call. The header that declares
 //! them is written by hand in `include/clarity_ui.h`; each function here

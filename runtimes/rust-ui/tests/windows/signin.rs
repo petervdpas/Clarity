@@ -1,4 +1,4 @@
-//! Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): the
+//! Who is using the program (docs/ledger/signin.md): the
 //! sign-in window shows before the main window when the start says so, a
 //! `signin <strategy>` button signs in with the window's parts named as the
 //! strategy's inputs, a refusal shows as refusals do, and `signout` closes

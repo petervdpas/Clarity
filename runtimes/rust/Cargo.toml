@@ -22,28 +22,28 @@ sqlite = ["dep:rusqlite"]
 postgres = ["dep:postgres", "dep:bytes", "rust_decimal/db-postgres"]
 mysql = ["dep:mysql"]
 mssql = ["dep:tiberius", "dep:tokio", "dep:tokio-util"]
-# Engines (DESIGN 5.11): WebAssembly modules hosted through wasmi.
+# Engines (manual/code.engines.md): WebAssembly modules hosted through wasmi.
 engines = ["dep:wasmi"]
-# HTTP calls from code (DESIGN 5.23), through ureq with rustls.
+# HTTP calls from code (manual/code.web-apis.md), through ureq with rustls.
 http = ["dep:ureq"]
-# The picture functions of code (docs/IMAGE-PLAN.md), through Clarity.Image.
+# The picture functions of code (docs/ledger/picture-functions.md), through Clarity.Image.
 pictures = ["dep:clarity-image"]
-# The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
+# The data formats of code (docs/ledger/formats.md): Clarity.Formats.
 formats = ["dep:clarity-formats"]
-# Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4):
+# Who is using the program (docs/ledger/signin.md):
 # Clarity.Auth's strategies, sessions and tries.
 auth = ["dep:clarity-auth", "dep:windows-sys", "windows-sys?/Win32_System_Console"]
 # The app's commands for AI agents over MCP (docs/ledger/app-mcp.md):
 # `<program> mcp`, through Clarity.AppMcp.
 mcp = ["dep:clarity-app-mcp"]
-# Secret settings (DESIGN 5.27): the system's protected store. The
+# Secret settings (manual/data.settings.md): the system's protected store. The
 # Credential Manager through Win32 itself, written as every stack writes it
 # (conformance/secret-store.json); the Keychain and the Secret Service over
 # D-Bus through keyring.
 secrets = ["dep:keyring", "dep:windows-sys", "windows-sys?/Win32_Security_Credentials"]
 # The desktop through Clarity.UI's ready-made library (its C interface), as
 # Go, C and C++ use it: no Skia to build. The program links the library from
-# the folder CLARITY_UI names (DESIGN 7.9).
+# the folder CLARITY_UI names (manual/start.how-it-works.md).
 native-ui = []
 
 [dependencies]

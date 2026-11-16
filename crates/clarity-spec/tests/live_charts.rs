@@ -1,4 +1,4 @@
-//! Live graphs (DESIGN 5.26): a `chart line` (or `bar`) of a list of
+//! Live graphs (manual/parts.data.md): a `chart line` (or `bar`) of a list of
 //! numbers draws them as they are, the last `points` of them; a `trend`
 //! part keeps the last `points` values of one number, taken every so many
 //! seconds; a `timer` runs a handler every so many seconds while its window

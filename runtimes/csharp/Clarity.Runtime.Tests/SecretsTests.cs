@@ -1,4 +1,4 @@
-// Secret settings in the system's protected store (DESIGN 5.27): kept, read
+// Secret settings in the system's protected store (manual/data.settings.md): kept, read
 // back and forgotten, apart from settings.json. Needs a store, such as the
 // Secret Service of a desktop session; without one it checks nothing.
 
@@ -94,7 +94,7 @@ public sealed class SecretsTests
         }
     }
 
-    /// <summary>A database connects with a secret setting (DESIGN 5.27): its connection, password and all, kept in the protected store.</summary>
+    /// <summary>A database connects with a secret setting (manual/data.settings.md): its connection, password and all, kept in the protected store.</summary>
     [Fact]
     public void A_database_connects_with_a_secret_setting()
     {

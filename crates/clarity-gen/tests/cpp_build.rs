@@ -92,7 +92,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
 }
 
 /// The game whose field of orbs a C++ library draws on Clarity.UI's canvas
-/// (a custom part, DESIGN 5.19): the program builds with it inside.
+/// (a custom part, manual/design.custom-parts.md): the program builds with it inside.
 #[test]
 #[ignore]
 fn the_orbs_example_builds_and_runs_in_cpp() {
@@ -304,7 +304,7 @@ fn board_runs_in_cpp(interpreted: bool) {
     remove(&out);
 }
 
-/// A window that asks each kind of question (DESIGN 5.14) builds without a
+/// A window that asks each kind of question (manual/code.statements.md) builds without a
 /// warning in its own code.
 #[test]
 #[ignore]
@@ -324,7 +324,7 @@ fn questions_and_their_answers_build_in_cpp() {
     remove(&out);
 }
 
-/// Records in app code and a tree by key (DESIGN 5.12) build without a
+/// Records in app code and a tree by key (manual/code.engines.md) build without a
 /// warning in their own code.
 #[test]
 #[ignore]
@@ -344,7 +344,7 @@ fn an_outline_of_records_builds_in_cpp() {
     remove(&out);
 }
 
-/// The web target (DESIGN 7.3, round B): a project whose only target is the
+/// The web target (manual/project.run-build.md, round B): a project whose only target is the
 /// web builds into a web server that serves Clarity.UI's page and browser
 /// files, the program's files.json, and answers the library's commands.
 #[test]

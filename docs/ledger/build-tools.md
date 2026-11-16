@@ -31,7 +31,7 @@ Paths for other tools go through `clarity_project::slashed` (plain, `/` between 
 - Building without the internet: see [offline](offline.md).
 
 ## Conflicts
-- setup.tools.md:16, :64 say cargo downloads Skia; Rust links the ready-made library (`runtimes/rust/Cargo.toml:45`). README.md:75 and setup.tools.md:7 name the library for Go, C and C++ only.
+- none. (Fixed 2026-11-16: manual setup.tools.md said cargo downloads Skia for Rust; Rust links Clarity.UI's ready-made library, `runtimes/rust/Cargo.toml:41-45`, `crates/clarity-gen/src/rust/mod.rs:107-109`; nothing downloads or builds Skia. README.md:75 is in [docs](docs.md).)
 
 ## Decisions
 - P3 (undated in DESIGN): Clarity is installed as a finished program; a missing tool only stops Build and Run, never designing, checking or generating.

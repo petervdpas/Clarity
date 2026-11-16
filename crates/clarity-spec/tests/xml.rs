@@ -1,4 +1,4 @@
-//! XML in code (docs/FORMATS-PLAN.md, step 3): `read list<Order> from xml
+//! XML in code (docs/ledger/formats.md): `read list<Order> from xml
 //! text at "shop/orders/order"` and `xml of orders at "shop/orders/order"`.
 //! XML nests, and `xml of` always takes `at`: no element name is guessed.
 

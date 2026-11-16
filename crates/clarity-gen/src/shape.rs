@@ -1,5 +1,5 @@
 //! What a program reads from a format or writes in one, as Clarity.Formats
-//! is told it (docs/FORMATS-PLAN.md): the kind, as JSON, the same on every
+//! is told it (docs/ledger/formats.md): the kind, as JSON, the same on every
 //! stack. A record lists every field of its entity in order with what it
 //! takes: a reference, a picture, a file and a list of stored records are
 //! never read (`other`), and a record held inside an entity of a web API,
@@ -39,7 +39,7 @@ pub(crate) fn options_pieces(options: &[(String, String)]) -> Vec<Piece> {
 }
 
 /// The format a reading or writing is in, and its options as pieces
-/// (docs/FORMATS-PLAN.md, step 4): a mapping written in place gives each
+/// (docs/ledger/formats.md): a mapping written in place gives each
 /// option's value as the stack's code, which `code` writes as JSON; a
 /// declared mapping is its options object whole. None for a mapping the
 /// project does not declare.

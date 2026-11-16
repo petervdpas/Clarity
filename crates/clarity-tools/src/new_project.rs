@@ -35,7 +35,7 @@ pub fn write_new_project(path: &Path, stack: Stack) -> Result<PathBuf, String> {
     let project = clarity_project::write(None, &settings)?;
     let title = clarity_project::title(&settings);
     // The app and its main window, each a file of its own in design/ (MyShop.cxaml, Main.cxaml);
-    // the window shows its parts in a view in its content, as New window makes one (DESIGN 5.33).
+    // the window shows its parts in a view in its content, as New window makes one (manual/design.windows.md).
     let module_file = format!("{module}.clarity");
     let module_text = format!("module {module}\n");
     let empty = clarity_spec::load_sources([(module_file.as_str(), module_text.as_str())]);
@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(settings.stack, csharp());
         assert_eq!(settings.datasources[0].url, "data/my_shop.db");
         assert!(std::fs::read_to_string(dir.join(".gitignore")).unwrap().contains("out/"));
-        // Its main window shows its parts in a view in its content, as New window makes one (DESIGN 5.33).
+        // Its main window shows its parts in a view in its content, as New window makes one (manual/design.windows.md).
         let main = std::fs::read_to_string(dir.join("design/Main.cxaml")).unwrap();
         assert!(main.contains("<Window class=\"my_shop.Main\"") && main.contains("<Content") && main.contains("<View name=\"MainView\""), "{main}");
         let view = std::fs::read_to_string(dir.join("design/MainView.cxaml")).unwrap();

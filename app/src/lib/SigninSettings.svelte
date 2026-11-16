@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Who is using the program (docs/APP-CAPABILITIES-PLAN.md step 4): the
+  // Who is using the program (docs/ledger/signin.md): the
   // project file's `signin` block in Settings. The entity of people, the
   // targets people sign in on, and the strategies of Clarity.Auth's catalog,
   // each with the fields it names; the backend checks what is saved.

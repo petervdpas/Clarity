@@ -6,7 +6,7 @@ import type { TypeRef } from "./TypeRef";
 
 /**
  * `const lives = 3`: a value written out, read by name and never set
- * (DESIGN 5.12), in a module or an engine written in Clarity.
+ * (manual/code.engines.md), in a module or an engine written in Clarity.
  */
 export type ConstDecl = { name: Ident, 
 /**

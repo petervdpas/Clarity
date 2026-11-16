@@ -1,5 +1,5 @@
 //! A record keeps the keys no part binds when a person edits it in a window
-//! (docs/APP-CAPABILITIES-PLAN.md step 5): every stack sends a record's
+//! (docs/ledger/row-versions.md): every stack sends a record's
 //! version as `rowVersion` beside its fields, and a save is refused when the
 //! version that comes back is not the one read. So typing in a bound box
 //! must leave `rowVersion` (and `id`) as the program sent them.

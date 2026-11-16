@@ -85,7 +85,7 @@ fn csharp_needs_the_dotnet_sdk_the_project_targets() {
     assert_eq!(ready.found, [".NET SDK 10.0.402"]);
 }
 
-/// Go draws with Clarity.UI's library through cgo (DESIGN 7.9): Go and a C
+/// Go draws with Clarity.UI's library through cgo (manual/start.how-it-works.md): Go and a C
 /// compiler, no WebKitGTK; the library is the folder CLARITY_UI names.
 #[test]
 fn go_needs_go_and_a_c_compiler_for_cgo() {
@@ -113,7 +113,7 @@ fn with_libraries(machine: Machine) -> Machine {
 #[test]
 fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     // C and C++ build with CMake (the generated project has a CMakeLists.txt) and make or Ninja.
-    // C draws with Clarity.UI's library (DESIGN 7.9): no C++ compiler, no WebKitGTK.
+    // C draws with Clarity.UI's library (manual/start.how-it-works.md): no C++ compiler, no WebKitGTK.
     let c = check(
         Backend::C,
         Ui::Clarity,
@@ -383,7 +383,7 @@ fn every_missing_tool_points_at_the_manual() {
 }
 
 /// The web target of C# needs nothing beyond the SDK: its server serves
-/// Clarity.UI's browser files, which Clarity carries (DESIGN 7.9, B2).
+/// Clarity.UI's browser files, which Clarity carries (manual/start.how-it-works.md).
 #[test]
 fn the_web_target_of_csharp_needs_only_the_sdk() {
     let sdk = "10.0.402 [/usr/share/dotnet/sdk]\n";
@@ -394,7 +394,7 @@ fn the_web_target_of_csharp_needs_only_the_sdk() {
 
 /// No stack asks for Node.js or npm: a web stack's windows are markup the
 /// screen Clarity ships reads, so building an application needs only the
-/// stack's own tools (DESIGN 7.8).
+/// stack's own tools (manual/start.how-it-works.md).
 #[test]
 fn no_stack_needs_node() {
     for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity), (Backend::Csharp, Ui::Clarity)] {

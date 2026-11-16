@@ -372,7 +372,7 @@ fn board_runs_in_csharp(interpreted: bool) {
     remove(&root);
 }
 
-/// A window that asks each kind of question (DESIGN 5.14) builds without a
+/// A window that asks each kind of question (manual/code.statements.md) builds without a
 /// warning, every binding checked.
 #[test]
 #[ignore]
@@ -391,7 +391,7 @@ fn questions_and_their_answers_build_in_csharp() {
     remove(&out);
 }
 
-/// Records in app code and a tree by key (DESIGN 5.12) build without a
+/// Records in app code and a tree by key (manual/code.engines.md) build without a
 /// warning, every binding checked.
 #[test]
 #[ignore]
@@ -434,7 +434,7 @@ fn pictures_build_in_csharp() {
     remove(&out);
 }
 
-/// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
+/// An engine beside the screen (manual/code.engines.md, conformance/engines/play.clarity):
 /// the application builds with the engine embedded and a canvas that runs
 /// it. With CLARITY_KEEP set the built application stays, to run it.
 #[test]

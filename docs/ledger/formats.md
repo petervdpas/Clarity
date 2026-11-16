@@ -21,20 +21,56 @@ Progress: 55%
 - Examples: shop (CSV price list), stock (XML deliveries), todo (YAML ideas through a mapping)
 
 ## Open
-- The data browser shows file sources: NOT BUILT (no data browser; FORMATS-PLAN.md step 2 item 3).
-- An agent tool to add a file data source: NOT BUILT (FORMATS-PLAN.md step 2 item 4).
-- Reading formats from bytes: NOT BUILT (FORMATS-PLAN.md "In code").
-- `table "Orders"` for files with several tables: NOT BUILT (FORMATS-PLAN.md "The catalog").
-- xlsx and ods; toml and ini: NOT BUILT (FORMATS-PLAN.md "Later steps"; APP-CAPABILITIES-PLAN.md open questions).
-- Formats from libraries (`format name` in a library): NOT BUILT.
-- JSON Schema in `check` for JSON and YAML: NOT BUILT, open question.
-- A file source at a `setting:` path reloading when the setting changes: NOT BUILT, open question.
-- Text functions `encoded(text)` and `plainText(html)`: NOT BUILT (APP-CAPABILITIES-PLAN.md step 1).
-- Encrypted file sources: see [encrypted-storage](encrypted-storage.md). Shared core for file sources: NOT BUILT (MODULAR-PLAN.md order 2).
+- The data browser shows file sources: NOT BUILT (no data browser); see Design "In the IDE".
+- An agent tool to add a file data source: NOT BUILT; see Design "In the IDE".
+- Reading formats from bytes: NOT BUILT; see Design "Bytes".
+- Choosing one table of a file that holds several: NOT BUILT; see Design "Several tables".
+- xlsx and ods: NOT BUILT; see Design "Spreadsheets".
+- Formats from libraries: NOT BUILT; see Design "Library formats".
+- Text functions `encoded(text)` and `plainText(html)`: NOT BUILT; see Design "Text functions".
+- Encrypted file sources: see [encrypted-storage](encrypted-storage.md). Shared core for file sources: NOT BUILT ([modularity](modularity.md) step 2).
+
+## Design
+
+Each item is a complete slice: all five stacks, conformance, checker, designer, Settings rows, agent tools, manual, i18n, an example, every example building.
+
+### Bytes
+
+- The same shapes with `bytes` for formats that are not text: `read list<Order> from xlsx bytes`, and a mapping used on bytes.
+
+### Several tables
+
+- A catalog entry already says how many tables a file holds. Where it holds several (a spreadsheet's sheets), code and a file source name the one meant. Whether that is the mapping's `at` or a separate `table "Orders"` line is open.
+
+### Spreadsheets
+
+- `xlsx` and `ods` as catalog entries: bytes, several tables (the sheets), cell values only.
+- Built into `clarity-formats` (Rust `calamine` to read, `rust_xlsxwriter` to write) or left to a library format: open.
+
+### Library formats
+
+- A library declares `format name`; its adapter, in the project's own language, implements the two calls a built-in format has (parse to the document model, write from it), and the engine does the rest.
+
+### Text functions
+
+- `encoded(text)`: percent-encoding for a URL part, so `"mailto:{to}?subject={encoded(subject)}"` works.
+- `plainText(html)`: the readable text of an HTML page, for a model or a memo.
+- They join the language with the next change that touches text functions.
+
+### In the IDE
+
+- When the IDE gets a data browser, it shows file sources as it shows databases.
+- An agent tool adds a file data source with its format's options from the catalog (there is none for data sources today).
+
+### Open questions
+
+- `check` taking JSON Schema for JSON and YAML, beside XSD for XML.
+- Built in beyond json, csv, xml and yaml: toml and ini, or library formats.
+- Spreadsheet styling (widths, colors, formulas) on writing: an option of `xlsx`, or a report output ([reports-pdf](reports-pdf.md)).
+- A file source at a `"setting:name"` path: reloaded when the setting changes, or at the next start.
 
 ## Conflicts
 - Go's file-source tests carry the `clarityformats` tag but CI runs `-run Formats`, which does not match their names (`.github/workflows/checks.yml:207`, `runtimes/go/clarity/file_source_test.go`).
-- FORMATS-PLAN.md:3 says steps 2-5 unreleased; they are in tag v0.39.0. FORMATS-PLAN.md:334 says no example uses a mapping; todo does (`examples/todo/ideas.clarity:13`).
 
 ## Decisions
 - 2026-11-10: formats are one generic catalog, never one format. User: "csv is just one format of data... making it specific isnt very generic, is it... you need to keep thinking c++ builder and what you could make with that back in the days"
@@ -42,13 +78,13 @@ Progress: 55%
 - 2026-11-10: each step a complete slice on every stack. User: "be sure we are not going to do half implementations scattered all over!!!!!"
 - 2026-11-10: JSON moves into the library and `json of` writes the same bytes on every stack (relayed: keeping JSON per runtime "leaves a formats crate with CSV and JSON somewhere else, which removes the strength of the idea").
 - 2026-11-10: Go accepts cgo when a program uses a format; C# gets its own NuGet `Clarity.Formats`; the library joins a program only when used.
-- 2026-11-12: a file source is always `external`, find/save/delete work, write-back keeps unmapped columns, types are never guessed on Import (FORMATS-PLAN.md "A file as a data source").
+- 2026-11-12: a file source is always `external`, find/save/delete work, write-back keeps unmapped columns, types are never guessed on Import.
 - 2026-11-12: XML. User: "xpath slashes, element first, require at, start step 3"
 - 2026-11-12: mappings per case, one path style for every format. User: "yaml! and the still points should be configured per case not carved in stone beforehand!", "Yes, build mappings", "Slashes, dots still read"
 
 ## Was
-- FORMATS-PLAN.md (all: steps 1-5, "Later steps", "Decided", open questions)
-- APP-CAPABILITIES-PLAN.md step 1, "Where the code lives" (formats column)
+- docs/FORMATS-PLAN.md (all: steps 1-5, "In code" (bytes), "The catalog" (`table`), step 2 items 3-4, "Later steps", "Decided", open questions)
+- docs/APP-CAPABILITIES-PLAN.md step 1 (`encoded`, `plainText`), "Where the code lives" (formats column), open questions (toml, ini, spreadsheets, write-back)
 - DESIGN 5.23 (JSON second slice, "Moved into Clarity.Formats"), 5.25 (JSON part)
 - MODULAR-PLAN.md order 2 (file sources)
 - IMPLEMENTED.md 6 "Files and formats" (formats, file sources)

@@ -1,6 +1,6 @@
 package clarity
 
-// Secret settings (DESIGN 5.27): kept in the system's protected store, per
+// Secret settings (manual/data.settings.md): kept in the system's protected store, per
 // person and per application, never in settings.json. The store is the
 // package secrets of this module, which a program with secret settings sets
 // as Secrets; the others never load it.

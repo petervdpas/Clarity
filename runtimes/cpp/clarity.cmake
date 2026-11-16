@@ -61,7 +61,7 @@ macro(clarity_ui_folder)
   endif()
 endmacro()
 
-# The desktop program on Clarity.UI (DESIGN 7.9): only in a project whose
+# The desktop program on Clarity.UI (manual/start.how-it-works.md): only in a project whose
 # runtime copy has it, so a command-line program and a web server build
 # without it. Clarity.UI is one library (libclarity_ui.so, clarity_ui.dll,
 # libclarity_ui.dylib) with its header, in the folder CLARITY_UI names:
@@ -94,7 +94,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
   add_library(clarity_desktop STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp ${CMAKE_CURRENT_LIST_DIR}/ui/ui.cpp)
   target_include_directories(clarity_desktop PUBLIC ${CMAKE_CURRENT_LIST_DIR})
   target_link_libraries(clarity_desktop PUBLIC clarity_service clarity_ui)
-  # Handlers of long calls run on the library's worker thread (DESIGN 5.12).
+  # Handlers of long calls run on the library's worker thread (manual/code.engines.md).
   find_package(Threads REQUIRED)
   target_link_libraries(clarity_desktop PUBLIC Threads::Threads)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -114,7 +114,7 @@ function(clarity_ui_beside target)
   endif()
 endfunction()
 
-# Clarity.Audio (docs/AUDIO-PLAN.md) for a program whose sound parts play
+# Clarity.Audio (docs/ledger/audio.md) for a program whose sound parts play
 # songs: its library lies beside Clarity.UI's in the folder CLARITY_UI names
 # (include/clarity_audio.h and lib/). Linked to `target` and put beside it.
 function(clarity_use_audio target)
@@ -138,7 +138,7 @@ function(clarity_use_audio target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
-# Clarity.Formats (docs/FORMATS-PLAN.md) for a program whose code reads or
+# Clarity.Formats (docs/ledger/formats.md) for a program whose code reads or
 # writes a format, on any target: its library lies beside Clarity.UI's in
 # the folder CLARITY_UI names (include/clarity_formats.h and lib/), and the
 # runtime's formats/formats.cpp calls it, and formats/file_source.cpp reads a
@@ -203,7 +203,7 @@ function(clarity_use_agents target)
   endif()
 endfunction()
 
-# Clarity.Auth (docs/APP-CAPABILITIES-PLAN.md, step 4) for a program whose
+# Clarity.Auth (docs/ledger/signin.md) for a program whose
 # project signs people in, on any target: its library lies beside
 # Clarity.UI's in the folder CLARITY_UI names (include/clarity_auth.h and
 # lib/), and the runtime's auth/auth.cpp calls it. Linked to `target` and
@@ -236,7 +236,7 @@ function(clarity_use_auth target)
   endif()
 endfunction()
 
-# Clarity.Image (docs/IMAGE-PLAN.md) for a program whose code calls a
+# Clarity.Image (docs/ledger/picture-functions.md) for a program whose code calls a
 # picture function: its library lies beside Clarity.UI's in the folder
 # CLARITY_UI names (include/clarity_image.h and lib/), and the runtime's
 # pictures/pictures.cpp calls it. Linked to `target` and put beside it.
@@ -262,7 +262,7 @@ function(clarity_use_image target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_image> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
-# Clarity.Video (docs/VIDEO-PLAN.md) for a program with video parts: its
+# Clarity.Video (docs/ledger/video-camera.md) for a program with video parts: its
 # library and Cisco's openh264 lie beside Clarity.UI's in the folder CLARITY_UI
 # names. Linked to `target` and put beside it, openh264 too, so videos play
 # offline.
@@ -383,9 +383,9 @@ function(clarity_ui_files target folder)
   target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/clarity_ui_files.cpp)
 endfunction()
 
-# HTTP calls from code (DESIGN 5.23), through libcurl: only in a project
+# HTTP calls from code (manual/code.web-apis.md), through libcurl: only in a project
 # whose runtime copy has them, that is, one whose code calls out.
-# Secret settings (DESIGN 5.27) in the system's protected store: only in a
+# Secret settings (manual/data.settings.md) in the system's protected store: only in a
 # project whose runtime copy has them, that is, one with a secret setting.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.cpp)
   add_library(clarity_secrets STATIC ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.cpp)
@@ -415,7 +415,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.cpp)
   endif()
 endif()
 
-# Engines (DESIGN 5.11), hosted by wasm3: only in a project whose runtime
+# Engines (manual/code.engines.md), hosted by wasm3: only in a project whose runtime
 # copy has them, that is, one that declares an engine. wasm3 is C; the
 # runtime's own build takes it from the C runtime beside it.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp)

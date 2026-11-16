@@ -1,4 +1,4 @@
-//! JSON in code (DESIGN 5.23): `json of value` writes a record, a list or a
+//! JSON in code (manual/code.web-apis.md): `json of value` writes a record, a list or a
 //! value as Clarity's JSON, and `read Order from json text` (or
 //! `read list<Order> from json text at "data"`) reads records from it.
 

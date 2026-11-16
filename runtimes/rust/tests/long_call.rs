@@ -1,4 +1,4 @@
-//! A long engine call belongs to the handler that waits for it (DESIGN 5.12):
+//! A long engine call belongs to the handler that waits for it (manual/code.engines.md):
 //! its progress and its Stop are that handler's watch, on that handler's
 //! thread. A handler beside it (another window stack, a session) sees none
 //! of its progress and its Stop stops nothing of it; a report after the

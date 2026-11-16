@@ -15,7 +15,7 @@
   import { layout } from "./layout.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
-  import { commandsOf, grown, nudged } from "./designLayer";
+  import { canvasSize, commandsOf, grown, nudged, opening } from "./designLayer";
   import { applyEdit } from "./applyEdit";
   import { guided, signinTiles, signinViews, type SigninTile } from "./signinView";
   import type { Category } from "@clarity/ui/generated/Category.ts";
@@ -170,9 +170,11 @@
   // The size a window's edge is being dragged to, kept until the window has
   // it; null while none is.
   let sizing = $state<{ width: number; height: number } | null>(null);
-  // A slide-out designed on a canvas of its own (Views, marked slideout): only its parts show, as wide as it slides out.
-  const slideout = $derived(pageDesigner.slideout ? (allParts(page).find((w) => w.props.kind === "slideout" && w.props.name === pageDesigner.slideout) ?? null) : null);
-  const shownSize = $derived(slideout ? { width: slideout.props.slideWidth ?? 420, height: windowSize(page).height } : (sizing ?? windowSize(page)));
+  // A slide-out or popover designed on a canvas of its own (Views, marked so; a double click on it): only its parts show, as big as it opens.
+  const alone = $derived(
+    pageDesigner.canvas ? (allParts(page).find((w) => (w.props.kind === "slideout" || w.props.kind === "popover") && w.props.name === pageDesigner.canvas) ?? null) : null,
+  );
+  const shownSize = $derived(alone ? canvasSize(alone, windowSize(page).height, preview.project.rowHeight) : (sizing ?? windowSize(page)));
 
   async function resize(size: { width: number; height: number }, done: boolean) {
     sizing = size;
@@ -215,8 +217,8 @@
   });
   // What the drawing shows beyond the saved window: the page each container shows, the draft, the popover picked.
   const showing = $derived(
-    slideout
-      ? { pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, slideout: slideout.props.name ?? undefined }
+    alone
+      ? { pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, canvas: alone.props.name ?? undefined }
       : { pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, open: openPopovers },
   );
   const chosen = $derived(chosenOf(languageChoice.language, preview.project.locale.language ?? "en"));
@@ -243,9 +245,11 @@
     }
   }
 
-  // A part double-clicked on the window opens the code of its main event (its
-  // first in the catalog: click for a button, draw for a canvas), writing and
-  // wiring the handler first when there is none, as an IDE does.
+  // A part double-clicked on the window opens what it has of its own, as the
+  // Explorer opens it (`opening`: a slide-out or popover on a canvas of its
+  // own, the view or toolbox it shows); any other part the code of its main
+  // event (its first in the catalog: click for a button), writing and wiring
+  // the handler first when there is none, as an IDE does.
   let handledPartCode: object | null = null;
   $effect(() => {
     const request = pageDesigner.partCode;
@@ -274,6 +278,18 @@
     }
     const location = locateWidget(preview, itsPage, item);
     if (!location) return;
+    const own = opening(location.widget, pageDesigner.activeTabs[key] ?? 0);
+    if (own && "page" in own) {
+      pageDesigner.canvas = null;
+      onopen?.({ kind: "window", name: own.page });
+      return;
+    }
+    // A slide-out or popover of this window's own file (not one of a view the window shows: that one opens in its view).
+    if (own && allParts(page).some((w) => (w.props.kind === "slideout" || w.props.kind === "popover") && w.props.name === own.canvas)) {
+      pageDesigner.selected = null;
+      pageDesigner.canvas = own.canvas;
+      return;
+    }
     const p = location.widget.props;
     const info = widgetInfo(preview, p.kind);
     const event = info.events[0];
@@ -301,7 +317,7 @@
     if (!into) return;
     switch (source.kind) {
       case "new": {
-        // A Custom part is one of the project's: which, asked here, arriving at its declared size (DESIGN 5.19).
+        // A Custom part is one of the project's: which, asked here, arriving at its declared size (manual/design.custom-parts.md).
         let part = source.part ?? null;
         let height: number | null = null;
         if (source.widget === "custom" && !part) {
@@ -369,7 +385,7 @@
     pageDesigner.press(e, { kind: "new", widget: tile.kind, width: tile.width, height: tile.height, label: tile.label, input: tile.input, strategy: tile.strategy, shows: tile.shows });
   }
 
-  // The custom parts the project declares (DESIGN 5.19): a dropped Custom part is one of them, or a new one.
+  // The custom parts the project declares (manual/design.custom-parts.md): a dropped Custom part is one of them, or a new one.
   const customParts = $derived(preview.project.files.flatMap((f) => f.parts));
 
   /** Which custom part a dropped Custom part is: picked from the project's, or made new; none when the person cancels. */
@@ -500,19 +516,19 @@
   style:grid-template-columns={filled ? "minmax(0, 1fr)" : `minmax(0, 1fr) auto ${layout.folded.properties ? "auto" : layout.sizes.properties + "px"}`}
 >
   <div class="stage" class:hidden={filled}>
-    <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app || slideout ? undefined : resize}>
-      {#if slideout}
-        <!-- The slide-out on a canvas of its own: its title bar picks it, and a button goes back to the whole window. -->
+    <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app || alone ? undefined : resize}>
+      {#if alone}
+        <!-- The slide-out or popover on a canvas of its own: its title bar picks it, and a button goes back to the whole window. -->
         <div
           class="titlebar"
-          class:selected={pageDesigner.selected === shown.keyOf(slideout)}
+          class:selected={pageDesigner.selected === shown.keyOf(alone)}
           role="button"
           tabindex="-1"
-          onpointerdown={() => (pageDesigner.selected = shown.keyOf(slideout))}
+          onpointerdown={() => (pageDesigner.selected = shown.keyOf(alone))}
         >
-          <span>{slideout.props.caption ? tr(preview, slideout.props.caption) : slideout.props.name}</span>
-          <code>{slideout.props.name}: slide-out of {page.name.name} | {slideout.props.width} columns</code>
-          <button type="button" class="whole" onpointerdown={(e) => e.stopPropagation()} onclick={() => (pageDesigner.slideout = null)}>{page.name.name}</button>
+          <span>{alone.props.caption ? tr(preview, alone.props.caption) : alone.props.name}</span>
+          <code>{alone.props.name}: {alone.props.kind === "popover" ? "popover" : "slide-out"} of {page.name.name} | {alone.props.width} columns</code>
+          <button type="button" class="whole" onpointerdown={(e) => e.stopPropagation()} onclick={() => (pageDesigner.canvas = null)}>{page.name.name}</button>
         </div>
       {:else}
       <div
@@ -544,8 +560,8 @@
         </p>
       {/if}
     </ShownWindow>
-    {#if !app && !slideout}
-      <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26).
+    {#if !app && !alone}
+      <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (manual/design.sound.md, manual/parts.time.md).
            A popover or slide-out is hidden until opened: it waits here too, marked so, and shows on the window while it is picked. -->
       {@const unplaced = [...page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer"), ...popovers]}
       {#if unplaced.length > 0}
@@ -555,10 +571,14 @@
               <PartTile
                 kind={w.props.kind}
                 name={w.props.name ?? w.props.kind}
-                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' || w.props.kind === 'slideout' ? ', hidden until opened: picked, it shows on the window' : ''}. Pick it to set it in the inspector."
+                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' || w.props.kind === 'slideout' ? ', hidden until opened: picked, it shows on the window; double-click it to design it on a canvas of its own' : ''}. Pick it to set it in the inspector."
                 onpointerdown={(e) => {
                   e.stopPropagation();
                   pageDesigner.selected = shown.keyOf(w);
+                }}
+                ondblclick={() => {
+                  const key = shown.keyOf(w);
+                  if (key !== null) pageDesigner.openPartCode(key);
                 }}
               />
             </span>

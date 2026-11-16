@@ -1,4 +1,4 @@
-//! Class diagrams (DG1, DESIGN section 5.13): classes become entities,
+//! Class diagrams (manual/data.diagrams.md): classes become entities,
 //! `<<enumeration>>` enums, `<<engine>>` engines with their functions and
 //! `<<module>>` a module's functions; associations, compositions and
 //! aggregations become relations, as an ERD's do.

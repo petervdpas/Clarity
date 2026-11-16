@@ -1,5 +1,5 @@
 //! Clarity.Auth: the sign-in strategies of the programs Clarity generates
-//! (docs/APP-CAPABILITIES-PLAN.md step 4), alike on every stack. A runtime
+//! (docs/ledger/signin.md), alike on every stack. A runtime
 //! finds the person by what `find` says, then asks `check`; it never knows
 //! one strategy from another.
 

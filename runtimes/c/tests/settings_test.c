@@ -76,7 +76,7 @@ static bool store_set(const char* program, const char* name, const char* value) 
 
 // Keeping the settings writes a secret only when it changed: another setting
 // changing never needs the protected store, nor fails where it cannot be
-// reached (DESIGN 5.27).
+// reached (manual/data.settings.md).
 void a_secret_goes_to_the_store_only_when_it_changed(void) {
     const char* folder = clarity_format("%s/clarity-secrets-c-%d", temp_folder(), rand());
 #ifdef _WIN32

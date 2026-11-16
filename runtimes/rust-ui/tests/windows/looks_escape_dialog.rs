@@ -1,5 +1,5 @@
 //! Escape closes a dialog that has no cancel button as its close does
-//! (DESIGN 5.14: Escape is a cancel, which runs nothing): over the window,
+//! (manual/code.statements.md: Escape is a cancel, which runs nothing): over the window,
 //! and in a desktop window of its own. A window that is no dialog keeps
 //! Escape for its parts.
 

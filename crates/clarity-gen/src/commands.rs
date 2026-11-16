@@ -1,4 +1,4 @@
-//! What every stack's command-line program is made from (DESIGN 5.20):
+//! What every stack's command-line program is made from (manual/code.commands.md):
 //! the program's name and help, and its commands with their arguments and
 //! options in the words conformance/command-line.json uses, which each
 //! generator writes in its own language.

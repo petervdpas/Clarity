@@ -1,4 +1,4 @@
-//! The IDE's preview and design canvas on Clarity.UI (DESIGN 8.1): what is
+//! The IDE's preview and design canvas on Clarity.UI (manual/design.parts.md): what is
 //! designed and previewed is drawn by the same library, from the same
 //! markup, as the program that runs. The IDE serves Clarity.UI's browser
 //! files, the project's windows as `files.json` and a program that answers
@@ -103,14 +103,17 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     files.to_string() + "\n"
 }
 
-/// `files.json` for the designer showing the slide-out `part` of the window or
-/// view `shown` on a canvas of its own (the Elements tree lists it under
-/// Views, marked slideout): its parts as a window of their own, on its grid
-/// and as wide as it slides out. Each part keeps the key it has in the
-/// window's file (`design_keys::numbered`), so picking and changing one
-/// changes the window's file. Why not, when `part` is no slide-out there.
-pub fn files_json_slideout(project: &Project, title: &str, shown: &Shown, part: &str, showing: &BTreeMap<String, usize>) -> Result<String, String> {
-    let Shown::Window(name) = shown else { return Err("an app has no slide-outs".to_string()) };
+/// `files.json` for the designer showing the slide-out or popover `part` of
+/// the window or view `shown` on a canvas of its own (the Explorer lists it
+/// under Views; a double click on it opens it): its parts as a window of
+/// their own, on its grid, as big as it opens (a slide-out as wide as it
+/// slides out and as high as the window; a popover its columns and rows).
+/// Each part keeps the key it has in the window's file
+/// (`design_keys::numbered`), so picking and changing one changes the
+/// window's file. Why not, when `part` is neither there.
+pub fn files_json_own_canvas(project: &Project, title: &str, shown: &Shown, part: &str, showing: &BTreeMap<String, usize>) -> Result<String, String> {
+    use clarity_spec::widgets::WidgetKind;
+    let Shown::Window(name) = shown else { return Err("an app has no slide-outs or popovers".to_string()) };
     let filled = clarity_spec::translations::with_app_slots(project);
     let (filled, keys) = clarity_spec::design_keys::numbered(&filled);
     let (module, page) = filled
@@ -121,13 +124,21 @@ pub fn files_json_slideout(project: &Project, title: &str, shown: &Shown, part: 
     fn find<'a>(widgets: &'a [clarity_spec::model::Widget], name: &str) -> Option<&'a clarity_spec::model::Widget> {
         widgets.iter().find_map(|w| (w.props.name.as_deref() == Some(name)).then_some(w).or_else(|| find(&w.children, name)).or_else(|| w.pages.iter().find_map(|p| find(&p.children, name))))
     }
-    let slide = find(&page.widgets, part).filter(|w| w.props.kind == clarity_spec::widgets::WidgetKind::Slideout).ok_or_else(|| format!("{name} has no slide-out {part}"))?;
+    let alone = find(&page.widgets, part)
+        .filter(|w| matches!(w.props.kind, WidgetKind::Slideout | WidgetKind::Popover))
+        .ok_or_else(|| format!("{name} has no slide-out or popover {part}"))?;
     let mut own = page.clone();
-    own.widgets = slide.children.clone();
-    own.columns = slide.props.width.max(1);
+    own.widgets = alone.children.clone();
+    own.columns = alone.props.width.max(1);
     own.frame = clarity_spec::model::Frame::default();
-    let (_, height) = crate::window_size(&filled, name);
-    let width = slide.props.slide_width.unwrap_or(clarity_spec::model::SLIDEOUT_WIDTH);
+    let (width, height) = if alone.props.kind == WidgetKind::Popover {
+        // As Clarity.UI opens it: columns of POPOVER_COLUMN and rows of the project's height, a gap between each.
+        const GAP: u32 = 8;
+        let (columns, rows) = (alone.props.width.max(1), alone.props.height.max(1));
+        (POPOVER_COLUMN * columns + GAP * (columns - 1), filled.row_height * rows + GAP * (rows - 1))
+    } else {
+        (alone.props.slide_width.unwrap_or(clarity_spec::model::SLIDEOUT_WIDTH), crate::window_size(&filled, name).1)
+    };
     own.size = Some(clarity_spec::model::WindowSize { width, height });
     let markup = crate::web_windows::designed_showing(&keys, showing, || crate::web_windows::window_markup_in(&own, module, filled.row_height));
     let mut files: Value = serde_json::from_str(&files_json(project, title, shown, true, showing)).map_err(|e| e.to_string())?;
@@ -136,6 +147,9 @@ pub fn files_json_slideout(project: &Project, title: &str, shown: &Shown, part: 
     files["height"] = Value::from(height);
     Ok(files.to_string() + "\n")
 }
+
+/// How wide a column of a popover's grid is, as Clarity.UI draws it (`Popover::COLUMN`).
+const POPOVER_COLUMN: u32 = 80;
 
 /// Fills each content of `placed` with the parts of the views it lists, so
 /// the window is designed as it looks. The parts keep the numbers of their
@@ -577,9 +591,9 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
                     {
                         loaded.project = draft;
                     }
-                    // A slide-out designed on a canvas of its own (`slideout=properties`), else the window or view.
-                    let text = match request.query.get("slideout").filter(|s| design && !s.is_empty()) {
-                        Some(part) => match files_json_slideout(&loaded.project, &loaded.title, &shown, part, &showing_of(&request.query)) {
+                    // A slide-out or popover designed on a canvas of its own (`canvas=properties`), else the window or view.
+                    let text = match request.query.get("canvas").filter(|s| design && !s.is_empty()) {
+                        Some(part) => match files_json_own_canvas(&loaded.project, &loaded.title, &shown, part, &showing_of(&request.query)) {
                             Ok(text) => text,
                             Err(why) => return respond(&mut stream, "404 Not Found", "text/plain", why.as_bytes()),
                         },

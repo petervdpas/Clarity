@@ -2,7 +2,7 @@ name: Release Rust Clarity.Image
 
 # Push a runtimes/rust-image/v* tag (e.g. `git tag runtimes/rust-image/v0.1.0 &&
 # git push origin runtimes/rust-image/v0.1.0`) to publish the crate
-# clarity-image to crates.io (docs/IMAGE-PLAN.md). The tag must name the
+# clarity-image to crates.io (docs/ledger/canvas-toolbox.md). The tag must name the
 # version in runtimes/rust-image/Cargo.toml: bump that first, commit, then tag.
 # clarity-ui names a clarity-image version (its painting canvas's tools), so
 # this release goes before the clarity-ui release that needs it (tag runtimes/rust-ui/v*).

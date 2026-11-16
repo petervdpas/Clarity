@@ -1,4 +1,4 @@
-// A data source that is a file in a format (docs/FORMATS-PLAN.md, "A file
+// A data source that is a file in a format (docs/ledger/formats.md, "A file
 // as a data source"): `datasource logins csv "imports/logins.csv" external`.
 // The file is read through Clarity.Formats into one table of an in-memory
 // SQLite database, so the generated code finds, saves and deletes as it

@@ -1,4 +1,4 @@
-// What an application does when its databases did not open (DESIGN 5.27),
+// What an application does when its databases did not open (manual/data.settings.md),
 // as a generated Program.cs gives it to DesktopWindow.Run: the app's
 // `on unconnected` handler runs with why, on a window that is not shown, and
 // what it opens shows first; without one the window that keeps the

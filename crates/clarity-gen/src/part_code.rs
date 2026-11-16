@@ -1,4 +1,4 @@
-//! Reading a custom part's own code without building it (DESIGN 5.19): each
+//! Reading a custom part's own code without building it (manual/design.custom-parts.md): each
 //! stack's scan (`code_mismatches` in rust/parts.rs, go/parts.rs,
 //! c/parts.rs, cpp/parts.rs, csharp/parts.rs) checks that the code still
 //! implements what Clarity's file in the part's folder asks, and uses

@@ -1,4 +1,4 @@
-//! Engines (DESIGN 5.11): processing modules compiled once to WebAssembly,
+//! Engines (manual/code.engines.md): processing modules compiled once to WebAssembly,
 //! which every stack hosts alike (conformance/engines.json). An engine
 //! computes; it imports only the services of Clarity it declares (`uses
 //! clock, random, log`), so it reaches no database, file or network.
@@ -326,7 +326,7 @@ impl Engine {
     }
 
     /// Calls `function` in open window `window` as `call_in` does, adding
-    /// what its answer tells to `told` (an engine beside the screen, DESIGN 5.12).
+    /// what its answer tells to `told` (an engine beside the screen, manual/code.engines.md).
     pub fn call_told(&self, window: u64, function: &str, args: Vec<Value>, told: &mut Vec<crate::screen::ScreenTell>) -> Result<Value> {
         let watch = CURRENT.with(|c| c.borrow().clone()).unwrap_or_default();
         std::thread::scope(|scope| {
@@ -556,7 +556,7 @@ pub fn from_value<T: serde::de::DeserializeOwned>(engine: &str, function: &str, 
     serde_json::from_value(value).map_err(|e| Error::Engine(format!("engine {engine} gave {function} a value of another type: {e}")))
 }
 
-/// An engine beside the screen (DESIGN 5.12) for one canvas: one instance,
+/// An engine beside the screen (manual/code.engines.md) for one canvas: one instance,
 /// which keeps its memory from frame to frame. Each frame calls
 /// `clarity_tick` with the milliseconds since the last, then `clarity_draw`
 /// for the canvas's shapes, each call within the engine's limits. Pointer

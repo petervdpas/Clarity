@@ -15,7 +15,7 @@ export type WidgetPage = { title: string | null,
 columns: number | null, 
 /**
  * `section "Class" view ClassEditor`: a tab, step or section showing a
- * view (DESIGN 5.33), whose parts are then its own.
+ * view (manual/design.windows.md), whose parts are then its own.
  */
 view: string | null, 
 /**

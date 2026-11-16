@@ -30,7 +30,7 @@ const WORDS: [&str; 8] = [
 /// Sample rows for every entity, keyed by entity name.
 pub fn sample_data(project: &Project) -> BTreeMap<String, Vec<Row>> {
     let mut data = BTreeMap::new();
-    // A record's list shows sample rows in the designer too (DESIGN 5.12).
+    // A record's list shows sample rows in the designer too (manual/code.engines.md).
     for entity in project.entities().chain(project.records()) {
         let rows = (0..ROWS_PER_ENTITY)
             .map(|i| sample_row(project, entity, i))

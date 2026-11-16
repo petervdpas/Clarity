@@ -24,11 +24,11 @@ pub const MARKDOWN_EXTENSION: &str = "md";
 /// web renderer, and Clarity.UI through Skia.
 pub const PICTURE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"];
 
-/// The sound files every stack plays (DESIGN 5.22): the browser engines of
+/// The sound files every stack plays (manual/design.sound.md): the browser engines of
 /// the web stacks and C# read these alike.
 pub const SOUND_EXTENSIONS: [&str; 4] = ["wav", "mp3", "flac", "ogg"];
 
-/// Videos every stack plays (docs/VIDEO-PLAN.md).
+/// Videos every stack plays (docs/ledger/video-camera.md).
 pub const VIDEO_EXTENSIONS: [&str; 1] = ["mp4"];
 
 /// A file of the resources folder that the application carries as it is,
@@ -285,7 +285,7 @@ fn key_problems(project: &Project, kind: WidgetKind, key: &str, names: &[&str]) 
 }
 
 /// Every widget of `widgets`, with what they hold, in order.
-/// Whether the project plays songs (docs/AUDIO-PLAN.md), which the desktop
+/// Whether the project plays songs (docs/ledger/audio.md), which the desktop
 /// plays through Clarity.Audio, so the generator adds it: a sound part whose
 /// source is no WAV (mp3, flac, ogg), one wired `on end` or `on fail`, or
 /// code that plays a sound a file, pauses, resumes or seeks it.
@@ -319,7 +319,7 @@ pub fn plays_songs(project: &Project) -> bool {
     songs
 }
 
-/// Whether the project plays videos (docs/VIDEO-PLAN.md): a video part on
+/// Whether the project plays videos (docs/ledger/video-camera.md): a video part on
 /// a window, which the desktop plays through Clarity.Video, so the generator
 /// adds it.
 pub fn plays_videos(project: &Project) -> bool {

@@ -41,7 +41,7 @@ type Db struct {
 	// a file store whose folder is a setting reads them first
 	// (conformance/settings.json, `now`).
 	held map[string]any
-	// history is what undo takes back and redo does again (DESIGN 5.29).
+	// history is what undo takes back and redo does again (manual/code.handlers.md).
 	history history
 	// people is who uses the program and how they sign in (signin.go); nil without a signin block.
 	people *people
@@ -137,7 +137,7 @@ func (db *Db) MigrateSource(source string, steps [][]string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+	// A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
 	if done > 0 && done < len(steps) {
 		if err := backupBeforeMigration(s.driver, done+1); err != nil {
 			return 0, err

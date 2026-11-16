@@ -26,7 +26,7 @@ pub fn emit(project: &Project) -> (String, String) {
         let _ = writeln!(header, "struct {};", entity.name.name);
     }
     header.push('\n');
-    // A record held inside another is declared first (DESIGN 5.25).
+    // A record held inside another is declared first (manual/data.entities.md).
     for entity in crate::holding_order(project) {
         let (h, s) = record(project, entity);
         header.push_str(&h);
@@ -73,7 +73,7 @@ pub fn record_events(project: &Project, entity: &Entity) -> Vec<DataEvent> {
     events
 }
 
-/// A record (DESIGN 5.12): a struct of its fields with their defaults and
+/// A record (manual/code.engines.md): a struct of its fields with their defaults and
 /// its JSON; never stored, so it has no id, no table and no columns.
 fn plain_record(project: &Project, record: &Entity) -> (String, String) {
     let name = &record.name.name;

@@ -8,7 +8,7 @@
 const char* clarity_applied_sql(int version) { return clarity_format("INSERT INTO clarity_schema (version) VALUES (%d)", version); }
 
 bool clarity_location(const char* text, const char** out) {
-    // A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+    // A secret setting (manual/data.settings.md): setting:<program>/<name>, from the system's protected store.
     if (strncmp(text, "setting:", 8) == 0) {
         const char* at = text + 8;
         const char* slash = strchr(at, '/');

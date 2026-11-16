@@ -100,7 +100,7 @@ fn paging_word(kind: PagingKind) -> &'static str {
     PAGING_KINDS.iter().find(|(k, _)| *k == kind).map(|(_, w)| *w).unwrap_or("page")
 }
 
-/// A `paging` line under a web API (DESIGN 5.23): `page "p" size "s" N`,
+/// A `paging` line under a web API (manual/code.web-apis.md): `page "p" size "s" N`,
 /// `offset "o" size "s" N`, `cursor "c" next "path"` or `link`, then
 /// `items "path"` when a page's items are inside its JSON.
 fn paging(line: u32, a: &[&Token]) -> Result<Paging, String> {
@@ -215,7 +215,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             in_signin = false;
         }
         // `openapi "forms.yaml"`, `pick "listTemplates", ...` and `pick schema
-        // "Entry"` under a web API data source (DESIGN 5.23).
+        // "Entry"` under a web API data source (manual/code.web-apis.md).
         if entry.indent > setting_indent && keyword == "paging" {
             let Some(source) = datasources.last_mut() else {
                 return Err(format!("line {line}: 'paging' belongs under a datasource line, indented"));

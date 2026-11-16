@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The app's settings (the `settings` block of a module, DESIGN 5.17), by
+  // The app's settings (the `settings` block of a module, manual/data.settings.md), by
   // hand: Clarity's own settings ticked on or off, and the app's own
   // settings as fields, with the types and modifiers a setting takes.
 

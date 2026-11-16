@@ -104,7 +104,7 @@ int64_t clarity_text_index_of(const char* text, const char* find);
 /// lists pair up. The same files give the same bytes.
 ClarityBytes clarity_zip(ClarityTexts paths, ClarityTexts texts);
 
-/// `xs + ys` in code (DESIGN 5.26): a new list of the items of both, in order.
+/// `xs + ys` in code (manual/parts.data.md): a new list of the items of both, in order.
 ClarityIntegers clarity_integers_join(ClarityIntegers a, ClarityIntegers b);
 ClarityDecimals clarity_decimals_join(ClarityDecimals a, ClarityDecimals b);
 ClarityBools clarity_bools_join(ClarityBools a, ClarityBools b);

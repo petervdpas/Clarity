@@ -1,4 +1,4 @@
-// The paging form of a web API (DESIGN 5.23, paging): how its lists are
+// The paging form of a web API (manual/code.web-apis.md, paging): how its lists are
 // read a page at a time, as the project file's `paging` line writes it.
 
 import type { Paging } from "@clarity/ui/generated/Paging.ts";

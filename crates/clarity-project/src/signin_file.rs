@@ -1,5 +1,5 @@
-//! The `signin` block of the project file (docs/APP-CAPABILITIES-PLAN.md
-//! step 4): read, checked against Clarity.Auth's catalog and the stack, and
+//! The `signin` block of the project file (docs/ledger/signin.md):
+//! read, checked against Clarity.Auth's catalog and the stack, and
 //! written back.
 
 use clarity_spec::lexer::{Token, TokenKind};

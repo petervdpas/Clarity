@@ -1,4 +1,4 @@
-# What an engine written in Rust stands on (DESIGN 5.11): the engine
+# What an engine written in Rust stands on (manual/code.engines.md): the engine
 # interface, its functions with typed arguments, the services and bytes.
 # An engine is a cdylib built for wasm32-unknown-unknown.
 [package]

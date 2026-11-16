@@ -1,4 +1,4 @@
-//! The support module of engines written in Clarity (DESIGN 5.12, N5b).
+//! The support module of engines written in Clarity (manual/code.engines.md).
 //!
 //! It speaks the engine interface (conformance/engines.json): `memory`,
 //! `clarity_alloc`, `clarity_free`. Clarity's compiler adds the engine's own
@@ -518,7 +518,7 @@ pub extern "C" fn rt_field_bool(record: i32, at: i32, len: i32) -> i32 {
     field(record, at, len).truth() as i32
 }
 
-// Tells, for an engine beside the screen (DESIGN 5.12).
+// Tells, for an engine beside the screen (manual/code.engines.md).
 
 /// `tell name(values)`: a tell with its values, in the answer of this call.
 #[unsafe(no_mangle)]

@@ -36,7 +36,7 @@
     path = file.path;
   });
 
-  /** The project's settings, which a settings window shows (DESIGN 5.17). */
+  /** The project's settings, which a settings window shows (manual/data.settings.md). */
   const hasSettings = $derived(preview.project.files.some((f) => f.entities.some((e) => e.settings)));
   /** A project whose people sign in, with no sign-in window yet, is offered one. */
   const offersSignIn = $derived(!!preview.project.signin && !preview.project.files.some((f) => f.pages.some((p) => p.kind === "signin")));

@@ -1,4 +1,4 @@
-//! Constants (DESIGN 5.12) are written out where they are used before any
+//! Constants (manual/code.engines.md) are written out where they are used before any
 //! stack is written: no stack needs constants of its own.
 
 use clarity_gen::generate;

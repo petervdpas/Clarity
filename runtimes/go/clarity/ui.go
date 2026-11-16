@@ -54,7 +54,7 @@ type PartState struct {
 	Max *int64 `json:"max,omitempty"`
 	// Tool, Brush and Ink are the tool in hand of a painting or vector
 	// canvas, how wide it paints and its color, as a handler set them
-	// (DESIGN 5.31); nil keeps the design.
+	// (manual/parts.graphics.md); nil keeps the design.
 	Tool  *string `json:"tool,omitempty"`
 	Brush *int64  `json:"brush,omitempty"`
 	Ink   *string `json:"ink,omitempty"`
@@ -104,7 +104,7 @@ type WindowState struct {
 	Parts    map[string]PartState `json:"parts"`
 	Selected map[string]int       `json:"selected"`
 	// Views are what the screen shows of the list of each table, tree and
-	// chart, by the part's name (DESIGN 1.7): how it is shown, as the screen
+	// chart, by the part's name (manual/start.how-it-works.md): how it is shown, as the screen
 	// sends it, and what shows, as the runtime fills it after every reply.
 	Views map[string]map[string]any `json:"views,omitempty"`
 }
@@ -209,7 +209,7 @@ type Reply struct {
 	Hears []Hear `json:"hears,omitempty"`
 	// Copy is the text the handler copied (copy text), for the screen to put on the clipboard.
 	Copy *Text `json:"copy,omitempty"`
-	// Step is the id of the database step the handler made (DESIGN 5.29),
+	// Step is the id of the database step the handler made (manual/code.handlers.md),
 	// which the screen's edit keeps to undo it by; 0 when it changed nothing.
 	Step int64 `json:"step,omitempty"`
 	// Refused says the runtime took nothing of what the person typed (an
@@ -534,7 +534,7 @@ func (u *Ui) SetInk(part string, value string) {
 }
 
 // ShapeChosen is the place of the shape a person touched last on a vector
-// canvas, counted from 1; 0 when none (DESIGN 5.31).
+// canvas, counted from 1; 0 when none (manual/parts.graphics.md).
 func (u *Ui) ShapeChosen(part string) int64 {
 	if i, ok := u.selected[part]; ok && i >= 0 {
 		return int64(i) + 1
@@ -688,7 +688,7 @@ func (u *Ui) Select(part string, place int) {
 }
 
 // SelectRecord selects the first row of rows that is wanted field by field
-// (a record, DESIGN 5.12), or none.
+// (a record, manual/code.engines.md), or none.
 func SelectRecord[T any](u *Ui, part string, rows []T, wanted any) {
 	var want *T
 	switch v := wanted.(type) {

@@ -2,7 +2,7 @@
 //! Clarity's own folder: the project it has open, and whether outside
 //! agents may work on it. `clarity mcp` reads it on
 //! every call, so the agent works on the project open in the IDE and
-//! follows it when the IDE opens another (docs/MCP-PLAN.md, "Which project").
+//! follows it when the IDE opens another (docs/ledger/mcp-tools.md).
 //!
 //! Beside the project it records which IDE has it open (its process id and
 //! when that process started), so a project an IDE left behind when it

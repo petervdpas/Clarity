@@ -1,4 +1,4 @@
-<!-- The server of a Clarity.UI program shown in browsers (DESIGN 7.6, 7.9):
+<!-- The server of a Clarity.UI program shown in browsers (manual/stacks.csharp.md, manual/start.how-it-works.md):
      the library in the browser asks the program here, which answers through
      the runtime's ProgramWire as on the desktop; it serves the browser files
      and the program's files. It draws nothing, so it takes the runtime alone,

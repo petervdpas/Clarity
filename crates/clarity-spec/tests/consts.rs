@@ -1,4 +1,4 @@
-//! Constants (DESIGN 5.12): `const lives = 3` in a module, read by name from
+//! Constants (manual/code.engines.md): `const lives = 3` in a module, read by name from
 //! its code and from engines, never set; `const pillRed: picture =
 //! "pill-red.svg"` names a picture of the resources folder, checked once.
 

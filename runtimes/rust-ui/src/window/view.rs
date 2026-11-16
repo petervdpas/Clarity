@@ -1,4 +1,4 @@
-//! A whole window of the program (DESIGN 7.9): its parts in the window's
+//! A whole window of the program (manual/start.how-it-works.md): its parts in the window's
 //! grid, with the content padding every stack keeps around it, scrolling
 //! when the window is smaller than its rows. Around the parts is the
 //! window's frame (its menu bar, toolbar, ribbon, sidebars and footer, its

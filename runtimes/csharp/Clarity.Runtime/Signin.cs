@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4), as the
+// Who is using the program (docs/ledger/signin.md), as the
 // database handle knows it. The package that signs people in (Clarity.Auth,
 // Signins.AddSignin) gives the handle its people (IPeople) after the
 // databases open; Db.Signin then finds and checks the person through it and

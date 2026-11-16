@@ -24,11 +24,18 @@ pub const RELEASE_STATE: &str = "release_state";
 pub const DISK_STATE: &str = "disk_state";
 /// The tool that asks to remove a build folder.
 pub const REMOVE_FOLDER: &str = "remove_folder";
+/// The tool that writes a release plan, only while every release check passed on the tree.
+pub const WRITE_RELEASE_PLAN: &str = "write_release_plan";
+
+/// The name the developer's build gives, as `.mcp.json` names it.
+pub(crate) const NAME: &str = "clarity-cdev";
 
 /// What the agent is told of these tools, beside the server's own lines.
-pub(crate) const LINE: &str = "Working on Clarity itself, build a piece of Clarity (its library, browser files, runtimes) with build_piece, \
+pub(crate) const LINE: &str = "This server is clarity-cdev, the developer's build of Clarity from its repository (a debug build, started by \
+./mcp.sh); an installed Clarity serves as clarity, without the tools below. Working on Clarity itself, build a piece of Clarity (its library, browser files, runtimes) with build_piece, \
 which presses its Build in Clarity settings > DevTools, never with cargo or a script of your own. Read how its releases stand with \
-release_state before writing a release plan. Read disk_state before a build or the release checks; when room is short, ask the person \
+release_state before writing a release plan, and write it only with write_release_plan, which refuses while a release check \
+has not passed on the tree as it is. Read disk_state before a build or the release checks; when room is short, ask the person \
 with remove_folder, never remove build folders yourself.";
 
 fn failed(text: impl Into<String>) -> ToolResult {
@@ -78,6 +85,24 @@ Gives how it ended and what it freed. Folders: {}.",
             ),
             input_schema: json!({ "type": "object", "properties": { "folder": { "type": "string", "enum": folders } }, "required": ["folder"] }),
         },
+        ToolDef {
+            name: WRITE_RELEASE_PLAN.into(),
+            description: "For working on Clarity itself: writes the Release Helper's plan (its format, ~/Projects/ReleaseHelper/README.md) as \
+releases/<stamp>.json, `stamp` as YYYY-MM-DD-HHMM; its steps begin with the checks on main (a watch step of checks.yml) and an existing \
+plan is never overwritten. After a failed release, `fix` (a plan's stamp) with `commit_message` only changes that plan's commit message. \
+Either is refused while a release check (release_state) has failed, not run, or ran on another tree than the one now: the person runs \
+them in Clarity settings > DevTools > Release planning (Run release checks). It is the only way a plan is written."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "stamp": { "type": "string", "description": "The new plan's name: YYYY-MM-DD-HHMM" },
+                    "plan": { "type": "object", "description": "The plan: title, commit_message, steps, as the Release Helper reads it" },
+                    "fix": { "type": "string", "description": "A plan's stamp, to change only its commit message after a failed release" },
+                    "commit_message": { "type": "string", "description": "With fix: the new commit message" }
+                }
+            }),
+        },
     ]
 }
 
@@ -94,7 +119,7 @@ impl ClarityServer {
 
     /// Calls the DevTools tool `name` for `client`; none when `name` is no DevTools tool.
     pub(crate) fn devtools_call(&self, client: &str, name: &str, input: &Value) -> Option<ToolResult> {
-        if ![BUILD_PIECE, RELEASE_STATE, DISK_STATE, REMOVE_FOLDER].contains(&name) {
+        if ![BUILD_PIECE, RELEASE_STATE, DISK_STATE, REMOVE_FOLDER, WRITE_RELEASE_PLAN].contains(&name) {
             return None;
         }
         if !clarity_project::ide::outside_agents_in(&self.ide_file) {
@@ -104,6 +129,7 @@ impl ClarityServer {
             BUILD_PIECE => self.build_piece(client, input),
             RELEASE_STATE => json_of(repo().and_then(|repo| release_state(&repo))),
             DISK_STATE => json_of(repo().map(|repo| disk_state(&repo))),
+            WRITE_RELEASE_PLAN => write_release_plan(input),
             _ => self.remove_folder(client, input),
         })
     }
@@ -187,10 +213,13 @@ fn release_state(repo: &std::path::Path) -> Result<Value, String> {
         .collect();
     let (files, since) = release::since_ide_release(repo)?;
     let records = release::check_records(repo);
+    let state = release::tree_state(repo)?;
     let (mut passed, mut failed, mut not_run) = (Vec::new(), Vec::new(), Vec::new());
     let checks = release::checks(repo, &files);
     for check in &checks {
         match records.get(&check.key) {
+            // A result of another tree (a file the check reads changed since) counts as not run.
+            Some(r) if r.tree != state.fingerprint(check) => not_run.push(json!(format!("{} (ran on another tree)", r.title))),
             Some(r) if r.passed => passed.push(json!({ "title": r.title, "ended": r.ended, "head": r.head })),
             Some(r) => failed.push(json!({ "title": r.title, "why": r.why, "lines": r.lines, "ended": r.ended, "head": r.head })),
             None => not_run.push(json!(check.title)),
@@ -202,7 +231,46 @@ fn release_state(repo: &std::path::Path) -> Result<Value, String> {
         "releases": releases,
         "chain": chain,
         "checks": { "total": checks.len(), "passed": passed, "failed": failed, "notRun": not_run },
+        "planAllowed": failed.is_empty() && not_run.is_empty(),
     }))
+}
+
+/// Writes a release plan, or a fixed one's commit message, while no release check holds it back.
+fn write_release_plan(input: &Value) -> ToolResult {
+    let repo = match repo() {
+        Ok(repo) => repo,
+        Err(why) => return failed(why),
+    };
+    let fix = input.get("fix").and_then(Value::as_str);
+    let new = input.get("stamp").and_then(Value::as_str).zip(input.get("plan"));
+    if fix.is_none() && new.is_none() {
+        return failed("give a new plan (stamp and plan), or fix (a plan's stamp) with commit_message");
+    }
+    match release::held_back(&repo) {
+        Ok(held) if !held.is_empty() => {
+            let shown: Vec<String> = held.iter().take(15).cloned().collect();
+            let more = if held.len() > shown.len() { format!(" and {} more", held.len() - shown.len()) } else { String::new() };
+            return failed(format!(
+                "The plan is held back: {} release checks have not passed on the tree as it is ({}{more}). Ask the person to press Run release checks in Clarity settings > DevTools > Release planning, then try again.",
+                held.len(),
+                shown.join("; ")
+            ));
+        }
+        Ok(_) => {}
+        Err(why) => return failed(why),
+    }
+    let written = match (fix, new) {
+        (Some(stamp), _) => match input.get("commit_message").and_then(Value::as_str) {
+            Some(message) => release::set_commit_message(&repo, stamp, message),
+            None => Err("a fix gives the new commit_message".to_string()),
+        },
+        (None, Some((stamp, plan))) => release::write_plan(&repo, stamp, plan),
+        (None, None) => unreachable!(),
+    };
+    match written {
+        Ok(file) => ToolResult { text: format!("Written: {}. Every release check passed on this tree.", file.display()), is_error: false },
+        Err(why) => failed(why),
+    }
 }
 
 /// How big the build folders are and how much room is left.

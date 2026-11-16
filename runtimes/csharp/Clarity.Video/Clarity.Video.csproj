@@ -1,4 +1,4 @@
-<!-- Clarity.Video for C# (docs/VIDEO-PLAN.md): the native Clarity.Video
+<!-- Clarity.Video for C# (docs/ledger/video-camera.md): the native Clarity.Video
      library, which plays the videos of a program's video parts, Cisco's
      openh264 beside it (placed by the release workflow), and the one call
      that hands it to Clarity.UI. Clarity's generator adds it, with

@@ -6,7 +6,7 @@ name: Release Clarity.UI library
 # release of that tag. The tag must name the version in
 # runtimes/rust-ui-ffi/Cargo.toml: bump that first, commit, then tag.
 #
-# Each archive is the folder a build's CLARITY_UI names (DESIGN 7.9):
+# Each archive is the folder a build's CLARITY_UI names (manual/start.how-it-works.md):
 #   include/clarity_ui.h, include/clarity_audio.h
 #   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
 #   lib/libclarity_audio.so | libclarity_audio.dylib | clarity_audio.dll and clarity_audio.dll.lib
@@ -15,9 +15,9 @@ name: Release Clarity.UI library
 #   lib/ the same of clarity_formats, include/clarity_formats.h (Clarity.Formats)
 #   lib/ the same of clarity_auth, include/clarity_auth.h (Clarity.Auth)
 #   lib/ the same of clarity_app_mcp, include/clarity_app_mcp.h (Clarity.AppMcp)
-# Clarity.Audio (docs/AUDIO-PLAN.md) rides along: a program links it only
+# Clarity.Audio (docs/ledger/audio.md) rides along: a program links it only
 # when its sound parts play songs. So does Cisco's openh264 for the system
-# (lib/libopenh264-2.6.0-linux64.8.so and the like, docs/VIDEO-PLAN.md),
+# (lib/libopenh264-2.6.0-linux64.8.so and the like, docs/ledger/video-camera.md),
 # fetched from Cisco and checked against runtimes/rust-video/openh264.sha256:
 # every app with video carries it beside its program, so it plays offline.
 # named clarity-ui-<version>-<rid>.tar.gz (Windows has tar too), for linux-x64,
@@ -28,7 +28,7 @@ name: Release Clarity.UI library
 # package and does not use these archives.
 #
 # Beside them, clarity-ui-<version>-browser.tar.gz holds the browser files
-# (DESIGN 7.9, round B): clarity-ui.js, clarity-ui.wasm, clarity-ui-worker.js
+# (manual/start.how-it-works.md, round B): clarity-ui.js, clarity-ui.wasm, clarity-ui-worker.js
 # and clarity-ui-page.js, the library compiled once to WebAssembly with
 # Emscripten (the version rust-skia's CI builds skia-safe's prebuilt Skia
 # with), which every language's web server serves. SHA256SUMS covers all.

@@ -1,4 +1,4 @@
-//! Engines beside the screen (DESIGN 5.12, conformance/screen-engines.json),
+//! Engines beside the screen (manual/code.engines.md, conformance/screen-engines.json),
 //! as a canvas sees them: frames, each the input since the last and the
 //! milliseconds it took, answered with the canvas's shapes and what the
 //! engine told. The words are plain Rust, with no WebAssembly: a screen

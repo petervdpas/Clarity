@@ -1,5 +1,5 @@
 //! `clarity users`: the people of a project that signs people in
-//! (docs/APP-CAPABILITIES-PLAN.md step 4), changed from the command line, for
+//! (docs/ledger/signin.md), changed from the command line, for
 //! a computer without a browser at hand.
 
 use std::process::{Command, Stdio};

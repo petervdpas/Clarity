@@ -1,4 +1,4 @@
-//! The layers of a painting canvas (docs/IMAGE-PLAN.md): while the canvas is
+//! The layers of a painting canvas (docs/ledger/canvas-toolbox.md): while the canvas is
 //! open the person paints on one layer of several, each shown or hidden; the
 //! picture kept is the shown layers laid over each other, bottom first. When
 //! the picture changes otherwise (Ctrl+Z, another record), the layers fold

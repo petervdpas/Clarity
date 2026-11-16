@@ -1,5 +1,5 @@
-//! The sign-in window is designed, and guided (docs/APP-CAPABILITIES-PLAN.md
-//! step 4): window, content, views. Its content shows the sign-in views; a
+//! The sign-in window is designed, and guided (docs/ledger/signin.md):
+//! window, content, views. Its content shows the sign-in views; a
 //! sign-in view holds only the sign-in parts (fields, buttons, keep me
 //! signed in, language, other way, refusal) and a heading, label, picture,
 //! line or link; the window holds its content and that decoration. Each

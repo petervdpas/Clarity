@@ -1,4 +1,4 @@
-// The themes an application offers (DESIGN 1.5): it starts with the one kept
+// The themes an application offers (manual/themes.md): it starts with the one kept
 // from an earlier run while that is still offered, else the first; the
 // person's choice is kept for the next start, and the screen hears of it.
 // Kept in memory here: Remembered has no folder.

@@ -1,4 +1,4 @@
-// Who is using the program (docs/APP-CAPABILITIES-PLAN.md, step 4), through
+// Who is using the program (docs/ledger/signin.md), through
 // Clarity.Auth, the one implementation every stack calls. The generated
 // program names its entity of people and its strategies once, after its
 // databases open (clarity_db_add_signin); clarity_signin then finds the

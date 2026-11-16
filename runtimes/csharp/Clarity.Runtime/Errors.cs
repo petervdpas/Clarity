@@ -59,7 +59,7 @@ public sealed class StorageException(string what, Exception? inner = null) : Cla
     public new Exception? InnerException { get; } = inner;
 }
 
-/// <summary>A database connects with a secret setting (DESIGN 5.27) the person has not kept yet.</summary>
+/// <summary>A database connects with a secret setting (manual/data.settings.md) the person has not kept yet.</summary>
 public sealed class NotKeptException(string setting) : ClarityException($"storage: the secret setting {setting} is not kept yet: the settings name the connection")
 {
     public string Setting { get; } = setting;
@@ -94,5 +94,5 @@ public static class Contracts
 /// outside its list, a highest number below 1 (conformance/lists.json).</summary>
 public sealed class ValueException(string what, Text? said = null) : ClarityException(what, said);
 
-/// An engine that could not load, or that failed while it ran (DESIGN 5.11, 5.12).
+/// An engine that could not load, or that failed while it ran (manual/code.engines.md).
 public sealed class EngineException(string what, Text? said = null) : ClarityException(what, said);

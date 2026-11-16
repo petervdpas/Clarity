@@ -1,5 +1,4 @@
-//! Signing in with a provider (docs/APP-CAPABILITIES-PLAN.md, step 4,
-//! providers): GitHub, Microsoft and any OpenID provider are strategies of
+//! Signing in with a provider (docs/ledger/signin.md): GitHub, Microsoft and any OpenID provider are strategies of
 //! the catalog that match a field of the people and take nothing typed. On
 //! the desktop the browser goes to the provider and back to a loopback
 //! address with a code (`begin`, `finish`); `find` trades the code for a

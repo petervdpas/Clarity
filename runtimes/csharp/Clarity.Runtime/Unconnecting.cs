@@ -1,4 +1,4 @@
-// The app's `on unconnected` running (DESIGN 5.27): the window it runs on
+// The app's `on unconnected` running (manual/data.settings.md): the window it runs on
 // says and opens through this, wherever the program shows its windows.
 
 using System.Collections.ObjectModel;

@@ -312,7 +312,7 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     CHECK(!ui.resizable("sheet"));
 }
 
-// A canvas's tool, brush and ink (DESIGN 5.31): the design's until a handler
+// A canvas's tool, brush and ink (manual/parts.graphics.md): the design's until a handler
 // sets them, kept in the part's state; a vector canvas's chosen shape from 1.
 TEST(a_canvas_keeps_the_tool_brush_and_ink_code_sets) {
     clarity::WindowState state;

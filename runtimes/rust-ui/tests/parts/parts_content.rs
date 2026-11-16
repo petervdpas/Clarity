@@ -1,4 +1,4 @@
-//! A window's content (DESIGN 5.33): one view at a time, the one code picks
+//! A window's content (manual/design.windows.md): one view at a time, the one code picks
 //! (the part's state's tab, from 1). It has no look of its own: no strip of
 //! tabs, no frame, no fill; the view's parts start at its top.
 

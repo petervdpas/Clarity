@@ -343,7 +343,7 @@ fn only_files_inside_the_project_are_reached() {
 
 /// The client depends on no ACP crate, so nothing switches on serde_json's
 /// preserve_order for the workspace (it changed the key order of every JSON
-/// Clarity writes, docs/ACP-PLAN.md).
+/// Clarity writes, docs/ledger/acp.md).
 #[test]
 fn the_client_brings_no_acp_crate() {
     let manifest = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();

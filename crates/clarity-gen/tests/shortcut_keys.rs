@@ -1,4 +1,4 @@
-//! The person's keys in the generated application (DESIGN 5.28), where the
+//! The person's keys in the generated application (manual/app.keys.md), where the
 //! project file says `keys editable`: the keys window, the catalog of
 //! commands, and each command known by its id.
 
@@ -51,7 +51,7 @@ fn csharp_starts_the_persons_keys() {
 }
 
 /// On the web as on the desktop, Clarity.UI reads the keys window's
-/// commands from the model the application carries (DESIGN 7.9, B2).
+/// commands from the model the application carries (manual/start.how-it-works.md).
 #[test]
 fn csharp_on_the_web_carries_the_catalog_in_its_model() {
     let mut settings: Settings = starter("Shop", "shop");

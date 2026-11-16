@@ -1,4 +1,4 @@
-// The web target (DESIGN 7.3): see serve.hpp. Plain sockets, as on every
+// The web target (manual/project.run-build.md): see serve.hpp. Plain sockets, as on every
 // OS; Windows through Winsock.
 
 #include "shell/serve.hpp"

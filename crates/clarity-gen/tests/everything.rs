@@ -56,7 +56,7 @@ fn type_name(ty: &FieldType) -> &'static str {
     }
 }
 
-/// Every field type, by name. `record` is only a web API's (DESIGN 5.25),
+/// Every field type, by name. `record` is only a web API's (manual/data.entities.md),
 /// which the project meets when it has one (D2).
 const TYPES: [&str; 22] = [
     "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "secret", "folder", "language", "theme", "id", "enum", "ref", "list", "values",
@@ -84,7 +84,7 @@ fn the_every_part_project_uses_every_part() {
     assert!(missing.is_empty(), "parts the every-part project does not use yet: {}", missing.join(", "));
 }
 
-/// Every mode of a canvas (DESIGN 5.31), so each stack builds them.
+/// Every mode of a canvas (manual/parts.graphics.md), so each stack builds them.
 #[test]
 fn the_every_part_project_uses_every_canvas_mode() {
     use clarity_spec::model::CanvasMode;
@@ -128,7 +128,7 @@ fn the_every_part_project_uses_every_field_type_and_kind_of_page() {
 mod everything_project;
 
 /// Every stack and target, as a project file writes them.
-/// C# on the web comes with Clarity.UI (DESIGN 7.9, G7d).
+/// C# on the web comes with Clarity.UI (manual/start.how-it-works.md).
 const STACKS: [&str; 9] = [
     "csharp desktop cli",
     "rust desktop cli",

@@ -1,5 +1,5 @@
-//! A wizard, the steps part (DESIGN 5.15), decided here, not in the screen
-//! (DESIGN 1.7): the step it shows, the buttons it has, and what Next does.
+//! A wizard, the steps part (manual/parts.containers.md), decided here, not in the screen
+//! (manual/start.how-it-works.md): the step it shows, the buttons it has, and what Next does.
 //! Next runs the handler of `on next` on the step shown, then moves one step
 //! on, unless the handler refused (the step stays) or set the step itself
 //! (that step wins). Back goes one step back and runs nothing; Finish runs
@@ -43,7 +43,7 @@ fn set_step(state: &mut WindowState, part: &str, step: i64) {
     state.parts.entry(part.to_string()).or_default().step = Some(step);
 }
 
-/// `step_event` (DESIGN 1.7): `button` pressed on the wizard `part` of
+/// `step_event` (manual/start.how-it-works.md): `button` pressed on the wizard `part` of
 /// `count` steps, whose `on next` and `on finish` handlers are `next` and
 /// `finish`. `run` runs a handler as `dispatch_event` does, as one database
 /// step; a refusal or a failure is its error, and the step stays. Back, and

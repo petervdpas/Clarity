@@ -1,5 +1,5 @@
 // What runs once the work at hand is done: a change handler's edit is joined
-// to the edit its value made until then (DESIGN 5.29). The screen that shows
+// to the edit its value made until then (manual/code.handlers.md). The screen that shows
 // the windows says how; Clarity.UI's desktop and browser hosts run it on
 // their next frame, and elsewhere it goes to the current synchronization context, or runs at once.
 

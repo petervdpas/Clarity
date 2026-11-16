@@ -1,4 +1,4 @@
-// A canvas an engine beside the screen draws (DESIGN 5.12):
+// A canvas an engine beside the screen draws (manual/code.engines.md):
 // frames at the screen's pace, each worked off the screen's thread, one at
 // a time; a failure ends the loop and the canvas says why
 // (conformance/screen-engines.json, conformance/drawing.json).

@@ -1,4 +1,4 @@
-// Reordering (DESIGN 5.30) against the cases every runtime shares
+// Reordering (manual/parts.data.md) against the cases every runtime shares
 // (conformance/reorder.json).
 
 package clarity

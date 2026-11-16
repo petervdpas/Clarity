@@ -1,6 +1,6 @@
 // How the renderer reaches the backend of the application it runs in: with
 // Tauri's invoke in the Clarity IDE (the designer and its runs), or over HTTP
-// when the application is a web server (the web target, DESIGN 7.3). The
+// when the application is a web server (the web target, manual/project.run-build.md). The
 // commands and their arguments are the same on both; only the way there
 // differs.
 

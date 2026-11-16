@@ -1,4 +1,4 @@
-//! The sound part (DESIGN 5.22): heard, not seen, with no place in the
+//! The sound part (manual/design.sound.md): heard, not seen, with no place in the
 //! window. Code tells it what to play (`chime.play()`), as it tells a custom
 //! part, through the reply's hears: play its source (a sound of the
 //! program's resources), stop, a tone, a melody, a volume. Everything plays
@@ -220,7 +220,7 @@ impl SoundPart {
     fn hear(&mut self, hear: &str, given: &[Value]) {
         self.heard.push(hear.to_string());
         match hear {
-            // A song from disk (docs/AUDIO-PLAN.md).
+            // A song from disk (docs/ledger/audio.md).
             "play" if matches!(given.first(), Some(Value::String(_))) => {
                 let path = given[0].as_str().unwrap_or_default().to_string();
                 self.play_path(&path);
@@ -335,7 +335,7 @@ impl SoundPart {
         self.pending.push("fail");
     }
 
-    /// What code reads of it (docs/AUDIO-PLAN.md), in its values: set when it changed.
+    /// What code reads of it (docs/ledger/audio.md), in its values: set when it changed.
     fn say(&self) {
         let Some(name) = self.base.name() else { return };
         let song = self.song.as_deref();

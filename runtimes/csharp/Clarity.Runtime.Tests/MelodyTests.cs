@@ -1,4 +1,4 @@
-// How a sound reads a melody (DESIGN 5.22), as every stack reads it
+// How a sound reads a melody (manual/design.sound.md), as every stack reads it
 // (conformance/melody.json), and how tones are made into WAV data, which
 // every sound output plays as it plays a file.
 

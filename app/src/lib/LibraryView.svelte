@@ -1,5 +1,5 @@
 <script lang="ts">
-  // An external library (DESIGN 5.21): its package and the functions code
+  // An external library (manual/code.libraries.md): its package and the functions code
   // calls, as a form, and its adapter's files, opened and edited here. Its declaration is
   // Clarity, edited as text; the file of the adapter that types its functions
   // is Clarity's, written from the declaration, and shown to read.

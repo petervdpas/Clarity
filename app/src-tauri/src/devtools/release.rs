@@ -6,11 +6,11 @@
 //! (target/release-checks.json), where the agent reads it through MCP
 //! (`release_state`) to write the Release Helper's plan. The tab writes no plan.
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use clarity_gen::tools::devtools::jobs::{Job, JobState, OnChange};
-use clarity_gen::tools::devtools::release::{self, CheckRecord};
+use clarity_gen::tools::devtools::release::{self, Check, CheckRecord};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use ts_rs::TS;
@@ -58,6 +58,8 @@ pub struct CheckLast {
     /// When it ended, in milliseconds since 1970.
     #[ts(type = "number")]
     pub ended: u64,
+    /// It ran on the tree as it is now; a result of another tree counts as not run.
+    pub current: bool,
 }
 
 /// A check a release needs first.
@@ -100,10 +102,12 @@ fn view() -> Result<ReleaseView, String> {
         .collect();
     let (files, since) = release::since_ide_release(&repo)?;
     let records = release::check_records(&repo);
+    let state = release::tree_state(&repo).ok();
     let checks = release::checks(&repo, &files)
         .into_iter()
         .map(|c| {
-            let last = records.get(&c.key).map(|r| CheckLast { passed: r.passed, why: r.why.clone(), ended: r.ended });
+            let now = state.as_ref().map(|s| s.fingerprint(&c));
+            let last = records.get(&c.key).map(|r| CheckLast { passed: r.passed, why: r.why.clone(), ended: r.ended, current: now.as_deref() == Some(r.tree.as_str()) });
             CheckRow { job: job_key(&c.key), title: c.title, command: c.run.shown(), last }
         })
         .collect();
@@ -116,27 +120,39 @@ pub fn release_view() -> Result<ReleaseView, String> {
     view()
 }
 
-/// What a check's build says as it goes, and when it ends, how it ended kept for the agent.
-fn recording(app: &AppHandle, repo: PathBuf) -> OnChange {
+/// What a check's build says as it goes, and when it ends, how it ended kept
+/// for the agent, with the fingerprint of what it read: of the tree as it was
+/// when the check started, or for a check in the fresh checkout, of the
+/// tree the checkout was made from.
+fn recording(app: &AppHandle, repo: PathBuf, check: Check) -> OnChange {
     let notify = on_change(app);
+    let ran_on: Mutex<Option<(String, String)>> = Mutex::new(None);
     Arc::new(move |job: &Job| {
         notify(job);
-        if let Some(record) = record_of(job, &repo) {
+        let Ok(mut ran_on) = ran_on.lock() else { return };
+        if job.state == JobState::Running && ran_on.is_none() {
+            let checkout = release::fresh_checkout_dir(&repo.canonicalize().unwrap_or_else(|_| repo.clone()));
+            let (state, head) = if check.fresh { (release::checkout_state(&checkout), release::head(&checkout)) } else { (release::tree_state(&repo), release::head(&repo)) };
+            *ran_on = Some((head.unwrap_or_default(), state.map(|s| s.fingerprint(&check)).unwrap_or_default()));
+        }
+        if let Some(record) = record_of(job, ran_on.as_ref()) {
             let _ = release::record_check(&repo, &record);
         }
     })
 }
 
-/// How a check's build ended, once it has.
-fn record_of(job: &Job, repo: &Path) -> Option<CheckRecord> {
+/// How a check's build ended, once it has, on the tree (`head`, `tree`) it
+/// started on. A check stopped before it started is not kept.
+fn record_of(job: &Job, ran_on: Option<&(String, String)>) -> Option<CheckRecord> {
     let key = job.key.strip_prefix(CHECK)?;
     let (passed, why) = match &job.state {
         JobState::Passed => (true, None),
         JobState::Failed(why) => (false, Some(why.clone())),
         JobState::Waiting | JobState::Running => return None,
     };
+    let (head, tree) = ran_on?.clone();
     let lines = if passed { Vec::new() } else { job.lines.iter().skip(job.lines.len().saturating_sub(30)).cloned().collect() };
-    Some(CheckRecord { key: key.to_string(), title: job.title.clone(), passed, why, ended: job.ended.unwrap_or_default(), head: release::head(repo).unwrap_or_default(), lines })
+    Some(CheckRecord { key: key.to_string(), title: job.title.clone(), passed, why, ended: job.ended.unwrap_or_default(), head, tree, lines })
 }
 
 /// Runs the checks `jobs` (their builds' keys), one after the other.
@@ -151,9 +167,16 @@ pub fn release_run(jobs: Vec<String>, app: AppHandle, builds: State<DevJobs>) ->
             refused.push(format!("there is no check {key}"));
             continue;
         };
-        if let Err(why) = builds.0.start(&key, &check.title, check.run.clone(), Some(recording(&app, repo.clone()))) {
+        if let Err(why) = builds.0.start(&key, &check.title, check.run.clone(), Some(recording(&app, repo.clone(), check.clone()))) {
             refused.push(why);
         }
     }
     if refused.is_empty() { Ok(()) } else { Err(refused.join("; ")) }
+}
+
+/// Stops the release checks: the one running ends now, the waiting ones never start.
+#[tauri::command(async)]
+pub fn release_stop(builds: State<DevJobs>) -> usize {
+    let keys: Vec<String> = builds.0.all().into_iter().map(|job| job.key).filter(|key| key.starts_with(CHECK)).collect();
+    builds.0.stop(&keys)
 }

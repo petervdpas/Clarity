@@ -1,4 +1,4 @@
-//! Clarity's keys window (DESIGN 5.28), as the C# KeysWindowTests have it:
+//! Clarity's keys window (manual/app.keys.md), as the C# KeysWindowTests have it:
 //! every command per place with its keys; Change, then press the new key; a
 //! key another command has in the same place offers a swap; Reset and Reset
 //! all; refused keys say why; a modifier on its own is no key. As the root

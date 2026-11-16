@@ -1,4 +1,4 @@
-//! The colour dialog of a painting canvas (`does adjust`, docs/IMAGE-PLAN.md):
+//! The colour dialog of a painting canvas (`does adjust`, docs/ledger/canvas-toolbox.md):
 //! hue, saturation, brightness and contrast, each made less and more, shown
 //! on the picture as they change; OK keeps it as one edit, Cancel puts the
 //! picture back. On the selection when there is one, else the whole picture.

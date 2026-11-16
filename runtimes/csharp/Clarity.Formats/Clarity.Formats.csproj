@@ -1,4 +1,4 @@
-<!-- Clarity.Formats for C# (docs/FORMATS-PLAN.md): the native Clarity.Formats
+<!-- Clarity.Formats for C# (docs/ledger/formats.md): the native Clarity.Formats
      library and the data formats of code on it (JSON first): what is read is
      fitted to the record, what is written is in Clarity.s one form. Clarity.s generator adds it to a
      program whose code reads or writes a format. -->

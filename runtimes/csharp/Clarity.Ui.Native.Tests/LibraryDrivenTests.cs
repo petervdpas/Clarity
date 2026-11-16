@@ -1,5 +1,5 @@
 // The C# layer and the C# window model through the native library itself,
-// driven without a window (DESIGN 1.6): a C# custom part made, given its
+// driven without a window (manual/start.how-it-works.md): a C# custom part made, given its
 // values and hears, drawn into the screen's pixels and telling its window;
 // a part that throws staying in its place; undo, questions and messages
 // coming back to the view model; and the lifetimes across the boundary

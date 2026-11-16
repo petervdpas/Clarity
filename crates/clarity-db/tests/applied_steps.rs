@@ -1,5 +1,5 @@
 //! How many migration steps a database applied, read without changing it:
-//! whether the agent's latest step may still be folded (docs/MCP-PLAN.md).
+//! whether the agent's latest step may still be folded (docs/ledger/mcp-tools.md).
 
 use clarity_db::applied_steps;
 

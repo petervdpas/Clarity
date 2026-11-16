@@ -1,5 +1,5 @@
 // A backup of an SQLite database before migration steps change it
-// (docs/BACKUP-PLAN.md): a copy beside it in backups/, made with VACUUM
+// (docs/ledger/backups.md): a copy beside it in backups/, made with VACUUM
 // INTO, named <database>-<when>-before-migration-NNNN.db with the time in
 // UTC, as Clarity and every runtime name it (conformance/backups.json). The
 // newest ten automatic backups are kept; a manual one is the person's and

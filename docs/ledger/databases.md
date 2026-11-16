@@ -28,7 +28,7 @@ Progress: 65%
 - TLS to PostgreSQL and MySQL: PARTIAL. Rust connects without TLS (`runtimes/rust/src/postgres.rs:144`, `runtimes/rust/Cargo.toml:58`); SQL Server uses rustls; Go and C# not checked.
 - Money shown with the four decimals the servers store: open (roadmap D1d).
 - Testing a source's connection from the Project tab: NOT BUILT (DESIGN.md:131).
-- Copying data when a source changes kind (SQLite to PostgreSQL): NOT BUILT (DESIGN.md:160, roadmap D3); BACKUP-PLAN step 3 would give it, see [backups](backups.md).
+- Copying data when a source changes kind (SQLite to PostgreSQL): NOT BUILT (DESIGN.md:160, roadmap D3); the portable form for server databases would give it, see [backups](backups.md) Design "Server databases".
 - The shop's windows against a server database: UNTRIED (roadmap G2d).
 
 ## Conflicts

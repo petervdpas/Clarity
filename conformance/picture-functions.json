@@ -1,5 +1,5 @@
 {
-  "about": "The picture functions (docs/IMAGE-PLAN.md) as every stack gives them, through Clarity.Image. A picture is `width`, `height` and `pixels`: each pixel as eight hex digits, red, green, blue and alpha, rows from the top, left to right. A case calls `function` on `picture` (and `over` for blend) with `args` after the picture, and gives `result`. Crop, flip, quarter turns and blend are exact; resize, other angles and adjust are as the reference (runtimes/rust-image) gives them, which `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image` fills in where a case has no result yet.",
+  "about": "The picture functions (docs/ledger/picture-functions.md) as every stack gives them, through Clarity.Image. A picture is `width`, `height` and `pixels`: each pixel as eight hex digits, red, green, blue and alpha, rows from the top, left to right. A case calls `function` on `picture` (and `over` for blend) with `args` after the picture, and gives `result`. Crop, flip, quarter turns and blend are exact; resize, other angles and adjust are as the reference (runtimes/rust-image) gives them, which `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image` fills in where a case has no result yet.",
   "cases": [
     {
       "args": [

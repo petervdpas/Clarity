@@ -1,4 +1,4 @@
-// Shortcut keys (DESIGN 5.28), the IDE's and an application's alike: every
+// Shortcut keys (manual/app.keys.md), the IDE's and an application's alike: every
 // command once, with its name, the layers it is active in and its keys. What is active answers a key, the innermost layer first; the part
 // with the focus keeps its own keys before that. The person sets the keys,
 // kept as what differs from these, and a key taken in the same layer swaps.

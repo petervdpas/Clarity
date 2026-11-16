@@ -3,7 +3,7 @@
 //! the order pressed. Each keeps its last lines and how it ended, so its tab
 //! shows it while it builds and after.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -121,6 +121,24 @@ struct Inner {
     jobs: BTreeMap<String, Job>,
     waiting: VecDeque<(String, Runnable, Option<OnChange>)>,
     running: bool,
+    /// The build running now and its program's process.
+    current: Option<(String, u32)>,
+    /// The builds Stop was pressed for while they ran.
+    stopped: BTreeSet<String>,
+}
+
+/// What a build stopped by hand ended with.
+const STOPPED: &str = "stopped";
+
+/// Ends the process `pid` with everything it started (cargo's compilers and test programs).
+fn end_process(pid: u32) {
+    let pid = pid.to_string();
+    let _ = if cfg!(windows) {
+        Command::new("taskkill").args(["/T", "/F", "/PID", &pid]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+    } else {
+        // The build runs in a process group of its own, which a minus names.
+        Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+    };
 }
 
 /// The builds, shared by whoever presses Build; cloning shares them.
@@ -161,6 +179,34 @@ impl Jobs {
             std::thread::spawn(move || jobs.work());
         }
         Ok(())
+    }
+
+    /// Presses Stop for the builds `keys`: the one running ends now, the
+    /// waiting ones never start; each ends failed, "stopped". How many it stopped.
+    pub fn stop(&self, keys: &[String]) -> usize {
+        let (lock, ended) = &*self.inner;
+        let (dropped, running) = {
+            let Ok(mut inner) = lock.lock() else { return 0 };
+            let (dropped, kept): (Vec<_>, Vec<_>) = inner.waiting.drain(..).partition(|(key, _, _)| keys.contains(key));
+            inner.waiting = kept.into();
+            // Running, its process started or about to: once started, run ends it.
+            let running: Vec<String> = inner.jobs.values().filter(|j| j.state == JobState::Running && keys.contains(&j.key)).map(|j| j.key.clone()).collect();
+            inner.stopped.extend(running.iter().cloned());
+            let pid = inner.current.as_ref().filter(|(key, _)| running.contains(key)).map(|(_, pid)| *pid);
+            (dropped, (running.len(), pid))
+        };
+        let (running, pid) = running;
+        if let Some(pid) = pid {
+            end_process(pid);
+        }
+        for (key, _, on_change) in &dropped {
+            self.change(key, on_change, |job| {
+                job.state = JobState::Failed(STOPPED.into());
+                job.ended = Some(now_ms());
+            });
+        }
+        ended.notify_all();
+        dropped.len() + running
     }
 
     /// The build kept under `key`.
@@ -220,7 +266,13 @@ impl Jobs {
                 job.state = JobState::Running;
                 job.started = Some(now_ms());
             });
-            let ended = self.run(&key, &run, &on_change);
+            let mut ended = self.run(&key, &run, &on_change);
+            if let Ok(mut inner) = self.inner.0.lock() {
+                inner.current = None;
+                if inner.stopped.remove(&key) {
+                    ended = JobState::Failed(STOPPED.into());
+                }
+            }
             self.change(&key, &on_change, |job| {
                 job.state = ended;
                 job.ended = Some(now_ms());
@@ -252,10 +304,22 @@ impl Jobs {
         put(usize::MAX, Piece::Line(format!("{} (in {})", run.shown(), dir.display())));
         let mut command = Command::new(&run.program);
         command.args(&run.args).current_dir(&run.dir).envs(run.env.iter().map(|(k, v)| (k, v))).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(err) => return JobState::Failed(format!("cannot start {}: {err}", run.program)),
         };
+        let stopped_already = match self.inner.0.lock() {
+            Ok(mut inner) => {
+                inner.current = Some((key.to_string(), child.id()));
+                inner.stopped.contains(key)
+            }
+            Err(_) => false,
+        };
+        if stopped_already {
+            end_process(child.id());
+        }
         // cargo reports on stderr, dotnet and go on stdout: both are the build's lines.
         let (sender, pieces) = std::sync::mpsc::channel::<(usize, Piece)>();
         let readers: Vec<_> = [child.stdout.take().map(|o| Box::new(o) as Box<dyn std::io::Read + Send>), child.stderr.take().map(|e| Box::new(e) as Box<dyn std::io::Read + Send>)]

@@ -1,4 +1,4 @@
-//! Asking the person (DESIGN 5.14) on every stack: the handler that asks
+//! Asking the person (manual/code.statements.md) on every stack: the handler that asks
 //! puts the question in its reply (or, on C#, asks its window when it has
 //! finished), and each stack runs the handler the answer goes to, with
 //! the values written for it and the answer last: a record by its id or as

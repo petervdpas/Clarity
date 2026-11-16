@@ -1,4 +1,4 @@
-//! A mapping's `check "orders.xsd"` (docs/FORMATS-PLAN.md, step 4): the
+//! A mapping's `check "orders.xsd"` (docs/ledger/formats.md): the
 //! schema file is read with the project's folder and its text travels in
 //! the options object every stack passes to Clarity.Formats, so no stack
 //! reads files for the library. In code and on the file source alike.

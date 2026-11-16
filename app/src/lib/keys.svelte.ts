@@ -1,4 +1,4 @@
-// The person's own shortcut keys for the IDE (DESIGN 5.28), kept with
+// The person's own shortcut keys for the IDE (manual/app.keys.md), kept with
 // Clarity's other own choices and remembered for the next start.
 
 import { IDE_COMMANDS, assign, keysOf, reset, type KeyChoices } from "@clarity/ui/host/keys.ts";

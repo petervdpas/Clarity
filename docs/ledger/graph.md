@@ -19,16 +19,87 @@ Progress: 45%
 - `examples/network` (Rust desktop) in the example builds
 
 ## Open
-- Looks bound to fields (size by a number, color by a value, label templates, edge thickness): NOT BUILT (GRAPH-PLAN.md:26). `NodeLook` is per kind only (`runtimes/rust-ui/src/parts/data/graph.rs:73-77`).
-- Icons per node kind and label placement: NOT BUILT (GRAPH-PLAN.md:77, 86).
-- A panel beside the graph for the picked node, references as links: NOT BUILT (GRAPH-PLAN.md:27, 86); the network example uses a slide-out with `opens`.
-- Filters on any field: NOT BUILT (GRAPH-PLAN.md:28); only the legend's kinds.
-- Edges through a link entity; choosing which relations to follow: NOT BUILT / PARTIAL (GRAPH-PLAN.md:32, 91).
-- Property entities (open-ended typed properties as rows): NOT BUILT (GRAPH-PLAN.md:37-71).
-- Optional controls, a node and edge count, keeping drags optional: PARTIAL (GRAPH-PLAN.md:79-80).
-- Edge events and a focus-changed event: NOT BUILT (GRAPH-PLAN.md:81, 86).
-- The modelling example uses the graph (step 4): NOT BUILT. User: "I'm going to need it in the data modelling app"
-- Open questions (from the plan): whether data modelling is a graph of records or also of the model itself; whether people can add or link nodes in the graph (the plan only shows).
+- Looks bound to fields: NOT BUILT; see Design "Looks bound to fields".
+- Icons per node kind and label placement: NOT BUILT; see Design "Looks per kind".
+- A picked node's references shown as links: NOT BUILT; see Design "References as links".
+- Filters on any field: NOT BUILT; see Design "Filters". Only the legend's kinds are built.
+- Edges through a link entity; choosing which relations to follow: NOT BUILT / PARTIAL; see Design "Lists of the data model".
+- Property entities: NOT BUILT; see Design "Open-ended information".
+- Controls each optional, keeping drags optional: PARTIAL; see Design "Controls".
+- Edge events: NOT BUILT; see Design "Edge events".
+- The modelling example uses the graph (step 4): NOT BUILT; see Design "The data modelling app".
+- Open questions: see Design "Open questions".
+
+## Design
+
+### Looks bound to fields
+- A node's size by a number field, its color by a field's value, its label from a text with field slots, an edge's thickness by a number field.
+- Today `nodeLooks` and `edgeLooks` are per kind only (`runtimes/rust-ui/src/parts/data/graph.rs:73-77`).
+
+### Looks per kind
+- Beside shape, color and size (built): an icon per node kind, and how its label shows (beside, inside, on hover, cut at a length).
+- Per edge kind, beside line, color and arrow (built): whether its label shows.
+
+### References as links
+- A node's reference fields (one, or a list, to records of any entity) show as links where the picked node's fields show (pointing at it, or the slide-out `opens` names): one opens the record, as `on open` does, or picks it in the graph.
+
+### Filters
+- A filter that tests any field of the nodes or edges, beside the legend's kinds.
+
+### Lists of the data model
+- A relation through a link entity becomes one edge, carrying the link's fields as the edge's information.
+- Which relations of the `lists` entities the graph follows is set on the part (today every reference between the entities shown is an edge).
+
+### Open-ended information
+For information not known in advance (the user: graphs as "'unstructured' information structures"), a node's information can be rows of a property entity, one row per piece of information. The user's decision: "typed values, so it holds object references too".
+
+```clarity
+entity Thing
+    name: text
+    kind: text
+
+enum ValueType
+    text
+    number
+    date
+    yesNo
+    record
+
+entity ThingProperty
+    thing: ref Thing, cascade
+    name: text
+    type: ValueType
+    text: text
+    number: decimal
+    date: datetime
+    yesNo: bool
+    entity: text
+    record: integer
+```
+
+- Any node gets any information without a change to the model: a row `(thing, "owner", "Bob")`.
+- The part names the property entity and its three fields (the node it belongs to, the name, the value). The graph shows a node's properties as its own fields: pointing at it tells them, and looks and filters use them like fields.
+- An edge has properties the same way, through a property entity that refers to the edge.
+- `type` says which column holds the value; the others stay empty, so a number sorts as a number and a date as a date.
+- A value of type `record` refers to a record of any entity (`entity` names it, `record` holds its id): the node's store of object references. It shows as a link (see "References as links"), and as an edge to that record's node when the record is in the graph.
+- Such a reference cannot be a foreign key; the graph shows one to a removed record as gone.
+
+### Controls
+- Each control optional on the part: zoom and center, hops (built on every graph), the legend (built, optional), the count of nodes and edges (built beside hops).
+- Whether a dragged place is kept is an option (today always kept).
+
+### Edge events
+- An edge clicked or double clicked runs a handler, as a node's `on click`, `on select` and `on open` do (built for nodes only, `crates/clarity-spec/src/widgets.rs:1187`).
+
+### The data modelling app
+- Step 4: the data modelling example uses the graph. The user: "I'm going to need it in the data modelling app". The records of the model are the graph: domains, data objects, class definitions and properties, enums, events, adapter tables and API views, with the relations between them as edges, followed from the record on screen.
+- The modelling app does not shape the part (Decisions 2026-11-10); it fits onto steps 1 and 2 and the property entity.
+
+### Open questions
+- Is "data modelling" a graph of the records, or also a graph of the model itself (entities and their relations, as the ERD has)? The design covers the records; the model would be a graph of two lists or a third source.
+- Can people add or link nodes in the graph (an editor), or does it only show and navigate? The design only shows.
+- Are property names free, or from a list per kind?
+- Does removing a record also remove the property rows that refer to it?
 
 ## Conflicts
 - none
@@ -45,5 +116,6 @@ Progress: 45%
 - 2026-11-10: typed property values, so they hold object references (designed, not built). User: "typed values, so it holds object references too"
 
 ## Was
-- GRAPH-PLAN.md steps 1-4, Open questions
+- GRAPH-PLAN.md "Goal" (in Decisions), steps 1-3 (built; their "left for later" lists now Design), step 4 (Design "The data modelling app"), "Open questions" (Design "Open questions")
+- GRAPH-PLAN.md "The data" (looks bound to fields, the panel, filters, link-entity edges: now Design; "an entity and a focused record" is outdated, the code has `lists`, `pickedKind`, `pickedId`), "Storing open-ended information" (Design "Open-ended information"), "The design" (Design "Looks per kind", "Controls", "Edge events"; the focus-changed event is built as `on select`)
 - memory: graph-part-plan.md

@@ -1,13 +1,14 @@
 // DevTools' page logic (DevToolsSettings.svelte, ReleasePlanning.svelte).
 
 type JobLike = { state: string } | undefined;
-type CheckLike = { job: string; title: string; last: { passed: boolean } | null };
+type CheckLike = { job: string; title: string; last: { passed: boolean; current?: boolean } | null };
 
 /** How a check stands: its build in this run of Clarity, else how it last ended. */
 export function checkState(check: CheckLike, job: JobLike): "waiting" | "running" | "passed" | "failed" | "notRun" {
   if (job?.state === "waiting" || job?.state === "running" || job?.state === "passed") return job.state;
   if (job) return "failed";
-  if (check.last) return check.last.passed ? "passed" : "failed";
+  // A result of another tree (the commit or an uncommitted file changed since) counts as not run.
+  if (check.last && check.last.current !== false) return check.last.passed ? "passed" : "failed";
   return "notRun";
 }
 
@@ -27,7 +28,10 @@ export function verdict(checks: CheckLike[], jobs: Record<string, JobLike>) {
   else if (notRun.length === total) text = `Not run yet: ${total} checks`;
   else if (!notRun.length) text = `${failed.length} of ${total} failed`;
   else text = `${passed} passed, ${failed.length} failed, ${notRun.length} not run`;
-  return { running, failed, notRun, passed, total, allPassed: total > 0 && passed === total, text };
+  const held = total - passed;
+  // Whether the agent may write a plan (MCP write_release_plan refuses while one is held back).
+  const planText = held === 0 && total > 0 ? "A plan can be written" : `Held back: ${held} ${held === 1 ? "check" : "checks"} not passed on this tree`;
+  return { running, failed, notRun, passed, total, allPassed: total > 0 && passed === total, text, planText };
 }
 
 /** What a release's changes since its tag come to, for review: code first, the rest only named. */

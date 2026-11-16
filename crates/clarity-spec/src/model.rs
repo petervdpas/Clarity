@@ -31,7 +31,7 @@ pub struct SpecFile {
     pub source: Option<Ident>,
     pub enums: Vec<EnumDecl>,
     pub entities: Vec<Entity>,
-    /// Its records: values with fields that belong to no table (DESIGN 5.12).
+    /// Its records: values with fields that belong to no table (manual/code.engines.md).
     pub records: Vec<Entity>,
     pub pages: Vec<Page>,
     pub apps: Vec<App>,
@@ -41,20 +41,20 @@ pub struct SpecFile {
     pub code: Vec<crate::code::CodeBlock>,
     /// Functions and actions declared in this module.
     pub functions: Vec<crate::code::FunctionDecl>,
-    /// Its constants (DESIGN 5.12): `const lives = 3`.
+    /// Its constants (manual/code.engines.md): `const lives = 3`.
     pub consts: Vec<crate::code::ConstDecl>,
-    /// Its engines (DESIGN 5.11).
+    /// Its engines (manual/code.engines.md).
     pub engines: Vec<crate::code::EngineDecl>,
-    /// The `cli` block of a command-line program (DESIGN 5.20).
+    /// The `cli` block of a command-line program (manual/code.commands.md).
     pub clis: Vec<crate::code::CliDecl>,
-    /// Its commands, for the command-line program (DESIGN 5.20).
+    /// Its commands, for the command-line program (manual/code.commands.md).
     pub commands: Vec<crate::code::CommandDecl>,
-    /// Its custom parts, drawn by outside libraries (DESIGN 5.19).
+    /// Its custom parts, drawn by outside libraries (manual/design.custom-parts.md).
     pub parts: Vec<crate::code::PartDecl>,
-    /// Its outside libraries, called from code (DESIGN 5.21).
+    /// Its outside libraries, called from code (manual/code.libraries.md).
     pub libraries: Vec<crate::code::LibraryDecl>,
     /// Its mappings: how a kind of file is laid over an entity, per case
-    /// (docs/FORMATS-PLAN.md, step 4).
+    /// (docs/ledger/formats.md).
     pub mappings: Vec<crate::code::MappingDecl>,
     /// Its toasts: short messages code shows by name (`toast saved`).
     #[serde(default)]
@@ -88,16 +88,16 @@ pub struct Entity {
     /// `key "InvoiceID"`: the integer column that identifies a record, in
     /// an existing table; `id` otherwise.
     pub key: Option<String>,
-    /// The project's settings (`settings` block, DESIGN 5.17): kept per
+    /// The project's settings (`settings` block, manual/data.settings.md): kept per
     /// person on their machine, never in the database; named `Settings`.
     #[serde(default)]
     pub settings: bool,
-    /// `record Shape` (DESIGN 5.12): values with fields that belong to no
+    /// `record Shape` (manual/code.engines.md): values with fields that belong to no
     /// table, never stored; kept in the module's `records`, not its entities.
     #[serde(default)]
     pub record: bool,
     /// The entity of people the project file's `signin` names
-    /// (docs/APP-CAPABILITIES-PLAN.md step 4): `me` is one of its records.
+    /// (docs/ledger/signin.md): `me` is one of its records.
     #[serde(default)]
     pub people: bool,
     /// `readable when <condition>`: who may read one of its records, the
@@ -107,7 +107,7 @@ pub struct Entity {
     /// `writable when <condition>`: who may save or delete one of its records.
     pub writable: Option<crate::code::Expr>,
     /// `version "RowVersion"`: the column of an external database's table
-    /// that holds each record's version (docs/APP-CAPABILITIES-PLAN.md step
+    /// that holds each record's version (docs/ledger/row-versions.md step
     /// 5). An owned entity has none written: Clarity keeps `row_version`
     /// itself; `Project::version_column` gives the column either way.
     pub version: Option<String>,
@@ -124,8 +124,8 @@ pub struct Entity {
     #[ts(rename = "savedSince")]
     pub saved_since: Option<String>,
     /// The column the runtime keeps each record's version in, once the
-    /// project's steps or `version "Col"` give one (docs/APP-CAPABILITIES-PLAN.md
-    /// step 5); none while saves of it are not checked. Set after loading, for
+    /// project's steps or `version "Col"` give one (docs/ledger/row-versions.md);
+    /// none while saves of it are not checked. Set after loading, for
     /// the IDE to show: the version is Clarity's, never a field.
     #[serde(rename = "keptVersion", default)]
     #[ts(rename = "keptVersion")]
@@ -172,7 +172,7 @@ pub struct Field {
     pub span: Span,
 }
 
-/// How a graph places its nodes (docs/GRAPH-PLAN.md): pushed apart along
+/// How a graph places its nodes (docs/ledger/graph.md): pushed apart along
 /// their edges, in layers along the edges' direction, in rings around the
 /// chosen node, or on one circle. Every layout places the same graph the
 /// same way each time.
@@ -239,8 +239,8 @@ pub struct EdgeLook {
     pub arrow: Option<bool>,
 }
 
-/// What a graph of the data model knows of the model (docs/GRAPH-PLAN.md,
-/// step 2), worked out when the project loads: each list it shows, the
+/// What a graph of the data model knows of the model (docs/ledger/graph.md),
+/// worked out when the project loads: each list it shows, the
 /// entity of its records, the field a record shows as its label, and its
 /// references to the other entities shown, which become its edges.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -346,7 +346,7 @@ pub enum FieldType {
     /// A color, kept as text `#rrggbb` (U1c).
     Color,
     /// A setting kept in the system's protected store, per person and per
-    /// application, never in settings.json (DESIGN 5.27): a web API's token.
+    /// application, never in settings.json (manual/data.settings.md): a web API's token.
     Secret,
     /// A folder on the person's machine, a setting kept in settings.json:
     /// where a file store keeps its files (`filestore photos
@@ -364,14 +364,14 @@ pub enum FieldType {
     Ref {
         entity: Ident,
     },
-    /// A record of another entity held inside this one (DESIGN 5.25), as a
+    /// A record of another entity held inside this one (manual/data.entities.md), as a
     /// web API's JSON nests it: `owner: User`. Only an entity of a web API
     /// has one; a stored entity refers to another with `ref`.
     Record {
         entity: Ident,
     },
     /// Records of another entity, kept in their own table; in an entity of
-    /// a web API, held inside the record (DESIGN 5.25).
+    /// a web API, held inside the record (manual/data.entities.md).
     List {
         item: Ident,
     },
@@ -385,7 +385,7 @@ pub enum FieldType {
 impl FieldType {
     /// Whether the field holds records rather than a value: `list<Line>`,
     /// kept in its own table or (in a web API) inside the record, and a
-    /// record held inside (DESIGN 5.25). Neither is a column of its table.
+    /// record held inside (manual/data.entities.md). Neither is a column of its table.
     pub fn is_held(&self) -> bool {
         matches!(self, FieldType::List { .. } | FieldType::Record { .. })
     }
@@ -527,9 +527,9 @@ pub enum PageKind {
     View,
     /// The splash screen the app shows itself while it starts (`splash Welcome` in the app).
     Splash,
-    /// A toolbox (docs/IMAGE-PLAN.md): designed as a view, its parts the tools a canvas that names it shows (`toolbox Painting`).
+    /// A toolbox (docs/ledger/canvas-toolbox.md): designed as a view, its parts the tools a canvas that names it shows (`toolbox Painting`).
     Toolbox,
-    /// The sign-in window (docs/APP-CAPABILITIES-PLAN.md step 4): the program shows it before the main window when people sign in.
+    /// The sign-in window (docs/ledger/signin.md): the program shows it before the main window when people sign in.
     Signin,
 }
 
@@ -577,10 +577,10 @@ pub struct Page {
     /// Handlers of the window's own events: open, close, return.
     pub handlers: Vec<Handler>,
     /// What a dialog gives when it closes with a value (`page X: dialog
-    /// gives Friend`), for the handler that asked for it (DESIGN 5.14).
+    /// gives Friend`), for the handler that asked for it (manual/code.statements.md).
     pub gives: Option<crate::code::TypeRef>,
     /// What a view tells the window it shows in (`tells saved(name: text)`,
-    /// DESIGN 5.33): its code says `tell saved(name)`, and the window hears
+    /// manual/design.windows.md): its code says `tell saved(name)`, and the window hears
     /// it on the slide-out or section that shows it (`on saved: handler`).
     #[serde(default)]
     pub tells: Vec<crate::code::PartMessage>,
@@ -671,7 +671,7 @@ pub struct Widget {
     pub children: Vec<Widget>,
     /// Tabs of a `tabs` widget or panes of a `splitter`.
     pub pages: Vec<WidgetPage>,
-    /// Its context menu: a `menu` block under the part (DESIGN 5.16).
+    /// Its context menu: a `menu` block under the part (manual/design.parts.md).
     pub menu: Option<Menu>,
     /// A tree of several kinds of records: its levels, each the records of an
     /// entity under the row of the level around it, or a group heading.
@@ -683,7 +683,7 @@ pub struct Widget {
     pub span: Span,
 }
 
-/// A level of a tree of several kinds of records (DESIGN 5.33): `level
+/// A level of a tree of several kinds of records (manual/design.windows.md): `level
 /// Domain under project show name order by name`, the records of Domain
 /// whose `project` is the row of the level around it; or `group
 /// @dataObjectsNode`, a heading over the levels inside it, shown when they
@@ -726,7 +726,7 @@ pub struct WidgetPage {
     /// with. The second pane has the rest. Without it the panes start alike.
     pub columns: Option<u32>,
     /// `section "Class" view ClassEditor`: a tab, step or section showing a
-    /// view (DESIGN 5.33), whose parts are then its own.
+    /// view (manual/design.windows.md), whose parts are then its own.
     pub view: Option<String>,
     /// The tells of the view it shows wired to the window's handlers: `on saved: recipeSaved`.
     #[serde(default)]
@@ -743,7 +743,7 @@ pub struct WidgetPage {
     pub span: Span,
 }
 
-/// What the person does on a canvas (DESIGN 5.31): drags the records of a
+/// What the person does on a canvas (manual/parts.graphics.md): drags the records of a
 /// list, paints a picture, or draws and edits shapes. A canvas without one is
 /// drawn by its draw handler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -782,7 +782,7 @@ pub const TOOL_ACTIONS: [&str; 24] = [
     "rotate", "flipAcross", "flipDown", "crop", "import", "export", "zoomIn", "zoomOut", "adjust",
 ];
 
-/// How a painting canvas's toolbox shows (docs/IMAGE-PLAN.md).
+/// How a painting canvas's toolbox shows (docs/ledger/canvas-toolbox.md).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -943,7 +943,7 @@ pub struct WidgetProps {
     pub order: Option<TableOrder>,
     /// `reorder by position`: the person puts the rows of a list, table,
     /// tree or tree table in their own order, numbered in this integer field
-    /// (DESIGN 5.30). Without it the rows stay where the data has them.
+    /// (manual/parts.data.md). Without it the rows stay where the data has them.
     #[serde(default)]
     pub reorder: Option<String>,
     /// `reorder by chapter from 0`: the number the first row at each level gets; 1 without it.
@@ -951,7 +951,7 @@ pub struct WidgetProps {
     #[ts(type = "number | null")]
     pub reorder_from: Option<i64>,
     /// `mode objects types at x, y`, `mode paint`, `mode vector`: what the
-    /// person does on a canvas (DESIGN 5.31); none: its draw handler draws it.
+    /// person does on a canvas (manual/parts.graphics.md); none: its draw handler draws it.
     #[serde(default)]
     pub mode: Option<CanvasMode>,
     /// The list and fields of a canvas in `mode objects`.
@@ -961,7 +961,7 @@ pub struct WidgetProps {
     #[serde(default)]
     pub tools: Vec<String>,
     /// `toolbox popup` or `toolbox slideout`: a painting canvas's tools in a
-    /// toolbox (docs/IMAGE-PLAN.md) instead of the strip on the canvas.
+    /// toolbox (docs/ledger/canvas-toolbox.md) instead of the strip on the canvas.
     #[serde(default)]
     pub toolbox: Option<ToolboxKind>,
     /// `toolbox Painting`: the toolbox page whose parts the toolbox shows; none: the built-in one of the canvas's mode.
@@ -1001,7 +1001,7 @@ pub struct WidgetProps {
     /// `count`, `sum total`, `average total`: each group's number.
     #[serde(default)]
     pub measure: Option<ChartMeasure>,
-    /// A graph's edges (docs/GRAPH-PLAN.md): the list of records that join
+    /// A graph's edges (docs/ledger/graph.md): the list of records that join
     /// its nodes, the records of the list it binds.
     #[serde(default)]
     pub edges: Option<String>,
@@ -1139,7 +1139,7 @@ pub struct WidgetProps {
     #[serde(default)]
     pub dot_color: Option<String>,
     /// `runs Screen`: the engine beside the screen that draws the canvas
-    /// (DESIGN 5.12), in place of a draw handler.
+    /// (manual/code.engines.md), in place of a draw handler.
     pub runs: Option<String>,
     /// Text shown when the pointer rests on the part.
     pub tooltip: Option<String>,
@@ -1158,14 +1158,14 @@ pub struct WidgetProps {
     pub split: bool,
     /// A form's label column: `labels 3` gives each input in it a label in its first 3 columns.
     pub labels: Option<u32>,
-    /// A sound's volume, 0 to 100: `volume 80`; 100 without it (DESIGN 5.22).
+    /// A sound's volume, 0 to 100: `volume 80`; 100 without it (manual/design.sound.md).
     #[serde(default)]
     pub volume: Option<u32>,
     /// `repeat`: a sound plays its source over and over until it is stopped.
     #[serde(default)]
     pub repeat: bool,
     /// How many values a trend keeps, or a chart of numbers shows: `points 60`
-    /// (DESIGN 5.26); a trend keeps 60 without it, a chart shows all.
+    /// (manual/parts.time.md); a trend keeps 60 without it, a chart shows all.
     #[serde(default)]
     pub points: Option<u32>,
     /// Seconds between a timer's ticks, or a trend's values, as written:
@@ -1179,7 +1179,7 @@ pub struct WidgetProps {
     pub style: Option<String>,
     /// An input that shows its value but cannot be changed.
     pub readonly: bool,
-    /// A part the person edits without an undo of its own (DESIGN 5.29):
+    /// A part the person edits without an undo of its own (manual/code.handlers.md):
     /// `no undo`. Every other one takes back its own edits with Ctrl+Z.
     #[serde(default)]
     pub no_undo: bool,
@@ -1210,7 +1210,7 @@ pub struct WidgetProps {
     /// those below move down by the height to spare (`bottom`).
     #[serde(default)]
     pub bottom: bool,
-    /// A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
+    /// A custom part (manual/design.custom-parts.md): the name it is declared by, as in `Arena`.
     #[serde(default)]
     pub part: Option<String>,
     /// A custom part's properties set in the window: `speed 5`.
@@ -1589,12 +1589,12 @@ pub struct Project {
     /// (`gameRules resource "rules-nl.md"`), per language: the file's name.
     pub resource_keys: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
     /// Whether the people using the application set its keys themselves,
-    /// as the project file says (`keys editable`, DESIGN 5.28).
+    /// as the project file says (`keys editable`, manual/app.keys.md).
     #[serde(rename = "keysEditable")]
     #[ts(rename = "keysEditable")]
     pub keys_editable: bool,
     /// Who is using the program, as the project file says (`signin Member
-    /// ...`, docs/APP-CAPABILITIES-PLAN.md step 4); none without the block.
+    /// ...`, docs/ledger/signin.md); none without the block.
     #[serde(default)]
     pub signin: Option<crate::signin::Signin>,
     /// How high a row of the windows' grid is, in pixels, as the project
@@ -1625,7 +1625,7 @@ pub struct Project {
     #[ts(skip)]
     pub engines: Option<Vec<crate::engines::EngineFile>>,
     /// The files of the folders of the project's native custom parts
-    /// (DESIGN 5.19). None when the project was loaded without its folder.
+    /// (manual/design.custom-parts.md). None when the project was loaded without its folder.
     #[serde(skip)]
     #[ts(skip)]
     pub part_files: Option<Vec<crate::native::PartFile>>,
@@ -1673,9 +1673,9 @@ impl Project {
         self.entities().filter(|e| !e.settings && !self.in_web_api(&e.name.name))
     }
 
-    /// Whether `entity` lives in a web API data source (DESIGN 5.23): a
+    /// Whether `entity` lives in a web API data source (manual/code.web-apis.md): a
     /// service keeps its records, so no database stores them.
-    /// The settings kept in the system's protected store (DESIGN 5.27), by name.
+    /// The settings kept in the system's protected store (manual/data.settings.md), by name.
     pub fn secret_settings(&self) -> Vec<&str> {
         self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Secret).map(|f| f.name.name.as_str()).collect()
     }
@@ -1699,7 +1699,7 @@ impl Project {
         self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Folder).map(|f| f.name.name.as_str()).collect()
     }
 
-    /// The secret settings a database connects with (DESIGN 5.27): its
+    /// The secret settings a database connects with (manual/data.settings.md): its
     /// connection is `setting:name` in the project file.
     pub fn secret_connections(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.sources.iter().filter(|s| s.sql).filter_map(|s| s.address.strip_prefix("setting:")).collect();
@@ -1707,14 +1707,14 @@ impl Project {
         names
     }
 
-    /// Whether an app of the project has an `on unconnected` handler (DESIGN 5.27).
+    /// Whether an app of the project has an `on unconnected` handler (manual/data.settings.md).
     pub fn handles_unconnected(&self) -> bool {
         self.files.iter().flat_map(|f| &f.apps).any(|a| a.handlers.iter().any(|h| h.event == crate::widgets::Event::Unconnected))
     }
 
     /// The window where the person keeps a database's secret connection: the
     /// first that shows one. An application whose database cannot connect
-    /// opens it first, and connects once it closes (DESIGN 5.27).
+    /// opens it first, and connects once it closes (manual/data.settings.md).
     pub fn connection_window(&self) -> Option<&Page> {
         let names = self.secret_connections();
         self.files.iter().flat_map(|f| &f.pages).find(|page| names.iter().any(|name| shows_setting(&page.widgets, name)))
@@ -1749,13 +1749,13 @@ impl Project {
         })
     }
 
-    /// Whether any code of the project calls a web API (DESIGN 5.23): a
+    /// Whether any code of the project calls a web API (manual/code.web-apis.md): a
     /// stack then brings its HTTP client along.
     pub fn calls_out(&self) -> bool {
         self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::Http { .. }))
     }
 
-    /// Whether the code reads or writes a format (docs/FORMATS-PLAN.md), so its program carries Clarity.Formats.
+    /// Whether the code reads or writes a format (docs/ledger/formats.md), so its program carries Clarity.Formats.
     pub fn uses_formats(&self) -> bool {
         self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::ReadFormat { .. } | crate::code::ExprKind::FormatOf { .. }))
     }
@@ -1794,7 +1794,7 @@ impl Project {
         self.files.iter().flat_map(|f| f.apps.iter())
     }
 
-    /// The mapping `name`, declared in any module (docs/FORMATS-PLAN.md, step 4).
+    /// The mapping `name`, declared in any module (docs/ledger/formats.md).
     pub fn mapping(&self, name: &str) -> Option<&crate::code::MappingDecl> {
         self.files.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
     }
@@ -1804,7 +1804,7 @@ impl Project {
         self.files.iter().flat_map(|f| &f.toasts).find(|t| t.name.name == name)
     }
 
-    /// An entity or a record (DESIGN 5.12) by its name: what has fields.
+    /// An entity or a record (manual/code.engines.md) by its name: what has fields.
     pub fn entity(&self, name: &str) -> Option<&Entity> {
         self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
     }
@@ -1814,7 +1814,7 @@ impl Project {
     pub const VERSION_WIRE: &'static str = "rowVersion";
 
     /// The column that holds the version of each record of entity `name`,
-    /// which a save and a delete check (docs/APP-CAPABILITIES-PLAN.md step 5):
+    /// which a save and a delete check (docs/ledger/row-versions.md):
     /// `row_version` in a database Clarity owns once its steps add it, the
     /// `version "Column"` of an external one; none where saves are not
     /// checked (no step yet, `version none`, a file, a web API, a record).
@@ -1822,7 +1822,7 @@ impl Project {
         crate::versions::version_column(self, name)
     }
 
-    /// The records of every module (DESIGN 5.12): values with fields, never stored.
+    /// The records of every module (manual/code.engines.md): values with fields, never stored.
     pub fn records(&self) -> impl Iterator<Item = &Entity> {
         self.files.iter().flat_map(|f| f.records.iter())
     }

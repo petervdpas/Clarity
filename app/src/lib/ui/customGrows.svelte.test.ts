@@ -1,5 +1,5 @@
 // A custom part grows with its window when its declaration says `grows`
-// (DESIGN 5.19): the project marks each placed part, and the designer's
+// (manual/design.custom-parts.md): the project marks each placed part, and the designer's
 // preview lays it out by that, as every Clarity.UI does.
 
 import { expect, test } from "vitest";

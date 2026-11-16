@@ -1,4 +1,4 @@
-//! Where a graph's nodes stand (docs/GRAPH-PLAN.md), in the graph's own
+//! Where a graph's nodes stand (docs/ledger/graph.md), in the graph's own
 //! units around 0,0, which the part fits into its place. Every layout
 //! places the same graph the same way each time: no randomness, a fixed
 //! number of steps, ties broken by the nodes' order.

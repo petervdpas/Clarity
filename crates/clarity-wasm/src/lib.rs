@@ -1,4 +1,4 @@
-//! Compiles an engine written in Clarity to WebAssembly (DESIGN 5.12, N5b).
+//! Compiles an engine written in Clarity to WebAssembly (manual/code.engines.md).
 //!
 //! The file it gives speaks the engine interface (conformance/engines.json)
 //! as an engine built from Rust does, so every host runs it as any engine.

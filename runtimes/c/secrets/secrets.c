@@ -1,4 +1,4 @@
-// Secret settings in the system's protected store (DESIGN 5.27); see secrets.h.
+// Secret settings in the system's protected store (manual/data.settings.md); see secrets.h.
 
 #include "secrets/secrets.h"
 

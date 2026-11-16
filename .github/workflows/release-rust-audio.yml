@@ -2,7 +2,7 @@ name: Release Rust Clarity.Audio
 
 # Push a runtimes/rust-audio/v* tag (e.g. `git tag runtimes/rust-audio/v0.1.0 &&
 # git push origin runtimes/rust-audio/v0.1.0`) to publish the crate
-# clarity-audio to crates.io (docs/AUDIO-PLAN.md). The tag must name the
+# clarity-audio to crates.io (docs/ledger/audio.md). The tag must name the
 # version in runtimes/rust-audio/Cargo.toml: bump that first, commit, then tag.
 # clarity-ui's `audio` feature names a clarity-audio version, so this release
 # goes before the clarity-ui release that needs it (tag runtimes/rust-ui/v*).

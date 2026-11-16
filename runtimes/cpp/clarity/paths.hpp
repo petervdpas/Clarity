@@ -1,4 +1,4 @@
-// Paths into a window's data (DESIGN 1.7): `album.tags` is the field `tags`
+// Paths into a window's data (manual/start.how-it-works.md): `album.tags` is the field `tags`
 // of the record `album`, `readings` a plain value, and a number in a path is
 // a row of a list by its place.
 

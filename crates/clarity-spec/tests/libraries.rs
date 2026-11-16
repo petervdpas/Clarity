@@ -1,4 +1,4 @@
-//! External libraries (DESIGN 5.21): a `library` declared in Clarity with
+//! External libraries (manual/code.libraries.md): a `library` declared in Clarity with
 //! the functions code calls, written in the project's own language with
 //! that language's package (NuGet, a crate, a Go module, a CMake package),
 //! called as `Words.spell(42)`.

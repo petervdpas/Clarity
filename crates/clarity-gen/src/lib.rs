@@ -1,5 +1,5 @@
 //! Transpiles a checked Clarity project into a real application for the
-//! stack its project file names (docs/DESIGN.md section 1.2). Generation is
+//! stack its project file names (docs/ledger/project-file.md). Generation is
 //! deterministic: the same project always gives the same files, byte for
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
@@ -60,7 +60,7 @@ fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<St
         if project.entities_in(&source.name).next().is_none() {
             continue;
         }
-        // A web API keeps its own records (DESIGN 5.23): its entities are not stored.
+        // A web API keeps its own records (manual/code.web-apis.md): its entities are not stored.
         // A file source is opened from its file, not connected to (`file_sources`).
         if source.kind == clarity_project::SourceKind::File {
             continue;
@@ -79,7 +79,7 @@ fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<St
     Ok((databases, owned))
 }
 
-/// A data source that is a file in a format (docs/FORMATS-PLAN.md), as
+/// A data source that is a file in a format (docs/ledger/formats.md), as
 /// every runtime opens it: read into one in-memory SQLite table of its
 /// entity, written back after each change.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,7 +101,7 @@ pub(crate) fn file_sources(project: &Project, settings: &clarity_project::Settin
     let mut out = Vec::new();
     for source in &settings.datasources {
         let Some(file) = &source.file else { continue };
-        // `using OrderFeed`: the mapping says the format, the entity and the options (docs/FORMATS-PLAN.md, step 4).
+        // `using OrderFeed`: the mapping says the format, the entity and the options (docs/ledger/formats.md).
         let mapping = match &file.mapping {
             Some(name) => match project.mapping(name) {
                 Some(mapping) => Some(mapping),
@@ -243,7 +243,7 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
     (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT)
 }
 
-/// Every engine the project declares (DESIGN 5.11).
+/// Every engine the project declares (manual/code.engines.md).
 /// What a `TypeRef` names, as a checker type.
 /// What cascades from `entity` (`cascade`): each child entity, the module
 /// file it is in, and the column of its field that refers to `entity`.
@@ -459,7 +459,7 @@ pub(crate) fn engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
         .collect()
 }
 
-/// The engines beside the screen (DESIGN 5.12), which the renderer runs:
+/// The engines beside the screen (manual/code.engines.md), which the renderer runs:
 /// the web stacks carry them in the model, C# in the application.
 pub(crate) fn screen_engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
     project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none() && e.beside).collect()
@@ -475,7 +475,7 @@ pub(crate) fn screen_engine_files(project: &Project, folder: &str) -> Vec<OutFil
         .collect()
 }
 
-/// How the type an `ask` asks for travels to the screen (DESIGN 5.14):
+/// How the type an `ask` asks for travels to the screen (manual/code.statements.md):
 /// its word (text, integer, decimal, money, date, datetime, duration, enum,
 /// record) and the enum or entity it names.
 pub(crate) fn ask_type(project: &Project, ty: &clarity_spec::code::TypeRef) -> (&'static str, Option<String>) {
@@ -496,8 +496,8 @@ pub(crate) fn ask_type(project: &Project, ty: &clarity_spec::code::TypeRef) -> (
 /// The handlers of a window the answer to one of its questions runs: the
 /// handlers after `then`, each once.
 /// The handlers that run with values given from outside the code: the
-/// handler an answer goes to (DESIGN 5.14), and a handler wired to a custom
-/// part's tell (DESIGN 5.19).
+/// handler an answer goes to (manual/code.statements.md), and a handler wired to a custom
+/// part's tell (manual/design.custom-parts.md).
 pub(crate) fn given_values_handlers<'a>(page: Option<&clarity_spec::model::Page>, handlers: &[&'a clarity_spec::code::HandlerDecl]) -> Vec<&'a clarity_spec::code::HandlerDecl> {
     let mut found = answering_handlers(handlers);
     for name in parts::told_handlers(page) {
@@ -570,7 +570,7 @@ pub(crate) fn canvas_draws(page: &clarity_spec::model::Page) -> Vec<(String, Str
 /// Each value of a shape as a draw statement gives it: its key on the
 /// wire, what it is, and the argument written, or the value it has when
 /// left out (conformance/drawing.json).
-/// The tool a painting or vector canvas starts with (DESIGN 5.31): the
+/// The tool a painting or vector canvas starts with (manual/parts.graphics.md): the
 /// first of its `tools`, else the first of its mode's; empty for none.
 /// A spin box's range as its line writes it, whole numbers: 0 and 2147483647 where it writes none.
 pub(crate) fn spin_range(props: &clarity_spec::model::WidgetProps) -> (i64, i64) {
@@ -749,7 +749,7 @@ pub struct OutFile {
 /// language: the Markdown of its file, or the name of its picture. Every
 /// stack shows a key's value through its texts, so this one way covers them.
 /// The entities in an order where each comes after the records it holds
-/// (DESIGN 5.25), as C and C++ declare a struct before one that holds it.
+/// (manual/data.entities.md), as C and C++ declare a struct before one that holds it.
 /// The checker keeps a record from holding itself.
 pub(crate) fn holding_order(project: &Project) -> Vec<&clarity_spec::model::Entity> {
     fn visit<'p>(project: &'p Project, entity: &'p clarity_spec::model::Entity, out: &mut Vec<&'p clarity_spec::model::Entity>, busy: &mut Vec<String>) {
@@ -774,7 +774,7 @@ pub(crate) fn holding_order(project: &Project) -> Vec<&clarity_spec::model::Enti
 }
 
 /// The name a program keeps the person's things under: the folder of its
-/// settings, and its secrets in the system's protected store (DESIGN 5.17,
+/// settings, and its secrets in the system's protected store (manual/data.settings.md,
 /// 5.27). The project's name in snake case (`ShopDesk` is `shop_desk`), the
 /// same on every stack and for its command-line program too, so an
 /// application built on another stack finds what this one kept
@@ -785,7 +785,7 @@ pub fn settings_program(settings: &Settings) -> String {
 }
 
 /// `project` with each web API that signs with a secret setting naming it as
-/// `setting:<program>/<name>` (DESIGN 5.27): where the runtime finds it in
+/// `setting:<program>/<name>` (manual/data.settings.md): where the runtime finds it in
 /// the system's protected store, under the program's own name, which each
 /// stack's settings use too.
 pub(crate) fn with_secret_settings(project: &Project, program: &str) -> Project {
@@ -801,7 +801,7 @@ pub(crate) fn with_secret_settings(project: &Project, program: &str) -> Project 
 }
 
 /// The databases with each connection kept as a secret setting named as
-/// `setting:<program>/<name>` (DESIGN 5.27), as `with_secret_settings` does
+/// `setting:<program>/<name>` (manual/data.settings.md), as `with_secret_settings` does
 /// for a web API's key.
 pub(crate) fn with_secret_locations(databases: Vec<(String, ddl::Sql, String)>, program: &str) -> Vec<(String, ddl::Sql, String)> {
     databases
@@ -813,7 +813,7 @@ pub(crate) fn with_secret_locations(databases: Vec<(String, ddl::Sql, String)>, 
         .collect()
 }
 
-/// What an application does when its databases do not open (DESIGN 5.27):
+/// What an application does when its databases do not open (manual/data.settings.md):
 /// the app's `on unconnected` handler, by its app and handler names, and
 /// the window that keeps a secret connection. None when it just stops.
 pub(crate) struct Unconnected {
@@ -837,7 +837,7 @@ pub(crate) fn unconnected_takes_reason(project: &Project, app: &str, name: &str)
     project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == app).flat_map(|b| &b.handlers).any(|h| h.name.name == name && h.params.len() == 1)
 }
 
-/// The secret settings' names as a list a program hands its runtime (DESIGN 5.27).
+/// The secret settings' names as a list a program hands its runtime (manual/data.settings.md).
 pub(crate) fn secret_names(project: &Project) -> Vec<String> {
     project.secret_settings().into_iter().map(str::to_string).collect()
 }
@@ -854,7 +854,7 @@ pub fn with_resource_texts(project: &Project) -> Project {
     project
 }
 
-/// Engines written in Clarity become WebAssembly files (DESIGN 5.12, N5b):
+/// Engines written in Clarity become WebAssembly files (manual/code.engines.md):
 /// each is compiled, or built for the interpreter when the project says
 /// `engines interpreted`, as `<name>.wasm` among the engine files; its keys
 /// go to its `says`, and from then on every stack takes it as any engine file.
@@ -904,7 +904,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     check_stores(project, settings)?;
     check_web_secrets(project)?;
     check_parts_in_browser(project, settings)?;
-    // A custom part is written in the project's own language (DESIGN 5.19).
+    // A custom part is written in the project's own language (manual/design.custom-parts.md).
     let misfits: Vec<String> = clarity_project::target_problems(settings, project, "")
         .into_iter()
         .map(|d| d.message)
@@ -915,7 +915,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     // Each view shows as parts of the window that shows it (clarity_spec::views).
     let mut project = compile_engines(with_resource_texts(&consts::inlined(&calls::filled(&clarity_spec::views::placed(project)))), settings)?;
-    // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
+    // The keys window and the person's keys, where the project file allows them (manual/app.keys.md).
     project.keys_editable = settings.keys_editable;
     // How high the windows' rows are, which their markup carries.
     project.row_height = clarity_project::row_height(settings);
@@ -933,7 +933,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         Backend::C => c::generate(project, settings)?,
         Backend::Cpp => cpp::generate(project, settings)?,
     };
-    // The codec libraries the project adds, carried and added as the program starts (docs/VIDEO-PLAN.md).
+    // The codec libraries the project adds, carried and added as the program starts (docs/ledger/video-camera.md).
     if settings.stack.has(clarity_project::Target::Desktop) {
         with_codecs(&mut files, crate::codec_libraries(project, settings)?, settings.stack.backend);
     }
@@ -969,7 +969,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 }
 
 /// One program of a project: what a target of its stack builds, written
-/// into its own folder of `out/` (DESIGN 5.20).
+/// into its own folder of `out/` (manual/code.commands.md).
 #[derive(Debug, Clone)]
 pub struct Program {
     pub target: clarity_project::Target,
@@ -1281,7 +1281,7 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         }
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Clarity => {
             let configuration = if release { "Release" } else { "Debug" };
-            // The web application is built as its server, which builds the application it serves (DESIGN 7.6).
+            // The web application is built as its server, which builds the application it serves (manual/stacks.csharp.md).
             let web = windowed_target(settings) == clarity_project::Target::Web;
             let (project, folder, program) = if web {
                 (vec!["Server".to_string()], "Server/", format!("{}.Server", csharp::project_name(settings)))
@@ -1310,7 +1310,7 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 args.extend(["-trimpath", "-ldflags=-s -w"].map(String::from));
             }
             args.extend(["-o".to_string(), built, ".".to_string()]);
-            // The desktop program links Clarity.UI's library, from the folder CLARITY_UI names (DESIGN 7.9).
+            // The desktop program links Clarity.UI's library, from the folder CLARITY_UI names (manual/start.how-it-works.md).
             let env = if settings.stack.has(clarity_project::Target::Desktop) { go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(std::path::Path::new), std::env::consts::OS) } else { Vec::new() };
             Some(Toolchain {
                 tool: "go",
@@ -1356,7 +1356,7 @@ pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'stat
     vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
 }
 
-/// The codec libraries a project with videos adds (docs/VIDEO-PLAN.md), for
+/// The codec libraries a project with videos adds (docs/ledger/video-camera.md), for
 /// this system: each library's file name (`libvp9.so`) and the file carrying
 /// it in the program's `codecs` folder. The `from` of each is resolved by
 /// `clarity_project::build_settings`; a library that is not there is an error.
@@ -1419,7 +1419,7 @@ pub(crate) const BUILT_INS: [BuiltIn; 19] = [
     BuiltIn { name: "slice", rust: "clarity_runtime::texts::slice", go: "clarity.TextSlice", csharp: "Clarity.Runtime.Texts.Slice", c: "clarity_text_slice", cpp: "clarity::slice" },
     BuiltIn { name: "indexOf", rust: "clarity_runtime::texts::index_of", go: "clarity.TextIndexOf", csharp: "Clarity.Runtime.Texts.IndexOf", c: "clarity_text_index_of", cpp: "clarity::index_of" },
     BuiltIn { name: "zip", rust: "clarity_runtime::zip::stored", go: "clarity.Zip", csharp: "Clarity.Runtime.Zip.Of", c: "clarity_zip", cpp: "clarity::zip" },
-    // The picture functions (docs/IMAGE-PLAN.md), through Clarity.Image; Go's are in the program's pictures.go.
+    // The picture functions (docs/ledger/picture-functions.md), through Clarity.Image; Go's are in the program's pictures.go.
     BuiltIn { name: "resize", rust: "clarity_runtime::picture_functions::resize", go: "pictureResize", csharp: "Clarity.Image.PictureFunctions.Resize", c: "clarity_picture_resize", cpp: "clarity::picture_resize" },
     BuiltIn { name: "crop", rust: "clarity_runtime::picture_functions::crop", go: "pictureCrop", csharp: "Clarity.Image.PictureFunctions.Crop", c: "clarity_picture_crop", cpp: "clarity::picture_crop" },
     BuiltIn { name: "rotate", rust: "clarity_runtime::picture_functions::rotate", go: "pictureRotate", csharp: "Clarity.Image.PictureFunctions.Rotate", c: "clarity_picture_rotate", cpp: "clarity::picture_rotate" },
@@ -1468,14 +1468,14 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
             if let Some(main) = files.iter_mut().find(|f| f.path == "src/main.rs")
                 && let Some(at) = main.text.find(run)
             {
-                main.text.insert_str(at, &format!("    // The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+                main.text.insert_str(at, &format!("    // The codec libraries the project adds (docs/ledger/video-camera.md).\n{lines}"));
             }
         }
         Backend::Csharp => {
             let lines: String = names.iter().map(|n| format!("        Clarity.Video.ClarityVideo.AddCodec({});\n", quoted(n))).collect();
             insert_after(files, "Program.cs", "Clarity.Video.ClarityVideo.Use();\n", &lines);
             if let Some(project) = files.iter_mut().find(|f| f.path.ends_with(".csproj") && !f.path.contains('/')) {
-                project.text = project.text.replacen("</Project>", "  <!-- The codec libraries the project adds, beside the program (docs/VIDEO-PLAN.md). -->\n  <ItemGroup>\n    <None Include=\"codecs/**\" CopyToOutputDirectory=\"PreserveNewest\" />\n  </ItemGroup>\n</Project>", 1);
+                project.text = project.text.replacen("</Project>", "  <!-- The codec libraries the project adds, beside the program (docs/ledger/video-camera.md). -->\n  <ItemGroup>\n    <None Include=\"codecs/**\" CopyToOutputDirectory=\"PreserveNewest\" />\n  </ItemGroup>\n</Project>", 1);
             }
         }
         Backend::Go => {
@@ -1484,7 +1484,7 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
             if let Some(video) = files.iter_mut().find(|f| f.path == "video.go")
                 && let Some(at) = video.text.rfind("}\n")
             {
-                video.text.insert_str(at, &format!("\t// The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+                video.text.insert_str(at, &format!("\t// The codec libraries the project adds (docs/ledger/video-camera.md).\n{lines}"));
             }
         }
         Backend::C | Backend::Cpp => {
@@ -1494,7 +1494,7 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
                 && let Some(at) = file.text.find("clarity_ui_use_video(clarity_video_api())")
                 && let Some(end) = file.text[at..].find('\n')
             {
-                file.text.insert_str(at + end + 1, &format!("    // The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+                file.text.insert_str(at + end + 1, &format!("    // The codec libraries the project adds (docs/ledger/video-camera.md).\n{lines}"));
             }
         }
     }
@@ -1531,11 +1531,11 @@ pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathB
 
 /// Whether the windowed build (not the command-line program) links
 /// Clarity.UI's library from the folder CLARITY_UI names: a Go, C, C++ or
-/// Rust desktop program (DESIGN 7.9). C# brings the library in its package.
+/// Rust desktop program (manual/start.how-it-works.md). C# brings the library in its package.
 /// Whether a build of the program of `target` needs Clarity.UI's folder
 /// (CLARITY_UI): a Go, C, C++ or Rust desktop program draws with its library,
 /// and a Go, C or C++ program of any target whose code reads or writes a
-/// format links Clarity.Formats from beside it (docs/FORMATS-PLAN.md).
+/// format links Clarity.Formats from beside it (docs/ledger/formats.md).
 pub fn needs_library_folder(project: &Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> bool {
     let draws = target == clarity_project::Target::Desktop && uses_clarity_ui(settings);
     let formats = carries_formats(project, settings) && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
@@ -1590,7 +1590,7 @@ pub fn command_words(line: &str) -> Vec<String> {
     words
 }
 
-/// The build of the command-line program (DESIGN 5.20) in `out/cli`, with
+/// The build of the command-line program (manual/code.commands.md) in `out/cli`, with
 /// the stack's own tools; the program is named as it is typed.
 pub fn cli_toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
     let program = commands::program_name(settings);
@@ -1655,14 +1655,14 @@ pub const OUT_MARKER: &str = ".clarity-out";
 const OUT_MARKER_TEXT: &str =
     "This folder is generated by Clarity from a project's .clarity files. Clarity replaces its contents on every build.\n";
 
-/// Where `http ... from source` calls (DESIGN 5.23): the web API's address,
+/// Where `http ... from source` calls (manual/code.web-apis.md): the web API's address,
 /// and its auth as the project file writes it (kind, where the secret is).
 pub(crate) fn web_source<'p>(project: &'p Project, name: &str) -> Option<(&'p str, Option<(&'p str, &'p str)>)> {
     let source = project.sources.iter().find(|s| s.name == name && !s.sql)?;
     Some((source.address.as_str(), source.auth.as_ref().map(|(kind, secret)| (kind.as_str(), secret.as_str()))))
 }
 
-/// How a web API data source pages, which `every page` follows (DESIGN 5.23).
+/// How a web API data source pages, which `every page` follows (manual/code.web-apis.md).
 pub(crate) fn web_paging<'p>(project: &'p Project, name: &str) -> Option<&'p clarity_spec::Paging> {
     project.sources.iter().find(|s| s.name == name && !s.sql)?.paging.as_ref()
 }
@@ -1677,7 +1677,7 @@ pub(crate) fn paging_word(kind: clarity_spec::PagingKind) -> &'static str {
     }
 }
 
-/// A custom part is a library of the stack's own language (DESIGN 6.5, 7.9),
+/// A custom part is a library of the stack's own language (manual/design.custom-parts.md, manual/start.how-it-works.md),
 /// which runs beside Clarity.UI on the desktop; in a browser Clarity.UI runs
 /// alone, compiled once for every language, so a program served to a
 /// browser alone has none (a .NET part too, since C#'s browser drawing went).

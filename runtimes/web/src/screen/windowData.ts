@@ -64,7 +64,7 @@ function shownType(ty: TypeRefKind, span: DataDecl["span"]): FieldType | null {
       return { kind: "decimal", precision: 0, scale: 0 };
     case "named":
       return { kind: "enum", name: { name: ty.name, span } };
-    // A list of values (DESIGN 5.26); a list of records is no plain value.
+    // A list of values (manual/parts.data.md); a list of records is no plain value.
     case "list":
       return ["text", "integer", "decimal", "date"].includes(ty.item) ? { kind: "values", item: { kind: ty.item as "text" | "integer" | "decimal" | "date" } } : null;
     case "file":

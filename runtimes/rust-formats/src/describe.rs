@@ -1,4 +1,4 @@
-//! What a file holds, for Import (docs/FORMATS-PLAN.md, "Import, and the
+//! What a file holds, for Import (docs/ledger/formats.md, "Import, and the
 //! XML Data Binding wizard made generic"): the tables it holds and their
 //! columns, found in the document model alike for every format; and the
 //! rules a schema gives (the tables an XSD declares, typed: xsd.rs), which

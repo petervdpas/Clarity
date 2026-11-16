@@ -1,4 +1,4 @@
-//! Asking the person (DESIGN 5.14): `ask ... then handler` in a handler.
+//! Asking the person (manual/code.statements.md): `ask ... then handler` in a handler.
 //! The dialog shows after the handler has finished; the answer runs the
 //! handler after `then`, with the values written there and the answer
 //! last. What is asked decides the dialog: a question with yes and no, or a

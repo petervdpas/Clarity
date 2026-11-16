@@ -1,4 +1,4 @@
-// The edit bus (DESIGN 5.29) against the cases every runtime shares
+// The edit bus (manual/code.handlers.md) against the cases every runtime shares
 // (conformance/edit-bus.json).
 
 #include "check.hpp"

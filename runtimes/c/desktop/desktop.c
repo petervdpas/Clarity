@@ -1,4 +1,4 @@
-// The thin C layer on Clarity.UI (DESIGN 7.9): the library asks by command
+// The thin C layer on Clarity.UI (manual/start.how-it-works.md): the library asks by command
 // (clarity_ui.h) and the service answers, one command at a time. The
 // library calls from the screen's thread and from the thread that runs a
 // long handler, so the service takes turns; how far a long call is and its

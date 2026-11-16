@@ -2,8 +2,8 @@
 import type { GraphList } from "./GraphList";
 
 /**
- * What a graph of the data model knows of the model (docs/GRAPH-PLAN.md,
- * step 2), worked out when the project loads: each list it shows, the
+ * What a graph of the data model knows of the model (docs/ledger/graph.md),
+ * worked out when the project loads: each list it shows, the
  * entity of its records, the field a record shows as its label, and its
  * references to the other entities shown, which become its edges.
  */

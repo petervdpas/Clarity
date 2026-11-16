@@ -115,7 +115,7 @@ async function openWindow(button) {
 
 try {
   await b.until(`document.querySelector("[data-part]")`, "the first window", 30000);
-  // The window is drawn from its markup, which the program carries (DESIGN 7.8), not from the model.
+  // The window is drawn from its markup, which the program carries (manual/start.how-it-works.md), not from the model.
   const drawnFrom = await b.eval(`document.querySelector(".client")?.dataset.drawn`);
   if (drawnFrom !== "markup") throw new Error(`the first window was drawn from ${drawnFrom ?? "nothing"}, not from its markup`);
   const frameFrom = await b.eval(`document.querySelector(".client")?.dataset.frame`);
@@ -390,7 +390,7 @@ try {
     await undoIn("dial", "canvas");
   });
 
-  // ---- Canvas modes (DESIGN 5.31): each gesture is one edit the runtime makes.
+  // ---- Canvas modes (manual/parts.graphics.md): each gesture is one edit the runtime makes.
   const places = () => rows("SELECT id || ':' || copies || ',' || position FROM album ORDER BY id");
   await step("an object dragged on a board lands on the grid, saved; Ctrl+Z takes it back", async () => {
     const before = places();
@@ -502,7 +502,7 @@ try {
     same(rows("SELECT name FROM folder WHERE parent IS NULL ORDER BY position"), ["Docs", "Music"], "kept: no undo");
   });
 
-  // ---- What a table, a tree and a chart show, as the runtime decides it (DESIGN 1.7).
+  // ---- What a table, a tree and a chart show, as the runtime decides it (manual/start.how-it-works.md).
   await step("a table shows its first order a page at a time, and turns pages", async () => {
     await b.until(`document.querySelectorAll('${part("albumGrid")} [data-row]').length >= 2`, "the albums");
     await sameSoon(() => shownRows("albumGrid"), ["Alpha 1", "Beta 2"], "the first page, by title");

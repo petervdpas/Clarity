@@ -1,5 +1,5 @@
-//! A save never overwrites someone else's change (docs/APP-CAPABILITIES-PLAN.md
-//! step 5), the language and migration side: the step that adds the version
+//! A save never overwrites someone else's change (docs/ledger/row-versions.md),
+//! the language and migration side: the step that adds the version
 //! column, which entities are versioned and in which column, `version` and
 //! `savedSince` on entities, and `save ... anyway` and `reload` in code.
 

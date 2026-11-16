@@ -1,4 +1,4 @@
-<!-- The tests of a program served to browsers (DESIGN 7.6, 7.9): the server
+<!-- The tests of a program served to browsers (manual/stacks.csharp.md, manual/start.how-it-works.md): the server
      (Clarity.Ui.Server), which serves the browser files and the program's
      files and answers Clarity.UI's commands in the browser through the
      runtime's ProgramWire, as the desktop does. -->

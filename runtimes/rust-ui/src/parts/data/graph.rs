@@ -1,4 +1,4 @@
-//! A graph (docs/GRAPH-PLAN.md), drawn from what Clarity.Graph
+//! A graph (docs/ledger/graph.md), drawn from what Clarity.Graph
 //! (`clarity_graph`) reads: the records of the list it binds as nodes and
 //! the records of its `edges` list as edges between them; or, a graph of
 //! the data model, the records of the lists it names (`lists`) as nodes of

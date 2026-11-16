@@ -1,4 +1,4 @@
-//! The settings each person keeps for themselves (DESIGN 5.17): one JSON
+//! The settings each person keeps for themselves (manual/data.settings.md): one JSON
 //! file per application in the folder for application settings of the
 //! person's system (conformance/settings.json, `file`). Of what was kept, a
 //! start takes back only what still fits its setting (`fits`, `taken`).
@@ -157,7 +157,7 @@ pub fn keep(program: &str, values: &Map<String, Value>) -> Result<()> {
     std::fs::rename(&written, &path).map_err(failed)
 }
 
-/// The settings `program` kept, with its secrets (DESIGN 5.27): each name of
+/// The settings `program` kept, with its secrets (manual/data.settings.md): each name of
 /// `secrets` that the system's protected store holds, beside the file's.
 #[cfg(feature = "secrets")]
 pub fn read_with(program: &str, secrets: &[&str]) -> Map<String, Value> {

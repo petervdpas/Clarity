@@ -1,4 +1,4 @@
-//! Screen readers (DESIGN 7.9, A1): the accessibility tree made from the
+//! Screen readers (manual/start.how-it-works.md): the accessibility tree made from the
 //! screen's elements, per kind of part (role, name from its caption or its
 //! label, translated, value and states), the focus following the screen's,
 //! actions from the tree done as the person's input, AccessKit's updates

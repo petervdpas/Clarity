@@ -191,7 +191,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "
 pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "keys", "undo", "redo", "back", "forward"];
 
 /// The click target that signs in with a strategy of the project file's
-/// `signin` block: `signin password` (docs/APP-CAPABILITIES-PLAN.md step 4).
+/// `signin` block: `signin password` (docs/ledger/signin.md).
 pub const SIGNIN_TARGET: &str = "signin";
 /// The click target that signs out who signed in: `signout`.
 pub const SIGNOUT_TARGET: &str = "signout";

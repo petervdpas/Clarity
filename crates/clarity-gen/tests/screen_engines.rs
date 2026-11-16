@@ -1,7 +1,7 @@
-//! Engines beside the screen in the generated application (DESIGN 5.12):
+//! Engines beside the screen in the generated application (manual/code.engines.md):
 //! the program runs them beside Clarity.UI, on the desktop in-process and on
 //! the web in the server, which the library in the browser asks over the
-//! wire (`engine_*`, DESIGN 7.9 round B). C# gives each canvas that runs one
+//! wire (`engine_*`, manual/start.how-it-works.md round B). C# gives each canvas that runs one
 //! an instance of its own.
 
 use clarity_gen::{OutFile, generate};
@@ -78,7 +78,7 @@ fn the_web_stacks_answer_tells_and_send_hears() {
     assert!(all.contains("ui.hear(\"sky\", \"start\", vec![to_value(&2"), "a hear goes with the reply");
 }
 
-/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b) is
+/// An engine beside the screen written in Clarity (manual/code.engines.md) is
 /// compiled when the project is generated, and every stack carries it as it
 /// carries one brought along.
 #[test]

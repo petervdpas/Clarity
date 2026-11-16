@@ -519,7 +519,7 @@ fn a_clarity_engine_beside_the_screen_builds_in_go() {
     }
 }
 
-/// A window that asks each kind of question (DESIGN 5.14) builds, and gofmt
+/// A window that asks each kind of question (manual/code.statements.md) builds, and gofmt
 /// and go vet are content with what answers them.
 #[test]
 #[ignore = "builds Go"]
@@ -536,7 +536,7 @@ fn questions_and_their_answers_build_in_go() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// Records in app code and a tree by key (DESIGN 5.12) build, and gofmt and
+/// Records in app code and a tree by key (manual/code.engines.md) build, and gofmt and
 /// go vet are content with them.
 #[test]
 #[ignore = "builds Go"]
@@ -553,7 +553,7 @@ fn an_outline_of_records_builds_in_go() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
+/// An engine beside the screen (manual/code.engines.md, conformance/engines/play.clarity):
 /// the backend loads no engine, the model carries it for the renderer. With
 /// CLARITY_KEEP set the built application stays, to run it.
 #[test]
@@ -578,7 +578,7 @@ fn an_engine_beside_the_screen_builds_in_go() {
 
 /// The invaders example, whose only target is the web: the program is a web
 /// server that serves Clarity.UI's browser files and answers the wire the
-/// library asks the game over (round B of DESIGN 7.9).
+/// library asks the game over (round B of manual/start.how-it-works.md).
 #[test]
 #[ignore]
 fn the_invaders_example_serves_in_go() {

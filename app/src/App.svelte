@@ -222,7 +222,7 @@
 
   /**
    * Generates and builds the application; with `run`, starts it. A project
-   * with a command-line program (DESIGN 5.20) asks which program to run when
+   * with a command-line program (manual/code.commands.md) asks which program to run when
    * it has two, and the command line to run it with.
    */
   async function buildApp(release: boolean, run: boolean) {
@@ -669,7 +669,7 @@
     }
   }
 
-  /** A new web API (DESIGN 5.23): a rest data source of the project file, by the name code calls it by. */
+  /** A new web API (manual/code.web-apis.md): a rest data source of the project file, by the name code calls it by. */
   async function startNewApi() {
     const settings = projectFile?.settings;
     if (!settings) return;
@@ -1251,14 +1251,14 @@
   function selectPage(p: Page) {
     stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
-    pageDesigner.slideout = null;
+    pageDesigner.canvas = null;
   }
 
-  /** A slide-out picked under Views: its window, with the slide-out on a canvas of its own. */
-  function selectSlideout(p: Page, name: string) {
+  /** A slide-out or popover picked under Views: its window, with it on a canvas of its own. */
+  function selectCanvas(p: Page, name: string) {
     stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
-    pageDesigner.slideout = name;
+    pageDesigner.canvas = name;
   }
 
   async function addWindow(target: SpecFile, name: string, template: PageTemplate | "dialog") {
@@ -1349,7 +1349,7 @@
     invoke("open_manual", { topic: topicForTab(inAgent ? "agent" : tab) }).catch(() => {});
   }
 
-  /** What each command does and whether it can now, as its ribbon button says (DESIGN 5.28, lib/keys.ts). */
+  /** What each command does and whether it can now, as its ribbon button says (manual/app.keys.md, lib/keys.ts). */
   const commands: Record<string, { run: () => unknown; can?: () => boolean }> = {
     manual: { run: () => openManual() },
     "view.project": { run: () => switchTab("project") },
@@ -1568,7 +1568,7 @@
         {full}
         onapp={selectApp}
         onwindow={selectPage}
-        onslideout={full ? selectSlideout : null}
+        oncanvas={full ? selectCanvas : null}
         onselect={select}
         onnewdata={full ? startNewData : null}
         onnewmapping={full ? startNewMapping : null}

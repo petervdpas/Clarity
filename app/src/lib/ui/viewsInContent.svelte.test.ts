@@ -1,4 +1,4 @@
-// A view drawn in a window's content (DESIGN 5.33) from its own file (a
+// A view drawn in a window's content (manual/design.windows.md) from its own file (a
 // `.cxaml`): its parts keep their view's keys, so an edit of one goes to the
 // view's file in its own places.
 

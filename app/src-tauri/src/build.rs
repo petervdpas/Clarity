@@ -242,10 +242,10 @@ pub struct Generated {
 /// and runs with the stack's own tools, in Clarity or outside it.
 pub fn generate_source(file: &Path) -> Result<Source, String> {
     let dir = clarity_project::module_dir(file);
-    // Each web API's module follows its description and picks (DESIGN 5.23).
+    // Each web API's module follows its description and picks (manual/code.web-apis.md).
     clarity_project::refresh_apis(file)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    // Each native part's header follows its declaration, and a new part gets a starter (DESIGN 5.19).
+    // Each native part's header follows its declaration, and a new part gets a starter (manual/design.custom-parts.md).
     clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
     let mut source = transpile(file)?;
     source.written = clarity_gen::write_programs_listed(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
@@ -265,7 +265,7 @@ fn transpile(file: &Path) -> Result<Source, String> {
     };
     let built = clarity_project::build_settings(&dir, &settings);
     let mut programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
-    // A program served to a browser carries Clarity.UI's browser files (round B of DESIGN 7.9).
+    // A program served to a browser carries Clarity.UI's browser files (round B of manual/start.how-it-works.md).
     if clarity_gen::web_browser::needs_library(&programs) {
         clarity_gen::web_browser::with_library(&mut programs, &browser_folder()?)?;
     }
@@ -451,7 +451,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
 }
 
 /// The toolchain of `generated`, with Clarity.UI's library for a Go, C or
-/// C++ desktop program (DESIGN 7.9): the folder CLARITY_UI names, else the
+/// C++ desktop program (manual/start.how-it-works.md): the folder CLARITY_UI names, else the
 /// one fetched from the library's release into the cache folder, fetched
 /// now when it is not there yet.
 fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::Toolchain, String> {
@@ -472,7 +472,7 @@ pub(crate) fn library_folder(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Makes sure the library's folder holds Cisco's openh264, which every video
-/// app carries (docs/VIDEO-PLAN.md): in the background, never holding a build
+/// app carries (docs/ledger/video-camera.md): in the background, never holding a build
 /// up, and quietly offline. A folder Clarity carries already has it; one
 /// fetched before it did, or Clarity's own repository build, gets it from Cisco.
 fn keep_openh264(folder: &std::path::Path) {
@@ -791,7 +791,7 @@ mod tests {
         let again = generate_source(&file).unwrap().written;
         assert!(again.written == first.written && again.removed.is_empty(), "{again:?}");
         let Generated { out, toolchain, .. } = generate_out(&file, true, false).unwrap();
-        // The desktop program, in its own folder of the output (DESIGN 5.20).
+        // The desktop program, in its own folder of the output (manual/code.commands.md).
         assert_eq!(out, dir.join("shop/out/desktop"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());

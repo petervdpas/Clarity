@@ -1,6 +1,6 @@
 package clarity
 
-// Canvas modes (DESIGN 5.31), as every runtime does them
+// Canvas modes (manual/parts.graphics.md), as every runtime does them
 // (conformance/canvas-modes.json).
 
 import (

@@ -96,7 +96,7 @@ code Plans
         days = Planner.plan([1, 2, 3], 3)
 ";
 
-/// A long engine call says how far it is (DESIGN 5.12): `progress(done, total)`
+/// A long engine call says how far it is (manual/code.engines.md): `progress(done, total)`
 /// in an engine that uses progress, which the screen shows as a bar.
 #[test]
 fn an_engine_says_how_far_a_long_call_is() {

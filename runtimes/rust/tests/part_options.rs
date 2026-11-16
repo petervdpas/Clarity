@@ -1,4 +1,4 @@
-//! A part's options are the runtime's parameters (DESIGN 1.7): a readonly
+//! A part's options are the runtime's parameters (manual/start.how-it-works.md): a readonly
 //! part's change, and a table's change outside the fields its cells edit,
 //! are taken back to the window's edit baseline and answered refused, with
 //! no handler run and no edit kept.

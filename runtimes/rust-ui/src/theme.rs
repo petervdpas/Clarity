@@ -1,4 +1,4 @@
-//! A theme as Clarity.UI draws it (DESIGN 1.5, 7.9): what Clarity resolves
+//! A theme as Clarity.UI draws it (manual/themes.md, manual/start.how-it-works.md): what Clarity resolves
 //! for light or dark mode, read as JSON. A project's theme lies over
 //! Clarity's own, which Clarity.UI carries; what the project's leaves out is
 //! Clarity's. The look is defined in Clarity; this only reads it.

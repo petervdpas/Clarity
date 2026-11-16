@@ -1,4 +1,4 @@
-//! Views generated from the project (DG1, DESIGN section 5.13): the Data
+//! Views generated from the project (manual/data.diagrams.md): the Data
 //! model as an ERD in Mermaid, with each line linked to what it shows.
 //! A view read back proposes nothing: it is the project, drawn.
 

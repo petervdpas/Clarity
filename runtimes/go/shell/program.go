@@ -1,4 +1,4 @@
-// The program over the wire (DESIGN 7.3 and 7.9): what Clarity.UI asks a
+// The program over the wire (manual/project.run-build.md, manual/start.how-it-works.md): what Clarity.UI asks a
 // generated program, on the desktop through package ui and in a browser
 // over HTTP (serve.go), answered with the service and the program's own
 // facts, engines and long calls.
@@ -18,7 +18,7 @@ import (
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
 
-// Engines are the engines beside the screen of a program (DESIGN 5.12),
+// Engines are the engines beside the screen of a program (manual/code.engines.md),
 // each instance by its number; package engine's Screens is one.
 type Engines interface {
 	// EngineOpen opens a new instance of engine name: its number; found is

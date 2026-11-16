@@ -1,4 +1,4 @@
-//! A small project that calls every picture function (docs/IMAGE-PLAN.md),
+//! A small project that calls every picture function (docs/ledger/picture-functions.md),
 //! built on each desktop stack as the IDE builds it, without a warning. Each
 //! is a whole build, so they are ignored: run one at a time,
 //! `cargo test -p clarity-gen --test picture_functions_build -- --ignored --exact <name>`.

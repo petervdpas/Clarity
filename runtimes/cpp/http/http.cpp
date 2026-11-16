@@ -160,7 +160,7 @@ namespace {
 
 /// A secret where the project file says it is: `env:NAME` reads that
 /// environment variable, `setting:<program>/<name>` a secret setting from
-/// the system's protected store (DESIGN 5.27); empty when it is not there.
+/// the system's protected store (manual/data.settings.md); empty when it is not there.
 std::string secret_at(const std::string& location) {
     if (location.rfind("env:", 0) == 0) {
         const char* value = std::getenv(location.substr(4).c_str());

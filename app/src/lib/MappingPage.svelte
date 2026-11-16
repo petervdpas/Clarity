@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A mapping (docs/FORMATS-PLAN.md, step 4) on a page of its own: how one
+  // A mapping (docs/ledger/formats.md) on a page of its own: how one
   // kind of file is laid over an entity, for this case only. The format, the
   // entity, where the records are, a row per field with its path, the records
   // inside with their own rows, the schema it is checked against and the

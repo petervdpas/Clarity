@@ -1,5 +1,5 @@
 //! The slider and the spin box of U1c, decided here, not in the screen
-//! (DESIGN 1.7): how a key, a drag or a typed number moves a value within
+//! (manual/start.how-it-works.md): how a key, a drag or a typed number moves a value within
 //! its range. Numbers come as text and stay exact: the sums are done on
 //! whole numbers scaled by ten as often as needed. Every runtime moves alike
 //! (conformance/ranges.json).
@@ -159,7 +159,7 @@ pub fn typed_in(value: &str, range: &Range) -> Option<String> {
     Some(text(within(at(value, s.scale)?, s.low, s.high), s.scale))
 }
 
-/// `range_event` (DESIGN 1.7): the value at `path` in the window's data
+/// `range_event` (manual/start.how-it-works.md): the value at `path` in the window's data
 /// after `mv`, written as a number when the field is `whole`, else as text.
 /// A changed value runs `run`, the handler, as an edit ends
 /// (`edits::ended`); one that stays, or text that is no number, answers

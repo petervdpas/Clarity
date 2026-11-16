@@ -127,7 +127,7 @@ pub fn snapped(value: i64, step: i64) -> i64 {
     if step > 0 { (2 * value + step).div_euclid(2 * step) * step } else { value }
 }
 
-/// Runs a handler of an edit as one undo step (DESIGN 5.29): the reply
+/// Runs a handler of an edit as one undo step (manual/code.handlers.md): the reply
 /// carries the step's id when the handler changed the database.
 pub fn stepped(db: &Db, run: impl FnOnce() -> Result<ui::Reply>) -> Result<ui::Reply> {
     let before = db.last_step();
@@ -183,13 +183,13 @@ pub enum Error {
     /// A stored value does not fit its field.
     Invalid(String),
     Storage(String),
-    /// A database connects with a secret setting (DESIGN 5.27) that the
+    /// A database connects with a secret setting (manual/data.settings.md) that the
     /// person has not kept yet: the setting's name.
     NotKept(String),
     /// A data event refused a save or delete, or code refused to go on, in
     /// its own words.
     Refused(ui::Text),
-    /// An engine could not load, or failed while it ran (DESIGN 5.11).
+    /// An engine could not load, or failed while it ran (manual/code.engines.md).
     Engine(String),
     /// A value in code that does not fit where it is used: a highest
     /// number below 1, JSON that does not fit (conformance/lists.json).
@@ -253,7 +253,7 @@ fn first_required_empty(required: &[(&str, &str)], columns: &[&str], values: &[S
     })
 }
 
-/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// Why the databases did not open, as the person reads it (manual/data.settings.md,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.
 pub fn unconnected_reason(err: &Error) -> ui::Text {
@@ -462,7 +462,7 @@ pub struct Db {
     sources: Vec<Source>,
     /// The file stores, by name.
     stores: Vec<(String, StorePlace)>,
-    /// What undo takes back and redo does again (DESIGN 5.29).
+    /// What undo takes back and redo does again (manual/code.handlers.md).
     history: RefCell<History>,
     /// The settings of the running handler: the window's data had them when
     /// the call began, and its code sets them before they are kept; a file
@@ -491,7 +491,7 @@ struct Change {
     after_version: Option<i64>,
 }
 
-/// The database side of undo (DESIGN 5.29): the changes of each handler
+/// The database side of undo (manual/code.handlers.md): the changes of each handler
 /// run that changed something, by the step's id. The screen keeps the edits
 /// on its bus, each with the id of the step its handler made, and asks for
 /// that step to be undone or done again. Kept until the application closes.
@@ -789,7 +789,7 @@ impl Db {
     pub fn migrate_source(&mut self, source: &str, steps: &[Step]) -> Result<usize> {
         let mut conn = self.conn(source)?;
         let done = schema_version(&mut **conn)?;
-        // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+        // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
         if done > 0 && done < steps.len() {
             backup::before_migration(&mut **conn, done + 1)?;
         }

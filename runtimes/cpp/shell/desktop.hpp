@@ -1,4 +1,4 @@
-// The desktop program of C++ applications (DESIGN 7.9): Clarity.UI draws
+// The desktop program of C++ applications (manual/start.how-it-works.md): Clarity.UI draws
 // the windows in the program's own process, and asks the program by command
 // (clarity_ui.h). The service answers the commands of the screen's wire;
 // this adds the desktop's own: how it starts, the facts of the fields, and

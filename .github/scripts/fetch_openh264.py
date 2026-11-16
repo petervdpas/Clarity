@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetches Cisco's openh264 binary for one system into a folder, as every
-app with video carries it (docs/VIDEO-PLAN.md): downloaded from Cisco,
+app with video carries it (docs/ledger/video-camera.md): downloaded from Cisco,
 unpacked, and kept only when its SHA-256 is one Clarity.Video's openh264
 knows (runtimes/rust-video/openh264.sha256). Run from the repository's root
 on any runner (Linux, macOS, Windows):

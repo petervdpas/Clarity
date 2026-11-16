@@ -1,4 +1,4 @@
-//! A question a handler asks: `ask ... then handler(values)` (DESIGN 5.14),
+//! A question a handler asks: `ask ... then handler(values)` (manual/code.statements.md),
 //! in Clarity's own dialog over the window, never a dialog of the system:
 //! the question, the input its form needs (a text box, a number box in the
 //! value's format, a date input for a day or a moment, or a dropdown of its

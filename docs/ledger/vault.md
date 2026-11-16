@@ -17,9 +17,9 @@ Progress: 90%
 - `app/src/lib/vault.test.ts`, unlock.test.ts
 
 ## Open
-- Vault keys, the eye and copy on fields inside an open vault, AltGr on European layouts: UNTRIED on Windows (WINDOWS-TESTS.md:23-28, "no vault was made"); see [os-checks](os-checks.md)
+- Vault keys, the eye and copy on fields inside an open vault, AltGr on European layouts: UNTRIED on Windows (no vault was made there); see [os-checks](os-checks.md)
 - A designed app's own vault or config parts: NOT BUILT; apps keep `secret` settings in the system keychain, see [settings-secrets](settings-secrets.md)
-- The vault's crypto as a shared crate for encrypted files and stores: NOT BUILT (APP-CAPABILITIES-PLAN.md:362, 384); see [encrypted-storage](encrypted-storage.md)
+- The vault's crypto as a shared crate for encrypted files and stores: NOT BUILT; see [encrypted-storage](encrypted-storage.md) Design "How"
 
 ## Conflicts
 - none

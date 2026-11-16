@@ -1,4 +1,4 @@
-//! What the program's model says beyond the window's values (DESIGN 7.9):
+//! What the program's model says beyond the window's values (manual/start.how-it-works.md):
 //! which windows are dialogs and the size each opens at, the facts of every
 //! field of its entities (label, format, required, range, what it refers
 //! to), the values of its enums with their labels, and the person's formats.
@@ -59,7 +59,7 @@ pub struct ModelFacts {
 }
 
 /// The project's `signin` block as a sign-in part offers it
-/// (docs/APP-CAPABILITIES-PLAN.md step 4): its strategies in the order
+/// (docs/ledger/signin.md): its strategies in the order
 /// written, each with what a person gives it and where it works.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SigninFacts {

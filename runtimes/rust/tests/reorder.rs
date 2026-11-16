@@ -1,4 +1,4 @@
-//! Reordering (DESIGN 5.30) against the cases every runtime shares
+//! Reordering (manual/parts.data.md) against the cases every runtime shares
 //! (conformance/reorder.json), and the move of a window's list that
 //! `reorder_event` makes.
 

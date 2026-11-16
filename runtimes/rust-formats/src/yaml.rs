@@ -1,4 +1,4 @@
-//! YAML, syntax only (docs/FORMATS-PLAN.md, "Step 5: YAML"): YAML 1.2's
+//! YAML, syntax only (docs/ledger/formats.md): YAML 1.2's
 //! core schema read into the document model (doc.rs) as JSON's values are,
 //! and written from it in block style.
 //!

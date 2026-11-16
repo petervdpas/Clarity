@@ -1,4 +1,4 @@
-// The service (DESIGN 7.3 and 5.x): it answers the commands of the web
+// The service (manual/project.run-build.md and 5.x): it answers the commands of the web
 // wire, for Clarity.UI on the desktop (desktop/desktop.c) and for a browser
 // (serve.c). It needs nothing of a desktop toolkit.
 
@@ -38,7 +38,7 @@ struct ClarityService {
     bool (*open_link)(const char* address);
     void (*log_line)(const char* line);
     /// The selected rows the screen sent with the command that runs, before
-    /// a handler changed them: a row chosen since shows (DESIGN 1.7).
+    /// a handler changed them: a row chosen since shows (manual/start.how-it-works.md).
     ClaritySelected* sent;
     size_t sent_count;
     /// The settings of the page whose command runs (clarity_service_page).
@@ -165,10 +165,10 @@ static bool dispatched_step(void* context) {
     return dispatched(step->service, step->state, step->handler, &step->reply);
 }
 
-/// A window's reply, which is where its edits start (DESIGN 5.29): what a
+/// A window's reply, which is where its edits start (manual/code.handlers.md): what a
 /// handler changed is never the person's edit.
 static cJSON* answered(ClarityService* s, ClarityReply* reply) {
-    // What the window's tables, trees and charts show, from its data now (DESIGN 1.7).
+    // What the window's tables, trees and charts show, from its data now (manual/start.how-it-works.md).
     clarity_fill_views(&reply->state, s->sent, s->sent_count);
     clarity_edits_reset(clarity_edits_of(reply->state.instance), clarity_edit_data(&reply->state));
     return value(clarity_reply_json(reply));
@@ -247,7 +247,7 @@ static cJSON* unchanged(ClarityService* s, const ClarityWindowState* state, bool
 }
 
 /// What the screen changed of a readonly part, or of a table's column it
-/// does not edit, taken back (DESIGN 1.7): the window's data as its edit
+/// does not edit, taken back (manual/start.how-it-works.md): the window's data as its edit
 /// baseline had it, answered refused. No handler runs and no edit is kept.
 static cJSON* taken_back(ClarityService* s, const ClarityWindowState* state) {
     cJSON* baseline = clarity_edits_baseline(clarity_edits_of(state->instance));
@@ -285,7 +285,7 @@ static bool edits_only(const cJSON* before, const cJSON* after, const char* path
     return true;
 }
 
-/// The end of an edit the runtime made of the window's data (DESIGN 1.7),
+/// The end of an edit the runtime made of the window's data (manual/start.how-it-works.md),
 /// as edit_event ends one: its handler runs as one database step and, with
 /// a scope, the edit goes on the window's record. No handler: the window as it is.
 static cJSON* edit_made(ClarityService* s, const ClarityWindowState* changed, const cJSON* args) {
@@ -296,7 +296,7 @@ static cJSON* edit_made(ClarityService* s, const ClarityWindowState* changed, co
     return answered(s, reply);
 }
 
-/// A row of a list moved by a drag or a key (DESIGN 5.30): the list in its
+/// A row of a list moved by a drag or a key (manual/parts.data.md): the list in its
 /// new order, each record's number in `by` and, in a tree, its parent, and
 /// the moved row selected.
 static cJSON* reordered(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
@@ -378,7 +378,7 @@ static ClarityWindowState without_selected(const ClarityWindowState* state, cons
     return out;
 }
 
-/// The person's action on a canvas (DESIGN 5.31): an object dropped, a
+/// The person's action on a canvas (manual/parts.graphics.md): an object dropped, a
 /// stroke painted, or a shape added, changed, moved or deleted, snapped to
 /// the canvas's grid, with what it touched selected. An action that changes
 /// nothing is refused and runs nothing.
@@ -417,7 +417,7 @@ static ClarityWindowState on_step(const ClarityWindowState* state, const char* p
     return clarity_ui_reply(ui, state->window, state->data)->state;
 }
 
-/// Next, Back or Finish on a wizard (DESIGN 5.15): Next runs `on next` on
+/// Next, Back or Finish on a wizard (manual/parts.containers.md): Next runs `on next` on
 /// the step shown, stays when it refused or failed, keeps the step it set,
 /// else moves on; Back goes back and runs nothing; Finish runs `on finish`.
 static cJSON* stepped_wizard(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
@@ -526,14 +526,14 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         return value(cJSON_CreateNull());
     }
     if (strcmp(command, "read_settings") == 0) {
-        // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+        // The settings the person kept (manual/data.settings.md); the screen takes back those that still fit.
         return value(clarity_read_settings_with(s->options.name, cJSON_GetObjectItemCaseSensitive(args, "secrets")));
     }
     if (strcmp(command, "keep_settings") == 0) {
         // The person's settings, as the screen has them now.
         const cJSON* settings = cJSON_GetObjectItemCaseSensitive(args, "settings");
         if (!cJSON_IsObject(settings)) return error_text("keep_settings takes the settings as an object");
-        // Its secret settings go to the system's protected store, never the file (DESIGN 5.27).
+        // Its secret settings go to the system's protected store, never the file (manual/data.settings.md).
         if (!clarity_keep_settings_with(s->options.name, settings, cJSON_GetObjectItemCaseSensitive(args, "secrets"))) return failed();
         return value(cJSON_CreateNull());
     }
@@ -554,7 +554,7 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
     if (strcmp(command, "return_to") == 0) return replied(s, &state, "return");
     if (strcmp(command, "start_app") == 0) return replied(s, &state, "start");
     if (strcmp(command, "dispatch_event") == 0) {
-        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        // One undo step (manual/code.handlers.md): the reply carries its id when the handler changed the database.
         int64_t before = clarity_last_step(db);
         Stepping step = {s, &state, text_of(args, "handler"), NULL};
         if (!clarity_step(db, dispatched_step, &step)) return failed();
@@ -562,10 +562,10 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         return answered(s, step.reply);
     }
     if (strcmp(command, "edit_event") == 0) {
-        // The person ended an edit of a part (DESIGN 5.29): its handler runs as
+        // The person ended an edit of a part (manual/code.handlers.md): its handler runs as
         // one database step, and the edit goes on the window's record with
         // what it changed. A drag goes on until its drop. A readonly part, or a
-        // table's column it does not edit, changes nothing (DESIGN 1.7).
+        // table's column it does not edit, changes nothing (manual/start.how-it-works.md).
         if (is_readonly(args)) return taken_back(s, &state);
         const cJSON* editable = cJSON_GetObjectItemCaseSensitive(args, "editable");
         cJSON* baseline = clarity_edits_baseline(clarity_edits_of(state.instance));
@@ -580,7 +580,7 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
             clarity_edits_drag(bus, text_of(args, "part"), text_of(args, "scope"), &reply->step, count);
         return answered(s, reply);
     }
-    // What the person did to a part, which the runtime decides (DESIGN 1.7).
+    // What the person did to a part, which the runtime decides (manual/start.how-it-works.md).
     if (strcmp(command, "reorder_event") == 0) return reordered(s, &state, args);
     if (strcmp(command, "item_event") == 0) return item_added(s, &state, args);
     if (strcmp(command, "range_event") == 0) return ranged(s, &state, args);

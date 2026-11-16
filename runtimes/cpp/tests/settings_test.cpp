@@ -48,7 +48,7 @@ TEST(settings_kept_are_read_back) {
 
 // Keeping the settings writes a secret only when it changed: another setting
 // changing never needs the protected store, nor fails where it cannot be
-// reached (DESIGN 5.27).
+// reached (manual/data.settings.md).
 TEST(a_secret_goes_to_the_store_only_when_it_changed) {
     auto folder = std::filesystem::temp_directory_path() / "clarity-secrets-cpp";
     std::filesystem::remove_all(folder);

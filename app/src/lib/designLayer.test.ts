@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { cellsOf, commandsOf, dividerOf, grown, heldBy, layerOf, nudged, paneSizeAt, placeIn, resizedBy, resizedTo, rowStep, slideEdgeOf, slideSizeAt, type LayerGrid, type LayerPart } from "./designLayer.ts";
+import { cellsOf, commandsOf, dividerOf, grown, heldBy, layerOf, canvasSize, nudged, opening, paneSizeAt, placeIn, resizedBy, resizedTo, rowStep, slideEdgeOf, slideSizeAt, type LayerGrid, type LayerPart } from "./designLayer.ts";
 import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
@@ -149,8 +149,22 @@ test("the IDE's language is the drawing's choice", () => {
   );
 });
 
-test("a slide-out designed on a canvas of its own asks the preview for its parts alone", () => {
-  assert.equal(filesAddress("http://x/s/", { window: "ChaptersPart" }, true, 2, { slideout: "properties" }), "http://x/s/files.json?window=ChaptersPart&design=1&slideout=properties&revision=2");
+test("a slide-out or popover designed on a canvas of its own asks the preview for its parts alone", () => {
+  assert.equal(filesAddress("http://x/s/", { window: "ChaptersPart" }, true, 2, { canvas: "properties" }), "http://x/s/files.json?window=ChaptersPart&design=1&canvas=properties&revision=2");
+});
+
+test("a double click opens what a part has of its own: a slide-out or popover on its canvas, a view or toolbox it shows; else nothing (its code)", () => {
+  const with_ = (w: Widget, props: object) => ({ ...w, props: { ...w.props, ...props } }) as Widget;
+  assert.deepEqual(opening(widget(1, "slideout"), 0), { canvas: "slideout1" });
+  assert.deepEqual(opening(widget(1, "popover"), 0), { canvas: "popover1" });
+  assert.deepEqual(opening(with_(widget(1, "slideout"), { view: "ClassEditor" }), 0), { page: "ClassEditor" }, "a slide-out showing a view opens the view");
+  assert.equal(opening(with_(widget(1, "popover"), { name: null }), 0), null, "an unnamed one has no canvas");
+  assert.deepEqual(opening(with_(widget(1, "canvas"), { toolboxPage: "Painting" }), 0), { page: "Painting" });
+  const tabs = widget(1, "tabs", [], [{ start: 2, children: [] }, { start: 3, children: [] }]);
+  tabs.pages[1] = { ...tabs.pages[1], view: "Keypad" };
+  assert.deepEqual(opening(tabs, 1), { page: "Keypad" }, "the view of the page it shows");
+  assert.equal(opening(tabs, 0), null, "a page of its own parts has no view to open");
+  assert.equal(opening(widget(1, "button"), 0), null);
 });
 
 test("the preview takes input and has the accessible mirror; the design canvas neither", () => {
@@ -274,4 +288,11 @@ test("let go, the inner edge gives the slide-out its size from its outer edge, w
   assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 40, width: 300, height: 600 } }, "left", 350.4, null, null), 350);
   assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 400, width: 1000, height: 300 } }, "bottom", 350, null, null), 350);
   assert.equal(slideSizeAt({ ...slidePart, box: { x: 0, y: 0, width: 1000, height: 300 } }, "top", 250, null, null), 250);
+});
+
+test("a canvas of its own is as big as the part opens: a slide-out as wide as it slides out and as high as the window, a popover its columns and rows", () => {
+  const w = (kind: string, props: object) => ({ ...widget(1, kind), props: { ...widget(1, kind).props, ...props } }) as Widget;
+  assert.deepEqual(canvasSize(w("slideout", { slideWidth: 300 }), 600, 36), { width: 300, height: 600 });
+  assert.deepEqual(canvasSize(w("slideout", { slideWidth: null }), 600, 36), { width: 420, height: 600 });
+  assert.deepEqual(canvasSize(w("popover", { width: 4, height: 2 }), 600, 36), { width: 4 * 80 + 3 * 8, height: 2 * 36 + 8 }, "as crates/clarity-gen's files_json_own_canvas");
 });

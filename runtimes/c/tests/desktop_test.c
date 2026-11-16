@@ -1,5 +1,5 @@
-// The C layer on Clarity.UI (DESIGN 7.9), through the library itself: a
-// program driven without a window (DESIGN 1.6) opens its window from the
+// The C layer on Clarity.UI (manual/start.how-it-works.md), through the library itself: a
+// program driven without a window (manual/start.how-it-works.md) opens its window from the
 // files it carries, shows its data, runs its handlers and takes the
 // person's edits; the library's own commands are answered (started, a
 // record's file, settings, facts); a long call says how far it is and stops
@@ -178,7 +178,7 @@ static bool make_screen(const char* name, ClarityScreenEngine** out) {
 
 static cJSON* screen_answer(const char* command, const cJSON* args) { return clarity_screen_answer(screens, command, args); }
 
-// Engines beside the screen (DESIGN 5.12): the program answers the library's
+// Engines beside the screen (manual/code.engines.md): the program answers the library's
 // engine_* commands from its instances, one per canvas, by number.
 void the_layer_runs_engines_beside_the_screen(void) {
     ClarityDb* db;
@@ -201,7 +201,7 @@ void the_layer_runs_engines_beside_the_screen(void) {
     clarity_db_close(db);
 }
 
-// A long call (DESIGN 5.12): on the handler's thread between start_watch and
+// A long call (manual/code.engines.md): on the handler's thread between start_watch and
 // end_watch; how far it is and Stop come from other threads while it runs.
 void a_long_call_says_how_far_it_is_and_stops(void) {
     ClarityDb* db;

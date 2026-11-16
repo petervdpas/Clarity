@@ -1,4 +1,4 @@
-//! The checkbox and the switch (DESIGN 7.9, conformance/forms.json): a box
+//! The checkbox and the switch (manual/start.how-it-works.md, conformance/forms.json): a box
 //! with a tick, or a track with a knob, and the caption beside it. Its value
 //! is bound, else kept in its state's `checked`. Only the person ticking it
 //! is a change; what code sets is not. A click, Space or Enter ticks it; a

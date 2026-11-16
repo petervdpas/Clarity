@@ -2,7 +2,7 @@ name: Release Rust Clarity.Graph
 
 # Push a runtimes/rust-graph/v* tag (e.g. `git tag runtimes/rust-graph/v0.1.0 &&
 # git push origin runtimes/rust-graph/v0.1.0`) to publish the crate
-# clarity-graph to crates.io (docs/GRAPH-PLAN.md). The tag must name the
+# clarity-graph to crates.io (docs/ledger/graph.md). The tag must name the
 # version in runtimes/rust-graph/Cargo.toml: bump that first, commit, then tag.
 # clarity-ui names a clarity-graph version (its graph part), so
 # this release goes before the clarity-ui release that needs it (tag runtimes/rust-ui/v*).

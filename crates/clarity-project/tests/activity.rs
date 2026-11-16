@@ -1,4 +1,4 @@
-//! The outside agents' activity (docs/ACP-PLAN.md, "Agent activity"): one
+//! The outside agents' activity (docs/ledger/acp.md): one
 //! line per tool call `clarity mcp` answers, kept short, which the IDE follows.
 
 use std::path::{Path, PathBuf};

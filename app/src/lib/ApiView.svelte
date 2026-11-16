@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A web API of the project (DESIGN 5.23), opened from the project tree:
+  // A web API of the project (manual/code.web-apis.md), opened from the project tree:
   // where it is, how it is signed, and what the application uses of its
   // OpenAPI description. It is a data source of the project file, as in the
   // project settings, shown where a developer looks for it.

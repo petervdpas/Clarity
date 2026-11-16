@@ -1,4 +1,4 @@
-//! Custom parts in the IDE (DESIGN 5.19): the files of a part's library,
+//! Custom parts in the IDE (manual/design.custom-parts.md): the files of a part's library,
 //! read and written from Clarity, and the header and starter written from
 //! its declaration. The `clarity` folder of a native part is Clarity's, so
 //! its header is shown and never written from here.

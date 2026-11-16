@@ -1,4 +1,4 @@
-//! What a screen knows of a program's fields and types (DESIGN 7.9), beside
+//! What a screen knows of a program's fields and types (manual/start.how-it-works.md), beside
 //! the values: each entity field's label, format, whether it is required, its
 //! range and what it refers to, keyed "Entity.field", and the type of each
 //! value of a window's data. The generated program carries them as one static

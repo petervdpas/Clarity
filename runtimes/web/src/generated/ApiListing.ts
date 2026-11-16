@@ -3,7 +3,7 @@ import type { ApiOperation } from "./ApiOperation";
 import type { ApiSchema } from "./ApiSchema";
 
 /**
- * What the picking of a web API data source shows (DESIGN 5.23).
+ * What the picking of a web API data source shows (manual/code.web-apis.md).
  */
 export type ApiListing = { 
 /**

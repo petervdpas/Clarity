@@ -1,5 +1,5 @@
 {
-  "about": "The languages a memo colors as code (`memo ... code csharp`, DESIGN 5.34): the checker takes these words after `code`, and Clarity.UI colors each one's comments, texts, numbers, keywords and type names.",
+  "about": "The languages a memo colors as code (`memo ... code csharp`, manual/parts.input.md): the checker takes these words after `code`, and Clarity.UI colors each one's comments, texts, numbers, keywords and type names.",
   "languages": [
     "clarity",
     "csharp",

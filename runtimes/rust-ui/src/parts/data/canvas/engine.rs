@@ -1,4 +1,4 @@
-//! A canvas an engine beside the screen draws (DESIGN 5.12,
+//! A canvas an engine beside the screen draws (manual/code.engines.md,
 //! conformance/screen-engines.json): one instance from when it first shows,
 //! a frame at the screen's pace, the frame's work off the screen's thread
 //! and its shapes shown on the next frame the screen draws. While it runs it

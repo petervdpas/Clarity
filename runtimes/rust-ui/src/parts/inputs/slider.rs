@@ -1,4 +1,4 @@
-//! The slider (DESIGN 7.9, conformance/ranges.json): a number between its
+//! The slider (manual/start.how-it-works.md, conformance/ranges.json): a number between its
 //! lowest and highest value (its bound field's range when the part writes
 //! none, else 0 and 100). Dragged, its thumb snaps to the steps and it
 //! takes the nearest step when let go;

@@ -23,24 +23,25 @@ fn clarity_ui_folder(at: &Path) -> PathBuf {
 }
 
 fn configured(source: &Path, build: &Path, folder: &Path) -> String {
-    // Only configured: the runtime's own targets have no sources in this bare project, so generating fails after.
     let out = Command::new("cmake").arg("-S").arg(source).arg("-B").arg(build).env("CLARITY_UI", folder).output().expect("cmake runs");
-    let said = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(said.contains("uses "), "{said}{}", String::from_utf8_lossy(&out.stderr));
-    said
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).to_string()
 }
 
 #[test]
 fn the_folder_named_now_wins_over_the_one_cmake_kept() {
-    if cfg!(not(target_os = "linux")) || Command::new("cmake").arg("--version").output().is_err() {
+    if Command::new("cmake").arg("--version").output().is_err() {
         return;
     }
     for runtime in ["c", "cpp"] {
         let dir = temp(runtime);
-        let cmake = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes").join(runtime).join("clarity.cmake").canonicalize().unwrap();
+        // The runtime's macro that picks the folder, on its own: the rest of the file finds libraries (curl, SQLite) a bare machine may lack.
+        let text = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes").join(runtime).join("clarity.cmake")).unwrap();
+        let start = text.find("macro(clarity_ui_folder)").expect("the macro");
+        let end = start + text[start..].find("endmacro()").expect("its end") + "endmacro()".len();
         let source = dir.join("project");
         std::fs::create_dir_all(&source).unwrap();
-        std::fs::write(source.join("CMakeLists.txt"), format!("cmake_minimum_required(VERSION 3.16)\nproject(swapped C)\ninclude({})\nclarity_ui_folder()\nmessage(STATUS \"uses ${{CLARITY_UI}}\")\n", cmake.display())).unwrap();
+        std::fs::write(source.join("CMakeLists.txt"), format!("cmake_minimum_required(VERSION 3.16)\nproject(swapped NONE)\n{}\nclarity_ui_folder()\nmessage(STATUS \"uses ${{CLARITY_UI}}\")\n", &text[start..end])).unwrap();
         let release = clarity_ui_folder(&dir.join("release"));
         let own = clarity_ui_folder(&dir.join("own"));
         let build = dir.join("build");

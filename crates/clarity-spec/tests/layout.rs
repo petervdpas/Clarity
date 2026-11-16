@@ -68,6 +68,7 @@ fn every_window_opens_at_the_size_the_designer_shows() {
     // (or the standard one), drawn by Clarity.UI as it runs (DESIGN 8.1), its padding Clarity.UI's own.
     assert!(APP.contains("<ShownWindow") && APP.contains("clientWidth={windowSize(page).width}") && APP.contains("windowSize(page).height") && APP.contains("<ClarityWindow"), "preview");
     // The designer shows the size a window's edge is dragged to while it is dragged.
-    assert!(PAGE_DESIGNER.contains("const shownSize = $derived(sizing ?? windowSize(page));"), "designer");
+    // (A slide-out designed on a canvas of its own shows as wide as it slides out.)
+    assert!(PAGE_DESIGNER.contains("(sizing ?? windowSize(page))") && PAGE_DESIGNER.contains("const shownSize = $derived("), "designer");
     assert!(PAGE_DESIGNER.contains("<ShownWindow {area} clientWidth={shownSize.width}") && PAGE_DESIGNER.contains("style:height=\"{shownSize.height}px\"") && PAGE_DESIGNER.contains("<ClarityWindow"), "designer");
 }

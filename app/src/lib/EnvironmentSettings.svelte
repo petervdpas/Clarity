@@ -3,8 +3,11 @@
   // stacks on this computer, for every project. A scan finds every copy of
   // each tool with its version; the person picks the one builds use, or
   // chooses a program elsewhere with Browse, or leaves it to Clarity (the
-  // first one found). Paths are never typed, so none is mistyped.
+  // first one found). Paths are never typed, so none is mistyped. Beside
+  // the stacks, what engines need, with Install for Rust's WebAssembly
+  // target, which asks first.
 
+  import { dialogs } from "./dialogStore.svelte";
   import { browse as browseFiles } from "./fileBrowserStore.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import type { EnvironmentView } from "@clarity/ui/generated/EnvironmentView.ts";
@@ -13,6 +16,7 @@
 
   let view = $state<EnvironmentView | null>(null);
   let scanning = $state(false);
+  let installing = $state(false);
   let error = $state<string | null>(null);
 
   /** The choice that leaves the tool to Clarity: the first copy found. */
@@ -38,6 +42,25 @@
       checkTools(true);
     } catch (err) {
       error = String(err);
+    }
+  }
+
+  /** Adds Rust's WebAssembly target for engines, after asking: it runs `command`. */
+  async function installEngineTarget(command: string) {
+    const agreed = await dialogs.confirm({
+      title: "Install for engines",
+      text: `Engines are built for WebAssembly. Clarity runs ${command} to add Rust's WebAssembly target to this computer.`,
+      action: "Install",
+    });
+    if (!agreed) return;
+    installing = true;
+    error = null;
+    try {
+      view = await invoke<EnvironmentView>("install_engine_target");
+    } catch (err) {
+      error = String(err);
+    } finally {
+      installing = false;
     }
   }
 
@@ -84,6 +107,33 @@
             {/if}
           </li>
         {/each}
+      </ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>Engines</legend>
+      <ul class="stacks">
+        <li class:ready={view.engines.ready}>
+          <strong>Engines in Rust</strong>
+          {#if view.engines.ready}
+            <span class="state ok">Ready</span>
+            <span class="muted">cargo, Rust's WebAssembly target</span>
+          {:else}
+            <span class="state missing">Missing</span>
+            <ul class="needs">
+              {#each view.engines.missing as need (need.what)}
+                <li>
+                  <span class="muted">{need.what}</span>
+                  {#if view.engines.install}
+                    {@const command = view.engines.install}
+                    <button type="button" disabled={installing} onclick={() => installEngineTarget(command)} title="Runs {command}, after asking">{installing ? "Installing..." : "Install"}</button>
+                  {/if}
+                  <button type="button" onclick={() => openSetupGuide(need.guide)} title="Opens the manual where it tells how to install this">How to install</button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </li>
       </ul>
     </fieldset>
 

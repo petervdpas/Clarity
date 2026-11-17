@@ -1,4 +1,7 @@
-/target
+# Cargo's build folders: the workspace's, and the one each engine (an
+# example's engines/<name>/) and each runtime of its own builds in. An
+# engine's built .wasm beside its folder is kept, so the example runs as checked out.
+target/
 node_modules/
 # The screen package's link to the IDE's packages (app/scripts/link-ui.mjs).
 runtimes/web/node_modules

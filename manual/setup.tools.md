@@ -123,6 +123,8 @@ An engine written in Rust is built for WebAssembly, which needs Rust and its Web
 rustup target add wasm32-unknown-unknown
 ```
 
+**Clarity settings**, **Environment** says under **Engines** whether it is there. With Rust installed through rustup, **Install** there runs this command for you, after asking.
+
 ## After installing
 
 Open **Clarity settings**, **Environment** and choose **Scan again**: the stack shows Ready, or says what is still missing. A tool installed somewhere Clarity does not look can be chosen there by its path. See [Run and Build](project.run-build.md#where-clarity-finds-them) for how Clarity finds the tools.

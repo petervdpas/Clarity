@@ -470,21 +470,52 @@ fn clarity_ui_library(probe: &dyn Probe, found: &mut Vec<String>, missing: &mut 
 
 const WASM_TARGET: &str = "Rust's WebAssembly target: run rustup target add wasm32-unknown-unknown";
 
-/// What to install to build engines from their Rust source: cargo, and
-/// Rust's WebAssembly target. Empty when nothing is missing.
-pub fn engine_tools(probe: &dyn Probe) -> Vec<String> {
+/// The part of the setup page about engines: the same on every system.
+const ENGINES_GUIDE: Guide = Guide { windows: "engines", linux: "engines", macos: "engines" };
+
+/// What adds Rust's WebAssembly target, the one thing engines miss that
+/// Clarity installs itself (after asking): nothing else, and never Rust.
+pub const ENGINE_INSTALL: [&str; 4] = ["rustup", "target", "add", clarity_project::engines::TARGET];
+
+/// What engines need on this machine, as a stack's tools are told
+/// (`StackTools`): what is missing, the setup page's part for each, and
+/// the command that installs the WebAssembly target when that is what is
+/// missing and rustup is there to add it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineTools {
+    pub missing: Vec<String>,
+    pub guides: Vec<&'static str>,
+    pub install: Option<Vec<String>>,
+}
+
+/// Engines, built from their Rust source: cargo, and Rust's WebAssembly target.
+pub fn engine_check(probe: &dyn Probe) -> EngineTools {
     if probe.run("cargo", &["--version"]).is_none() {
-        return vec![RUST.to_string()];
+        return EngineTools { missing: vec![RUST.to_string()], guides: vec![RUST_GUIDE.here()], install: None };
     }
     let target = clarity_project::engines::TARGET;
-    let installed = match probe.run("rustup", &["target", "list", "--installed"]) {
+    let listed = probe.run("rustup", &["target", "list", "--installed"]);
+    let installed = match &listed {
         Some(listed) => listed.lines().any(|l| l.trim() == target),
         // Rust without rustup, as a system package: the target is in its sysroot or not.
         None => probe
             .run("rustc", &["--print", "sysroot"])
             .is_some_and(|root| std::path::Path::new(root.trim()).join("lib/rustlib").join(target).is_dir()),
     };
-    if installed { Vec::new() } else { vec![WASM_TARGET.to_string()] }
+    if installed {
+        return EngineTools { missing: Vec::new(), guides: Vec::new(), install: None };
+    }
+    EngineTools {
+        missing: vec![WASM_TARGET.to_string()],
+        guides: vec![ENGINES_GUIDE.here()],
+        install: listed.is_some().then(|| ENGINE_INSTALL.iter().map(|a| a.to_string()).collect()),
+    }
+}
+
+/// What to install to build engines from their Rust source: cargo, and
+/// Rust's WebAssembly target. Empty when nothing is missing.
+pub fn engine_tools(probe: &dyn Probe) -> Vec<String> {
+    engine_check(probe).missing
 }
 
 /// Every stack the catalog offers, checked.

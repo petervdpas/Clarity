@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use clarity_gen::tools::{Probe, check, engine_tools, find_on_path, git_bash, search_path};
+use clarity_gen::tools::{Probe, check, engine_check, engine_tools, find_on_path, git_bash, search_path};
 use clarity_gen::clarity_ui::Library;
 use clarity_project::{Backend, Ui};
 
@@ -282,6 +282,30 @@ fn engines_need_cargo_and_the_webassembly_target() {
         .with("cargo", "--version", "cargo 1.91.0\n")
         .with("rustup", "target list --installed", "x86_64-unknown-linux-gnu\nwasm32-unknown-unknown\n");
     assert!(engine_tools(&with).is_empty());
+}
+
+/// Settings > Environment shows engines beside the stacks: what is missing
+/// with its part of the setup page, and Install for the WebAssembly target,
+/// offered only where rustup is there to add it.
+#[test]
+fn the_webassembly_target_is_installed_with_rustup() {
+    let cargo = || Machine::default().with("cargo", "--version", "cargo 1.91.0\n");
+    let no_cargo = engine_check(&Machine::default());
+    assert_eq!(no_cargo.install, None, "Rust comes first, from rustup.rs");
+    assert!(no_cargo.guides[0].starts_with("rust-on-"), "{:?}", no_cargo.guides);
+
+    let without = engine_check(&cargo().with("rustup", "target list --installed", "x86_64-pc-windows-msvc\n"));
+    assert_eq!(without.missing, engine_tools(&cargo().with("rustup", "target list --installed", "x86_64-pc-windows-msvc\n")));
+    assert_eq!(without.guides, ["engines"]);
+    assert_eq!(without.install.as_deref(), Some(&["rustup", "target", "add", "wasm32-unknown-unknown"].map(String::from)[..]));
+
+    // Rust as a system package has no rustup: its package brings the target, not Clarity.
+    let system = engine_check(&cargo().with("rustc", "--print sysroot", "/no/such/sysroot\n"));
+    assert_eq!(system.missing.len(), 1);
+    assert_eq!(system.install, None);
+
+    let ready = engine_check(&cargo().with("rustup", "target list --installed", "wasm32-unknown-unknown\n"));
+    assert!(ready.missing.is_empty() && ready.guides.is_empty() && ready.install.is_none(), "{ready:?}");
 }
 
 /// A folder tree under the test's own temporary folder, with these files.

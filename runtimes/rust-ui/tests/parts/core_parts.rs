@@ -496,7 +496,10 @@ fn an_input_methods_composing_goes_to_the_element_with_the_focus() {
 
 #[cfg(feature = "desktop")]
 mod desktop {
-    use clarity_ui::desktop::files::{answer, apple_script, commands, extensions, portal, show_command, Ask, Kind, Os};
+    use clarity_ui::desktop::files::{answer, apple_script, commands, extensions, show_command, Ask, Kind, Os};
+    // The desktop portal is D-Bus's, built on Linux and the other Unixes only.
+    #[cfg(unix)]
+    use clarity_ui::desktop::files::portal;
     use clarity_ui::files::FileFilter;
 
     fn ask(kind: Kind) -> Ask {
@@ -523,9 +526,11 @@ mod desktop {
         assert_eq!(Some("/home/p/a.png".to_string()), answer("/home/p/a.png\n"));
         assert_eq!(Some("/home/p/folder".to_string()), answer("/home/p/folder/\r\n"));
         assert_eq!(None, answer("\n"));
+        #[cfg(unix)]
         assert_eq!("/home/p/my file.png", portal::unescape("/home/p/my%20file.png"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_portals_messages_are_written_and_read_as_d_bus_writes_them() {
         use portal::{method_call, Dbus, Reader};

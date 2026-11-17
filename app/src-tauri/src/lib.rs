@@ -987,6 +987,7 @@ pub fn run() {
             parts::build_part,
             environment::environment_view,
             environment::choose_tool,
+            environment::install_engine_target,
             folders::folders_view,
             folders::set_folder,
             folders::new_project_file,

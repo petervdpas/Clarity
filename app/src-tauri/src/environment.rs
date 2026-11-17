@@ -1,13 +1,14 @@
 //! The Environment settings (Clarity settings, for every project): the build
 //! tools of the five stacks on this computer, every copy a scan finds with
 //! its version, the one each build uses, and the person's choice. Kept in
-//! Clarity's own folder; see clarity_gen::tools::environment.
+//! Clarity's own folder; see clarity_gen::tools::environment. Beside the
+//! stacks, what engines need, with Install for Rust's WebAssembly target.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use clarity_gen::tools::environment::{self, Environment, TOOLS};
-use clarity_gen::tools::{self, System};
+use clarity_gen::tools::{self, Probe, System};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -55,12 +56,25 @@ pub struct StackView {
     pub missing: Vec<MissingTool>,
 }
 
+/// Engines (Rust built to WebAssembly), beside the stacks: whether they can
+/// build here, what is missing, and the command Install runs when Clarity
+/// can add what is missing itself.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct EnginesView {
+    pub ready: bool,
+    pub missing: Vec<MissingTool>,
+    /// What Install runs, as people read it: `rustup target add wasm32-unknown-unknown`.
+    pub install: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct EnvironmentView {
     /// Where the choices are kept.
     pub file: String,
     pub stacks: Vec<StackView>,
+    pub engines: EnginesView,
     pub tools: Vec<ToolView>,
 }
 
@@ -117,7 +131,29 @@ pub fn view() -> EnvironmentView {
             missing: s.missing.into_iter().zip(s.guides).map(|(what, guide)| MissingTool { what, guide: guide.to_string() }).collect(),
         })
         .collect();
-    EnvironmentView { file: environment::file().display().to_string(), stacks, tools }
+    let engines = tools::engine_check(&System);
+    let engines = EnginesView {
+        ready: engines.missing.is_empty(),
+        install: engines.install.map(|command| command.join(" ")),
+        missing: engines.missing.into_iter().zip(engines.guides).map(|(what, guide)| MissingTool { what, guide: guide.to_string() }).collect(),
+    };
+    EnvironmentView { file: environment::file().display().to_string(), stacks, engines, tools }
+}
+
+/// Installs Rust's WebAssembly target for engines: the one install Clarity
+/// runs itself, once the person agreed, and always the same command
+/// (`tools::ENGINE_INSTALL`), never one given from outside. Gives the
+/// environment as it is then.
+#[tauri::command(async)]
+pub fn install_engine_target() -> Result<EnvironmentView, String> {
+    let [program, args @ ..] = tools::ENGINE_INSTALL;
+    let rustup = System.find(program).ok_or_else(|| "rustup is not on this computer: install Rust from https://rustup.rs first".to_string())?;
+    let out = clarity_project::background_command(rustup).args(args).stdin(Stdio::null()).output().map_err(|err| format!("cannot start rustup: {err}"))?;
+    if !out.status.success() {
+        let said = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("rustup could not add the target: {}", said.trim()));
+    }
+    Ok(view())
 }
 
 /// The environment, scanned anew.

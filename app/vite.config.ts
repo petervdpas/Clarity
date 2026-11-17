@@ -43,7 +43,9 @@ const stylesAfterComponent: Plugin = {
     if (at < 0 || !devServer) return;
     const file = id.slice(0, at);
     const root = devServer.config.root;
-    const url = file.startsWith(`${root}/`) ? file.slice(root.length) : `/@fs${file}`;
+    // A file outside the root goes by /@fs/: on Linux and macOS its path starts
+    // with "/", on Windows with its drive ("E:/"), which needs the slash added.
+    const url = file.startsWith(`${root}/`) ? file.slice(root.length) : `/@fs/${file.replace(/^\//, "")}`;
     await devServer.environments.client.transformRequest(url);
   },
 };

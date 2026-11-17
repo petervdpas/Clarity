@@ -28,8 +28,12 @@ fi
 export CLARITY_RUNTIME="${CLARITY_RUNTIME-$root/runtimes/csharp}"
 
 cd "$root/app"
-if [ ! -d node_modules ]; then
+# Installs again whenever package-lock.json changed since the last install, not
+# only when node_modules is missing: a package added later (@clarity/ui, linked
+# from runtimes/web) is otherwise never there ("Failed to resolve import").
+if ! cmp -s package-lock.json node_modules/.clarity-installed-lock.json; then
     npm install
+    cp package-lock.json node_modules/.clarity-installed-lock.json
 fi
 # Vite's cache (node_modules/.vite) is kept: emptying it made Vite prepare
 # its packages again while the IDE's page loaded, and a component's styles

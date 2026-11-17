@@ -57,7 +57,9 @@ pub fn local_patch(named: &std::path::Path) -> Result<String, String> {
     let holds = |folder: &std::path::Path| std::fs::read_to_string(folder.join("Cargo.toml")).is_ok_and(|m| m.contains("\nname = \"clarity-runtime\""));
     let runtime = crate::tools::environment::runtime_in(named, "rust", &holds).ok_or_else(wrong)?;
     let runtime = runtime.canonicalize().map_err(|_| wrong())?;
-    let path = runtime.display().to_string().replace('\\', "/");
+    // Slashed also takes off the `\\?\` canonicalize puts before a Windows
+    // path, which cargo refuses ("invalid path url `//?/E:/...`").
+    let path = clarity_project::slashed(&runtime);
     Ok(format!(
         "# Written by Clarity because {RUNTIME_VARIABLE} (or Clarity settings > DevTools) named the\n# Rust runtime in Clarity's repository when it generated this project: the program\n# builds on the crate there instead of the published one. Clarity removes this file\n# when neither names it any more; remove it yourself to build on crates.io now.\n\n[patch.crates-io]\nclarity-runtime = {{ path = \"{path}\" }}\n"
     ))

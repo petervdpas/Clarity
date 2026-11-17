@@ -9,16 +9,12 @@
 use std::path::{Path, PathBuf};
 
 use clarity_gen::{generate, rust_local_patch};
-use clarity_project::{Backend, Settings, Ui, starter};
+use clarity_project::{Backend, Settings, Ui, slashed, starter};
 use clarity_spec::load_converted;
 
+/// The runtime's folder, canonical: on Windows a verbatim `\\?\E:\...` path.
 fn runtime() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap()
-}
-
-/// A path as TOML holds it: `/` between the folders, never a backslash.
-fn slashed(path: &Path) -> String {
-    path.display().to_string().replace('\\', "/")
 }
 
 /// Only the runtime: every desktop program links Clarity.UI's ready-made
@@ -29,6 +25,8 @@ fn a_project_patches_the_runtime() {
     let text = rust_local_patch(&runtime()).unwrap();
     assert!(text.contains("[patch.crates-io]\n"), "{text}");
     assert!(text.contains(&format!("clarity-runtime = {{ path = \"{}\" }}\n", slashed(&runtime()))), "{text}");
+    // Cargo refuses Windows' verbatim prefix: "invalid path url `//?/E:/...`".
+    assert!(!text.contains("//?/") && !text.contains(r"\\?\"), "{text}");
     assert!(!text.contains("clarity-ui"), "{text}");
     // The file says where it comes from and how to go back to crates.io.
     assert!(text.starts_with("# Written by Clarity"), "{text}");

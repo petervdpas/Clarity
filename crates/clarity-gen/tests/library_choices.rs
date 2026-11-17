@@ -104,9 +104,11 @@ fn the_runtimes_are_found_from_any_folder_of_the_repository() {
     let os = std::env::consts::OS;
     let repo = repo();
     let runtimes = repo.join("runtimes");
+    // Kept as a build tool takes it: on Windows without canonicalize's `\\?\`, with `/`.
+    let kept = |folder: &str| PathBuf::from(clarity_project::slashed(&runtimes.join(folder)));
     for picked in [repo.clone(), runtimes.clone(), runtimes.join("csharp"), runtimes.join("rust")] {
-        assert_eq!(Choosable::RustCrates.folder_in(&picked, os).unwrap(), runtimes.join("rust"), "{}", picked.display());
-        assert_eq!(Choosable::NugetPackages.folder_in(&picked, os).unwrap(), runtimes.join("csharp"), "{}", picked.display());
+        assert_eq!(Choosable::RustCrates.folder_in(&picked, os).unwrap(), kept("rust"), "{}", picked.display());
+        assert_eq!(Choosable::NugetPackages.folder_in(&picked, os).unwrap(), kept("csharp"), "{}", picked.display());
     }
 }
 

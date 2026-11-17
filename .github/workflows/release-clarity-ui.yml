@@ -128,6 +128,13 @@ jobs:
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_app_mcp}" "out/$name/lib/"
           done
           python3 .github/scripts/fetch_openh264.py ${{ matrix.rid }} "out/$name/lib"
+          # On Windows, Microsoft's C++ runtime beside the libraries, which need it.
+          case "${{ matrix.rid }}" in
+            win-*)
+              python3 .github/scripts/vc_runtime.py ${{ matrix.rid }} "out/$name/lib"
+              python3 .github/scripts/check_dll_imports.py "out/$name/lib"
+              ;;
+          esac
           cp LICENSE "out/$name/"
           cd out
           tar czf "$name.tar.gz" "$name"

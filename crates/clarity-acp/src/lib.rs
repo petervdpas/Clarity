@@ -266,6 +266,10 @@ impl Agent {
     /// Starts `program`, working in the project folder `root`.
     pub async fn start(program: &Program, root: &Path, host: Host) -> Result<Agent, String> {
         let mut command = tokio::process::Command::new(&program.command);
+        // A background process: on Windows no console window of its own (CREATE_NO_WINDOW, as
+        // clarity_project::background_command starts every other program).
+        #[cfg(windows)]
+        command.creation_flags(0x0800_0000);
         command
             .args(&program.args)
             .envs(program.env.iter().cloned())

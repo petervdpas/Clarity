@@ -4,6 +4,10 @@
 //! docs/ledger/project-file.md.
 
 pub mod activity;
+mod background;
+pub use background::{background_command, no_window};
+#[cfg(windows)]
+pub use background::BACKGROUND_FLAGS;
 pub mod browse;
 pub mod dev_asks;
 pub mod engines;

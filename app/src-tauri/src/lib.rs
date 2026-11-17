@@ -875,6 +875,10 @@ pub fn run() {
             if let Some(folder) = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir)) {
                 clarity_gen::clarity_ui::set_bundled_browser(folder);
             }
+            // The runtimes the installer carries, which a build takes when the internet does not answer (docs/ledger/offline.md).
+            if let Ok(dir) = app.path().resource_dir() {
+                clarity_gen::carried::set_carried(dir.join(clarity_gen::carried::FOLDER));
+            }
             if repository().is_some() {
                 clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
             }

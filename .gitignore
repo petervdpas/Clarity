@@ -21,9 +21,12 @@ obj/
 /.claude/
 # The native Clarity.UI library a Release build copies in for packing.
 /runtimes/csharp/Clarity.Ui/runtimes/
+/runtimes/csharp/Clarity.Runtime/runtimes/
 # The Clarity.UI library the IDE's installer carries (.github/scripts/stage-clarity-ui.sh).
 /app/src-tauri/clarity-ui/
 /app/src-tauri/clarity-ui-browser/
+# The runtimes it carries for builds with no internet (.github/scripts/stage-runtimes.sh).
+/app/src-tauri/runtimes/
 /app/src-tauri/binaries/
 
 # The Release Helper's plans; it deletes each when done.

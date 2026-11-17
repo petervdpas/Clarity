@@ -4,7 +4,7 @@
 //! Clarity's own folder; see clarity_gen::tools::environment.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use clarity_gen::tools::environment::{self, Environment, TOOLS};
 use clarity_gen::tools::{self, System};
@@ -75,7 +75,7 @@ fn version_of(path: &Path, program: &str) -> Option<String> {
     } else {
         &["--version"]
     };
-    let out = Command::new(path).args(args).stdin(Stdio::null()).output().ok()?;
+    let out = clarity_project::background_command(path).args(args).stdin(Stdio::null()).output().ok()?;
     // Some tools (Visual Studio's cl) say who they are on stderr.
     let text = if out.stdout.is_empty() { out.stderr } else { out.stdout };
     String::from_utf8_lossy(&text).lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_string)

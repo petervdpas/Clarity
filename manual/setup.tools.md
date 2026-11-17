@@ -49,6 +49,16 @@ pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w
 
 Take every C and C++ tool from that one folder, never a mix: two compilers of different versions in one project do not link. A custom part that uses a native library needs that library from the same shell too.
 
+A C or C++ program built with MSYS2's compiler also needs MSYS2's own DLLs when it runs (`libstdc++-6.dll`, `libgcc_s_seh-1.dll`, `libwinpthread-1.dll`, `libsqlite3-0.dll`). Add `C:\msys64\ucrt64\bin` to `PATH` so programs find them on your machine. To give a program to someone else, copy the ones it uses from that folder next to it.
+
+### Microsoft's C++ runtime
+
+Clarity.UI's library and the other libraries Clarity carries for Windows need Microsoft's C++ runtime (`vcruntime140.dll`, `vcruntime140_1.dll` and `msvcp140.dll`). A fresh Windows has it only after the Visual C++ Redistributable is installed. The libraries ship these three files beside themselves, and every build of a Rust, Go, C or C++ desktop program puts them next to the program with the libraries; a C# program gets them from the Clarity.Runtime package. So the program runs on any Windows 10 or 11 as it is. Ship them along when you copy the program elsewhere.
+
+A program whose stack is the desktop alone is built as a Windows window program: started from Explorer it opens its window and no console beside it. A program that can also serve a browser keeps its console, where `--serve` says the address it serves at.
+
+If a program says that `VCRUNTIME140.dll` or `MSVCP140.dll` was not found, it was built before the libraries carried the runtime, or its files were copied without them. Either build it again in Clarity, or install the Visual C++ Redistributable for your processor from Microsoft: [vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe) for Intel and AMD, [vc_redist.arm64.exe](https://aka.ms/vs/17/release/vc_redist.arm64.exe) for ARM. Run it once; it serves every program.
+
 ## Linux
 
 The commands are Debian's and Ubuntu's; other systems name the same packages a little differently.

@@ -286,7 +286,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut files = vec![
         text(
             "CMakeLists.txt",
-            cmake_lists(&program, engines || screen_engines, project.calls_out(), keeps_secrets(project, settings), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program) + &crate::c::audio_cmake_lines(project, settings, &program) + &crate::c::formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { crate::c::agents_cmake_lines(project, &program) } else { String::new() }),
+            cmake_lists(&program, engines || screen_engines, project.calls_out(), keeps_secrets(project, settings), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program) + &crate::c::audio_cmake_lines(project, settings, &program) + &crate::c::formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { crate::c::agents_cmake_lines(project, &program) } else { String::new() }) + &crate::c::window_program_lines(settings, &program),
         ),
         text("CMakePresets.json", PRESETS.to_string()),
     ];

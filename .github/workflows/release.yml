@@ -14,11 +14,13 @@ name: Release Clarity
 # Tauri builds its own installers: NSIS and MSI on Windows, .deb and .rpm on
 # Linux. Each carries Clarity.UI's library for its own system as a resource
 # (clarity-ui/, staged by .github/scripts/stage-clarity-ui.sh and added by
-# app/src-tauri/tauri.clarity-ui.conf.json), which Go, C and C++ builds use,
-# and Clarity.UI's browser files (clarity-ui-browser/), which every
-# language's web program serves. Those are the same on every system: the
-# browser job builds them once with the Emscripten SDK and each installer
-# job takes them.
+# app/src-tauri/tauri.clarity-ui.conf.json), which Rust, Go, C and C++ desktop
+# builds use, Clarity.UI's browser files (clarity-ui-browser/), which every
+# language's web program serves, and the runtimes a Rust or Go build takes
+# with no internet (runtimes/: the crates and Go modules). The browser files
+# and the runtimes are the same on every system: the browser job builds the
+# files once with the Emscripten SDK, the runtimes job fetches the runtimes
+# once (.github/scripts/stage-runtimes.sh), and each installer job takes both.
 # Each Linux package is built inside a container of the distribution
 # it is for (.github/scripts/build-linux.sh), so it links that distribution's
 # glibc and WebKitGTK:
@@ -137,11 +139,43 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
+  # The runtimes every installer carries, so a project builds with no
+  # internet (docs/ledger/offline.md): the published crates and Go modules
+  # of this Clarity's versions, fetched once. C# needs the internet.
+  # ───────────────────────────────────────────────────────────────
+  runtimes:
+    name: Carried runtimes
+    needs: [check]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: runtimes/carried/go.mod
+          cache: false
+
+      - name: Fetch the runtimes
+        shell: bash
+        run: bash .github/scripts/stage-runtimes.sh out/runtimes
+
+      - name: Upload the runtimes
+        uses: actions/upload-artifact@v7
+        with:
+          name: carried-runtimes
+          path: out/runtimes/
+          if-no-files-found: error
+
+  # ───────────────────────────────────────────────────────────────
   # Windows: NSIS installer + MSI installer + portable zip.
   # ───────────────────────────────────────────────────────────────
   windows:
     name: Windows (amd64)
-    needs: [check, browser]
+    needs: [check, browser, runtimes]
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
@@ -181,6 +215,13 @@ jobs:
         with:
           name: clarity-ui-browser
           path: app/src-tauri/clarity-ui-browser
+
+      # The runtimes a build takes with no internet (docs/ledger/offline.md).
+      - name: Take the carried runtimes
+        uses: actions/download-artifact@v8
+        with:
+          name: carried-runtimes
+          path: app/src-tauri/runtimes
 
       # The installer carries Clarity.UI's library for Go, C and C++ builds (manual/start.how-it-works.md), and its browser files.
       - name: Build Clarity.UI's library
@@ -257,7 +298,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   linux:
     name: Linux ${{ matrix.label }}
-    needs: [check, browser]
+    needs: [check, browser, runtimes]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -301,6 +342,13 @@ jobs:
         with:
           name: clarity-ui-browser
           path: app/src-tauri/clarity-ui-browser
+
+      # The runtimes a build takes with no internet (docs/ledger/offline.md).
+      - name: Take the carried runtimes
+        uses: actions/download-artifact@v8
+        with:
+          name: carried-runtimes
+          path: app/src-tauri/runtimes
 
       - name: Build in ${{ matrix.image }}
         run: |

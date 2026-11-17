@@ -44,6 +44,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />
+    <!-- On Windows, Microsoft's C++ runtime every Clarity native library needs (vcruntime140.dll,
+         msvcp140.dll), placed here by the release (release-csharp-runtime.yml): once, in the
+         package they all stand on. -->
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" />
     <None Include="../assets/icon.png" Pack="true" PackagePath="assets/" />
     <None Include="../assets/LICENSE.txt" Pack="true" PackagePath="assets/" />
   </ItemGroup>

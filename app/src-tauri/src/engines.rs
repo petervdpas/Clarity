@@ -7,7 +7,7 @@
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::Ordering;
 
 use clarity_project::engines::{self, EngineBuilt, EngineInfo, EngineSource};
@@ -153,7 +153,7 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
     }
     let command = engines::build_command(source, library().as_deref());
     send_line(app, format!("{} {} (in {})", command.tool, command.args.join(" "), command.dir.display()));
-    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, command.tool).unwrap_or_else(|| command.tool.into()))
+    let mut child = clarity_project::background_command(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, command.tool).unwrap_or_else(|| command.tool.into()))
         .args(&command.args)
         .env("PATH", clarity_gen::tools::tool_path())
         // The C and C++ compilers chosen in the Environment settings, for CMake.

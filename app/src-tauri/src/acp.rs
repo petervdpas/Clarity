@@ -368,7 +368,7 @@ pub async fn agent_sign_in(connection: String, app: AppHandle) -> Result<String,
     let program = find(vendor, from_settings.as_deref())?;
     match vendor.sign_in() {
         VendorSignIn::Command(args) => {
-            let status = tauri::async_runtime::spawn_blocking(move || std::process::Command::new(&program.command).args(args).envs(program.env.iter().cloned()).status())
+            let status = tauri::async_runtime::spawn_blocking(move || clarity_project::background_command(&program.command).args(args).envs(program.env.iter().cloned()).status())
                 .await
                 .map_err(|err| err.to_string())?
                 .map_err(|err| format!("cannot start {}: {err}", vendor.name()))?;

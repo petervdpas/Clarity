@@ -274,7 +274,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // Custom parts are kinds of part of Clarity.UI, built into the program (manual/start.how-it-works.md): on the desktop only.
     let custom = if desktop { parts::parts(project) } else { Vec::new() };
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program) + &formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { agents_cmake_lines(project, &program) } else { String::new() })),
+        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program) + &formats_cmake_lines(project, settings, &program) + &auth_cmake_lines(project, &program) + &(if desktop { agents_cmake_lines(project, &program) } else { String::new() }) + &window_program_lines(settings, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     if !custom.is_empty() {
@@ -734,6 +734,13 @@ pub(crate) fn signin_source(project: &Project, program: &str, fail: &str) -> (St
         if plan.remember_asks { ", .remember_asks = true" } else { "" }
     );
     (data, format!("    if (!clarity_db_add_signin(db, &signin_source)) {fail}\n"))
+}
+
+/// The line that builds a window program alone (crate::window_program_only)
+/// as a Windows GUI program, with no console beside its window
+/// (clarity_window_program in clarity.cmake, C's and C++'s alike).
+pub(crate) fn window_program_lines(settings: &Settings, program: &str) -> String {
+    if crate::window_program_only(settings) { format!("\n# A window program: no console of its own on Windows.\nclarity_window_program({program})\n") } else { String::new() }
 }
 
 /// The CMake line that links Clarity.Audio when the desktop program plays songs (docs/ledger/audio.md); C's and C++'s.

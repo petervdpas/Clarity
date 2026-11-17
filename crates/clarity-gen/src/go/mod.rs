@@ -95,6 +95,11 @@ const SERVERS: [Server; 3] = [
 
 /// The runtime's module file, whose requirements the application takes over.
 const RUNTIME_MOD: &str = include_str!("../../../../runtimes/go/go.mod");
+/// The `go` line of the runtime's module file, which a generated one takes over.
+pub(crate) fn runtime_go_line() -> &'static str {
+    RUNTIME_MOD.lines().find(|l| l.starts_with("go ")).unwrap_or("go 1.25")
+}
+
 /// The modules each group of the runtime's packages needs, with their sums,
 /// as go mod tidy picks them (recorded by a go_build test).
 const MODULES: &str = include_str!("modules.txt");

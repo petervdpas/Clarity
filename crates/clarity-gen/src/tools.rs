@@ -6,7 +6,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use clarity_project::{Backend, Ui};
 
@@ -39,13 +39,13 @@ impl Probe for System {
 
     fn run(&self, program: &str, args: &[&str]) -> Option<String> {
         let path = self.find(program)?;
-        let out = Command::new(path).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+        let out = clarity_project::background_command(path).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
         out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
     }
 
     fn says(&self, program: &str, args: &[&str]) -> Option<String> {
         let path = self.find(program)?;
-        let out = Command::new(path).args(args).stdin(Stdio::null()).output().ok()?;
+        let out = clarity_project::background_command(path).args(args).stdin(Stdio::null()).output().ok()?;
         let text = if out.stdout.iter().all(u8::is_ascii_whitespace) { out.stderr } else { out.stdout };
         let text = String::from_utf8_lossy(&text).into_owned();
         (!text.trim().is_empty()).then_some(text)
@@ -190,7 +190,7 @@ pub fn visual_studio_folders(installation: &Path) -> Vec<PathBuf> {
 fn vswhere_installations() -> Vec<PathBuf> {
     let Some(x86) = std::env::var_os("ProgramFiles(x86)") else { return Vec::new() };
     let vswhere = PathBuf::from(x86).join("Microsoft Visual Studio").join("Installer").join("vswhere.exe");
-    let Ok(out) = Command::new(vswhere).args(["-all", "-products", "*", "-property", "installationPath"]).stdin(Stdio::null()).stderr(Stdio::null()).output() else {
+    let Ok(out) = clarity_project::background_command(vswhere).args(["-all", "-products", "*", "-property", "installationPath"]).stdin(Stdio::null()).stderr(Stdio::null()).output() else {
         return Vec::new();
     };
     String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
@@ -339,7 +339,7 @@ fn compiler_needed(backend: Backend) -> String {
 /// Everything `backend` builds with, on any system: what a README lists.
 pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
-        Backend::Rust => vec![RUST.to_string()],
+        Backend::Rust => vec![RUST.to_string(), CLARITY_UI_LIBRARY.to_string()],
         Backend::Csharp => vec![dotnet()],
         Backend::Go => vec![GO.to_string(), CGO.to_string(), CLARITY_UI_LIBRARY.to_string()],
         Backend::C => vec![compiler_needed(backend), CMAKE.to_string(), MAKE.to_string(), SQLITE.to_string(), CLARITY_UI_LIBRARY.to_string()],
@@ -365,7 +365,8 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push((RUST.to_string(), RUST_GUIDE)),
             }
-            // Clarity.UI draws with Skia, whose prebuilt library cargo downloads: no webview to install.
+            // The desktop program links Clarity.UI's ready-made library (feature native-ui): no Skia to build, no webview.
+            clarity_ui_library(probe, &mut found, &mut missing);
         }
         Backend::Csharp => {
             let listed = probe.run("dotnet", &["--list-sdks"]);
@@ -431,7 +432,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
     }
 }
 
-/// Clarity.UI's library for a Go, C or C++ desktop program (manual/start.how-it-works.md):
+/// Clarity.UI's library for a Rust, Go, C or C++ desktop program (manual/start.how-it-works.md):
 /// the folder CLARITY_UI names, else the one the installed Clarity carries,
 /// else the one Clarity fetched or fetches on the first build; missing only
 /// where none of these works.

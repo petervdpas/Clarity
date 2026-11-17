@@ -1,14 +1,14 @@
 # Building offline
 
-Status: not built. Building an app with no internet: a warmed cache (Prepare for offline) or a vendored project, tested with the network off.
+Status: partial. Building an app with no internet: the installer carries the runtimes (built 2026-11-17, unreleased), a warmed cache (Prepare for offline) or a vendored project, tested with the network off.
 
-Progress: 5%
+Progress: 30%
 
 ## Code
 - Spec: none
 - Generators: none for offline as such. What is carried today: C and C++ copy their runtime into the output (cJSON, wasm3 vendored); in a dev IDE, a piece swapped to the cDdev's own build in Clarity settings > DevTools replaces downloads of it (`environment::use_libraries`; see [devtools](devtools.md)); the Clarity.UI library and browser files come from `CLARITY_UI`, the installed copy, or a fetch into the cache (`crates/clarity-gen/src/clarity_ui.rs`; see [build-tools](build-tools.md)); openh264 is carried beside video programs (see [video-camera](video-camera.md))
 - Checked when fetched, as the design says: the Clarity.UI archive against the release's SHA256SUMS (`clarity_ui.rs:225`), openh264 against a pinned hash (`clarity_ui.rs:161-174`, fetched by `app/src-tauri/src/build.rs:481`); the cache folder per system (`clarity_ui.rs:106`)
-- Runtimes: Rust from crates.io, C# from nuget.org, Go modules through the proxy: all download on first build
+- Runtimes: Rust from crates.io and Go modules through the proxy, the internet first; with no answer from the registry, the carried archive. C# from nuget.org only (`crates/clarity-gen/src/carried.rs`: `registry`, `unpacked`, `offline`; the IDE's `with_carried` in `app/src-tauri/src/build.rs`). The release fills the archives from `runtimes/carried/` (guard CLARITY_WRITE_CARRIED) with `.github/scripts/stage-runtimes.sh`, job `runtimes` of release.yml
 - Clarity.UI: none
 - IDE: none (no offline sign beside Build)
 - Docs: none for offline in the manual; `project.run-build.md:45` says the installer carries the Clarity.UI library and a Clarity without it fetches it once, checked
@@ -26,13 +26,14 @@ Where the network is needed today:
 Rust links the ready-made Clarity.UI library (`runtimes/rust/Cargo.toml:41-45`, feature `native-ui`); nothing downloads or builds Skia.
 
 ## Tests
-- none
+- `crates/clarity-gen/tests/carried.rs`: the manifests are current and name every runtime; each registry; offline Go and Rust (the lock rule), C and C# as always; an archive unpacked once
+- `crates/clarity-gen/tests/installed.rs`: the installer keeps `clarity-ui/include` and `lib`, and carries each stack's archive
 
 ## Open
 - The offline test per stack (Design, "Testing"; step 1): NOT BUILT.
 - Prepare for offline and the sign beside Build (Design, "Prepare for offline"; step 2): NOT BUILT.
 - Vendored projects (Design, "Vendored projects"; step 3): NOT BUILT.
-- The installer carrying the runtimes (Design, "The installer"; step 4): PARTIAL. It carries the Clarity.UI library and browser files only.
+- The installer carrying the runtimes (Design, "The installer"; step 4): BUILT 2026-11-17, unreleased. Tried by hand 2026-11-17 with the network off (`unshare -rn`), empty caches and the archives the release script made: examples/calculator (Go) and examples/maintenance (Rust) both built. The CI job per stack (step 1) is still open.
 - A build lacking a piece names it (Design, "Testing"): NOT BUILT.
 - To settle (Design, "To settle"): needs decision.
 
@@ -59,6 +60,12 @@ Vendored projects
 
 The installer
 - The installed Clarity carries, for its own system, the runtimes of each stack in the forms the stacks read offline, beside the Clarity.UI library and browser files it carries now, so a fresh machine builds its first app with no network. Whether it carries all stacks or offers them as downloads is settled by its size.
+- 2026-11-17, user: "installer carrying the runtimes first", "everything", the switch in "Clarity's build", "it should only need them when there is no internet... so it stays internet first", "but it should have them present!!!", and on the size: "cant it be zipped and then put in the installer?". Built so:
+  - The installer's `runtimes/` folder (beside `clarity-ui/`) holds `rust.tar.zst` (`cargo vendor --versioned-dirs`, every system's crates, every feature) and `go.tar.zst` (the module cache's `cache/download`, a Go proxy in files). The release's `runtimes` job fetches the published versions with the projects in `runtimes/carried/` (written from the generators, guard CLARITY_WRITE_CARRIED) and every installer job takes them.
+  - A build asks the stack's registry first (crates.io's index, proxy.golang.org; five seconds). Only with no answer is the stack's archive unpacked into `<cache>/clarity/runtimes/<stack>/<version>` (once per version) and the build pointed at it: Go's GOPROXY is the folder; cargo replaces crates.io with it when it holds every crate of the project's Cargo.lock (or there is none yet), else builds `--offline` from its own cache.
+  - C and C++: nothing more; their runtime is copied into the project, and SQLite, nlohmann_json, curl and gio are the system's, installed once.
+  - C# carries none. User: "nuget stays download when internet is available and else no c#". Its packages hold every system's native libraries: 781 MB unpacked, 349 MB packed (Clarity.Ui alone 313 MB). Its first build needs the internet; NuGet's own cache serves the builds after that.
+  - Sizes: the crates 548 MB unpacked, 44 MB packed; the Go modules 62 MB, 52 MB packed.
 
 Testing
 - A CI job per stack generates an example, prepares it, builds it with networking off (a network namespace on Linux), and runs it headless.
@@ -84,6 +91,7 @@ To settle
 - 2026-11-05: two ways: a warmed cache, or a vendored project; the stacks' own offline means, no tool of Clarity's own.
 - 2026-11-05: tested with the network off; every OS alike, each keeping its caches in its own places.
 - 2026-11-07: offline means no download at run time either: video programs carry openh264 (see [video-camera](video-camera.md)).
+- 2026-11-17: the installer flattened `clarity-ui/` (Tauri copies a glob's files flat), so the installed Clarity's library lacked `include/` and `lib/` and every Rust, Go, C and C++ desktop build fetched it. `tauri.clarity-ui.conf.json` maps the two folders apart now, guarded by `tests/installed.rs`; the tool check counts the library for Rust too. User: "that would break if there is no internet connection!!"
 
 ## Was
 - OFFLINE-PLAN.md (removed 2026-11-16): goal, "Where the network is needed today", "Decisions", "Prepare for offline", "Vendored projects", "The installer", "Testing", "Order" steps 1-4, "To settle when building" (the skia-safe question dropped: Rust no longer builds Skia)

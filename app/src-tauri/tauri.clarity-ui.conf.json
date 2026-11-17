@@ -2,8 +2,11 @@
   "bundle": {
     "externalBin": ["binaries/clarity"],
     "resources": {
-      "clarity-ui/**/*": "clarity-ui/",
-      "clarity-ui-browser/**/*": "clarity-ui-browser/"
+      "clarity-ui/include/*": "clarity-ui/include/",
+      "clarity-ui/lib/*": "clarity-ui/lib/",
+      "clarity-ui/LICENSE": "clarity-ui/LICENSE",
+      "clarity-ui-browser/**/*": "clarity-ui-browser/",
+      "runtimes/": "runtimes/"
     }
   }
 }

@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -134,10 +134,10 @@ const STOPPED: &str = "stopped";
 fn end_process(pid: u32) {
     let pid = pid.to_string();
     let _ = if cfg!(windows) {
-        Command::new("taskkill").args(["/T", "/F", "/PID", &pid]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+        clarity_project::background_command("taskkill").args(["/T", "/F", "/PID", &pid]).stdout(Stdio::null()).stderr(Stdio::null()).status()
     } else {
         // The build runs in a process group of its own, which a minus names.
-        Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+        clarity_project::background_command("kill").args(["-TERM", "--", &format!("-{pid}")]).stdout(Stdio::null()).stderr(Stdio::null()).status()
     };
 }
 
@@ -302,7 +302,7 @@ impl Jobs {
         };
         let dir = run.dir.canonicalize().unwrap_or_else(|_| run.dir.clone());
         put(usize::MAX, Piece::Line(format!("{} (in {})", run.shown(), dir.display())));
-        let mut command = Command::new(&run.program);
+        let mut command = clarity_project::background_command(&run.program);
         command.args(&run.args).current_dir(&run.dir).envs(run.env.iter().map(|(k, v)| (k, v))).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut command, 0);

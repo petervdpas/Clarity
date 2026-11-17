@@ -26,3 +26,58 @@ fn the_product_name_is_the_ide_s() {
     let conf: serde_json::Value = serde_json::from_str(&conf).unwrap();
     assert_eq!(conf["productName"], clarity_gen::clarity_ui::PRODUCT_NAME);
 }
+
+/// Where Tauri puts a staged file (`staged`, relative to app/src-tauri) by the
+/// installer's resources map: a glob copies each file it matches flat into its
+/// target folder, by file name; a folder keeps its tree below its target; a
+/// plain path goes to its target as it is.
+fn installed_as(resources: &serde_json::Map<String, serde_json::Value>, staged: &str) -> Option<String> {
+    resources.iter().find_map(|(source, target)| {
+        let target = target.as_str()?;
+        let name = staged.rsplit('/').next()?;
+        match source.split_once('*') {
+            Some((folder, _)) if source.contains("**") => staged.starts_with(folder).then(|| format!("{target}{name}")),
+            Some((folder, _)) => (staged.starts_with(folder) && !staged[folder.len()..].contains('/')).then(|| format!("{target}{name}")),
+            None if source.ends_with('/') => staged.strip_prefix(source.as_str()).map(|below| format!("{target}{below}")),
+            None => (source == staged).then(|| target.to_string()),
+        }
+    })
+}
+
+/// Go, C and C++ desktop builds take Clarity.UI's library from the installed
+/// clarity-ui folder only when it has include/ and lib/; else they fetch it,
+/// which fails without the internet.
+#[test]
+fn the_installer_keeps_the_library_s_include_and_lib_folders() {
+    let conf = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../app/src-tauri/tauri.clarity-ui.conf.json")).unwrap();
+    let conf: serde_json::Value = serde_json::from_str(&conf).unwrap();
+    let resources = conf["bundle"]["resources"].as_object().unwrap();
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("installed-clarity-ui");
+    // What .github/scripts/stage-clarity-ui.sh stages on each system.
+    for (os, library) in [("linux", "libclarity_ui.so"), ("windows", "clarity_ui.dll"), ("macos", "libclarity_ui.dylib")] {
+        let _ = std::fs::remove_dir_all(&root);
+        for staged in ["clarity-ui/include/clarity_ui.h".to_string(), format!("clarity-ui/lib/{library}"), "clarity-ui/LICENSE".to_string()] {
+            let installed = installed_as(resources, &staged).unwrap_or_else(|| panic!("the installer does not carry {staged}"));
+            let path = root.join(installed);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"").unwrap();
+        }
+        assert!(clarity_gen::clarity_ui::complete(&root.join("clarity-ui"), os), "on {os} the installed clarity-ui folder lacks include/ or lib/, so builds fetch the library");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The runtimes a build takes with no internet: one archive per stack, in
+/// the installed runtimes folder (docs/ledger/offline.md).
+#[test]
+fn the_installer_carries_each_stack_s_runtimes_archive() {
+    let conf = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../app/src-tauri/tauri.clarity-ui.conf.json")).unwrap();
+    let conf: serde_json::Value = serde_json::from_str(&conf).unwrap();
+    let resources = conf["bundle"]["resources"].as_object().unwrap();
+    let folder = clarity_gen::carried::FOLDER;
+    for backend in [clarity_project::Backend::Rust, clarity_project::Backend::Go] {
+        let below = clarity_gen::carried::archive_name(backend).unwrap();
+        let staged = format!("{folder}/{below}");
+        assert_eq!(installed_as(resources, &staged).as_deref(), Some(staged.as_str()), "the installer moves {staged}");
+    }
+}

@@ -54,6 +54,7 @@ Clarity checks generated files against their source in tests that fail when a fi
 | `runtimes/rust-ui/themes/` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test clarity_ui_theme` |
 | the picture cases | `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image --test pictures` |
 | the parts pages' catalog tables (`manual/parts.*.md`) | `CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test manual_catalog` |
+| `runtimes/carried/` (what the installer carries for builds with no internet) | `CLARITY_WRITE_CARRIED=1 cargo test -p clarity-gen --test carried` |
 
 A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runtimes --include=*.rs -o | sort -u`.
 

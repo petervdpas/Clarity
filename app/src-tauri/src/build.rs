@@ -6,7 +6,7 @@
 use crate::fail_safe::Held;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -364,7 +364,7 @@ fn start_steps(app: AppHandle, folder: PathBuf, steps: Vec<Vec<String>>, env: Ve
 fn run_tool(app: &AppHandle, dir: &Path, step: &[String], env: &[(String, String)]) -> Result<(), String> {
     let Some((tool, args)) = step.split_first() else { return Ok(()) };
     send_line(app, format!("{tool} {} (in {})", args.join(" "), dir.display()));
-    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
+    let mut child = clarity_project::background_command(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
         .args(args)
         .env("PATH", clarity_gen::tools::tool_path())
         // The C and C++ compilers chosen in the Environment settings, for CMake.
@@ -450,16 +450,48 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     Ok(())
 }
 
-/// The toolchain of `generated`, with Clarity.UI's library for a Go, C or
-/// C++ desktop program (manual/start.how-it-works.md): the folder CLARITY_UI names, else the
+/// The toolchain of `generated`, with Clarity.UI's library for a Rust, Go,
+/// C or C++ desktop program (manual/start.how-it-works.md): the folder CLARITY_UI names, else the
 /// one fetched from the library's release into the cache folder, fetched
 /// now when it is not there yet.
+/// With the runtimes the installed Clarity carries, for when the internet
+/// does not answer (`with_carried`).
 fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::Toolchain, String> {
+    let toolchain = with_carried(app, generated.toolchain.clone(), generated.stack.backend, &generated.out);
     if !generated.library {
-        return Ok(generated.toolchain.clone());
+        return Ok(toolchain);
     }
     let folder = library_folder(app)?;
-    Ok(clarity_gen::with_clarity_ui(generated.toolchain.clone(), generated.stack.backend, &folder))
+    Ok(clarity_gen::with_clarity_ui(toolchain, generated.stack.backend, &folder))
+}
+
+/// `toolchain` with the runtimes the installed Clarity carries
+/// (docs/ledger/offline.md): the internet first; only when the stack's
+/// registry does not answer, its carried runtimes, unpacked into the cache
+/// folder the first time, said in the build's output.
+fn with_carried(app: &AppHandle, toolchain: clarity_gen::Toolchain, backend: clarity_project::Backend, out: &Path) -> clarity_gen::Toolchain {
+    let (Some(carried), Some(registry)) = (clarity_gen::carried::carried(), clarity_gen::carried::registry(backend)) else { return toolchain };
+    if answers(registry) {
+        return toolchain;
+    }
+    let Some(cache) = clarity_gen::clarity_ui::cache_dir() else { return toolchain };
+    send_line(app, format!("No answer from {registry}: building with the runtimes Clarity carries"));
+    match clarity_gen::carried::unpacked(carried, backend, &cache) {
+        Ok(folder) => {
+            send_line(app, format!("The runtimes are in {}", folder.display()));
+            clarity_gen::carried::offline(toolchain, backend, &folder, out)
+        }
+        Err(why) => {
+            send_line(app, why);
+            toolchain
+        }
+    }
+}
+
+/// Whether `url` answers at all within a few seconds.
+fn answers(url: &str) -> bool {
+    let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(5)).build() else { return false };
+    client.get(url).send().is_ok()
 }
 
 /// The folder of Clarity.UI's library for a build: the one CLARITY_UI names,
@@ -522,6 +554,14 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         if let Err(done) = build_with(app, out, toolchain) {
             return done;
         }
+        // Go's build has no step of its own after `go build`: the libraries go beside the program here,
+        // as C's, C++'s and Rust's builds put them (on Windows the program finds them only there).
+        if generated.library && generated.stack.backend == clarity_project::Backend::Go {
+            let placed = library_folder(app).and_then(|folder| clarity_gen::libraries_beside(&folder, &out.join(&toolchain.program), std::env::consts::OS).map_err(|err| format!("cannot put the libraries beside the program: {err}")));
+            if let Err(message) = placed {
+                return failed(message);
+            }
+        }
         let _ = clarity_gen::record_build(out, &generated.fingerprint, generated.release);
     }
     let binary = out.join(&toolchain.program);
@@ -539,7 +579,7 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         let address = serves;
         // What starts, and where: after a build, or the last one when nothing changed.
         send_line(app, format!("{} (in {})", binary.display(), out.display()));
-        let mut command = Command::new(&binary);
+        let mut command = clarity_project::background_command(&binary);
         command.current_dir(out);
         // The program works on the project's data, not the person's (conformance/data-folder.json).
         if let Some(data) = &generated.data {
@@ -563,7 +603,7 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
 /// Runs the stack's build tool in `out`, its output in the Output panel.
 fn build_with(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain) -> Result<(), BuildDone> {
     let failed = |message: String| BuildDone { ok: false, message, binary: None };
-    let mut command = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, toolchain.tool).unwrap_or_else(|| toolchain.tool.into()));
+    let mut command = clarity_project::background_command(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, toolchain.tool).unwrap_or_else(|| toolchain.tool.into()));
     command
         .args(&toolchain.args)
         // The tool starts others (go runs gcc and pkg-config): they look where Clarity looks.
@@ -608,7 +648,7 @@ fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str, data
     stop(app);
     let words = clarity_gen::command_words(line);
     send_line(app, format!("{} {}", binary.file_name().unwrap_or_default().to_string_lossy(), line.trim()));
-    let mut command = Command::new(binary);
+    let mut command = clarity_project::background_command(binary);
     command.args(&words).current_dir(out).env("CLARITY_TERMINAL", "1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     if let Some(data) = data {
         command.env("CLARITY_DATA", data);

@@ -6,6 +6,7 @@
 pub mod agent_tools;
 pub mod tools;
 pub mod clarity_ui;
+pub mod carried;
 mod c;
 pub mod calls;
 mod consts;
@@ -1015,6 +1016,29 @@ pub(crate) fn pictures_without_library(project: &Project, settings: &Settings) -
     })
 }
 
+/// Whether the program is a window program alone: its stack has the
+/// desktop and not the web. On Windows it is built with no console of its
+/// own; one that also serves a browser (`--serve`) keeps its console for
+/// what it says there.
+pub fn window_program_only(settings: &Settings) -> bool {
+    settings.stack.has(clarity_project::Target::Desktop) && !settings.stack.has(clarity_project::Target::Web)
+}
+
+/// The `-ldflags` of a Go build on system `os`: without debug information in
+/// a `release` build, and on Windows a window program alone
+/// (`window_program_only`) built as one (`-H=windowsgui`), so it opens no
+/// console beside its window. None when there is nothing to say.
+pub fn go_ldflags(settings: &Settings, release: bool, os: &str) -> Option<String> {
+    let mut flags = Vec::new();
+    if release {
+        flags.push("-s -w");
+    }
+    if os == "windows" && window_program_only(settings) {
+        flags.push("-H=windowsgui");
+    }
+    (!flags.is_empty()).then(|| format!("-ldflags={}", flags.join(" ")))
+}
+
 /// The target of the program with windows, and its folder of `out/`: the
 /// desktop's, or the web's when it is served to a browser alone.
 pub fn windowed_target(settings: &Settings) -> clarity_project::Target {
@@ -1306,9 +1330,10 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
             // -v names each package as it is built: a first build is silent otherwise.
             let mut args = vec!["build".to_string(), "-v".to_string()];
             if release {
-                // Without debug information.
-                args.extend(["-trimpath", "-ldflags=-s -w"].map(String::from));
+                args.push("-trimpath".to_string());
             }
+            // Without debug information in a release build; on Windows a window program with no console.
+            args.extend(go_ldflags(settings, release, std::env::consts::OS));
             args.extend(["-o".to_string(), built, ".".to_string()]);
             // The desktop program links Clarity.UI's library, from the folder CLARITY_UI names (manual/start.how-it-works.md).
             let env = if settings.stack.has(clarity_project::Target::Desktop) { go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(std::path::Path::new), std::env::consts::OS) } else { Vec::new() };
@@ -1354,6 +1379,29 @@ pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'stat
         _ => format!(" -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"),
     };
     vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
+}
+
+/// Puts the shared libraries of the library folder `clarity_ui` (its lib/)
+/// for system `os` beside `program`, as C's and C++'s builds and Rust's
+/// build script do: Go's build has no step of its own after `go build`. On
+/// Windows, which has no rpath, the program finds them only there; with them
+/// Microsoft's C++ runtime the libraries ship (vcruntime140.dll and the others).
+pub fn libraries_beside(clarity_ui: &std::path::Path, program: &std::path::Path, os: &str) -> std::io::Result<()> {
+    let Some(beside) = program.parent() else { return Ok(()) };
+    let shared = |name: &str| match os {
+        "windows" => name.ends_with(".dll"),
+        "macos" => name.ends_with(".dylib"),
+        _ => name.ends_with(".so") || name.contains(".so."),
+    };
+    std::fs::create_dir_all(beside)?;
+    for entry in std::fs::read_dir(clarity_ui.join("lib"))? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if shared(&name) {
+            std::fs::copy(entry.path(), beside.join(&name))?;
+        }
+    }
+    Ok(())
 }
 
 /// The codec libraries a project with videos adds (docs/ledger/video-camera.md), for
@@ -1517,7 +1565,7 @@ pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {
 /// builds link this source's Clarity.UI: how a change of Clarity.UI is tried.
 /// The folder they are in, as CLARITY_UI names it.
 pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let mut command = std::process::Command::new("cargo");
+    let mut command = clarity_project::background_command("cargo");
     command.current_dir(repo).args(["build", "--release"]);
     for library in BASE_LIBRARIES {
         command.args(["-p", library]);

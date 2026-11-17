@@ -144,11 +144,11 @@ pub fn open_log_folder() -> Result<(), String> {
     let folder = folder(&clarity_project::clarity_home());
     std::fs::create_dir_all(&folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
     #[cfg(target_os = "windows")]
-    let opened = std::process::Command::new("explorer").arg(&folder).spawn();
+    let opened = clarity_project::background_command("explorer").arg(&folder).spawn();
     #[cfg(target_os = "macos")]
-    let opened = std::process::Command::new("open").arg(&folder).spawn();
+    let opened = clarity_project::background_command("open").arg(&folder).spawn();
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let opened = std::process::Command::new("xdg-open").arg(&folder).spawn();
+    let opened = clarity_project::background_command("xdg-open").arg(&folder).spawn();
     opened.map(|_| ()).map_err(|err| format!("cannot open {}: {err}", folder.display()))
 }
 

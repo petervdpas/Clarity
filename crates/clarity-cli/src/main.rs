@@ -22,12 +22,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Work with spec files.
+    /// Check a project, and bring an older one up to what the checker asks
+    ///
+    /// See manual/project.run-build.md.
     Spec {
         #[command(subcommand)]
         command: SpecCommand,
     },
-    /// Transpile a project into the stack its project file names.
+    /// Generate a project's program for its stack
+    ///
+    /// Transpiles the project into the stack its project file names. See manual/project.run-build.md.
     Gen {
         /// The project file, like shop.clarity; its modules are in shop/.
         project: PathBuf,
@@ -35,21 +39,26 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Write the file each custom part and library follows from its
-    /// declaration, and a starter into a folder that has none (manual/design.custom-parts.md, manual/code.libraries.md).
+    /// Write the files of custom parts and libraries
+    ///
+    /// Writes the file each custom part and library follows from its declaration, and a starter
+    /// into a folder that has none. See manual/design.custom-parts.md and manual/code.libraries.md.
     Parts {
         /// The project file, like shop.clarity.
         project: PathBuf,
     },
-    /// Move each window and view out of the project's .clarity files into a
-    /// .cxaml file of its own, in a folder named after its module
-    ///.
+    /// Move windows and views into .cxaml files
+    ///
+    /// Moves each window and view out of the project's .clarity files into a .cxaml file of its
+    /// own, in a folder named after its module. See manual/design.windows.md.
     ConvertPages {
         /// The project file, like shop.clarity.
         project: PathBuf,
     },
-    /// Write the changes in the data dictionary that no migration covers
-    /// yet as the next step in the project's migrations folder.
+    /// Write the next migration step
+    ///
+    /// Writes the changes in the data dictionary that no migration covers yet as the next step
+    /// in the project's migrations folder. See manual/data.migrations.md.
     Migrate {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -66,16 +75,20 @@ enum Command {
         #[arg(long)]
         allow_data_loss: bool,
     },
-    /// Take ownership of an external data source: its tables as they are
-    /// become a baseline step, and from then on Clarity migrates them.
+    /// Take ownership of an external data source
+    ///
+    /// Its tables as they are become a baseline step, and from then on Clarity migrates them.
+    /// See manual/data.sources.md.
     Own {
         /// The project file, like shop.clarity.
         project: PathBuf,
         /// The external data source, as the project file names it.
         source: String,
     },
-    /// Import tables of an external SQLite data source, or the tables of a
-    /// data source that is a file (CSV, JSON, XML), as a module of entities mapped onto them.
+    /// Import a data source's tables as entities
+    ///
+    /// Imports the tables of an external SQLite data source, or of a data source that is a file
+    /// (CSV, JSON, XML), as a module of entities mapped onto them. See manual/data.sources.md.
     Import {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -94,53 +107,71 @@ enum Command {
         #[arg(long)]
         schema: Option<PathBuf>,
     },
-    /// Back up the project's SQLite databases, list the backups, and restore one (docs/ledger/backups.md).
+    /// Back up, list and restore the project's databases
+    ///
+    /// Backs up the project's SQLite databases, lists the backups and restores one; brings a
+    /// database up to date. See manual/data.sources.md and manual/data.migrations.md.
     Data {
         #[command(subcommand)]
         command: DataCommand,
     },
-    /// The people of a project that signs people in: list, add, give a
-    /// password, a token or recovery codes, remove (docs/ledger/signin.md).
+    /// Manage the people of a project that signs people in
+    ///
+    /// Lists, adds and removes people, and gives a password, a token or recovery codes.
+    /// See manual/project.signin.md.
     Users {
         /// The project file, like club.clarity.
         project: PathBuf,
         #[command(subcommand)]
         command: UsersCommand,
     },
-    /// Look for the build tools of every stack, and say what to install.
+    /// Look for the build tools of every stack
+    ///
+    /// Says which tools each stack has and what to install. See manual/setup.tools.md.
     Tools,
-    /// The release checks of Clarity's repository that are no test, run
-    /// inside it (Clarity settings > DevTools > Release planning runs them).
+    /// Run the release checks, inside Clarity's repository
+    ///
+    /// The release checks of Clarity's repository that are no test; Clarity settings > DevTools >
+    /// Release planning runs them.
     Release {
         #[command(subcommand)]
         command: ReleaseCommand,
     },
-    /// Serve Clarity's tools to an AI agent over MCP on stdin and stdout, on the
-    /// project open in the Clarity IDE (docs/ledger/mcp-tools.md): it designs and
-    /// generates, and never builds or runs. Messages go to stderr.
+    /// Serve Clarity's tools to an AI agent over MCP
+    ///
+    /// Serves them on stdin and stdout, on the project open in the Clarity IDE: the agent designs
+    /// and generates, and never builds or runs. Messages go to stderr. See manual/ai.mcp.md.
     Mcp {
         /// For a turn of the IDE's chat panel: the file where show_window and
         /// show_diagram write what to show, which the IDE reads when the turn ends.
         #[arg(long)]
         turn: Option<PathBuf>,
     },
-    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats, Clarity.Auth, Clarity.AppMcp) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
+    /// Rebuild the base libraries, inside Clarity's repository
+    ///
+    /// Rebuilds Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image, Clarity.Formats,
+    /// Clarity.Auth and Clarity.AppMcp from the source in Clarity's repository: every Go, C, C++
+    /// and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is
+    /// tried in any project.
     Libraries,
 }
 
 #[derive(Subcommand)]
 enum ReleaseCommand {
-    /// Make target/fresh-checkout a fresh checkout as the checks on GitHub
-    /// have it: the last commit without tags or history, the uncommitted
-    /// changes over it, nothing git ignores. Needs no network.
+    /// Make target/fresh-checkout as the checks on GitHub have it
+    ///
+    /// The last commit without tags or history, the uncommitted changes over it, nothing git
+    /// ignores. Needs no network.
     FreshCheckout,
     /// Fail when the checks left files in the tree since the fresh checkout.
     CleanTree,
-    /// Build every test of the fresh checkout once, as the checks on GitHub
-    /// do, and note each test program.
+    /// Build every test of the fresh checkout once
+    ///
+    /// As the checks on GitHub do, noting each test program.
     BuildTests,
-    /// Run a test program that build made: `<package>:<target>` (`--lib`
-    /// for a library's own tests), its arguments after `--`.
+    /// Run a test program the build made
+    ///
+    /// Named `<package>:<target>` (`--lib` for a library's own tests), its arguments after `--`.
     RunTest {
         key: String,
         #[arg(last = true)]
@@ -192,8 +223,10 @@ enum DataCommand {
         #[arg(long)]
         source: Option<String>,
     },
-    /// Create the database or bring it up to date, as the program does when it
-    /// starts (a database that changes is backed up first), without opening a window.
+    /// Create the database or bring it up to date
+    ///
+    /// As the program does when it starts (a database that changes is backed up first), without
+    /// opening a window. See manual/data.migrations.md.
     Migrate {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -220,23 +253,26 @@ enum SpecCommand {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
-    /// Name every part that has none, and make part and handler names
-    /// camelCase, in every module of a project: what the checker asks of
-    /// projects written before names were required.
+    /// Name unnamed parts, and make part and handler names camelCase
+    ///
+    /// In every module of a project: what the checker asks of projects written before names
+    /// were required.
     Names {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
-    /// Make every text people read a key: in the modules, a key in place of
-    /// each text, and a file per language giving every key its value, the
-    /// texts' own in the default language: what the checker asks of projects
-    /// written before texts had keys.
+    /// Make every text people read a key
+    ///
+    /// In the modules, a key in place of each text, and a file per language giving every key its
+    /// value, the texts' own in the default language: what the checker asks of projects written
+    /// before texts had keys. See manual/languages.md.
     Keys {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
-    /// List, per language, the keys its file gives no value yet, written as
-    /// lines to fill in.
+    /// List the keys each language has no text for yet
+    ///
+    /// Written as lines to fill in. See manual/languages.md.
     Texts {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
@@ -249,8 +285,9 @@ enum SpecCommand {
         #[arg(long)]
         samples: bool,
     },
-    /// Write each window and app of a project as markup for the web stacks'
-    /// screen (manual/start.how-it-works.md): `windows/Main.cxaml` and `apps/Shop.cxaml` in a folder.
+    /// Write each window and app as markup for the web screen
+    ///
+    /// `windows/Main.cxaml` and `apps/Shop.cxaml` in a folder. See manual/start.how-it-works.md.
     Windows {
         /// The project file, or the folder with its modules.
         dir: PathBuf,

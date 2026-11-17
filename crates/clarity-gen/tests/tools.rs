@@ -58,7 +58,9 @@ fn rust_on_clarity_ui_needs_only_cargo() {
     assert!(bare.missing[0].contains("https://rustup.rs"), "{:?}", bare.missing);
     let ready = check(Backend::Rust, Ui::Clarity, &Machine::default().with("cargo", "--version", "cargo 1.91.0\n"));
     assert!(ready.ready(), "{:?}", ready.missing);
-    assert_eq!(ready.found, ["cargo 1.91.0"]);
+    // Rust draws with Clarity.UI's library too (feature native-ui), from the folder CLARITY_UI names.
+    assert_eq!(ready.found, ["cargo 1.91.0", FETCHED_ON_FIRST_BUILD]);
+    assert!(clarity_gen::tools::requirements(Backend::Rust).iter().any(|r| r.contains("CLARITY_UI")));
     if cfg!(target_os = "linux") {
         assert!(!bare.missing.iter().any(|m| m.contains("WebKitGTK")), "{:?}", bare.missing);
     }
@@ -148,7 +150,7 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     }
 }
 
-/// Clarity.UI's library for Go, C and C++: the folder CLARITY_UI names wins;
+/// Clarity.UI's library for Rust, Go, C and C++: the folder CLARITY_UI names wins;
 /// else the one fetched before; it is missing only where no release fits
 /// the system, or the named folder lacks the header.
 #[test]
@@ -166,12 +168,12 @@ fn clarity_ui_is_named_fetched_or_fetched_on_first_build() {
     assert_eq!(bundled.found[2], format!("Clarity.UI's library {}, carried by Clarity", clarity_gen::clarity_ui::version()));
     let fetched = check(Backend::Go, Ui::Clarity, &ready(Machine::default().library(Library::Fetched(dir.clone()))));
     assert_eq!(fetched.found[2], format!("Clarity.UI's library {}", clarity_gen::clarity_ui::version()));
-    for backend in [Backend::Go, Backend::C, Backend::Cpp] {
+    for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
         let none = check(backend, Ui::Clarity, &Machine::default().library(Library::Unavailable));
         assert!(none.missing.iter().any(|m| m == clarity_gen::tools::CLARITY_UI_LIBRARY), "{:?}", none.missing);
     }
-    // Rust and C# bring the library as a package.
-    assert!(!check(Backend::Rust, Ui::Clarity, &Machine::default().library(Library::Unavailable)).missing.iter().any(|m| m.contains("CLARITY_UI")));
+    // C# brings the library in its NuGet packages.
+    assert!(!check(Backend::Csharp, Ui::Clarity, &Machine::default().library(Library::Unavailable)).missing.iter().any(|m| m.contains("CLARITY_UI")));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

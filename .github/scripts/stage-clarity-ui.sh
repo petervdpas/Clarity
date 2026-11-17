@@ -61,5 +61,12 @@ case "$(uname -s)-$(uname -m)" in
     *) rid=linux-x64 ;;
 esac
 python3 .github/scripts/fetch_openh264.py "$rid" "$stage/lib"
+# On Windows, Microsoft's C++ runtime beside the libraries, which need it.
+case "$rid" in
+    win-*)
+        python3 .github/scripts/vc_runtime.py "$rid" "$stage/lib"
+        python3 .github/scripts/check_dll_imports.py "$stage/lib"
+        ;;
+esac
 cp LICENSE "$stage/"
 ls -lR "$stage" "$browser"

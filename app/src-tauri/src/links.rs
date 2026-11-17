@@ -18,11 +18,11 @@ fn open_with(address: &str, open: impl FnOnce(&str) -> std::io::Result<()>) -> R
 /// Starts the system's own way of opening an address.
 fn in_browser(address: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
-    let opened = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", address]).spawn();
+    let opened = clarity_project::background_command("rundll32").args(["url.dll,FileProtocolHandler", address]).spawn();
     #[cfg(target_os = "macos")]
-    let opened = std::process::Command::new("open").arg(address).spawn();
+    let opened = clarity_project::background_command("open").arg(address).spawn();
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let opened = std::process::Command::new("xdg-open").arg(address).spawn();
+    let opened = clarity_project::background_command("xdg-open").arg(address).spawn();
     opened.map(|_| ())
 }
 

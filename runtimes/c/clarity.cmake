@@ -105,6 +105,13 @@ endif()
 function(clarity_beside target)
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_ui> $<TARGET_FILE_DIR:${target}>)
+  # On Windows, Microsoft's C++ runtime the library needs, which it ships beside itself
+  # (a fresh Windows has it only with the Visual C++ Redistributable).
+  file(GLOB CLARITY_VC_RUNTIME "${CLARITY_UI}/lib/vcruntime140*.dll" "${CLARITY_UI}/lib/msvcp140*.dll")
+  if(WIN32 AND CLARITY_VC_RUNTIME)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CLARITY_VC_RUNTIME} $<TARGET_FILE_DIR:${target}>)
+  endif()
   if(APPLE)
     set_target_properties(${target} PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
   elseif(UNIX)
@@ -419,3 +426,15 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.c)
     endif()
   endif()
 endif()
+
+# A window program alone opens no console of its own on Windows: built as a
+# GUI program (WIN32_EXECUTABLE), still starting at main (MinGW does so by
+# itself; MSVC is told). Elsewhere nothing changes.
+function(clarity_window_program target)
+  if(WIN32)
+    set_target_properties(${target} PROPERTIES WIN32_EXECUTABLE TRUE)
+    if(MSVC)
+      target_link_options(${target} PRIVATE /ENTRY:mainCRTStartup)
+    endif()
+  endif()
+endfunction()

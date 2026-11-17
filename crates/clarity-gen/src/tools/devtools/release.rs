@@ -7,7 +7,6 @@
 //! person commits, pushes and tags.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use std::collections::BTreeMap;
 
@@ -90,8 +89,9 @@ pub const UNITS: [Unit; 15] = [
         workflow: Some("release-clarity-ui.yml"),
         version: Some(VersionAt::Cargo("runtimes/rust-ui-ffi/Cargo.toml")),
         crate_name: None,
-        // Its archives hold every native library and the browser files (release-clarity-ui.yml).
-        sources: &["runtimes/rust", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi"],
+        // Its archives hold every native library and the browser files (release-clarity-ui.yml),
+        // with Microsoft's C++ runtime beside the Windows libraries (vc_runtime.py, checked by check_dll_imports.py).
+        sources: &[".github/workflows/release-clarity-ui.yml", ".github/scripts/vc_runtime.py", ".github/scripts/check_dll_imports.py", "runtimes/rust", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi"],
         out: Out::GithubRelease,
         next_after_workflow: false,
     },
@@ -253,7 +253,7 @@ pub fn needs(repo: &Path, unit: &Unit) -> Vec<String> {
 
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").args(args).current_dir(repo).output().map_err(|e| format!("cannot run git: {e}"))?;
+    let out = clarity_project::background_command("git").args(args).current_dir(repo).output().map_err(|e| format!("cannot run git: {e}"))?;
     if !out.status.success() {
         return Err(format!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -378,7 +378,7 @@ pub struct Guard {
 }
 
 /// Every guard, in CLAUDE.md's order; a variable without a name writes as it tests (ts-rs).
-pub const GUARDS: [Guard; 9] = [
+pub const GUARDS: [Guard; 10] = [
     Guard { variable: "CLARITY_WRITE_GRAMMAR", package: "clarity-spec", test: Some("highlight"), writes: "the VS Code grammar" },
     Guard { variable: "CLARITY_WRITE_DEFAULTS", package: "clarity-gen", test: Some("web_windows"), writes: "the Clarity.UI catalog" },
     Guard { variable: "", package: "clarity-spec", test: None, writes: "the TypeScript types" },
@@ -388,6 +388,7 @@ pub const GUARDS: [Guard; 9] = [
     Guard { variable: "CLARITY_WRITE_DEFAULTS", package: "clarity-spec", test: Some("clarity_ui_theme"), writes: "the Clarity.UI themes" },
     Guard { variable: "CLARITY_WRITE_PICTURES", package: "clarity-image", test: Some("pictures"), writes: "the picture cases" },
     Guard { variable: "CLARITY_WRITE_MANUAL", package: "clarity-spec", test: Some("manual_catalog"), writes: "the parts pages' catalog tables" },
+    Guard { variable: "CLARITY_WRITE_CARRIED", package: "clarity-gen", test: Some("carried"), writes: "runtimes/carried/" },
 ];
 
 /// The examples every release checks (crates/clarity-gen/tests/examples_build.rs builds each on its own stack).
@@ -1036,7 +1037,7 @@ pub fn build_tests(repo: &Path) -> Result<String, String> {
     }
     let mut all = BuiltTests::default();
     for args in &runs {
-        let mut command = Command::new("cargo");
+        let mut command = clarity_project::background_command("cargo");
         command.args(args).arg("--message-format=json-render-diagnostics").current_dir(&dir).stdout(std::process::Stdio::piped());
         for (name, value) in build_env(repo) {
             command.env(name, value);
@@ -1111,7 +1112,7 @@ pub fn run_test(repo: &Path, key: &str, args: &[String]) -> Result<i32, String> 
     };
     let old = std::env::var_os(variable).unwrap_or_default();
     let paths = std::env::join_paths([debug.join("deps"), debug.clone()].into_iter().chain(std::env::split_paths(&old))).map_err(|e| e.to_string())?;
-    let status = Command::new(&test.program)
+    let status = clarity_project::background_command(&test.program)
         .args(args)
         .current_dir(&test.folder)
         .env("CARGO_MANIFEST_DIR", &test.folder)

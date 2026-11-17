@@ -1,4 +1,4 @@
-//! Clarity.UI's library for Go, C and C++ programs (manual/start.how-it-works.md). Their
+//! Clarity.UI's library for Rust, Go, C and C++ programs (manual/start.how-it-works.md). Their
 //! builds take it from the folder the environment variable `CLARITY_UI`
 //! names: `include/clarity_ui.h` and, in `lib/`, the library for the
 //! system. In order: the folder the person names; the one the installed
@@ -110,6 +110,11 @@ pub fn cache_dir_in(os: &str, env: impl Fn(&str) -> Option<String>) -> Option<Pa
         "macos" => set("HOME").map(|home| PathBuf::from(home).join("Library").join("Caches")),
         _ => set("XDG_CACHE_HOME").map(PathBuf::from).or_else(|| set("HOME").map(|home| PathBuf::from(home).join(".cache"))),
     }
+}
+
+/// The person's cache folder on this system.
+pub fn cache_dir() -> Option<PathBuf> {
+    cache_dir_in(std::env::consts::OS, |name| std::env::var(name).ok())
 }
 
 /// Where a fetched library is kept: `<cache>/clarity/clarity-ui/<version>/<rid>`,

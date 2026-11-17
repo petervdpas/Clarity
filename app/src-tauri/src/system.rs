@@ -366,7 +366,7 @@ fn machine_name_here() -> String {
     }
     #[cfg(target_os = "windows")]
     {
-        let output = std::process::Command::new("reg")
+        let output = clarity_project::background_command("reg")
             .args(["query", r"HKLM\HARDWARE\DESCRIPTION\System\BIOS"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
@@ -379,7 +379,7 @@ fn machine_name_here() -> String {
     }
     #[cfg(target_os = "macos")]
     {
-        let model = std::process::Command::new("sysctl")
+        let model = clarity_project::background_command("sysctl")
             .args(["-n", "hw.model"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())

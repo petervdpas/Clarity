@@ -259,6 +259,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let main_text = main_text
         .replacen("mod modules;\n", if agents { "mod modules;\nmod facts;\nmod commands;\n// The commands' data, where the command functions name it.\nuse commands::CommandData;\n" } else { "mod modules;\nmod facts;\n" }, 1)
         .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}{}", screen_engines_static(project), screen_engine_fn(project), if agents { AGENT_FNS } else { "" }), 1);
+    // A window program alone opens no console beside its window on Windows (crate::window_program_only).
+    let main_text = if crate::window_program_only(settings) { main_text.replacen(HEADER, &format!("{HEADER}// A window program: no console of its own on Windows.\n#![windows_subsystem = \"windows\"]\n"), 1) } else { main_text };
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
     files.extend(local_patch_file()?);
@@ -604,7 +606,9 @@ fn main() {{
     if let Some(beside) = profile_folder() {{
         for entry in std::fs::read_dir(&lib).into_iter().flatten().flatten() {{
             let name = entry.file_name().to_string_lossy().to_string();
-            let wanted = LIBRARIES.iter().any(|l| name.starts_with(&format!("lib{{l}}.")) || name.starts_with(&format!("{{l}}."))) || name.contains("openh264");
+            // On Windows also Microsoft's C++ runtime, which the libraries ship beside themselves.
+            let runtime = name.starts_with("vcruntime140") || name.starts_with("msvcp140");
+            let wanted = LIBRARIES.iter().any(|l| name.starts_with(&format!("lib{{l}}.")) || name.starts_with(&format!("{{l}}."))) || name.contains("openh264") || runtime;
             let shared = name.ends_with(".so") || name.ends_with(".dylib") || name.ends_with(".dll") || name.contains(".so.");
             if wanted && shared {{
                 let _ = std::fs::copy(entry.path(), beside.join(&name));
@@ -733,6 +737,17 @@ fn main_window(project: &Project) -> Option<String> {
 }
 
 
+/// The crates every generated program needs beside the runtime.
+pub(crate) const COMPANIONS: &str = "serde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\n";
+
+/// Every feature of the runtime crate, as its manifest lists them.
+pub(crate) fn runtime_features() -> Vec<&'static str> {
+    let Some(start) = RUNTIME_MANIFEST.find("\n[features]\n") else { return Vec::new() };
+    let table = &RUNTIME_MANIFEST[start + "\n[features]\n".len()..];
+    let table = &table[..table.find("\n[").unwrap_or(table.len())];
+    table.lines().filter_map(|l| l.split_once(" = ").map(|(k, _)| k.trim())).filter(|k| !k.starts_with('#') && *k != "default").collect()
+}
+
 /// The manifest of the application, with the runtime features it uses
 /// (the databases of its data sources, `native-ui` on the desktop).
 fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
@@ -753,9 +768,7 @@ edition = "2024"
 
 [dependencies]
 clarity-runtime = {{ version = "{version}", default-features = false, features = [{features}] }}
-serde = {{ version = "1", features = ["derive"] }}
-serde_json = "1"
-
+{COMPANIONS}
 {parts}
 {profile}# A project of its own, not part of a workspace around it.
 [workspace]

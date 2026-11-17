@@ -131,6 +131,16 @@ jobs:
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_auth}" out/auth/
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_app_mcp}" out/appmcp/
           python3 .github/scripts/fetch_openh264.py ${{ matrix.rid }} out/video
+          # On Windows, Microsoft's C++ runtime the libraries need, carried once by Clarity.Runtime;
+          # checked as the program's folder holds them all together.
+          case "${{ matrix.rid }}" in
+            win-*)
+              mkdir -p out/vcruntime out-check
+              python3 .github/scripts/vc_runtime.py ${{ matrix.rid }} out/vcruntime
+              cp out/*/*.dll out-check/
+              python3 .github/scripts/check_dll_imports.py out-check
+              ;;
+          esac
           ls -lR out
 
       - name: Upload the libraries
@@ -186,6 +196,11 @@ jobs:
               mkdir -p "$dest"
               cp native/native-$rid/${part,,}/* "$dest/"
             done
+            # Microsoft's C++ runtime, once, in the package every package with a native library stands on.
+            if [ -d "native/native-$rid/vcruntime" ]; then
+              mkdir -p "runtimes/csharp/Clarity.Runtime/runtimes/$rid/native"
+              cp native/native-$rid/vcruntime/* "runtimes/csharp/Clarity.Runtime/runtimes/$rid/native/"
+            fi
           done
           find runtimes/csharp/Clarity.Ui/runtimes runtimes/csharp/Clarity.Audio/runtimes runtimes/csharp/Clarity.Video/runtimes runtimes/csharp/Clarity.Image/runtimes runtimes/csharp/Clarity.Formats/runtimes runtimes/csharp/Clarity.Auth/runtimes runtimes/csharp/Clarity.AppMcp/runtimes -type f | sort
 
@@ -211,6 +226,10 @@ jobs:
             test -f "$nupkg" || { echo "::error::$nupkg was not made"; exit 1; }
             mkdir -p packages
             cp "$nupkg" packages/
+          done
+          runtime="packages/Clarity.Runtime.$version.nupkg"
+          for entry in runtimes/win-x64/native/vcruntime140.dll runtimes/win-x64/native/msvcp140.dll runtimes/win-arm64/native/vcruntime140.dll runtimes/win-arm64/native/msvcp140.dll; do
+            unzip -l "$runtime" "$entry" > /dev/null || { echo "::error::Clarity.Runtime lacks $entry"; exit 1; }
           done
           ui="packages/Clarity.Ui.$version.nupkg"
           for entry in \

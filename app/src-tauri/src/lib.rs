@@ -945,6 +945,7 @@ pub fn run() {
             devtools::release::release_stop,
             devtools::disk::disk_view,
             devtools::disk::disk_remove,
+            devtools::disk::disk_mark,
             splash::main_drawn,
             splash::splash_done,
             splash::splash_status,

@@ -2,7 +2,9 @@
   // DevTools' Disk tab (src-tauri/src/devtools/disk.rs): the folders
   // Clarity's builds and checks fill in its repository, biggest first, each
   // with what removing it costs and Remove, which asks first; and the free
-  // space of the disk, with a warning below 40 GB.
+  // space of the disk, with a warning below 40 GB. At next start marks a
+  // folder the running IDE holds (on Windows its own files) to go when
+  // dev.sh or dev.bat starts it again, before anything builds.
 
   import { invoke } from "@tauri-apps/api/core";
   import type { DiskView } from "@clarity/ui/generated/DiskView.ts";
@@ -41,6 +43,13 @@
     });
     if (sure) await call("disk_remove", { key: place.key });
   }
+
+  const anyMarked = $derived(places.some((p) => p.marked));
+
+  /** Marks the place to go at the next start, or takes the mark away. */
+  async function mark(place: DiskView["places"][number], marked: boolean) {
+    await call("disk_mark", { key: place.key, marked });
+  }
 </script>
 
 <div class="disk">
@@ -65,8 +74,15 @@
           <tr class:empty={p.bytes === 0}>
             <td>{p.name}</td>
             <td class="size">{bytesText(p.bytes)}</td>
-            <td class="muted">{p.cost}</td>
-            <td><button onclick={() => remove(p)} disabled={working || p.bytes === 0}>Remove</button></td>
+            <td class="muted">{p.cost}{#if p.marked}{" "}<strong class="marked">Goes at the next start.</strong>{/if}</td>
+            <td class="actions">
+              <button onclick={() => remove(p)} disabled={working || p.bytes === 0}>Remove</button>
+              {#if p.marked}
+                <button onclick={() => mark(p, false)} disabled={working} title="It stays at the next start">Unmark</button>
+              {:else}
+                <button onclick={() => mark(p, true)} disabled={working || p.bytes === 0} title="Removed when dev.sh or dev.bat starts Clarity again, before anything builds: for a folder the running Clarity holds">At next start</button>
+              {/if}
+            </td>
           </tr>
         {/each}
       </tbody>
@@ -74,7 +90,10 @@
         <tr><td>All of them</td><td class="size">{bytesText(total)}</td><td></td><td></td></tr>
       </tfoot>
     </table>
-    <p class="muted">Every folder here is one git ignores and a build makes again. Remove waits until no build runs.</p>
+    <p class="muted">Every folder here is one git ignores; a build makes it again, except what examples no longer in Clarity left behind. Remove waits until no build runs.</p>
+    {#if anyMarked}
+      <p class="muted">The marked folders go when dev.sh or dev.bat starts Clarity again, before anything builds: close Clarity and start it again.</p>
+    {/if}
   {:else if working}
     <p class="muted">Measuring the folders...</p>
   {/if}
@@ -124,6 +143,12 @@
   }
   tr.empty td {
     color: var(--text-muted);
+  }
+  .actions {
+    white-space: nowrap;
+  }
+  .marked {
+    color: var(--warning);
   }
   tfoot td {
     font-weight: 600;

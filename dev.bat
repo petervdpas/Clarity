@@ -36,6 +36,10 @@ fc /b package-lock.json node_modules\.clarity-installed-lock.json >nul 2>&1 || (
     call npm install || exit /b 1
     copy /y package-lock.json node_modules\.clarity-installed-lock.json >nul
 )
+rem The folders Clarity settings > DevTools > Disk marked for the next start
+rem go now, before anything builds or holds their files (a running IDE holds
+rem its own on Windows, so Remove cannot take them).
+node scripts\clean-at-start.mjs
 rem Vite's cache (node_modules\.vite) is kept, as dev.sh keeps it.
 call npm run tauri dev
 exit /b %errorlevel%

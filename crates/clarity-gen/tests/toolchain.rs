@@ -59,11 +59,17 @@ fn go_builds_with_go_build() {
     // under the name Run starts: `.exe` on Windows.
     let built = exe("bin/shop").to_string_lossy().into_owned();
     // -v names each package as it is built, so a long first build shows progress.
-    assert_eq!(debug.args, ["build", "-v", "-o", built.as_str(), "."]);
+    // On Windows a program with windows alone is a GUI program, with no console of its own.
+    if cfg!(windows) {
+        assert_eq!(debug.args, ["build", "-v", "-ldflags=-H=windowsgui", "-o", built.as_str(), "."]);
+    } else {
+        assert_eq!(debug.args, ["build", "-v", "-o", built.as_str(), "."]);
+    }
     assert_eq!(debug.program, exe("bin/shop"));
     let release = clarity_gen::toolchain(&settings, true).unwrap();
     // Without debug information.
-    assert_eq!(release.args, ["build", "-v", "-trimpath", "-ldflags=-s -w", "-o", built.as_str(), "."]);
+    let release_flags = if cfg!(windows) { "-ldflags=-s -w -H=windowsgui" } else { "-ldflags=-s -w" };
+    assert_eq!(release.args, ["build", "-v", "-trimpath", release_flags, "-o", built.as_str(), "."]);
     assert!(debug.missing.contains("Go"), "{}", debug.missing);
 }
 

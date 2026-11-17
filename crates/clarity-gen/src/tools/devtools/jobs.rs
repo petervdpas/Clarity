@@ -300,7 +300,8 @@ impl Jobs {
                 }
             })
         };
-        let dir = run.dir.canonicalize().unwrap_or_else(|_| run.dir.clone());
+        // Plain: shown as people know the folder, on Windows without canonicalize's `\\?\`.
+        let dir = run.dir.canonicalize().map(clarity_project::plain).unwrap_or_else(|_| run.dir.clone());
         put(usize::MAX, Piece::Line(format!("{} (in {})", run.shown(), dir.display())));
         let mut command = clarity_project::background_command(&run.program);
         command.args(&run.args).current_dir(&run.dir).envs(run.env.iter().map(|(k, v)| (k, v))).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());

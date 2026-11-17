@@ -35,6 +35,9 @@ if ! cmp -s package-lock.json node_modules/.clarity-installed-lock.json; then
     npm install
     cp package-lock.json node_modules/.clarity-installed-lock.json
 fi
+# The folders Clarity settings > DevTools > Disk marked for the next start
+# go now, before anything builds or holds their files.
+node scripts/clean-at-start.mjs
 # Vite's cache (node_modules/.vite) is kept: emptying it made Vite prepare
 # its packages again while the IDE's page loaded, and a component's styles
 # asked for in between came back empty ("failed to load virtual css module").

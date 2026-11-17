@@ -3,4 +3,8 @@
 /**
  * A folder builds fill, as the tab shows it.
  */
-export type DiskPlace = { key: string, name: string, cost: string, bytes: number, };
+export type DiskPlace = { key: string, name: string, cost: string, bytes: number,
+/**
+ * Marked to go at the next start of the IDE.
+ */
+marked: boolean, };

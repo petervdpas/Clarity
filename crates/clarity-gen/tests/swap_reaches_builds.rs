@@ -45,9 +45,11 @@ fn the_folder_named_now_wins_over_the_one_cmake_kept() {
         let release = clarity_ui_folder(&dir.join("release"));
         let own = clarity_ui_folder(&dir.join("own"));
         let build = dir.join("build");
-        assert!(configured(&source, &build, &release).contains(&format!("uses {}", release.display())), "{runtime}: the release first");
-        assert!(configured(&source, &build, &own).contains(&format!("uses {}", own.display())), "{runtime}: swapped, the next build uses the cDdev's own");
-        assert!(configured(&source, &build, &release).contains(&format!("uses {}", release.display())), "{runtime}: and the release again");
+        // As CMake prints a PATH: with `/` between folders, on Windows too.
+        let (release_shown, own_shown) = (clarity_project::slashed(&release), clarity_project::slashed(&own));
+        assert!(configured(&source, &build, &release).contains(&format!("uses {release_shown}")), "{runtime}: the release first");
+        assert!(configured(&source, &build, &own).contains(&format!("uses {own_shown}")), "{runtime}: swapped, the next build uses the cDdev's own");
+        assert!(configured(&source, &build, &release).contains(&format!("uses {release_shown}")), "{runtime}: and the release again");
     }
 }
 

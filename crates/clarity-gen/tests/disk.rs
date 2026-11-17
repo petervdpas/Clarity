@@ -30,10 +30,35 @@ fn every_place_is_a_build_folder_inside_the_repository() {
         for path in &place.paths {
             assert!(path.starts_with(&repo) && path != &repo, "{}: {} is inside the repository", place.key, path.display());
             let rel = path.strip_prefix(&repo).unwrap().to_string_lossy().replace('\\', "/");
-            assert!(rel.starts_with("target/") || rel.ends_with("/out") || rel.ends_with("/bin") || rel.ends_with("/obj"), "{}: {rel} is a build folder git ignores", place.key);
+            let leftover = place.key == "leftoverExamples" && rel.starts_with("examples/") && !repo.join(format!("{rel}.clarity")).exists();
+            assert!(rel.starts_with("target/") || rel.ends_with("/out") || rel.ends_with("/bin") || rel.ends_with("/obj") || leftover, "{}: {rel} is a build folder git ignores", place.key);
         }
     }
     assert!(places.iter().any(|p| p.key == "debug") && places.iter().any(|p| p.key == "freshTarget"));
+    // The build tests' apps fill target/generated, which the tab shows too.
+    assert!(places.iter().any(|p| p.paths == [repo.join("target").join("generated")]));
+}
+
+/// An example's folder sits beside its project file; one without it is
+/// what an example removed from Clarity left behind (its ignored out/ and
+/// data/), which the tab shows so it can go. A project's folder never does.
+#[test]
+fn an_example_folder_without_its_project_file_is_a_leftover() {
+    let repo = temp("leftovers");
+    file(repo.join("examples/todo.clarity"), 3);
+    file(repo.join("examples/todo/design/Main.cxaml"), 4);
+    file(repo.join("examples/todo/out/app.bin"), 5);
+    file(repo.join("examples/dice/out/desktop/app.bin"), 100);
+    file(repo.join("examples/dice/data/dice.db"), 20);
+    let leftovers = disk::places(&repo).into_iter().find(|p| p.key == "leftoverExamples").unwrap();
+    assert_eq!(leftovers.paths, [repo.join("examples/dice")]);
+    assert_eq!(disk::size(&leftovers), 120);
+    assert!(leftovers.cost.contains("data/"), "it says a database goes too: {}", leftovers.cost);
+    let outs = disk::places(&repo).into_iter().find(|p| p.key == "exampleOuts").unwrap();
+    assert_eq!(outs.paths, [repo.join("examples/todo/out")], "a leftover's out/ is counted once, with the leftover");
+    disk::remove(&repo, "leftoverExamples").unwrap();
+    assert!(!repo.join("examples/dice").exists());
+    assert!(repo.join("examples/todo/design/Main.cxaml").exists() && repo.join("examples/todo/out/app.bin").exists(), "a project's folder stays");
 }
 
 #[test]
@@ -45,7 +70,10 @@ fn a_place_is_as_big_as_its_files_and_removing_it_takes_only_its_own() {
     file(repo.join("examples/shop/out/app.bin"), 10);
     file(repo.join("examples/todo/out/app.bin"), 5);
     file(repo.join("examples/todo/todo.clarity"), 3);
-    let tmp = disk::places(&repo).into_iter().find(|p| p.key == "testScratch").unwrap();
+    // Each example's folder beside its project file, else it is a leftover.
+    file(repo.join("examples/shop.clarity"), 1);
+    file(repo.join("examples/todo.clarity"), 1);
+    let tmp =disk::places(&repo).into_iter().find(|p| p.key == "testScratch").unwrap();
     assert_eq!(disk::size(&tmp), 1024);
     let outs = disk::places(&repo).into_iter().find(|p| p.key == "exampleOuts").unwrap();
     assert_eq!(outs.paths.len(), 2, "every example's out/");
@@ -56,6 +84,33 @@ fn a_place_is_as_big_as_its_files_and_removing_it_takes_only_its_own() {
     disk::remove(&repo, "exampleOuts").unwrap();
     assert!(!repo.join("examples/shop/out").exists() && repo.join("examples/todo/todo.clarity").exists(), "a project's own files stay");
     assert!(disk::remove(&repo, "nothing").is_err());
+}
+
+/// On Windows a running IDE holds its own files (target/debug), so Remove
+/// cannot take them: a place is marked for the next start instead, written
+/// as its folders relative to the repository, which dev.sh and dev.bat
+/// remove before anything builds (app/scripts/clean-at-start.mjs).
+#[test]
+fn a_place_is_marked_for_the_next_start_by_its_folders() {
+    let repo = temp("marks");
+    file(repo.join("target/debug/clarity.exe"), 10);
+    file(repo.join("target/tmp/a.bin"), 4);
+    assert!(disk::marked(&repo).is_empty());
+    disk::mark(&repo, "debug", true).unwrap();
+    disk::mark(&repo, "testScratch", true).unwrap();
+    disk::mark(&repo, "debug", true).unwrap();
+    assert_eq!(disk::marked(&repo), ["debug", "testScratch"], "each once");
+    assert_eq!(std::fs::read_to_string(disk::at_start_file(&repo)).unwrap(), "target/debug\ntarget/tmp\n", "folders relative to the repository, with /");
+    disk::mark(&repo, "testScratch", false).unwrap();
+    assert_eq!(disk::marked(&repo), ["debug"]);
+    assert!(disk::mark(&repo, "nothing", true).is_err());
+    assert!(repo.join("target/debug/clarity.exe").exists(), "marking removes nothing");
+    // A failed Remove names the folder as the tab does, not the path the IDE was started from.
+    let held = std::fs::File::open(repo.join("target/debug/clarity.exe")).unwrap();
+    if let Err(why) = disk::remove(&repo, "debug") {
+        assert!(why.starts_with("cannot remove target/debug:"), "{why}");
+    }
+    drop(held);
 }
 
 #[test]

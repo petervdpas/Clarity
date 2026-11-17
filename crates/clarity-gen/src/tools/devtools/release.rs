@@ -1131,7 +1131,8 @@ pub fn run_test(repo: &Path, key: &str, args: &[String]) -> Result<i32, String> 
 /// when app/ or a model type changed (in the tree, which has its
 /// node_modules); and last, that the checks left the tree clean.
 pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
-    let canonical = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
+    // Plain: on Windows without canonicalize's `\\?\`, which every check would otherwise start in and hand on.
+    let canonical = repo.canonicalize().map(clarity_project::plain).unwrap_or_else(|_| repo.to_path_buf());
     let repo = canonical.as_path();
     let fresh = fresh_checkout_dir(repo);
     // Clarity's CLI as the fresh checkout's check built it, without the IDE's own settings: it builds the tests once
@@ -1159,8 +1160,16 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
             let program = format!("{package}:--lib");
             checks.push(Check { key: format!("test:{program}"), title: format!("{package}: lib tests"), run: on_fresh(&["release", "run-test", &program]), fresh: true, inputs: Inputs::Crate(package.to_string()) });
         }
+        // A test target, as cargo finds them: a file tests/<name>.rs, or a folder tests/<name>/ with its main.rs.
         let mut tests: Vec<String> = std::fs::read_dir(repo.join(&member).join("tests"))
-            .map(|d| d.flatten().filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".rs").map(str::to_string)).collect())
+            .map(|d| {
+                d.flatten()
+                    .filter_map(|e| {
+                        let name = e.file_name().to_string_lossy().to_string();
+                        if e.path().join("main.rs").is_file() { Some(name) } else { name.strip_suffix(".rs").map(str::to_string) }
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         tests.sort();
         for test in tests {

@@ -24,8 +24,9 @@ fn shell(script: &str) -> Runnable {
     }
 }
 
+/// The repository as cargo and git name it: on Windows without canonicalize's `\\?\`.
 fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    clarity_project::plain(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap())
 }
 
 #[test]
@@ -34,7 +35,8 @@ fn a_build_keeps_its_lines_and_how_it_ended() {
     jobs.start("a", "A", shell("echo one && echo two"), None).unwrap();
     let job = jobs.wait("a", Duration::from_secs(20)).unwrap();
     assert_eq!(job.state, JobState::Passed);
-    assert!(job.lines.iter().any(|l| l == "one") && job.lines.iter().any(|l| l == "two"), "{:?}", job.lines);
+    // Trimmed: cmd's `echo one && echo two` keeps the space before `&&`.
+    assert!(job.lines.iter().any(|l| l.trim() == "one") && job.lines.iter().any(|l| l.trim() == "two"), "{:?}", job.lines);
     jobs.start("b", "B", shell("exit 3"), None).unwrap();
     assert!(matches!(jobs.wait("b", Duration::from_secs(20)).unwrap().state, JobState::Failed(_)));
 }
@@ -167,7 +169,8 @@ fn the_checks_cover_guards_tests_of_changed_crates_and_examples() {
     let repo = repo();
     let changed = vec!["crates/clarity-spec/src/check.rs".to_string(), "examples/todo/todo.clarity".to_string(), "app/src/App.svelte".to_string()];
     let checks: Vec<Check> = release::checks(&repo, &changed);
-    let shown: Vec<String> = checks.iter().map(|c| c.run.shown()).collect();
+    // With `/` between folders: on Windows a path joined from `examples/<name>` mixes the two.
+    let shown: Vec<String> = checks.iter().map(|c| c.run.shown().replace('\\', "/")).collect();
     assert!(shown.iter().any(|s| s.contains("cargo test -p clarity-spec --test highlight")), "a guard: {shown:?}");
     assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:--lib")), "the changed crate's lib tests");
     assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:cxaml")), "each of its test targets");
@@ -232,6 +235,20 @@ fn a_build_names_its_folder_plainly() {
     jobs.start("dir", "Dir", Runnable::new("git", &["--version"], &dir), None).unwrap();
     let job = jobs.wait("dir", Duration::from_secs(20)).unwrap();
     assert!(!job.lines[0].contains(".."), "{}", job.lines[0]);
+}
+
+/// A test target is a file `tests/<name>.rs` or a folder `tests/<name>/main.rs`
+/// (Clarity.UI keeps its tests in folders): the checks run both, and a
+/// helper folder without main.rs (tests/common) is no target.
+#[test]
+fn the_checks_run_folder_test_targets_too() {
+    let repo = repo();
+    let checks = release::checks(&repo, &["runtimes/rust-ui/src/lib.rs".to_string()]);
+    let keys: Vec<&str> = checks.iter().map(|c| c.key.as_str()).collect();
+    for folder in ["data", "hosts", "inputs", "language", "parts", "screen", "windows"] {
+        assert!(keys.contains(&format!("test:clarity-ui:{folder}").as_str()), "tests/{folder}/main.rs: {keys:?}");
+    }
+    assert!(!keys.iter().any(|k| *k == "test:clarity-ui:common" || *k == "test:clarity-ui:fonts"), "a folder without main.rs is no test target");
 }
 
 #[test]

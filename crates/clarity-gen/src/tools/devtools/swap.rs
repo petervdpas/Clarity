@@ -169,7 +169,7 @@ pub fn built_at(repo: &Path, piece: &Piece, os: &str) -> Option<SystemTime> {
 pub fn build(repo: &Path, piece: &Piece) -> Runnable {
     match piece.kind {
         Kind::Native { package, .. } => Runnable::new("cargo", &["build", "--release", "-p", package], repo).with_env("CARGO_BUILD_JOBS", "2"),
-        Kind::Browser => Runnable::new("bash", &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "2"),
+        Kind::Browser => Runnable::new(&crate::tools::bash(), &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "2"),
         Kind::Runtime { folder: "runtimes/rust" } => Runnable::new("cargo", &["build", "-p", "clarity-runtime"], repo).with_env("CARGO_BUILD_JOBS", "2"),
         // The NuGet packages come from the Release build, into each project's bin/Release.
         Kind::Runtime { folder: "runtimes/csharp" } => Runnable::new("dotnet", &["build", "-c", "Release", "Clarity.slnx"], &repo.join("runtimes/csharp")).with_env("MSBUILDDISABLENODEREUSE", "1"),

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use clarity_gen::tools::{Probe, check, engine_tools, find_on_path, search_path};
+use clarity_gen::tools::{Probe, check, engine_tools, find_on_path, git_bash, search_path};
 use clarity_gen::clarity_ui::Library;
 use clarity_project::{Backend, Ui};
 
@@ -192,6 +192,30 @@ fn a_program_is_found_on_the_path() {
     let path = std::env::join_paths([dir.join("nothing"), bin.clone()]).unwrap();
     assert_eq!(find_on_path("cargo", &path), Some(bin.join(name)));
     assert_eq!(find_on_path("dotnet", &path), None);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn bash_on_windows_is_gits_not_the_systems() {
+    // Windows' own System32\bash.exe starts WSL and comes first on the PATH;
+    // Git's bash is not on the PATH at all, only Git\cmd\git.exe is.
+    let dir = std::env::temp_dir().join(format!("clarity-git-bash-{}", std::process::id()));
+    let exe = |name: &str| if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    let system = dir.join("System32");
+    let cmd = dir.join("Git").join("cmd");
+    let bin = dir.join("Git").join("bin");
+    for (folder, name) in [(&system, "bash"), (&cmd, "git"), (&bin, "bash")] {
+        std::fs::create_dir_all(folder).unwrap();
+        std::fs::write(folder.join(exe(name)), "").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(folder.join(exe(name)), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+    let path = std::env::join_paths([system.clone(), cmd.clone()]).unwrap();
+    assert_eq!(git_bash(&path), Some(bin.join(exe("bash"))));
+    assert_eq!(git_bash(&std::env::join_paths([system]).unwrap()), None, "no Git, no Git Bash");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

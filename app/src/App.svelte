@@ -1,7 +1,7 @@
 <script lang="ts">
   import { shownLine } from "./lib/outputLines";
   import PartGuard from "@clarity/ui/parts/PartGuard.svelte";
-  import Toasts, { TOAST_MS } from "./lib/Toasts.svelte";
+  import Toasts, { TOAST_MS, type ToastLevel } from "./lib/Toasts.svelte";
   import { catchUncaught } from "@clarity/ui/host/uncaught.ts";
   import Guarded from "@clarity/ui/parts/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -41,6 +41,7 @@
   import ToastView from "./lib/ToastView.svelte";
   import DeclCodeView from "./lib/DeclCodeView.svelte";
   import { commandLine } from "./lib/commandLine";
+  import { startProject } from "./lib/startProject";
   import { isToastName, newToastText, textKeyOf } from "./lib/toastLines";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
   import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
@@ -138,12 +139,12 @@
   let history = $state<HistoryCounts>({ undo: 0, redo: 0 });
   let actionError = $state<string | null>(null);
   /** The notices that show as toasts: every action error and load error, as it happens. */
-  let toasts = $state<{ id: number; text: string }[]>([]);
+  let toasts = $state<{ id: number; text: string; level: ToastLevel }[]>([]);
   let nextToast = 0;
-  function toast(text: string) {
+  function toast(text: string, level: ToastLevel = "error") {
     const id = nextToast++;
     // Untracked: an effect that shows a toast must not rerun on the list it adds to (a failed open looped forever).
-    toasts = [...untrack(() => toasts), { id, text }];
+    toasts = [...untrack(() => toasts), { id, text, level }];
     setTimeout(() => dismissToast(id), TOAST_MS);
   }
   function dismissToast(id: number) {
@@ -428,6 +429,14 @@
       return localStorage.getItem(LAST_PROJECT_KEY);
     } catch {
       return null;
+    }
+  }
+
+  function forgetLastProject() {
+    try {
+      localStorage.removeItem(LAST_PROJECT_KEY);
+    } catch {
+      // Remembering the project is a convenience only.
     }
   }
 
@@ -1140,21 +1149,26 @@
   /** Project files are .clarity files, like the modules in their folder. */
 
   async function openProject(path: string) {
-    const trimmed = path.trim();
-    if (!trimmed) return;
     try {
-      const result = await invoke<Preview>("open_project", { path: trimmed });
-      loadError = null;
-      openFile = trimmed;
-      writeLastProject(trimmed);
-      stack = [];
-      tabViews = { project: [], design: [], preview: [], vault: [] };
-      viewCleared = false;
-      applyPreview(result);
-      await loadProjectFile();
+      await loadProject(path);
     } catch (err) {
       loadError = String(err);
     }
+  }
+
+  /** Opens the project at `path`, failing with why. */
+  async function loadProject(path: string) {
+    const trimmed = path.trim();
+    if (!trimmed) return;
+    const result = await invoke<Preview>("open_project", { path: trimmed });
+    loadError = null;
+    openFile = trimmed;
+    writeLastProject(trimmed);
+    stack = [];
+    tabViews = { project: [], design: [], preview: [], vault: [] };
+    viewCleared = false;
+    applyPreview(result);
+    await loadProjectFile();
   }
 
   /** When Check last ran, shown in the problems list; flashing while new. */
@@ -1513,10 +1527,15 @@
       building = true;
       showOutput = true;
     });
-    invoke<string | null>("initial_project").then((dir) => {
-      const start = dir ?? readLastProject();
-      if (start) openProject(start);
-    });
+    invoke<string | null>("initial_project").then((dir) =>
+      startProject(dir, readLastProject(), {
+        open: loadProject,
+        forget: forgetLastProject,
+        say: (text) => (loadError = text),
+        warn: (text) => toast(text, "warning"),
+        choose: chooseProject,
+      }),
+    );
     return () => {
       unlisten.then((stop) => stop());
       unlistenProject.then((stop) => stop());

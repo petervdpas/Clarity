@@ -203,6 +203,24 @@ pub fn find_on_path(program: &str, path: &OsStr) -> Option<PathBuf> {
     std::env::split_paths(path).flat_map(|dir| names.iter().map(move |n| dir.join(n))).find(|file| is_program(file))
 }
 
+/// Git's bash, beside the git of `path`: the first folder above git that
+/// holds `bin/bash`. On Windows a bare `bash` is System32's, which starts
+/// WSL, and Git's own bash is not on the PATH (only `Git\cmd` is).
+pub fn git_bash(path: &OsStr) -> Option<PathBuf> {
+    let git = find_on_path("git", path)?;
+    let bash = if cfg!(windows) { "bash.exe" } else { "bash" };
+    git.ancestors().skip(1).map(|dir| dir.join("bin").join(bash)).find(|file| is_program(file))
+}
+
+/// The bash a script of the repository runs with: Git's on Windows (else a
+/// bare `bash`), the system's elsewhere.
+pub fn bash() -> String {
+    if !cfg!(windows) {
+        return "bash".to_string();
+    }
+    std::env::var_os("PATH").and_then(|path| git_bash(&path)).map(|file| file.display().to_string()).unwrap_or_else(|| "bash".to_string())
+}
+
 pub(crate) fn is_program(file: &std::path::Path) -> bool {
     let Ok(meta) = std::fs::metadata(file) else { return false };
     #[cfg(unix)]

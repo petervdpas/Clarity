@@ -2,8 +2,8 @@
   "mcpServers": {
     "clarity-cdev": {
       "type": "stdio",
-      "command": "./mcp.sh",
-      "args": []
+      "command": "node",
+      "args": ["mcp.mjs"]
     }
   }
 }

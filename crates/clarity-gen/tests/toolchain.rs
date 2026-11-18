@@ -84,11 +84,26 @@ fn go_takes_clarity_ui_from_the_folder_clarity_ui_names() {
     let linux = go_cgo_env(Some(folder), "linux");
     let value = |env: &[(&str, String)], name: &str| env.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone()).unwrap_or_default();
     assert_eq!(value(&linux, "CGO_ENABLED"), "1");
-    assert_eq!(value(&linux, "CGO_CFLAGS"), format!("-I{}", folder.join("include").display()));
+    assert_eq!(value(&linux, "CGO_CFLAGS"), format!("'-I{}'", folder.join("include").display()));
     let lib = folder.join("lib").display().to_string();
-    assert_eq!(value(&linux, "CGO_LDFLAGS"), format!("-L{lib} -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"));
-    assert_eq!(value(&go_cgo_env(Some(folder), "macos"), "CGO_LDFLAGS"), format!("-L{lib} -Wl,-rpath,@executable_path -Wl,-rpath,{lib}"));
-    assert_eq!(value(&go_cgo_env(Some(folder), "windows"), "CGO_LDFLAGS"), format!("-L{lib}"));
+    assert_eq!(value(&linux, "CGO_LDFLAGS"), format!("'-L{lib}' '-Wl,-rpath,$ORIGIN' '-Wl,-rpath,{lib}'"));
+    assert_eq!(value(&go_cgo_env(Some(folder), "macos"), "CGO_LDFLAGS"), format!("'-L{lib}' '-Wl,-rpath,@executable_path' '-Wl,-rpath,{lib}'"));
+    assert_eq!(value(&go_cgo_env(Some(folder), "windows"), "CGO_LDFLAGS"), format!("'-L{lib}'"));
+}
+
+/// The installed IDE carries the library in a folder with a space
+/// (/usr/lib/Clarity IDE, C:\Program Files\Clarity IDE): every flag is quoted,
+/// as Go splits CGO_CFLAGS and CGO_LDFLAGS, so a path stays one flag. A path
+/// with a single quote is quoted with double quotes.
+#[test]
+fn go_flags_keep_a_folder_with_a_space_or_a_quote_whole() {
+    use clarity_gen::go_cgo_env;
+    let value = |env: &[(&str, String)], name: &str| env.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone()).unwrap_or_default();
+    let spaced = std::path::Path::new("/usr/lib/Clarity IDE/clarity-ui");
+    assert_eq!(value(&go_cgo_env(Some(spaced), "linux"), "CGO_CFLAGS"), "'-I/usr/lib/Clarity IDE/clarity-ui/include'");
+    assert_eq!(value(&go_cgo_env(Some(spaced), "windows"), "CGO_LDFLAGS"), "'-L/usr/lib/Clarity IDE/clarity-ui/lib'");
+    let quoted = std::path::Path::new("/home/o'brien/clarity-ui");
+    assert_eq!(value(&go_cgo_env(Some(quoted), "linux"), "CGO_CFLAGS"), "\"-I/home/o'brien/clarity-ui/include\"");
 }
 
 #[test]

@@ -1418,12 +1418,22 @@ pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'stat
     let lib = folder.join("lib");
     let lib = lib.display();
     // Windows finds the DLL beside the program or on PATH; it has no rpath.
-    let found = match os {
-        "windows" => String::new(),
-        "macos" => format!(" -Wl,-rpath,@executable_path -Wl,-rpath,{lib}"),
-        _ => format!(" -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"),
-    };
-    vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
+    let mut ldflags = vec![format!("-L{lib}")];
+    match os {
+        "windows" => {}
+        "macos" => ldflags.extend(["-Wl,-rpath,@executable_path".to_string(), format!("-Wl,-rpath,{lib}")]),
+        _ => ldflags.extend(["-Wl,-rpath,$ORIGIN".to_string(), format!("-Wl,-rpath,{lib}")]),
+    }
+    let ldflags = ldflags.iter().map(|flag| go_flag(flag)).collect::<Vec<_>>().join(" ");
+    vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", go_flag(&format!("-I{}", folder.join("include").display()))), ("CGO_LDFLAGS", ldflags)]
+}
+
+/// One flag of CGO_CFLAGS or CGO_LDFLAGS, quoted so Go keeps it whole: Go
+/// splits these at spaces, and a folder may have one (the installed IDE's
+/// /usr/lib/Clarity IDE, C:\Program Files\Clarity IDE). Go takes single or
+/// double quotes and no escapes, so a flag with a single quote gets double ones.
+fn go_flag(flag: &str) -> String {
+    if flag.contains('\'') { format!("\"{flag}\"") } else { format!("'{flag}'") }
 }
 
 /// Puts the shared libraries of the library folder `clarity_ui` (its lib/)

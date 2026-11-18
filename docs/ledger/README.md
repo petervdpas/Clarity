@@ -120,6 +120,7 @@ Plain ASCII, no em-dashes, short lines.
 | [acp](acp.md) | partial | Codex and Copilot checked by hand |
 | [mcp-tools](mcp-tools.md) | partial | the questionnaire |
 | [app-mcp](app-mcp.md) | partial | the guidance wizard (step 5) |
+| [learn-by-watching](learn-by-watching.md) | not built | steps: every editing tool says what it changed and where |
 
 ### Planned, nothing built
 

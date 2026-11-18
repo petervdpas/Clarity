@@ -199,3 +199,39 @@ void a_folder_lists_and_writes_the_files_of_its_extensions(void) {
     clarity_db_close(db);
     remove_tree(root);
 }
+
+// A blob or file field that says its extensions takes only those files; one
+// of another type is refused in Clarity's own words (conformance/files.json, fieldFiles).
+void a_field_takes_only_the_files_of_its_extensions(void) {
+    cJSON* cases = conformance("files.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "fieldFiles")) {
+        bool taken = clarity_check_file_type("video", patterns_of(c), cJSON_IsTrue(cJSON_GetObjectItem(c, "hidden")), cJSON_GetObjectItem(c, "name")->valuestring);
+        CHECK(taken == cJSON_IsTrue(cJSON_GetObjectItem(c, "taken")));
+    }
+    CHECK(!clarity_check_file_type("video", "*.mp4", false, "notes.txt"));
+    CHECK(clarity_error()->kind == CLARITY_REFUSED);
+    CHECK_TEXT(clarity_error()->text->key, "fileTypeRefused");
+    CHECK_TEXT(clarity_text_show(clarity_error()->text), "video takes *.mp4 files, not notes.txt");
+}
+
+// A file a person picked in a web app goes into a file store on the server,
+// in a folder named by its contents as a blob's is, and its path there is
+// what a file field keeps (docs/ledger/files-pictures.md, step 5).
+void an_upload_goes_into_a_store_and_gives_its_path(void) {
+    const char* root = planted();
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_add_store(db, "uploads", root));
+    const char* path = NULL;
+    REQUIRE_OK(clarity_store_upload(db, "uploads", "C:\\me\\cat.png", (ClarityBytes){(const uint8_t*)"meow", 4}, &path));
+    CHECK_TEXT(path, clarity_format("%s/%s", root, clarity_store_path((ClarityBytes){(const uint8_t*)"meow", 4}, "cat.png")));
+    ClarityBytes back = {0};
+    CHECK_OK(clarity_read_file(path, &back));
+    CHECK(back.size == 4 && memcmp(back.data, "meow", 4) == 0);
+    CHECK(!clarity_store_upload(db, "nowhere", "a.txt", (ClarityBytes){(const uint8_t*)"x", 1}, &path));
+    char* stores = cJSON_PrintUnformatted(clarity_stores(db));
+    CHECK_TEXT(stores, clarity_format("[{\"name\":\"uploads\",\"folder\":\"%s\"}]", root));
+    clarity_db_close(db);
+    remove_tree(root);
+}

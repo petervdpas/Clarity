@@ -96,7 +96,7 @@ pub const KEYWORDS: &[&str] = &[
 
 /// Clarity's own types.
 pub const TYPES: &[&str] =
-    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "color", "id", "ref", "image", "picture"];
+    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "blob", "bytes", "list", "email", "url", "color", "id", "ref", "image", "picture"];
 
 pub const LITERALS: &[&str] = &["true", "false", "none"];
 

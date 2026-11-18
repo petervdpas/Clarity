@@ -49,6 +49,7 @@
   <Dropdown name="languageBox" at="4,12" span="3" bind="settings.language" />
   <Dropdown name="favouriteFriendBox" at="7,12" span="4" bind="settings.favouriteFriend" />
   <File name="bookletBox" at="1,13" span="8" bind="album.booklet" onchange="bookletChanged" />
+  <File name="scanBox" at="9,13" span="4" bind="album.scan" extensions=".pdf" startFolder="scans" store="scans" newFile="true" />
   <Tags name="tagsBox" at="1,14" span="6" bind="album.tags" onchange="tagsChanged" />
   <Tags name="formatsBox" at="7,14" span="6" bind="album.formats" />
   <Tags name="playsBox" at="1,15" span="6" bind="album.plays" />

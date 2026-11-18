@@ -685,6 +685,12 @@ impl Builder {
                 }
                 n
             }
+            // A file on the disk is typed as a folder is; a record's file is chosen by its buttons.
+            "file" if any.is::<path::PathPart>() => {
+                let mut n = AccessNode::new(id, Role::TextBox, name_of(caption), b).with_actions(&input);
+                n.value = any.downcast_ref::<path::PathPart>().map(|f| f.value());
+                n
+            }
             "file" => {
                 let mut n = AccessNode::new(id, Role::Button, name_of(caption), b).with_actions(&interactive);
                 n.value = any.downcast_ref::<file::FilePart>().map(|f| f.shown());
@@ -692,7 +698,7 @@ impl Builder {
             }
             "folder" => {
                 let mut n = AccessNode::new(id, Role::TextBox, name_of(caption), b).with_actions(&input);
-                n.value = any.downcast_ref::<folder::FolderPart>().map(|f| f.value());
+                n.value = any.downcast_ref::<path::PathPart>().map(|f| f.value());
                 n
             }
             "tags" => {

@@ -1192,8 +1192,12 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
             inputs: Inputs::Crate("clarity-cli".into()),
         });
     }
-    // A Go, C or C++ desktop example builds with Clarity.UI's library as the IDE gives it to apps.
-    let library = library_in_use().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+    // A Go, C or C++ desktop example builds with Clarity.UI's library as the IDE gives it to apps;
+    // while a bumped library's release is not out, with the one DevTools built from this repository.
+    let library = library_in_use()
+        .or_else(|| crate::clarity_ui::repository_library(repo, std::env::consts::OS))
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
     for example in EXAMPLES.iter().filter(|e| under(&format!("examples/{e}"))) {
         let exact = format!("the_{example}_example_builds_without_warnings");
         checks.push(Check {

@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use clarity_runtime::program::{Program, Unconnected};
 use clarity_runtime::ui::Text;
-use clarity_ui::files::{ChosenFile, FileFilter, FilePicker};
+use clarity_ui::files::{PickerOptions, StorageFile, StorageFolder, StorageProvider};
 use clarity_ui::markup;
 use clarity_ui::parts::timer::TimerPart;
 use clarity_ui::window::{ApartWindow, Running, WindowStack};
@@ -132,18 +132,21 @@ fn without_a_window_to_show_the_application_ends() {
 
 struct Picker;
 
-impl FilePicker for Picker {
+impl StorageProvider for Picker {
     fn picks_folders(&self) -> bool {
         true
     }
-    fn open_file(&self, _title: &str, _filter: Option<&FileFilter>) -> Option<ChosenFile> {
+    fn open_file(&self, _options: &PickerOptions) -> Option<StorageFile> {
         None
     }
-    fn save_file(&self, _title: &str, _name: &str, _bytes: &[u8]) -> Option<String> {
+    fn save_file(&self, _options: &PickerOptions) -> Option<StorageFile> {
         None
     }
-    fn choose_folder(&self, _title: &str) -> Option<String> {
-        Some("/chosen".into())
+    fn write(&self, _file: &StorageFile, _bytes: &[u8]) -> Option<String> {
+        None
+    }
+    fn open_folder(&self, _options: &PickerOptions) -> Option<StorageFolder> {
+        Some(StorageFolder::at("/chosen"))
     }
     fn show(&self, _name: &str, _bytes: &[u8]) {}
 }
@@ -154,8 +157,8 @@ fn the_hosts_file_dialogs_reach_every_windows_parts() {
     let (mut screen, _) = started();
     click(&mut screen, "openConnection");
     assert!(stack(&screen).current().is_some());
-    assert_eq!(Some("/chosen".to_string()), clarity_ui::files::system().choose_folder("Export"));
-    clarity_ui::files::set_system(Arc::new(clarity_ui::files::NoFilePicker));
+    assert_eq!(Some("/chosen".to_string()), clarity_ui::files::system().open_folder(&PickerOptions::titled("Export")).and_then(|f| f.path));
+    clarity_ui::files::set_system(Arc::new(clarity_ui::files::NoStorageProvider));
 }
 
 // -- A timer lives with its window ----------------------------------------------------

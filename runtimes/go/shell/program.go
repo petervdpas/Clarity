@@ -139,7 +139,7 @@ var forwarded = map[string]bool{
 	"dispatch_event": true, "edit_event": true, "undo_edit": true, "reorder_event": true, "item_event": true,
 	"range_event": true, "canvas_event": true, "step_event": true, "view_event": true, "answer_event": true,
 	"ref_options": true, "field_values": true, "find_options": true, "read_settings": true, "keep_settings": true,
-	"set_language": true, "signin": true, "signout": true,
+	"set_language": true, "signin": true, "signout": true, "store_upload": true, "stores": true,
 }
 
 // value is the answer {"value": v}.

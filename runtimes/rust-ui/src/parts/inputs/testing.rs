@@ -33,6 +33,10 @@ pub struct InputsHost {
     pub files: RefCell<BTreeMap<String, Vec<u8>>>,
     /// The messages said, as `level: text`.
     pub said: RefCell<Vec<String>>,
+    /// The files kept in a store, as (store, name, bytes); each is kept at `/srv/<store>/<name>`.
+    pub uploaded: RefCell<Vec<(String, String, Vec<u8>)>>,
+    /// The program's file stores and their folders.
+    pub stores: RefCell<Vec<(String, String)>>,
 }
 
 impl InputsHost {
@@ -143,6 +147,15 @@ impl PartHost for InputsHost {
 
     fn say(&self, level: Level, text: Text) {
         self.said.borrow_mut().push(format!("{level:?}: {}", text.show()));
+    }
+
+    fn upload(&self, store: &str, name: &str, bytes: &[u8]) -> Result<String, Text> {
+        self.uploaded.borrow_mut().push((store.to_string(), name.to_string(), bytes.to_vec()));
+        Ok(format!("/srv/{store}/{name}"))
+    }
+
+    fn stores(&self) -> Vec<(String, String)> {
+        self.stores.borrow().clone()
     }
 
     fn bound_of(&self, part: &str) -> Option<String> {

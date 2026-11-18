@@ -440,7 +440,7 @@ pub enum TypeInfo {
     Duration,
     /// A picture of an image field.
     Image,
-    /// The file of a `file` field: its name and extension are read.
+    /// The file of a `blob` field: its name and extension are read.
     RecordFile,
     /// A file of a file store, and a list of them.
     File,
@@ -762,7 +762,7 @@ impl<'a> Env<'a> {
 
     fn field_type(&self, ty: &FieldType) -> Ty<'a> {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
             FieldType::Integer | FieldType::Id => Ty::Integer,
             FieldType::Decimal { .. } => Ty::Decimal,
             FieldType::Money => Ty::Money,
@@ -771,7 +771,7 @@ impl<'a> Env<'a> {
             FieldType::DateTime => Ty::DateTime,
             FieldType::Duration => Ty::Duration,
             FieldType::Image => Ty::Image,
-            FieldType::File => Ty::RecordFile,
+            FieldType::Blob => Ty::RecordFile,
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
             FieldType::Ref { entity } | FieldType::Record { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
@@ -797,7 +797,7 @@ enum Ty<'a> {
     DateTime,
     Duration,
     Image,
-    /// The file of a `file` field.
+    /// The file of a `blob` field.
     RecordFile,
     File,
     Files,
@@ -848,7 +848,7 @@ impl Ty<'_> {
             Ty::DateTime => "datetime".into(),
             Ty::Duration => "duration".into(),
             Ty::Image => "image".into(),
-            Ty::RecordFile => "file".into(),
+            Ty::RecordFile => "blob".into(),
             Ty::File => "file".into(),
             Ty::Bytes => "bytes".into(),
             Ty::Files => "list<file>".into(),
@@ -3644,6 +3644,17 @@ impl<'a> BodyChecker<'_, 'a> {
         };
         if let Err(message) = writable {
             self.error(message, target.span);
+        }
+        // A path written in the code for a file field of some extensions: one of another type is refused now.
+        if let (ExprKind::Str { value: path }, ExprKind::Member { object, member }) = (&value.kind, &target.kind)
+            && !path.is_empty()
+            && let Some(Place::Value { ty: Ty::Record(entity), .. }) = self.place(object)
+            && let Some(field) = entity.field(&member.name).filter(|f| f.ty == FieldType::File)
+        {
+            let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+            if !crate::files::matches(&field.modifiers.extensions, field.modifiers.hidden, name) {
+                self.error(format!("'{}' takes {} files, not '{path}'", member.name, field.modifiers.extensions.join(" ")), value.span);
+            }
         }
         // `grid.selected = none` selects no row, a list of records' too.
         if matches!(value.kind, ExprKind::Empty)

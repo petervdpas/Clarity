@@ -42,6 +42,22 @@ public sealed partial class Db
         return patterns.Any(p => p.StartsWith("*.", StringComparison.Ordinal) && extension.Length > 0 && extension == p[2..].ToLowerInvariant());
     }
 
+    /// <summary>
+    /// Whether a blob or file field that says its extensions takes the file <paramref name="name"/>
+    /// (a name or a path): its last part matched as a folder matches, a hidden one only with
+    /// <paramref name="hidden"/>; no file (an empty name) is always taken. One of another type is
+    /// refused (RefusedException) in Clarity's own words, fileTypeRefused (conformance/files.json, fieldFiles).
+    /// </summary>
+    public static void CheckFileType(string field, IReadOnlyList<string> patterns, bool hidden, string? name)
+    {
+        var whole = name ?? "";
+        var last = whole[(whole.LastIndexOfAny(['/', '\\']) + 1)..];
+        if (last.Length == 0 || Takes(patterns, hidden, last))
+            return;
+        var holds = last.StartsWith('.') && !hidden ? "no hidden" : patterns.Count == 0 ? "any" : string.Join(" ", patterns);
+        throw new RefusedException(ClarityException.Own("fileTypeRefused", "{field} takes {extensions} files, not {name}", ("field", field), ("extensions", holds), ("name", last)));
+    }
+
     /// <summary>The files of a folder ("folder:" and its path) its extensions take, in its folders too, sorted by path; hidden ones only with <paramref name="hidden"/>.</summary>
     public List<FileEntry> FilesIn(string folder, IReadOnlyList<string> patterns, bool hidden)
     {

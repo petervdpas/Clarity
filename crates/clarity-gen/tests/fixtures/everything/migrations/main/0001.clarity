@@ -18,7 +18,7 @@ migration "Step 1"
         favourite: bool
         rating: decimal(3, 1)
         tint: color, default "#3b82f6"
-        booklet: file
+        booklet: blob
         tags: list<text>, search
         formats: list<Format>
         plays: list<date>

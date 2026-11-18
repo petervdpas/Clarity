@@ -761,3 +761,13 @@ fn the_designer_draws_a_popover_as_a_window_of_its_own() {
     let rows = clarity_spec::layout::ROW_HEIGHT;
     assert_eq!(alone["height"], json!(2 * rows + 8), "as high as it opens");
 }
+
+/// The preview tells the page whether the project is a desktop one, so its
+/// parts take the desktop shape (docs/ledger/files-pictures.md, step 6).
+#[test]
+fn the_preview_s_files_say_whether_the_project_is_a_desktop_one() {
+    let files: serde_json::Value = serde_json::from_str(&preview::with_desktop("{\"windows\":{}}\n", true)).unwrap();
+    assert_eq!(files["desktop"], true);
+    let files: serde_json::Value = serde_json::from_str(&preview::with_desktop("{\"windows\":{}}\n", false)).unwrap();
+    assert_eq!(files["desktop"], false);
+}

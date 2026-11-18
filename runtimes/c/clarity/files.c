@@ -200,6 +200,52 @@ bool clarity_folder_takes(const char* patterns, bool hidden, const char* name) {
     return any;
 }
 
+bool clarity_store_upload(ClarityDb* db, const char* store, const char* name, ClarityBytes bytes, const char** out) {
+    const char* inside = clarity_store_path(bytes, name);
+    const char* folder = NULL;
+    if (!clarity_write_bytes(db, store, inside, bytes) || !clarity_store_folder(db, store, &folder)) return false;
+    *out = clarity_format("%s/%s", folder, inside);
+    return true;
+}
+
+static int by_name(const void* a, const void* b) { return strcmp(*(const char* const*)a, *(const char* const*)b); }
+
+cJSON* clarity_stores(ClarityDb* db) {
+    const char** names = calloc(db->store_count ? db->store_count : 1, sizeof *names);
+    size_t count = 0;
+    for (size_t i = 0; i < db->store_count; ++i) {
+        bool seen = false;
+        for (size_t k = 0; k < count; ++k) seen = seen || strcmp(names[k], db->stores[i].name) == 0;
+        if (!seen) names[count++] = db->stores[i].name;
+    }
+    if (count) qsort(names, count, sizeof *names, by_name);
+    cJSON* out = cJSON_CreateArray();
+    for (size_t i = 0; i < count; ++i) {
+        const char* folder = NULL;
+        if (!clarity_store_folder(db, names[i], &folder)) continue;
+        cJSON* store = cJSON_CreateObject();
+        cJSON_AddStringToObject(store, "name", names[i]);
+        cJSON_AddStringToObject(store, "folder", folder);
+        cJSON_AddItemToArray(out, store);
+    }
+    free(names);
+    return out;
+}
+
+bool clarity_check_file_type(const char* field, const char* patterns, bool hidden, const char* name) {
+    const char* last = name ? name : "";
+    for (const char* at = last; *at; ++at)
+        if (*at == '/' || *at == '\\') last = at + 1;
+    if (!*last || clarity_folder_takes(patterns, hidden, last)) return true;
+    const char* holds = last[0] == '.' && !hidden ? "no hidden" : (patterns && *patterns ? patterns : "any");
+    ClarityText* text = clarity_text("{field} takes {extensions} files, not {name}");
+    text->key = clarity_copy("fileTypeRefused");
+    text = clarity_text_with(text, "field", clarity_slot_text(field));
+    text = clarity_text_with(text, "extensions", clarity_slot_text(holds));
+    text = clarity_text_with(text, "name", clarity_slot_text(last));
+    return clarity_refuse(text);
+}
+
 bool clarity_files_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, ClarityFileList* out) {
     const char* root = NULL;
     Found found = {0};

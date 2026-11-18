@@ -115,7 +115,7 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
         FieldType::Duration => Value::from(bounded(field, 185 + (i as i64 * 37) % 240)),
         // No picture in sample data: the image part shows its placeholder.
         // A record held inside: the preview shows none.
-        FieldType::Image | FieldType::File | FieldType::Record { .. } => Value::Null,
+        FieldType::Image | FieldType::Blob | FieldType::Record { .. } => Value::Null,
         FieldType::Date => {
             Value::String(format!("2026-{:02}-{:02}", (i % 12) + 1, (i * 3 % 28) + 1))
         }
@@ -139,7 +139,7 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
         FieldType::Language => Value::String(project.locale.language.clone().unwrap_or_default()),
         FieldType::Theme => Value::String(project.themes.first().cloned().unwrap_or_default()),
         // The palette's middle row: clear colors.
-        FieldType::Secret | FieldType::Folder => Value::String(String::new()),
+        FieldType::Secret | FieldType::Folder | FieldType::File => Value::String(String::new()),
         FieldType::Color => Value::String(crate::colors::PALETTE[3][i % 10].to_string()),
         FieldType::Enum { name } => match project.enum_decl(&name.name) {
             Some(decl) if !decl.variants.is_empty() => {

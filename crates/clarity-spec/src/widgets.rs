@@ -419,6 +419,16 @@ pub enum WidgetProperty {
     FoldButtons,
     /// `reading width`: a markdown part's or memo's Markdown keeps a column of a reading width.
     ReadingWidth,
+    /// `extensions "*.pdf"`: the files a file part's dialog offers.
+    Extensions,
+    /// `hidden`: a folder or file part's hidden files and folders, whose name starts with a dot, count too.
+    Hidden,
+    /// `start folder "videos"`: where a folder or file part's dialog opens while nothing is chosen.
+    StartFolder,
+    /// `store uploads`: the file store a web app keeps a picked file in.
+    Store,
+    /// `new file`: a file part's dialog may name a file that is not there yet.
+    NewFile,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
     /// `reorder by position`: the person puts the rows in their own order (manual/parts.data.md).
@@ -614,6 +624,10 @@ pub const CODE_LANGUAGES: [&str; 19] = [
 ];
 
 const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+/// A file part: chosen in the system's file dialog, with its options.
+const FILE: &[WidgetProperty] = &[WidgetProperty::Extensions, WidgetProperty::Hidden, WidgetProperty::StartFolder, WidgetProperty::Store, WidgetProperty::NewFile, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+/// A folder part: typed, or chosen in the system's folder dialog, which opens in its start folder.
+const FOLDER: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Extensions, WidgetProperty::Hidden, WidgetProperty::StartFolder, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// A part that shows text and takes no input.
 const fn text_part(
@@ -778,8 +792,8 @@ const ENTRIES: &[Entry] = &[
     ),
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], TYPED),
     // A file of a record (U1c): its name, with buttons to choose, open, save a copy of and remove it.
-    input(WidgetKind::File, "file", "File", (6, 1), &["file"], &[Event::Change], PICKED),
-    input(WidgetKind::Folder, "folder", "Folder", (6, 1), &["folder"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::File, "file", "File", (6, 1), &["blob", "file"], &[Event::Change], FILE),
+    input(WidgetKind::Folder, "folder", "Folder", (6, 1), &["folder"], INPUT_EVENTS, FOLDER),
     // A list field of values (U1c): its items as chips, a typed item or an enum's value added, one removed.
     input(WidgetKind::Tags, "tags", "Tags", (6, 1), &["values"], &[Event::Change], TYPED),
     // A color (U1c): typed as #rrggbb, or picked from the palette every renderer shares.
@@ -1625,6 +1639,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::DateTime => "dateTime",
         FieldType::Duration => "duration",
         FieldType::Image => "image",
+        FieldType::Blob => "blob",
         FieldType::File => "file",
         FieldType::Email => "email",
         FieldType::Url => "url",
@@ -1718,6 +1733,11 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         striped: false,
         fold_buttons: false,
         reading_width: false,
+        extensions: None,
+        hidden: false,
+        start_folder: None,
+        store: None,
+        new_file: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -2166,6 +2186,21 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.reading_width {
         parts.push("reading width".to_string());
     }
+    if let Some(extensions) = &props.extensions {
+        parts.push(format!("extensions {}", crate::lexer::text_token(extensions)));
+    }
+    if props.hidden {
+        parts.push("hidden".to_string());
+    }
+    if let Some(start) = &props.start_folder {
+        parts.push(format!("start folder {}", crate::lexer::text_token(start)));
+    }
+    if let Some(store) = &props.store {
+        parts.push(format!("store {store}"));
+    }
+    if props.new_file {
+        parts.push("new file".to_string());
+    }
     if props.frame {
         parts.push("frame".to_string());
     }
@@ -2310,6 +2345,12 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     if let Some(part) = &props.name {
         identifier("part name", part)?;
     }
+    // A window file's `extensions` reads as a part's line does.
+    if let Some(written) = &props.extensions {
+        if let Some(problem) = crate::files::patterns_problem(&crate::files::patterns_of(written)) {
+            return Err(problem);
+        }
+    }
     for (i, h) in props.handlers.iter().enumerate() {
         if !has_event(props.kind, h.event) {
             return Err(format!("a {name} has no {} event", h.event.keyword()));
@@ -2365,6 +2406,11 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Striped, props.striped, "striped"),
         (WidgetProperty::FoldButtons, props.fold_buttons, "fold buttons"),
         (WidgetProperty::ReadingWidth, props.reading_width, "reading width"),
+        (WidgetProperty::Extensions, props.extensions.is_some(), "extensions"),
+        (WidgetProperty::Hidden, props.hidden, "hidden"),
+        (WidgetProperty::StartFolder, props.start_folder.is_some(), "start folder"),
+        (WidgetProperty::Store, props.store.is_some(), "store"),
+        (WidgetProperty::NewFile, props.new_file, "new file"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
         (WidgetProperty::Mode, props.mode.is_some(), "mode"),

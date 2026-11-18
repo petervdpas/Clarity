@@ -951,6 +951,21 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "{function}(ui, {}, {code});", string(&part));
                     return;
                 }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = crate::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        crate::FileName::Path => bare(self.value(value, &mut pre)),
+                        crate::FileName::StoreFile => {
+                            let file = bare(self.value(value, &mut pre));
+                            arrow(&file, "name")
+                        }
+                        crate::FileName::RecordFile => {
+                            let file = self.place(value, &mut pre);
+                            format!("({file} ? {file}->name : \"\")")
+                        }
+                    };
+                    let _ = writeln!(pre, "if (!clarity_check_file_type({}, {}, {}, {file})) return false;", string(&check.field), string(&check.patterns.join(" ")), check.hidden);
+                }
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target, &mut pre);
@@ -2535,7 +2550,7 @@ impl<'a> Emitter<'a> {
     /// A value compared with a field of type `ty`, as the runtime takes it.
     fn sql_value(&mut self, ty: &FieldType, value: &Expr, pre: &mut String) -> String {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({})", bare(self.value(value, pre))),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({})", bare(self.value(value, pre))),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity_integer_value({})", bare(self.value(value, pre))),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity_decimal_value({})", bare(self.decimal(value, pre))),
             FieldType::Bool => format!("clarity_bool_value({})", bare(self.value(value, pre))),
@@ -2551,7 +2566,7 @@ impl<'a> Emitter<'a> {
                 }
                 _ => format!("clarity_reference_value({})", bare(self.value(value, pre))),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
+            FieldType::Image | FieldType::Blob | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list field can only be compared with none in a query".into());
                 String::new()
             }

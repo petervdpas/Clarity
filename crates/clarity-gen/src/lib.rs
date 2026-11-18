@@ -318,7 +318,7 @@ pub(crate) struct Copied<'e> {
     pub from: Option<String>,
     /// The target field's file store.
     pub to: Option<String>,
-    /// A `file` field's file, rather than a picture.
+    /// A `blob` field's file, rather than a picture.
     pub file: bool,
 }
 
@@ -381,6 +381,51 @@ pub(crate) fn folder_rules(
 /// folder setting, so the settings the call began with come first.
 pub(crate) fn holds_settings(project: &Project) -> bool {
     !project.folder_settings().is_empty()
+}
+
+/// What a blob or file field that names its extensions takes, for the check
+/// each stack runs before code sets it (docs/ledger/files-pictures.md, step 4):
+/// its name, its patterns and whether it takes hidden files.
+pub(crate) struct FileCheck {
+    pub field: String,
+    pub patterns: Vec<String>,
+    pub hidden: bool,
+}
+
+/// How the name of the file a value gives is read: a path's text, a store
+/// file's name, or another record's file's name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileName {
+    Path,
+    StoreFile,
+    RecordFile,
+}
+
+/// The check before `target = value` sets a blob or file field that names
+/// its extensions, and how the value's file name is read; none for any
+/// other assignment, for one with no extensions, and for `none`.
+pub(crate) fn file_check(
+    project: &Project,
+    type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
+    target: &clarity_spec::code::Expr,
+    value: &clarity_spec::code::Expr,
+) -> Option<(FileCheck, FileName)> {
+    use clarity_spec::code::ExprKind;
+    use clarity_spec::code::check::TypeInfo;
+    use clarity_spec::model::FieldType;
+    let ExprKind::Member { object, member } = &target.kind else { return None };
+    let TypeInfo::Record(owner) = type_of(object) else { return None };
+    let field = project.entity(&owner)?.field(&member.name)?;
+    if field.modifiers.extensions.is_empty() || matches!(value.kind, ExprKind::Empty) {
+        return None;
+    }
+    let name = match (&field.ty, type_of(value)) {
+        (FieldType::File, _) => FileName::Path,
+        (FieldType::Blob, TypeInfo::File) => FileName::StoreFile,
+        (FieldType::Blob, TypeInfo::RecordFile) => FileName::RecordFile,
+        _ => return None,
+    };
+    Some((FileCheck { field: member.name.clone(), patterns: field.modifiers.extensions.clone(), hidden: field.modifiers.hidden }, name))
 }
 
 pub(crate) fn copied<'e>(

@@ -19,8 +19,8 @@ Progress: 90%
 - `conformance/list-fields.json`: run by all five, rust-ui, `runtimes/web`
 - `conformance/colors.json`, `code-languages.json`: run by rust-ui and the spec; `display.json`: rust-ui and `runtimes/web`
 - spec `status_item.rs`; rust-ui `tests/parts/parts_status_item.rs` (caption, gauge, check mark, warning and tooltip, click)
-- spec `small_parts.rs`, `button_kinds.rs`, `ranges.rs`, `spin_range.rs`, `dropdown_options.rs`, `list_fields.rs`, `value_lists.rs`, `pickers.rs`, `form_labels.rs`, `file_fields.rs`, `folders.rs`, `colors.rs`, `clipboard.rs`, `display.rs`, `icons.rs`
-- gen `small_parts.rs`, `button_kinds.rs`, `ranges.rs`, `spin_range.rs` (all five), `dropdown_options.rs`, `list_fields.rs`, `colors.rs`, `file_fields.rs`, `folders.rs`, `clipboard.rs`, `icons.rs`, `text_align.rs`
+- spec `small_parts.rs`, `button_kinds.rs`, `ranges.rs`, `spin_range.rs`, `dropdown_options.rs`, `list_fields.rs`, `value_lists.rs`, `pickers.rs`, `form_labels.rs`, `blob_fields.rs`, `folders.rs`, `colors.rs`, `clipboard.rs`, `display.rs`, `icons.rs`
+- gen `small_parts.rs`, `button_kinds.rs`, `ranges.rs`, `spin_range.rs` (all five), `dropdown_options.rs`, `list_fields.rs`, `colors.rs`, `blob_fields.rs`, `folders.rs`, `clipboard.rs`, `icons.rs`, `text_align.rs`
 - rust-ui `tests/inputs/*` (22 files), `tests/parts/text_box.rs`, `text_editor.rs`, `code_colors.rs`, `check_box.rs`, `parts_button.rs`, `parts_label.rs`, `core_help.rs`, `core_radio_label.rs`, `icon.rs`, `parts_display*.rs`, `parts_small_*.rs`
 
 ## Open

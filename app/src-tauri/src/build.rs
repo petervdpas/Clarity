@@ -490,8 +490,16 @@ fn with_carried(app: &AppHandle, toolchain: clarity_gen::Toolchain, backend: cla
 
 /// Whether `url` answers at all within a few seconds.
 fn answers(url: &str) -> bool {
-    let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(5)).build() else { return false };
-    client.get(url).send().is_ok()
+    off_runtime(|| {
+        let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(5)).build() else { return false };
+        client.get(url).send().is_ok()
+    })
+}
+
+/// Runs `work` on a thread of its own: the blocking client panics on the
+/// async runtime's threads, where DevTools' tab commands run.
+fn off_runtime<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    std::thread::scope(|s| s.spawn(work).join()).unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
 /// The folder of Clarity.UI's library for a build: the one CLARITY_UI names,
@@ -529,15 +537,17 @@ const DOWNLOAD_LIMIT: u64 = 512 * 1024 * 1024;
 
 /// The bytes at `url`, over HTTPS: the network part of fetching Clarity.UI's library.
 pub(crate) fn download(url: &str) -> Result<Vec<u8>, String> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
-        .build()
-        .map_err(|err| format!("cannot download {url}: {err}"))?;
-    let response = client.get(url).send().map_err(|err| format!("cannot download {url}: {err}"))?;
-    if !response.status().is_success() {
-        return Err(format!("cannot download {url}: {}", response.status()));
-    }
-    clarity_gen::clarity_ui::read_limited(response, DOWNLOAD_LIMIT)
+    off_runtime(|| {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(600))
+            .build()
+            .map_err(|err| format!("cannot download {url}: {err}"))?;
+        let response = client.get(url).send().map_err(|err| format!("cannot download {url}: {err}"))?;
+        if !response.status().is_success() {
+            return Err(format!("cannot download {url}: {}", response.status()));
+        }
+        clarity_gen::clarity_ui::read_limited(response, DOWNLOAD_LIMIT)
+    })
 }
 
 /// Builds the generated program with `toolchain` (unless `building` is
@@ -790,6 +800,16 @@ pub fn stop(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// DevTools' tab commands run on the async runtime's threads: a download
+    /// there fails as a download, never with a panic of the blocking client.
+    #[test]
+    fn a_download_on_the_async_runtime_does_not_panic() {
+        tauri::async_runtime::block_on(async {
+            assert!(download("http://127.0.0.1:9/library.tar.gz").is_err());
+            assert!(!answers("http://127.0.0.1:9/"));
+        });
+    }
 
     /// A copy of the example `name`, on the stack its project file names:
     /// an example is generated for its own stack only.

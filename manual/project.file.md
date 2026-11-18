@@ -227,7 +227,7 @@ datasource payments rest "https://api.example.com/v2"
 
 ### `filestore`
 
-A file store: a name and the folder that keeps the pictures and files of the `image` and `file` fields with `store name`, and the files code lists, reads and writes. The folder is relative to the project's folder, `"env:NAME"` (from that environment variable) or `"setting:name"` (a folder setting each person chooses). See [Pictures and files](data.pictures-files.md).
+A file store: a name and the folder that keeps the pictures and files of the `image` and `blob` fields with `store name`, and the files code lists, reads and writes. The folder is relative to the project's folder, `"env:NAME"` (from that environment variable) or `"setting:name"` (a folder setting each person chooses). See [Pictures and files](data.pictures-files.md).
 
 ```clarity
 filestore photos "data/photos"

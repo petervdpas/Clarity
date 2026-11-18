@@ -117,3 +117,42 @@ TEST(a_folder_lists_and_writes_the_files_of_its_extensions) {
     CHECK_THROWS(StorageError, db.files_in(folder_store, {}, false));
     fs::remove_all(root);
 }
+
+// A blob or file field that says its extensions takes only those files; one
+// of another type is refused in Clarity's own words (conformance/files.json, fieldFiles).
+TEST(a_field_takes_only_the_files_of_its_extensions) {
+    json cases = conformance("files.json");
+    for (const auto& c : cases["fieldFiles"]) {
+        bool taken = true;
+        try {
+            check_file_type("video", c["patterns"].get<std::vector<std::string>>(), c["hidden"].get<bool>(), c["name"].get<std::string>());
+        } catch (const RefusedError&) {
+            taken = false;
+        }
+        CHECK_EQ(taken, c["taken"].get<bool>());
+    }
+    try {
+        check_file_type("video", {"*.mp4"}, false, "notes.txt");
+        CHECK(false);
+    } catch (const RefusedError& refused) {
+        CHECK_EQ(refused.text.key().value_or(""), std::string("fileTypeRefused"));
+        CHECK_EQ(refused.text.show(), std::string("video takes *.mp4 files, not notes.txt"));
+    }
+}
+
+// A file a person picked in a web app goes into a file store on the server,
+// in a folder named by its contents as a blob's is, and its path there is
+// what a file field keeps (docs/ledger/files-pictures.md, step 5).
+TEST(an_upload_goes_into_a_store_and_gives_its_path) {
+    fs::path root = planted();
+    Db db = Db::memory();
+    db.add_store("uploads", root.string());
+    Bytes meow{'m', 'e', 'o', 'w'};
+    std::string path = db.store_upload("uploads", "C:\\me\\cat.png", meow);
+    CHECK_EQ(path, (root / fs::path(store_path(meow, "cat.png"))).string());
+    std::ifstream in(path, std::ios::binary);
+    CHECK_EQ(std::string((std::istreambuf_iterator<char>(in)), {}), std::string("meow"));
+    CHECK_THROWS(StorageError, db.store_upload("nowhere", "a.txt", meow));
+    CHECK_EQ(db.stores(), json::array({{{"name", "uploads"}, {"folder", root.string()}}}));
+    fs::remove_all(root);
+}

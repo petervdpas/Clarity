@@ -907,6 +907,16 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("ui.{method}({}, {code})\n", string(&part)));
                     return;
                 }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = crate::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        crate::FileName::Path => bare(self.value(value, &mut pre)),
+                        crate::FileName::StoreFile => format!("{}.Name", bare(self.value(value, &mut pre))),
+                        crate::FileName::RecordFile => format!("func() string {{ if f := {}; f != nil {{ return f.Name }}; return \"\" }}()", self.place(value, &mut pre)),
+                    };
+                    let patterns = check.patterns.iter().map(|p| string(p)).collect::<Vec<_>>().join(", ");
+                    pre.push_str(&format!("if err := clarity.CheckFileType({}, []string{{{patterns}}}, {}, {file}); err != nil {{\n\t{}\n}}\n", string(&check.field), check.hidden, self.fail("err")));
+                }
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target, &mut pre);

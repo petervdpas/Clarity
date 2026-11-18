@@ -198,6 +198,8 @@ impl ModelFacts {
                 color: kind == "color",
                 folder: kind == "folder",
                 help: modifiers["help"].as_str().filter(|h| !h.is_empty()).map(str::to_string),
+                extensions: modifiers["extensions"].as_array().map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect()).unwrap_or_default(),
+                hidden: modifiers["hidden"].as_bool().unwrap_or(false),
             };
             let store = modifiers["store"].as_str().map(str::to_string);
             let item = if kind == "values" { ty["item"]["name"]["name"].as_str().or_else(|| ty["item"]["kind"].as_str()).map(str::to_string) } else { None };

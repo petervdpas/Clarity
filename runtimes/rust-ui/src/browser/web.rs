@@ -148,6 +148,8 @@ fn with<R: Default>(act: impl FnOnce(&mut Web) -> R) -> R {
 pub fn start(files: &str, choices: &str, width: f64, height: f64, scale: f32, dark: bool) -> Result<(), String> {
     let files: Value = serde_json::from_str(files).map_err(|e| format!("files.json does not read: {e}"))?;
     let kept = kept_of(choices);
+    // The IDE's preview of a desktop project draws its parts as the desktop does.
+    let desktop = files.get("desktop").and_then(Value::as_bool).unwrap_or(false);
     let (files, owned) = super::owned_files_from_json(&files, &resource);
     let interface = gpu::gl::Interface::new_native().ok_or("WebGL2 gives Skia no interface")?;
     let mut context = gpu::direct_contexts::make_gl(interface, None).ok_or("Skia cannot draw with this WebGL2 context")?;
@@ -157,6 +159,7 @@ pub fn start(files: &str, choices: &str, width: f64, height: f64, scale: f32, da
     let teller: Tell = Arc::new(tell);
     let mut host = catch_unwind(AssertUnwindSafe(|| BrowserHost::start_kept(program, files, width, height, scale, dark, teller, kept))).map_err(|p| panic_text(p.as_ref()))?;
     host.set_asker(std::rc::Rc::new(ask_later));
+    host.set_desktop(desktop);
     host.keep_files(owned);
     WEB.with(|web| *web.borrow_mut() = Some(Web { host, context, surface, pixels }));
     Ok(())
@@ -171,9 +174,11 @@ pub fn reload(files: &str, choices: &str) -> Result<(), String> {
     if WEB.with(|web| web.borrow().is_none()) {
         return Err("the program has not started".to_string());
     }
+    let desktop = files.get("desktop").and_then(Value::as_bool).unwrap_or(false);
     let (files, owned) = super::owned_files_from_json(&files, &resource);
     let kept = kept_of(choices);
     with(|web| {
+        web.host.set_desktop(desktop);
         web.host.choose(kept);
         web.host.reload_owned(files, Some(owned));
     });

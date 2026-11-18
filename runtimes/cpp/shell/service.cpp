@@ -421,6 +421,12 @@ json Service::answer(const std::string& command, const json& args) {
             // A picture linked from a file of a store, before its record is saved.
             return value(data_url(db.store_file(text_of(args, "store"), text_of(args, "path"))));
         }
+        if (command == "store_upload") {
+            // A file a person picked in a web app, kept in a file store: its path on the server.
+            return value(db.store_upload(text_of(args, "store"), text_of(args, "name"), from_base64(text_of(args, "data"))));
+        }
+        // The file stores and their folders, which a folder part picks from in a web app.
+        if (command == "stores") return value(db.stores());
         if (command == "set_language") {
             // The language the screen picked, which text code makes is translated to.
             set_language(args.contains("language") && args["language"].is_string() ? std::optional(args["language"].get<std::string>()) : std::nullopt);

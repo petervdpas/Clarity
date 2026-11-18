@@ -89,7 +89,8 @@ impl PictureFieldPart {
             let picker = crate::files::system();
             let title = locale::translate("loadPicture", "Load a picture");
             let filter = FileFilter { name: title.clone(), patterns: PATTERNS.iter().map(|p| p.to_string()).collect() };
-            cx.later(loading.part, move || Loaded(picker.open_file(&title, Some(&filter)).map(|c| c.bytes)));
+            let options = crate::files::PickerOptions { file_type: Some(filter), ..crate::files::PickerOptions::titled(&title) };
+            cx.later(loading.part, move || Loaded(picker.open_file(&options).and_then(|f| f.read())));
         })
         .shows(move || can_load(&load_shows));
         let (removing, remove_shows) = (facts.clone(), facts.clone());

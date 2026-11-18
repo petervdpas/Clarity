@@ -23,6 +23,7 @@ pub mod color;
 pub mod date;
 pub mod file;
 pub mod folder;
+pub mod path;
 pub mod picker;
 pub mod picture_field;
 

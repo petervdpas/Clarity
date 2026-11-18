@@ -387,7 +387,7 @@ impl<'a> Checker<'a> {
                 if let Some(problem) = crate::names::name_problem("field", &field.name.name) {
                     self.error(file_index, problem, field.name.span);
                 }
-                if matches!(field.ty, FieldType::Image | FieldType::File) {
+                if matches!(field.ty, FieldType::Image | FieldType::Blob) {
                     self.error(file_index, format!("record {} has field {}: a record's fields are values or references to stored records, not pictures or files", record.name.name, field.name.name), field.name.span);
                     continue;
                 }
@@ -622,7 +622,7 @@ impl<'a> Checker<'a> {
                     self.error(file, format!("a secret has no default: it is the person's own ('{}')", field.name.name), field.span);
                 }
                 // A reference keeps the record's id, as a `ref` field does.
-                let plain = !matches!(field.ty, FieldType::List { .. } | FieldType::Image | FieldType::File | FieldType::Id);
+                let plain = !matches!(field.ty, FieldType::List { .. } | FieldType::Image | FieldType::Blob | FieldType::Id);
                 if !plain {
                     self.error(file, format!("a setting is a plain value or a reference; '{}' cannot be {}", field.name.name, field.type_text), field.span);
                 }
@@ -1757,6 +1757,12 @@ impl<'a> Checker<'a> {
                         format!("{at}: '{field_name}' is secret; only a password input shows it, as dots"),
                         widget.span,
                     ),
+                    // A blob reads the bytes of a file that is there; only a file field may name one that is not yet.
+                    Some(field) if p.new_file && field.ty == FieldType::Blob => self.error(
+                        file,
+                        format!("{at}: '{field_name}' is a blob, which keeps a file that is there; 'new file' is for a file field"),
+                        widget.span,
+                    ),
                     Some(field) if p.kind == WidgetKind::Dropdown => self.check_dropdown(file, &at, widget, &field.ty),
                     Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
@@ -1815,9 +1821,9 @@ impl<'a> Checker<'a> {
                             format!("{at}: '{field}' is a picture; show it in an image part"),
                             widget.span,
                         ),
-                        Some(f) if f.ty == FieldType::File => self.error(
+                        Some(f) if f.ty == FieldType::Blob => self.error(
                             file,
-                            format!("{at}: '{field}' is a file; show it in a file part"),
+                            format!("{at}: '{field}' is a blob; show it in a file part"),
                             widget.span,
                         ),
                         Some(_) => {}
@@ -1864,7 +1870,7 @@ impl<'a> Checker<'a> {
         for shown in &p.show {
             match target.field(shown) {
                 None => self.error(file, format!("{at}: {} has no field '{shown}' to show", target.name.name), widget.span),
-                Some(f) if matches!(f.ty, FieldType::Image | FieldType::File | FieldType::List { .. }) => {
+                Some(f) if matches!(f.ty, FieldType::Image | FieldType::Blob | FieldType::List { .. }) => {
                     self.error(file, format!("{at}: a search shows text and values, not {shown}"), widget.span)
                 }
                 Some(_) => {}
@@ -1915,7 +1921,7 @@ impl<'a> Checker<'a> {
             None => self.error(file, format!("{at}: a chart groups its rows by a field, as in 'by status'"), widget.span),
             Some(by) => match entity.field(by).map(|f| &f.ty) {
                 None => self.error(file, format!("{at}: {name} has no field '{by}'"), widget.span),
-                Some(FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. }) => {
+                Some(FieldType::Image | FieldType::Blob | FieldType::List { .. } | FieldType::Values { .. }) => {
                     self.error(file, format!("{at}: a chart cannot group by '{by}'"), widget.span)
                 }
                 Some(_) => {}
@@ -2499,14 +2505,14 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if m.store.is_some() && !matches!(field.ty, FieldType::Image | FieldType::File) {
-            self.error(file, format!("only an image or a file field has a store ('{name}')"), field.span);
+        if m.store.is_some() && !matches!(field.ty, FieldType::Image | FieldType::Blob) {
+            self.error(file, format!("only an image or a blob field has a store ('{name}')"), field.span);
         }
-        if !m.extensions.is_empty() && field.ty != FieldType::Folder {
-            self.error(file, format!("only a folder field has extensions ('{name}')"), field.span);
+        if !m.extensions.is_empty() && !matches!(field.ty, FieldType::Folder | FieldType::File | FieldType::Blob) {
+            self.error(file, format!("only a folder, file or blob field has extensions ('{name}')"), field.span);
         }
-        if m.hidden && field.ty != FieldType::Folder {
-            self.error(file, format!("only a folder field has hidden files ('{name}')"), field.span);
+        if m.hidden && !matches!(field.ty, FieldType::Folder | FieldType::File | FieldType::Blob) {
+            self.error(file, format!("only a folder, file or blob field has hidden files ('{name}')"), field.span);
         }
         // A full-text index reads words: text, and lists of text.
         if m.search
@@ -2520,12 +2526,12 @@ impl<'a> Checker<'a> {
         if m.cascade && !matches!(field.ty, FieldType::Ref { .. }) {
             self.error(file, format!("only a reference cascades: deleting the record it refers to deletes this one ('{name}')"), field.span);
         }
-        if field.ty == FieldType::File {
+        if field.ty == FieldType::Blob {
             if m.unique {
-                self.error(file, format!("a file cannot be unique ('{name}')"), field.span);
+                self.error(file, format!("a blob cannot be unique ('{name}')"), field.span);
             }
             if m.default.is_some() {
-                self.error(file, format!("a file has no default; it starts empty ('{name}')"), field.span);
+                self.error(file, format!("a blob has no default; it starts empty ('{name}')"), field.span);
             }
         }
         if matches!(field.ty, FieldType::Values { .. }) {
@@ -2589,7 +2595,7 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if let Some(default) = m.default.as_ref().filter(|_| !matches!(field.ty, FieldType::Image | FieldType::File | FieldType::Values { .. })) {
+        if let Some(default) = m.default.as_ref().filter(|_| !matches!(field.ty, FieldType::Image | FieldType::Blob | FieldType::Values { .. })) {
             self.check_default(file, field, default);
         }
     }

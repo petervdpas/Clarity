@@ -84,23 +84,60 @@ Moving a field's pictures between the database and a file store, or between `ima
 
 ## Files in records
 
-A `file` field holds any file a record keeps, such as a manual, a contract or a spreadsheet, with its name, or none:
+A `blob` field holds any file a record keeps, such as a manual, a contract or a spreadsheet, with its name, or none. Its bytes are a blob: Clarity keeps them as they are and does not read what is in them.
+
+Clarity 1.6 and earlier wrote this type `file`. `file` now means a file on the disk, kept as its path (below), so a project from then writes `blob` where it keeps files in its records.
 
 ```clarity
 entity Product
-    manual: file, label @manualLabel
-    sheet: file, store documents, label @sheetLabel
+    manual: blob, label @manualLabel
+    sheet: blob, store documents, label @sheetLabel
 ```
 
-- Where it is kept: without `store`, the file is in the database, its bytes in the field's column and its name in a column beside it, `manual_name`, which migrations add, rename and remove with the field. With `store`, it is a file of that file store, in a folder named by its contents and under its own name (`3fa9c1.../datasheet.pdf`); the column holds that path, and the name column is there too. A field cannot become a file or stop being one; remove it and add a new field.
+- Where it is kept: without `store`, the file is in the database, its bytes in the field's column and its name in a column beside it, `manual_name`, which migrations add, rename and remove with the field. With `store`, it is a file of that file store, in a folder named by its contents and under its own name (`3fa9c1.../datasheet.pdf`); the column holds that path, and the name column is there too. A field cannot become a blob or stop being one; remove it and add a new field.
 - The file part shows the file's name, or Clarity's word `noFile`, with buttons to choose a file, open it in the program the system uses for its kind, save a copy, and remove it. Choosing and removing are its `change`. A copy goes to the person's Downloads folder under the file's name (with ` (2)` and on when that name is taken there), and the part says so in Clarity's word `fileCopySaved`. Its buttons are Clarity's words `chooseFile`, `openFile`, `saveFileCopy` and `removeFile`.
 - Reading records never carries the file itself, only its name; the file comes on its own when it is opened or copied.
 - In code, `product.manual.name` and `product.manual.extension` read its name and extension; a file is compared with and set to `none`, set to a file of a store, and set to another record's file, `product.manual = other.manual`, which keeps its name.
-- A file cannot be unique ("a file cannot be unique ('manual')") or have a default, and a table or list does not show a file column; a file part does.
+- A blob cannot be unique ("a blob cannot be unique ('manual')") or have a default, and a table or list does not show a file column; a file part does.
 
 ```xml
 <File name="manualBox" at="1,1" span="8" bind="product.manual" />
 ```
+
+## Files on the disk
+
+A `file` field holds the path of a file on the disk, as a `folder` field holds a folder's. The file stays where it is; the record keeps only where it is.
+
+```clarity
+entity Movie
+    video: file, label @videoLabel
+```
+
+- It is kept as text, its column as wide as any text.
+- A file part bound to it shows the path, typed, or chosen with the system's own file dialog through the button inside its right edge. The dialog offers the part's `extensions`, and opens beside the file the part holds, else in its `startFolder`. With `newFile` it is the save dialog, so a file that is not there yet can be named; nothing is written to it.
+- In a web app the person picks a file in the browser: it is sent to the program and kept in the file part's `store` on the server, in a folder named by its contents as a blob's is, so nothing is written over; the field holds its path there. A web app's file part bound to a `file` field names its store.
+- In code it reads and is set as the text of its path: `movie.video = ""`.
+- A setting can be a `file` too, as it can be a `folder`.
+- `newFile` is for a file field only: a blob keeps the bytes of a file that is there ("'poster' is a blob, which keeps a file that is there; 'new file' is for a file field").
+
+```xml
+<File name="videoBox" at="1,1" span="8" bind="movie.video" extensions=".mp4, .webm" startFolder="videos" />
+```
+
+### Only some kinds of file
+
+A `file` or a `blob` field that names its extensions takes only those files, as a folder field holds only its own:
+
+```clarity
+entity Movie
+    video: file, extensions ".mp4, .webm"
+    poster: blob, extensions ".png, .jpg", hidden
+```
+
+- The extensions are a list, each with its dot (`.png, .jpg, .gif`); `"*.*"` takes any file and stands alone. A hidden file, whose name starts with a dot, is taken only with `hidden`.
+- Code that sets the field to a file of another type is refused, in Clarity's own word `fileTypeRefused` ("video takes *.mp4 *.webm files, not notes.txt"): a path written in the code when the project is checked, any other when the program runs, on every stack. A path's name, a store's file and another record's file are all checked; `none` is no file and always taken.
+- A file part bound to it offers only those in its dialog, and refuses one of another type that is typed or chosen, saying the same. A part that names its own `extensions` keeps to those instead.
+- A field without `extensions` takes any file, as before.
 
 ## File stores
 
@@ -115,9 +152,9 @@ filestore scans "setting:scansFolder"
 - A relative folder is in the project's folder, as a SQLite file is.
 - `"env:NAME"` takes it from that environment variable, for a folder that differs per machine.
 - `"setting:name"` takes it from a folder setting that each person chooses while the application runs; see [Folder settings](data.settings.md#folder-settings).
-- `store name` on an `image` or a `file` field keeps its pictures or files there; `store` on any other field is refused ("only an image or a file field has a store ('notes')").
+- `store name` on an `image` or a `blob` field keeps its pictures or files there; `store` on any other field is refused ("only an image or a blob field has a store ('notes')").
 
-You can also manage them in the **File stores** section of **Settings** on the Project tab. In the entity editor, the **Store** column of an image field picks **database** or one of the stores.
+You can also manage them in the **File stores** section of **Settings** on the Project tab. In the entity editor, the **Store** column of an image or blob field picks **database** or one of the stores.
 
 In a store, a picture's file is named after the SHA-256 of its bytes, so the same picture is kept once. Files are never deleted, so a store can be a folder of photos that are not the application's alone. Moving a field between the database and a store does not move its pictures, and can lose them.
 
@@ -156,7 +193,7 @@ A store is the app's own place, named in the project file. Any other folder, one
 ```clarity
 entity Category
     name: text(80), required
-    folder: folder, extensions "*.md", label @categoryFolderLabel
+    folder: folder, extensions ".md", label @categoryFolderLabel
 
 action importNotes(category: Category) -> integer
     effects db.write, files.read
@@ -173,7 +210,7 @@ action exportNote(category: Category, name: text, text: text)
 ```
 
 - `folder` names a folder field of a record or a setting (`folder category.folder`, `folder settings.exportFolder`); the checker refuses anything else, "the folder to list is a folder field, as in 'folder category.folder'".
-- The field says which files the folder holds: `extensions "*.md *.txt"` lists and writes only those, ignoring case; `extensions "*.*"` takes any file and stands alone. Without `extensions`, any file.
+- The field says which files the folder holds: `extensions ".md, .txt"` lists and writes only those, ignoring case; `extensions "*.*"` takes any file and stands alone. Without `extensions`, any file.
 - Hidden files and folders, whose name starts with a dot, count only when the field has `hidden`.
 - A write of a file the folder does not take is refused: by the checker when the path ends in written text ("category.folder holds *.md files, not 'notes.csv'"), and by the program otherwise.
 - A file found in a folder is read with `read text of f` and `read bytes of f`, and becomes a record's picture or file as a store's file does (a copy).

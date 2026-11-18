@@ -6,11 +6,11 @@
 
 use std::sync::{Arc, Mutex};
 
-use clarity_ui::files::{ChosenFile, FileFilter, FilePicker};
+use clarity_ui::files::{FileFilter, PickerOptions, StorageFile, StorageFolder, StorageProvider};
 
 #[derive(Default)]
 struct Kept {
-    next_file: Option<ChosenFile>,
+    next_file: Option<StorageFile>,
     next_folder: Option<String>,
     no_folders: bool,
     asked: Vec<String>,
@@ -19,6 +19,8 @@ struct Kept {
     filter: Option<FileFilter>,
     /// Where a saved copy goes; none: the default, a Downloads folder.
     saved_to: Option<String>,
+    /// The folder each dialog was asked to open in, in order.
+    starts: Vec<Option<String>>,
 }
 
 #[derive(Default)]
@@ -40,7 +42,12 @@ impl TestPicker {
 
     /// The file the next open dialog chooses, once.
     pub fn next_file(&self, name: &str, bytes: Vec<u8>) {
-        self.kept().next_file = Some(ChosenFile { name: name.to_string(), bytes });
+        self.kept().next_file = Some(StorageFile::given(name, bytes));
+    }
+
+    /// The file on the disk the next open dialog chooses, once, by its path.
+    pub fn next_file_at(&self, path: &str) {
+        self.kept().next_file = Some(StorageFile::at(path));
     }
 
     /// The folder the next folder dialog chooses, once.
@@ -73,31 +80,46 @@ impl TestPicker {
     pub fn filter(&self) -> Option<FileFilter> {
         self.kept().filter.clone()
     }
+
+    /// The folder each dialog was asked to open in, in order (none: where the system opens it).
+    pub fn starts(&self) -> Vec<Option<String>> {
+        self.kept().starts.clone()
+    }
 }
 
-impl FilePicker for TestPicker {
+impl StorageProvider for TestPicker {
     fn picks_folders(&self) -> bool {
         !self.kept().no_folders
     }
 
-    fn open_file(&self, title: &str, filter: Option<&FileFilter>) -> Option<ChosenFile> {
+    fn open_file(&self, options: &PickerOptions) -> Option<StorageFile> {
         let mut kept = self.kept();
-        kept.asked.push(format!("open {title}"));
-        kept.filter = filter.cloned();
+        kept.asked.push(format!("open {}", options.title));
+        kept.filter = options.file_type.clone();
+        kept.starts.push(options.start.clone());
         kept.next_file.take()
     }
 
-    fn save_file(&self, title: &str, name: &str, bytes: &[u8]) -> Option<String> {
+    fn save_file(&self, options: &PickerOptions) -> Option<StorageFile> {
         let mut kept = self.kept();
-        kept.asked.push(format!("save {title} {name}"));
-        kept.saved.push((name.to_string(), bytes.to_vec()));
-        Some(kept.saved_to.clone().unwrap_or_else(|| "/home/ada/Downloads/copy".to_string()))
+        let name = options.suggested_name.clone().unwrap_or_default();
+        kept.asked.push(format!("save {} {name}", options.title));
+        kept.starts.push(options.start.clone());
+        let path = kept.saved_to.clone().unwrap_or_else(|| "/home/ada/Downloads/copy".to_string());
+        Some(StorageFile { name, path: Some(path), bytes: None })
     }
 
-    fn choose_folder(&self, title: &str) -> Option<String> {
+    fn write(&self, file: &StorageFile, bytes: &[u8]) -> Option<String> {
+        self.kept().saved.push((file.name.clone(), bytes.to_vec()));
+        file.path.clone()
+    }
+
+    fn open_folder(&self, options: &PickerOptions) -> Option<StorageFolder> {
         let mut kept = self.kept();
-        kept.asked.push(format!("folder {title}"));
-        kept.next_folder.take()
+        kept.asked.push(format!("folder {}", options.title));
+        kept.filter = options.file_type.clone();
+        kept.starts.push(options.start.clone());
+        kept.next_folder.take().map(|f| StorageFolder::at(&f))
     }
 
     fn show(&self, name: &str, bytes: &[u8]) {

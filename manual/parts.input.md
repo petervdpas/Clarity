@@ -188,25 +188,37 @@ A day, or a day with a time, bound to a date or datetime field.
 
 ### `file`
 
-A file of a record, bound to a `file` field: its name, with buttons to choose, open, save a copy of and remove it. See [Pictures and files](data.pictures-files.md).
+A file of a record, bound to a `blob` field: its name, with buttons to choose, open, save a copy of and remove it. See [Pictures and files](data.pictures-files.md).
 
 ```xml
-<File name="contract" at="4,7" span="6" bind="customer.contract" />
+<File name="contract" at="4,7" span="6" bind="customer.contract" extensions=".pdf, .docx" startFolder="contracts" />
 ```
 
-- `bind` (a file field).
+Choose and Save a copy open the system's own file dialog.
+
+Bound to a `file` field instead, it shows the file's path, typed or chosen with the dialog through its button, as a folder part does; see [Files on the disk](data.pictures-files.md#files-on-the-disk).
+
+- `bind` (a blob or a file field).
+- `extensions` (none by default): the files it takes and its dialog offers, a list like `".png, .jpg, .gif"`, or `"*.*"` for all; without it, its field's (see [Only some kinds of file](data.pictures-files.md#only-some-kinds-of-file)). One of another type, typed or chosen, is refused. **Extensions** in the properties.
+- `hidden` (off by default): hidden files, whose name starts with a dot, are taken too, and the dialog shows them where the system can (Windows and macOS; the Linux dialogs cannot be asked to). **Hidden** in the properties.
+- `startFolder` (none by default): the folder the dialog opens in; a relative one is in the program's folder. **Start folder** in the properties.
+- `store` (none by default): the file store a web app keeps a picked file in, on the server; the field then holds its path there. A web app's file part bound to a `file` field needs one ("videoBox is a file part in a web app, which keeps a picked file in a file store on the server: name one, as in store uploads"); a desktop app picks on its own disk. **Store** in the properties, from the project's file stores.
+- `newFile` (off by default): for a file field, the dialog may name a file that is not there yet (the save dialog). **New file** in the properties.
 - `readonly`, `noUndo`, `taborder`: see above.
 - Event: `change`.
 
 ### `folder`
 
-A folder setting's path (`bind="settings.photosFolder"`): the folder a file store keeps its files in, typed, or chosen with the system's folder picker through its button. In a browser the path is typed.
+A folder field's path (`bind="settings.photosFolder"`): typed, or chosen with the system's own folder dialog through its button. The dialog opens in the folder the part holds, else in its start folder. In a web app the folders are the server's: the button opens a list of the program's file stores, and the one picked sets the folder; a program without file stores has no button there, and the path is typed.
 
 ```xml
-<Folder name="photosFolder" at="4,2" span="6" bind="settings.photosFolder" />
+<Folder name="photosFolder" at="4,2" span="6" bind="settings.photosFolder" startFolder="photos" />
 ```
 
-- `bind` (a folder setting).
+- `bind` (a folder field).
+- `startFolder` (none by default): the folder the dialog opens in while the part holds none; a relative one is in the program's folder. **Start folder** in the properties.
+- `hidden` (off by default): the dialog shows hidden folders where the system can (Windows and macOS). **Hidden** in the properties.
+- `extensions` (none by default): written as a file part's, `".mp4, .webm"` (**Extensions** in the properties). The folder dialog shows those files while a folder is chosen, so the person sees which folder holds them, where the system's dialog can: on Linux (the desktop portal and zenity); Windows and kdialog show folders alone, macOS every file. A folder's own name is no file's, so it refuses no folder.
 - `placeholder`, `readonly`, `noUndo`, `taborder`: see above.
 - Events: `change`, `enter`, `leave`.
 
@@ -321,8 +333,8 @@ The checker refuses a second default or cancel button in a window (`more than on
 | Dropdown | `dropdown` | field (enum, ref, language, theme, text) | 4 x 1 | no | `typed`, `search`, `show`, `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change` |
 | Radio buttons | `radio` | field (enum) | 6 x 1 | no | `orientation`, `readonly`, `noUndo`, `tabOrder` | `change` |
 | Date | `date` | field (date, dateTime) | 3 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change` |
-| File | `file` | field (file) | 6 x 1 | no | `readonly`, `noUndo`, `tabOrder` | `change` |
-| Folder | `folder` | field (folder) | 6 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave` |
+| File | `file` | field (blob, file) | 6 x 1 | no | `extensions`, `hidden`, `startFolder`, `store`, `newFile`, `readonly`, `noUndo`, `tabOrder` | `change` |
+| Folder | `folder` | field (folder) | 6 x 1 | no | `placeholder`, `extensions`, `hidden`, `startFolder`, `readonly`, `noUndo`, `tabOrder` | `change`, `enter`, `leave` |
 | Tags | `tags` | field (values) | 6 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change` |
 | Color | `color` | field (color) | 3 x 1 | no | `placeholder`, `readonly`, `noUndo`, `tabOrder` | `change` |
 | Slider | `slider` | field (integer, decimal, money) | 6 x 1 | no | `min`, `max`, `step`, `readonly`, `noUndo`, `tabOrder` | `change` |

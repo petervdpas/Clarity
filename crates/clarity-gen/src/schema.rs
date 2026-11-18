@@ -173,7 +173,7 @@ impl Writer<'_> {
             _ if old_ty == new_ty => Some(name),
             // A picture does not move between the database and a file store,
             // nor become another kind of value.
-            (FieldType::Image | FieldType::File, _) | (_, FieldType::Image | FieldType::File) => None,
+            (FieldType::Image | FieldType::Blob, _) | (_, FieldType::Image | FieldType::Blob) => None,
             _ if self.sql == Sql::Sqlite => Some(format!("CAST({name} AS {new_ty})")),
             _ => Some(self.sql.convert(&name, &old.ty, &new.ty, &new_ty)),
         }

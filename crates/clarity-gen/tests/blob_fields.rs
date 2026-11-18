@@ -1,4 +1,4 @@
-//! The file field of U1c on every stack: its bytes in its column and its
+//! The blob field of U1c (called `file` before) on every stack: its bytes in its column and its
 //! name in the column beside it, read and saved with the record; the web
 //! shells fetch, open and save a copy of it.
 
@@ -49,9 +49,9 @@ fn every_stack_reads_and_saves_a_file_with_its_name() {
 
 #[test]
 fn migrations_add_rename_and_remove_a_files_name_with_it() {
-    let module = "module shop\n\nentity Product\n    name: text(80)\n    sheet: file\n\npage Card: window\n    data product: Product\n";
-    let first = "migration \"First\"\n    add entity Product\n        name: text(80)\n        manual: file\n";
-    let second = "migration \"Files\"\n    rename field Product.manual to guide\n    add field Product.sheet: file\n";
+    let module = "module shop\n\nentity Product\n    name: text(80)\n    sheet: blob\n\npage Card: window\n    data product: Product\n";
+    let first = "migration \"First\"\n    add entity Product\n        name: text(80)\n        manual: blob\n";
+    let second = "migration \"Files\"\n    rename field Product.manual to guide\n    add field Product.sheet: blob\n";
     let third = "migration \"Tidy\"\n    remove field Product.guide\n";
     let project = clarity_spec::load_with_migrations(clarity_spec::converted([("shop.clarity", module)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", first), ("0002.clarity", second), ("0003.clarity", third)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();

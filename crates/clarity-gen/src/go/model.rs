@@ -104,7 +104,7 @@ fn go_date(d: &clarity_spec::dates::Moment) -> String {
 /// The value a new record starts with, when it differs from Go's zero value.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) if !s.is_empty() => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) if !s.is_empty() => Some(string(s)),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) if n != "0" => Some(n.clone()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) if n.parse::<f64>().is_ok_and(|v| v != 0.0) => {
             Some(decimal_literal(n))
@@ -131,7 +131,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Enum { .. } => format!("string({value})"),
         FieldType::Image => format!("clarity.PictureValue({value})"),
         // Its content, then its name in the column beside it.
-        FieldType::File => format!("clarity.FileContent({value}), clarity.FileNameValue({value})"),
+        FieldType::Blob => format!("clarity.FileContent({value}), clarity.FileNameValue({value})"),
         FieldType::Values { .. } => format!("clarity.ListValue({value})"),
         _ => value,
     }
@@ -140,7 +140,7 @@ fn to_value(f: &Field) -> String {
 fn read(i: usize, f: &Field, project: &Project) -> String {
     let column = string(&f.name.name);
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("read.Text({i}, {column})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("read.Text({i}, {column})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("read.Integer({i}, {column})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("read.Decimal({i}, {column})"),
         FieldType::Bool => format!("read.Bool({i}, {column})"),
@@ -148,7 +148,7 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
         FieldType::DateTime => format!("read.DateTime({i}, {column})"),
         FieldType::Ref { .. } => format!("read.Reference({i}, {column})"),
         FieldType::Image => format!("read.Picture({i}, {column})"),
-        FieldType::File => format!("read.File({i}, {column})"),
+        FieldType::Blob => format!("read.File({i}, {column})"),
         FieldType::Enum { name } => {
             let names: String =
                 project.enum_decl(&name.name).map(|d| d.variants.iter().map(|v| format!(", {}", string(&v.name.name))).collect()).unwrap_or_default();
@@ -179,7 +179,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     let columns = stored(entity)
         .flat_map(|f| {
             let column = entity.column_of(&f.name.name).to_string();
-            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
             std::iter::once(column).chain(name)
         })
         .map(|c| string(&c))
@@ -190,7 +190,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     let mut at = 0;
     for f in stored(entity) {
         let _ = writeln!(load, "\tr.{} = {}", field(&f.name.name), read(at, f, project));
-        at += if f.ty == FieldType::File { 2 } else { 1 };
+        at += if f.ty == FieldType::Blob { 2 } else { 1 };
     }
     let mut out = format!(
         "type {name} struct {{\n{}}}\n\n// New{name} is a new {} with its defaults.\nfunc New{name}() {name} {{\n\treturn {name}{{{}}}\n}}\n\n",
@@ -211,11 +211,11 @@ fn record(project: &Project, entity: &Entity) -> String {
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::Blob))
         .map(|f| {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map(|s| format!(", Store: {}", string(s))).unwrap_or_default();
-            let name = if f.ty == FieldType::File { format!(", Name: {}", string(&format!("{column}_name"))) } else { String::new() };
+            let name = if f.ty == FieldType::Blob { format!(", Name: {}", string(&format!("{column}_name"))) } else { String::new() };
             format!("{{Column: {}{store}{name}}}", string(&column))
         })
         .collect();
@@ -339,7 +339,7 @@ fn indent(code: &str) -> String {
 fn slot_of(f: &Field, value: &str) -> Option<String> {
     let format = string(f.modifiers.format.as_deref().unwrap_or_default());
     Some(match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity.SlotText({value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity.SlotText({value})"),
         FieldType::Integer | FieldType::Id => format!("clarity.SlotInteger({value}, {format})"),
         FieldType::Duration => format!("clarity.SlotDuration({value})"),
         FieldType::Decimal { scale, .. } => format!("clarity.SlotDecimal({value}, {scale}, {format})"),
@@ -348,7 +348,7 @@ fn slot_of(f: &Field, value: &str) -> Option<String> {
         FieldType::DateTime => format!("clarity.SlotDateTime({value}, {format})"),
         FieldType::Bool => format!("clarity.SlotBool({value})"),
         FieldType::Enum { name } => format!("clarity.SlotEnum(string({value}), {})", string(&name.name)),
-        FieldType::Ref { .. } | FieldType::Image | FieldType::File | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => return None,
+        FieldType::Ref { .. } | FieldType::Image | FieldType::Blob | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => return None,
     })
 }
 

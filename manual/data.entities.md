@@ -87,7 +87,8 @@ The checker refuses an entity without fields ("entity 'Customer' has no fields")
 | `datetime` | a date with a time |
 | `duration` | a length of time in whole seconds, shown and typed as `3:45` or `1:02:03` everywhere |
 | `image` | a picture (png, jpg, gif, bmp or webp), kept in the database, or with `store` as a file; see [Pictures and files](data.pictures-files.md) |
-| `file` | any file, with its name, kept in the database, or with `store` as a file; see [Pictures and files](data.pictures-files.md) |
+| `blob` | any file kept with the record, with its name: in the database, or with `store` as a file of a file store; see [Pictures and files](data.pictures-files.md) |
+| `file` | a file on the disk, kept as its path; a file part chooses it with the system's dialog; see [Pictures and files](data.pictures-files.md#files-on-the-disk) |
 | `email` | an e-mail address |
 | `url` | a web address |
 | `color` | a color, kept as text `#rrggbb`: `default "#3b82f6"`; code sets it as such text |
@@ -120,13 +121,13 @@ In an entity of a web API, code reads a record and a list held inside as any rec
 | `cascade` | flag | For a `ref Entity`: deleting the record it refers to deletes this one first, with its own cascades and data events, all in the transaction of that delete. When one of them refuses, nothing is deleted. |
 | `computed` | flag | The value is worked out, not entered. Clarity accepts it; the generated application does not compute it. |
 | `column "Name"` | text | The column the field is stored in, when it is not the field's name in snake case; see [External databases](data.sources.md#external-databases). |
-| `store name` | a file store | For an `image` or a `file`: kept as files in that file store of the project file, not in the database. |
-| `extensions "*.md *.csv"` | the files it holds | For a `folder`: the files code lists in it and writes to it, as a file browser writes them; `"*.*"` alone takes any file and stands without other extensions. Without it, any file. |
-| `hidden` | flag | For a `folder`: its hidden files and folders, whose name starts with a dot, count too. Without it code neither lists nor writes them. |
+| `store name` | a file store | For an `image` or a `blob`: kept as files in that file store of the project file, not in the database. |
+| `extensions ".md, .csv"` | the files it holds | A list of extensions, each with its dot, by commas (`*.md *.csv` reads too); `"*.*"` alone takes any file and stands without other extensions. For a `folder`: the files code lists in it and writes to it. For a `file` or a `blob`: the only files it takes, from code or a part; another is refused ("video takes *.mp4 files, not notes.txt"). Without it, any file. |
+| `hidden` | flag | For a `folder`, `file` or `blob`: hidden files and folders, whose name starts with a dot, count too. Without it a folder's code neither lists nor writes them, and a field with extensions takes none. |
 
 Each modifier appears at most once per field ("duplicate modifier 'required'"), and an unknown one is an error. The checker also refuses:
 
-- `owned` on anything but a list, `cascade` on anything but a `ref`, `store` on anything but an image or a file, `extensions` and `hidden` on anything but a folder, an extension that is no `*.md` (`'md' is no extension of files`), `"*.*"` beside other extensions, `search` on anything but text and lists of text, `pattern` on anything but text;
+- `owned` on anything but a list, `cascade` on anything but a `ref`, `store` on anything but an image or a blob, `extensions` and `hidden` on anything but a folder, a file or a blob, an extension that is no `.md` (`'md' is no extension of files`), `"*.*"` beside other extensions, `search` on anything but text and lists of text, `pattern` on anything but text;
 - `unique` or `default` on a picture, a file or a list;
 - a `min` or `max` that is no number on a number or no date on a date, and `min` greater than `max`;
 - a default that does not fit the type ("default value does not match the field type ('active')"), a default that is not one of the enum's values ("'Gold' is not a variant of 'CustomerKind' ('kind')"), a date or color written another way;

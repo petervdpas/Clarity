@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -264,6 +265,48 @@ func (db *Db) AddStoreSetting(name, program, setting, def string) error {
 	db.storeSettings[name] = storeSetting{program, setting, def}
 	_, err := db.storeFolder(name)
 	return err
+}
+
+// StoreFolder is a file store and its folder on this machine.
+type StoreFolder struct {
+	Name   string `json:"name"`
+	Folder string `json:"folder"`
+}
+
+// Stores is the file stores and their folders on this machine, by name; one
+// whose folder cannot be found is left out.
+func (db *Db) Stores() []StoreFolder {
+	names := []string{}
+	for name := range db.stores {
+		names = append(names, name)
+	}
+	for name := range db.storeSettings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := []StoreFolder{}
+	for _, name := range names {
+		if folder, err := db.storeFolder(name); err == nil {
+			out = append(out, StoreFolder{name, folder})
+		}
+	}
+	return out
+}
+
+// StoreUpload keeps a file a person picked in a web app in the file store
+// store on the server: in a folder named by its contents, as a blob's is, so
+// nothing is written over; its path on the server (step 5 of
+// docs/ledger/files-pictures.md).
+func (db *Db) StoreUpload(store, name string, b []byte) (string, error) {
+	inside := StorePath(b, name)
+	if err := db.WriteBytes(store, inside, b); err != nil {
+		return "", err
+	}
+	folder, err := db.storeFolder(store)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(folder, filepath.FromSlash(inside)), nil
 }
 
 func (db *Db) storeFolder(name string) (string, error) {

@@ -397,6 +397,8 @@ fn reply(state: Value, messages: Vec<Value>) -> Value {
 pub struct Loaded {
     pub project: Project,
     pub title: String,
+    /// The project's stack has the desktop target: the page draws its parts as the desktop does.
+    pub desktop: bool,
     /// The project's folder, whose resources the drawing reads.
     pub dir: PathBuf,
 }
@@ -599,6 +601,7 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
                         },
                         None => files_json(&loaded.project, &loaded.title, &shown, design, &showing_of(&request.query)),
                     };
+                    let text = with_desktop(&text, loaded.desktop);
                     let open: Vec<String> = request.query.get("open").map(|o| o.split(',').filter(|n| !n.is_empty()).map(str::to_string).collect()).unwrap_or_default();
                     *serving.program.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(PreviewProgram::new(loaded.project.clone(), shown.main()).opening(open)));
                     *serving.loaded.lock().unwrap_or_else(|p| p.into_inner()) = Some(loaded);
@@ -630,11 +633,23 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
     }
 }
 
+/// `files.json` saying whether the project is a desktop one (`"desktop"`), so
+/// the page draws its parts in the desktop's shape (step 6 of
+/// docs/ledger/files-pictures.md).
+pub fn with_desktop(text: &str, desktop: bool) -> String {
+    let Ok(mut files) = serde_json::from_str::<Value>(text) else { return text.to_string() };
+    if let Some(object) = files.as_object_mut() {
+        object.insert("desktop".to_string(), Value::Bool(desktop));
+    }
+    files.to_string() + "\n"
+}
+
 /// The project in `dir` (its modules) with the project file `file`, as the preview shows it.
 pub fn load(file: &Path, dir: &Path) -> Result<Loaded, String> {
     let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let title = clarity_project::load(file).title;
-    Ok(Loaded { project, title, dir: dir.to_path_buf() })
+    let loaded = clarity_project::load(file);
+    let desktop = loaded.settings.as_ref().is_some_and(|s| s.stack.has(clarity_project::Target::Desktop));
+    Ok(Loaded { project, title: loaded.title, desktop, dir: dir.to_path_buf() })
 }
 
 /// A secret for the server's path: hard to guess for another page of this machine.

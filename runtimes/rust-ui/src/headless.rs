@@ -62,7 +62,7 @@ use serde_json::{Map, Value, json};
 
 use crate::app_files::AppFiles;
 use crate::element::{self, Element, ElementId};
-use crate::files::{ChosenFile, FileFilter, FilePicker};
+use crate::files::{StorageProvider, PickerOptions, StorageFile, StorageFolder};
 use crate::geometry::Rect;
 use crate::input::{Key, KeyInput, Modifiers, PointerButton};
 use crate::screen::Screen;
@@ -85,27 +85,29 @@ impl Given {
     }
 }
 
-impl FilePicker for Given {
+impl StorageProvider for Given {
     fn picks_folders(&self) -> bool {
         true
     }
 
-    fn open_file(&self, _title: &str, _filter: Option<&FileFilter>) -> Option<ChosenFile> {
+    fn open_file(&self, _options: &PickerOptions) -> Option<StorageFile> {
         let path = self.next()?;
-        let bytes = std::fs::read(&path).ok()?;
-        let name = Path::new(&path).file_name()?.to_string_lossy().into_owned();
-        Some(ChosenFile { name, bytes })
+        Path::new(&path).is_file().then(|| StorageFile::at(&path))
     }
 
-    fn save_file(&self, _title: &str, name: &str, bytes: &[u8]) -> Option<String> {
+    /// The folder given next, with the suggested name.
+    fn save_file(&self, options: &PickerOptions) -> Option<StorageFile> {
         let folder = self.next()?;
-        let path = Path::new(&folder).join(crate::files::safe_name(name));
-        std::fs::write(&path, bytes).ok()?;
-        Some(path.display().to_string())
+        let path = Path::new(&folder).join(crate::files::safe_name(options.suggested_name.as_deref().unwrap_or("file")));
+        Some(StorageFile::at(&path.display().to_string()))
     }
 
-    fn choose_folder(&self, _title: &str) -> Option<String> {
-        self.next()
+    fn write(&self, file: &StorageFile, bytes: &[u8]) -> Option<String> {
+        crate::files::write_at(file, bytes)
+    }
+
+    fn open_folder(&self, _options: &PickerOptions) -> Option<StorageFolder> {
+        self.next().map(|f| StorageFolder::at(&f))
     }
 
     fn show(&self, _name: &str, _bytes: &[u8]) {}

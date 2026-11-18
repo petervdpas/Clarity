@@ -338,8 +338,13 @@ pub enum FieldType {
     /// A picture: kept in the database, or as a file in a file store
     /// (`store photos`).
     Image,
-    /// Any file, with its name: kept in the database (its name in a column
-    /// beside it) or, with `store`, as a file of a file store (U1c).
+    /// A blob: any file kept with the record, with its name, in the
+    /// database (its name in a column beside it) or, with `store`, as a
+    /// file of a file store (U1c).
+    Blob,
+    /// A file on the disk, kept as its path, as a folder's (step 3 of
+    /// docs/ledger/files-pictures.md); a file part chooses it with the
+    /// system's dialog.
     File,
     Email,
     Url,
@@ -938,6 +943,29 @@ pub struct WidgetProps {
     /// reads; without it the text takes the whole width.
     #[serde(default)]
     pub reading_width: bool,
+    /// `extensions ".png, .jpg, .gif"`: the files a folder or file part
+    /// takes, its dialog offering them (`*.*` alone: any file), written as
+    /// the list its line and the designer show.
+    #[serde(default)]
+    pub extensions: Option<String>,
+    /// `hidden`: a folder or file part's hidden files and folders, whose
+    /// name starts with a dot, count too.
+    #[serde(default)]
+    pub hidden: bool,
+    /// `start folder "videos"`: where a folder or file part's dialog (the
+    /// system's) opens while nothing is chosen; a relative one is in the
+    /// program's folder.
+    #[serde(default)]
+    pub start_folder: Option<String>,
+    /// `store uploads`: the file store a web app keeps a file in that a
+    /// person picks in a file part bound to a file field (step 5 of
+    /// docs/ledger/files-pictures.md).
+    #[serde(default)]
+    pub store: Option<String>,
+    /// `new file`: a file part's dialog may name a file that is not there
+    /// yet, to save to.
+    #[serde(default)]
+    pub new_file: bool,
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,

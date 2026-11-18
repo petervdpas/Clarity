@@ -84,6 +84,50 @@ public sealed class FileTests : IDisposable
         Assert.Throws<StorageException>(() => db.FilesIn(Db.FolderStore, [], false));
     }
 
+    /// <summary>
+    /// A blob or file field that says its extensions takes only those files; one of another
+    /// type is refused in Clarity's own words (conformance/files.json, fieldFiles).
+    /// </summary>
+    [Fact]
+    public void AFieldTakesOnlyTheFilesOfItsExtensions()
+    {
+        static string[] Strings(JsonElement e) => e.EnumerateArray().Select(p => p.GetString()!).ToArray();
+        foreach (var c in Cases().GetProperty("fieldFiles").EnumerateArray())
+        {
+            var taken = true;
+            try
+            {
+                Db.CheckFileType("video", Strings(c.GetProperty("patterns")), c.GetProperty("hidden").GetBoolean(), c.GetProperty("name").GetString());
+            }
+            catch (RefusedException)
+            {
+                taken = false;
+            }
+            Assert.Equal(c.GetProperty("taken").GetBoolean(), taken);
+        }
+        var refused = Assert.Throws<RefusedException>(() => Db.CheckFileType("video", ["*.mp4"], false, "notes.txt"));
+        Assert.Equal("fileTypeRefused", refused.Said.Key);
+        Assert.Equal("video takes *.mp4 files, not notes.txt", refused.Said.Show());
+    }
+
+    /// <summary>
+    /// A file a person picked in a web app goes into a file store on the server, in a folder
+    /// named by its contents as a blob's is, and its path there is what a file field keeps
+    /// (docs/ledger/files-pictures.md, step 5).
+    /// </summary>
+    [Fact]
+    public void AnUploadGoesIntoAStoreAndGivesItsPath()
+    {
+        var uploads = Path.Combine(root, "uploads");
+        db.AddStore("uploads", uploads);
+        var meow = "meow"u8.ToArray();
+        var path = db.StoreUpload("uploads", "C:\\me\\cat.png", meow);
+        Assert.Equal(Path.Combine(uploads, RecordFiles.StorePath(meow, "cat.png").Replace('/', Path.DirectorySeparatorChar)), path);
+        Assert.Equal(meow, File.ReadAllBytes(path));
+        Assert.Throws<StorageException>(() => db.StoreUpload("nowhere", "a.txt", meow));
+        Assert.Contains(("uploads", uploads), db.Stores());
+    }
+
     [Fact]
     public void BytesAreReadAndWrittenAsTheyAre()
     {

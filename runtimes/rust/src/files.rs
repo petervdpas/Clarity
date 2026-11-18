@@ -49,6 +49,32 @@ pub fn takes(patterns: &[String], hidden: bool, name: &str) -> bool {
     patterns.iter().any(|pattern| pattern.strip_prefix("*.").is_some_and(|ext| !extension.is_empty() && extension == ext.to_lowercase()))
 }
 
+/// What a field or folder holds, as its refusal says it: its extensions (any for none), or `no hidden` for a hidden name it does not take.
+fn holds(patterns: &[String], hidden: bool, name: &str) -> String {
+    if name.starts_with('.') && !hidden {
+        return "no hidden".to_string();
+    }
+    if patterns.is_empty() { "any".to_string() } else { patterns.join(" ") }
+}
+
+/// Whether a blob or file field that says its extensions takes the file
+/// `name` (a name or a path): its last part matched as a folder matches, a
+/// hidden one only with `hidden`; no file (an empty name) is always taken. One of
+/// another type is refused in Clarity's own words, `fileTypeRefused`
+/// (conformance/files.json, fieldFiles).
+pub fn check_file_type(field: &str, patterns: &[String], hidden: bool, name: &str) -> Result<()> {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    if last.is_empty() || takes(patterns, hidden, last) {
+        return Ok(());
+    }
+    use crate::ui::{Slot, Text};
+    let text = Text::keyed("fileTypeRefused", "{field} takes {extensions} files, not {name}")
+        .with("field", Slot::text(field))
+        .with("extensions", Slot::text(&holds(patterns, hidden, last)))
+        .with("name", Slot::text(last));
+    Err(Error::Refused(text))
+}
+
 /// The files under `folder`, whose path inside the store starts with `prefix`;
 /// hidden ones (a name starting with a dot) only with `hidden`.
 fn walk(store: &str, folder: &Path, prefix: &str, out: &mut Vec<FileEntry>) -> Result<()> {
@@ -112,6 +138,24 @@ impl Db {
             return Err(Error::Invalid(format!("the folder holds {holds} files, not '{path}'")));
         }
         self.write_bytes(folder, path, bytes)
+    }
+
+    /// A file a person picked in a web app, kept in the file store `store`
+    /// on the server: in a folder named by its contents, as a blob's is, so
+    /// nothing is written over; its path on the server (step 5 of
+    /// docs/ledger/files-pictures.md).
+    pub fn store_upload(&self, store: &str, name: &str, bytes: &[u8]) -> Result<String> {
+        let inside = crate::record_file::store_path(bytes, name);
+        self.write_bytes(store, &inside, bytes)?;
+        Ok(self.store_folder(store)?.join(&inside).display().to_string())
+    }
+
+    /// The file stores and their folders on this machine, by name; one whose
+    /// folder cannot be found is left out.
+    pub fn stores(&self) -> Vec<(String, String)> {
+        let mut names = self.store_names();
+        names.sort();
+        names.into_iter().filter_map(|name| self.store_folder(&name).ok().map(|f| (name, f.display().to_string()))).collect()
     }
 
     /// The bytes of the file `path` of a store: a picture linked from a file

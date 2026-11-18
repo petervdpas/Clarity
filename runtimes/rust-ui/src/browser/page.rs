@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use base64::Engine as _;
 use serde_json::{Value, json};
 
-use crate::files::{ChosenFile, FileFilter, FilePicker};
+use crate::files::{StorageProvider, PickerOptions, StorageFile, StorageFolder};
 use crate::overlay::Clipboard;
 use crate::parts::sound::{Music, MusicPlayer, MusicProblem, Playing, SoundOutput};
 use crate::parts::video::{Frame, VideoFrames, Videos};
@@ -403,50 +403,73 @@ pub fn shown_type(name: &str) -> Option<&'static str> {
     })
 }
 
-/// Files through the page: a saved file is a download, a shown one a tab
+/// Files through the page: a saved file is a download (a storage file with
+/// no path, written by its name), a shown one a tab
 /// of its own. A browser chooses no folder (one is typed there). Choosing a
 /// file to open needs the page's file input, which answers later than a
 /// picker may wait: it chooses none here, and the file the page gives is
 /// taken by the next open (`given`).
 pub struct PageFiles {
     tell: Tell,
-    given: Mutex<Option<ChosenFile>>,
+    given: Mutex<Option<StorageFile>>,
+    /// The IDE's preview of a desktop project: the parts take the desktop's
+    /// shape (a folder part has its button), and nothing is picked, as the
+    /// preview runs nothing (docs/ledger/files-pictures.md, step 6).
+    desktop: std::sync::atomic::AtomicBool,
 }
 
 impl PageFiles {
     pub fn new(tell: Tell) -> PageFiles {
-        PageFiles { tell, given: Mutex::new(None) }
+        PageFiles { tell, given: Mutex::new(None), desktop: std::sync::atomic::AtomicBool::new(false) }
+    }
+
+    /// Whether the page previews a desktop project (`"desktop"` in its files.json).
+    pub fn set_desktop(&self, desktop: bool) {
+        self.desktop.store(desktop, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn desktop(&self) -> bool {
+        self.desktop.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The file the person chose in the page, for the next open.
-    pub fn give(&self, file: ChosenFile) {
+    pub fn give(&self, file: StorageFile) {
         if let Ok(mut given) = self.given.lock() {
             *given = Some(file);
         }
     }
 }
 
-impl FilePicker for PageFiles {
+impl StorageProvider for PageFiles {
     fn picks_folders(&self) -> bool {
-        false
+        self.desktop()
     }
 
-    fn open_file(&self, title: &str, filter: Option<&FileFilter>) -> Option<ChosenFile> {
+    fn open_file(&self, options: &PickerOptions) -> Option<StorageFile> {
+        if self.desktop() {
+            return None;
+        }
         if let Some(file) = self.given.lock().ok().and_then(|mut g| g.take()) {
             return Some(file);
         }
-        let accept: Vec<String> = filter.map(|f| f.patterns.iter().map(|p| p.trim_start_matches('*').to_string()).collect()).unwrap_or_default();
-        (self.tell)(json!({ "tell": "pick", "title": title, "accept": accept }));
+        let accept: Vec<String> = options.file_type.as_ref().map(|f| f.patterns.iter().map(|p| p.trim_start_matches('*').to_string()).collect()).unwrap_or_default();
+        (self.tell)(json!({ "tell": "pick", "title": options.title, "accept": accept }));
         None
     }
 
-    fn save_file(&self, _title: &str, name: &str, bytes: &[u8]) -> Option<String> {
-        let name = crate::files::safe_name(name);
+    /// A download by the suggested name: a file with no path.
+    fn save_file(&self, options: &PickerOptions) -> Option<StorageFile> {
+        let name = crate::files::safe_name(options.suggested_name.as_deref().unwrap_or("file"));
+        Some(StorageFile { name, path: None, bytes: None })
+    }
+
+    fn write(&self, file: &StorageFile, bytes: &[u8]) -> Option<String> {
+        let name = crate::files::safe_name(&file.name);
         (self.tell)(json!({ "tell": "download", "name": name, "data": base64(bytes) }));
         Some(name)
     }
 
-    fn choose_folder(&self, _title: &str) -> Option<String> {
+    fn open_folder(&self, _options: &PickerOptions) -> Option<StorageFolder> {
         None
     }
 

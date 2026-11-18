@@ -679,9 +679,13 @@ impl PartHost for ProgramHost {
         let window = self.window();
         let model = self.facts.field(&window, path);
         match self.program_facts().field(&window, path) {
-            // The program's facts carry no help; the model's do.
+            // The program's facts carry no help, extensions or hidden; the model's do.
             Some(mut facts) => {
-                facts.help = model.and_then(|m| m.help);
+                if let Some(model) = model {
+                    facts.help = model.help;
+                    facts.extensions = model.extensions;
+                    facts.hidden = model.hidden;
+                }
                 Some(facts)
             }
             None => model,
@@ -792,6 +796,14 @@ impl PartHost for ProgramHost {
         let (owner, field) = bind.rsplit_once('.')?;
         let id = self.read(owner)?.get("id")?.as_i64()?;
         self.program.field_bytes(&entity, id, field).ok().flatten()
+    }
+
+    fn upload(&self, store: &str, name: &str, bytes: &[u8]) -> Result<String, Text> {
+        self.program.store_upload(store, name, bytes)
+    }
+
+    fn stores(&self) -> Vec<(String, String)> {
+        self.program.stores().unwrap_or_default()
     }
 
     fn selected(&self, part: &str) -> Option<usize> {

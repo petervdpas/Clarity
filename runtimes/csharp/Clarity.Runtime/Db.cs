@@ -122,6 +122,35 @@ public sealed partial class Db : IDisposable
     /// <summary>A setting the running handler's code set, before the settings are kept.</summary>
     public void HoldSetting(string setting, string value) => heldSettings[setting] = value;
 
+    /// <summary>
+    /// Keeps a file a person picked in a web app in the file store <paramref name="store"/>
+    /// on the server: in a folder named by its contents, as a blob's is, so nothing is written
+    /// over; its path on the server (step 5 of docs/ledger/files-pictures.md).
+    /// </summary>
+    public string StoreUpload(string store, string name, byte[] bytes)
+    {
+        var inside = RecordFiles.StorePath(bytes, name);
+        WriteBytes(store, inside, bytes);
+        return Path.Combine(StoreFolder(store), inside.Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    /// <summary>The file stores and their folders on this machine, by name; one whose folder cannot be found is left out.</summary>
+    public List<(string Name, string Folder)> Stores()
+    {
+        var found = new List<(string, string)>();
+        foreach (var name in stores.Keys.Concat(storeSettings.Keys).Distinct().OrderBy(n => n, StringComparer.Ordinal))
+        {
+            try
+            {
+                found.Add((name, StoreFolder(name)));
+            }
+            catch (StorageException)
+            {
+            }
+        }
+        return found;
+    }
+
     string StoreFolder(string name)
     {
         // A folder that is no store, by its path: just a folder.

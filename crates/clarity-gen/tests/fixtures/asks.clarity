@@ -22,7 +22,7 @@ entity Album
     favourite: bool
     rating: decimal(3, 1), min 0, max 5
     tint: color, default "#3b82f6"
-    booklet: file
+    booklet: blob
     tags: list<text>, search
     formats: list<Format>
     plays: list<date>

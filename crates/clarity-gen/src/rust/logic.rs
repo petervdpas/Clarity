@@ -306,6 +306,16 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
                     return;
                 }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = crate::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        crate::FileName::Path => format!("&{}", self.value(value)),
+                        crate::FileName::StoreFile => format!("&{}.name", self.object(value)),
+                        crate::FileName::RecordFile => format!("{}.as_ref().map_or(\"\", |f| f.name.as_str())", self.object(value)),
+                    };
+                    let patterns = check.patterns.iter().map(|p| format!("{p:?}.to_string()")).collect::<Vec<_>>().join(", ");
+                    out.push_str(&format!("{pad}clarity_runtime::files::check_file_type({:?}, &[{patterns}], {}, {file})?;\n", check.field, check.hidden));
+                }
                 // A record given to a reference field is stored as its id.
                 if let ExprKind::Member { object, member } = &target.kind
                     && let TypeInfo::Record(owner) = self.types.type_of(object)
@@ -337,7 +347,7 @@ impl<'a> Emitter<'a> {
                     let store = store.map_or("None".to_string(), |s| format!("Some({s:?})"));
                     let place = self.place(target);
                     let file = self.object(value);
-                    // A `file` field keeps any file, under its name; an image only a picture.
+                    // A `blob` field keeps any file, under its name; an image only a picture.
                     let made = if to == TypeInfo::RecordFile { "record_file_from" } else { "picture_from" };
                     out.push_str(&format!("{pad}{place} = Some(db.{made}(&{file}, {store})?);\n"));
                     return;
@@ -1502,7 +1512,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => {
                 format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))
@@ -1512,7 +1522,7 @@ impl<'a> Emitter<'a> {
             FieldType::DateTime => format!("sql::date_time({})", self.value(value)),
             FieldType::Enum { .. } => format!("sql::name(&{})", self.value(value)),
             // The checker allows only `== none` and `!= none`, handled before.
-            FieldType::Image | FieldType::File => {
+            FieldType::Image | FieldType::Blob => {
                 self.errors.push("a picture or a file is compared with none only".into());
                 String::new()
             }

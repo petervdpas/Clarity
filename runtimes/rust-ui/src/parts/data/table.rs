@@ -910,7 +910,7 @@ impl TablePart {
         let picker = crate::files::system();
         let title = crate::parts::inputs::folder::choose_name();
         let field = field.to_string();
-        cx.later(self.base.node.id(), move || FolderPicked(place, field, picker.choose_folder(&title)));
+        cx.later(self.base.node.id(), move || FolderPicked(place, field, picker.open_folder(&crate::files::PickerOptions::titled(&title)).and_then(|f| f.path)));
     }
 
     /// The swatch of the color in a cell of a color column, while it is in sight; none for a cell without a color.

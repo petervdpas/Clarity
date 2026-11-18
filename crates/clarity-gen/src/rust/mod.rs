@@ -331,12 +331,13 @@ fn fact_type(ty: &FieldType) -> String {
         FieldType::DateTime => "datetime".into(),
         FieldType::Duration => "duration".into(),
         FieldType::Image => "image".into(),
-        FieldType::File => "file".into(),
+        FieldType::Blob => "blob".into(),
         FieldType::Email => "email".into(),
         FieldType::Url => "url".into(),
         FieldType::Color => "color".into(),
         FieldType::Secret => "secret".into(),
         FieldType::Folder => "folder".into(),
+        FieldType::File => "file".into(),
         FieldType::Language => "language".into(),
         FieldType::Theme => "theme".into(),
         FieldType::Id => "id".into(),
@@ -1416,6 +1417,14 @@ impl Program for App {{
 
     fn store_file(&self, store: &str, path: &str) -> Answer<Vec<u8>> {{
         locked(self, |db| db.store_file(store, path))
+    }}
+
+    fn store_upload(&self, store: &str, name: &str, bytes: &[u8]) -> Answer<String> {{
+        locked(self, |db| db.store_upload(store, name, bytes))
+    }}
+
+    fn stores(&self) -> Answer<Vec<(String, String)>> {{
+        locked(self, |db| Ok(db.stores()))
     }}
 
     fn read_settings(&self) -> Map<String, Value> {{

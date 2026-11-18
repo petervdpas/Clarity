@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 #include "clarity/db.hpp"
@@ -113,6 +114,44 @@ bool folder_takes(const std::vector<std::string>& patterns, bool hidden, const s
     for (const auto& p : patterns)
         if (p.starts_with("*.") && !extension.empty() && extension == lower(p.substr(2))) return true;
     return false;
+}
+
+void check_file_type(const std::string& field, const std::vector<std::string>& patterns, bool hidden, const std::string& name) {
+    size_t cut = name.find_last_of("/\\");
+    std::string last = cut == std::string::npos ? name : name.substr(cut + 1);
+    if (last.empty() || folder_takes(patterns, hidden, last)) return;
+    std::string holds;
+    if (last.starts_with(".") && !hidden) {
+        holds = "no hidden";
+    } else if (patterns.empty()) {
+        holds = "any";
+    } else {
+        for (const auto& p : patterns) holds += (holds.empty() ? "" : " ") + p;
+    }
+    refuse(Text::keyed("fileTypeRefused", "{field} takes {extensions} files, not {name}")
+               .with("field", slot_text(field))
+               .with("extensions", slot_text(holds))
+               .with("name", slot_text(last)));
+}
+
+std::string Db::store_upload(const std::string& store, const std::string& name, const Bytes& bytes) {
+    std::string inside = store_path(bytes, name);
+    write_bytes(store, inside, bytes);
+    return (store_folder(store) / fs::path(inside)).string();
+}
+
+nlohmann::json Db::stores() {
+    std::set<std::string> names;
+    for (const auto& [name, _] : stores_) names.insert(name);
+    for (const auto& [name, _] : store_settings_) names.insert(name);
+    nlohmann::json out = nlohmann::json::array();
+    for (const auto& name : names) {
+        try {
+            out.push_back({{"name", name}, {"folder", store_folder(name).string()}});
+        } catch (const Error&) {
+        }
+    }
+    return out;
 }
 
 std::vector<FileEntry> Db::files_in(const std::string& folder, const std::vector<std::string>& patterns, bool hidden) {

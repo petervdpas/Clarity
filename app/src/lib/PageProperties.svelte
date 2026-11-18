@@ -160,7 +160,7 @@
       const decl = page.data.find((d) => d.name.name === data);
       const field = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null))?.fields.find((f) => f.name.name === name);
       const target = field?.type.kind === "ref" ? field.type.entity.name : null;
-      return (entities.find((e) => e.name.name === target)?.fields ?? []).filter((f) => !["list", "image", "file"].includes(f.type.kind));
+      return (entities.find((e) => e.name.name === target)?.fields ?? []).filter((f) => !["list", "image", "blob"].includes(f.type.kind));
     }
     const decl = page.data.find((d) => d.name.name === p.bind);
     const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
@@ -176,7 +176,7 @@
   const edgeFields = $derived.by(() => {
     const decl = page.data.find((d) => d.name.name === p?.edges);
     const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
-    return (entity?.fields ?? []).filter((f) => !["list", "image", "file"].includes(f.type.kind));
+    return (entity?.fields ?? []).filter((f) => !["list", "image", "blob"].includes(f.type.kind));
   });
 
   /** The kinds a graph has looks for, with what each says; a new one is added empty. */
@@ -509,7 +509,7 @@
         <span>Grouped by</span>
         <select value={p.by ?? ""} onchange={(e) => update({ by: e.currentTarget.value || null })}>
           <option value="">(none)</option>
-          {#each collectionFields.filter((f) => !["image", "file", "values"].includes(f.type.kind)) as field (field.name.name)}
+          {#each collectionFields.filter((f) => !["image", "blob", "values"].includes(f.type.kind)) as field (field.name.name)}
             <option value={field.name.name}>{field.label}</option>
           {/each}
         </select>
@@ -1081,6 +1081,41 @@
       <label class="prop">
         <span>Opens</span>
         <input value={p.to ?? ""} placeholder="https://..." onchange={(e) => update({ to: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("extensions")}
+      <label class="prop" title="The files it takes and its dialog offers, as a list like .png, .jpg, .gif; *.* takes every extension">
+        <span>Extensions</span>
+        <input value={p.extensions ?? ""} placeholder=".png, .jpg, .gif or *.* for all" onchange={(e) => update({ extensions: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("hidden")}
+      <label class="prop" title="Hidden files and folders, whose name starts with a dot, count too">
+        <span>Hidden</span>
+        <input type="checkbox" checked={p.hidden} onchange={(e) => update({ hidden: e.currentTarget.checked })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("startFolder")}
+      <label class="prop" title="The folder the system's dialog opens in; a relative one is in the program's folder">
+        <span>Start folder</span>
+        <input value={p.startFolder ?? ""} onchange={(e) => update({ startFolder: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("store")}
+      {@const stores = settings?.filestores.map((s) => s.name) ?? []}
+      <label class="prop" title="The file store a web app keeps a picked file in, on the server; a desktop app picks on its own disk">
+        <span>Store</span>
+        <select value={p.store ?? ""} onchange={(e) => update({ store: e.currentTarget.value || null })}>
+          <option value="">none</option>
+          {#each stores as store (store)}<option value={store}>{store}</option>{/each}
+          {#if p.store && !stores.includes(p.store)}<option value={p.store}>{p.store} (not in the settings)</option>{/if}
+        </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("newFile")}
+      <label class="prop" title="The dialog may name a file that is not there yet">
+        <span>New file</span>
+        <input type="checkbox" checked={p.newFile} onchange={(e) => update({ newFile: e.currentTarget.checked })} />
       </label>
     {/if}
     {#if info.properties.includes("labels")}

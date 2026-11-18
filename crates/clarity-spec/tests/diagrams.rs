@@ -95,12 +95,12 @@ fn relationships_keep_both_ends_and_whether_they_identify() {
 
 #[test]
 fn problems_are_placed_on_their_line_in_the_checkers_words() {
-    let text = "erDiagram\n    Customer {\n        blob photo\n        decimal price\n    }\n    Customer ||~~o{ Order : places\n";
+    let text = "erDiagram\n    Customer {\n        widget photo\n        decimal price\n    }\n    Customer ||~~o{ Order : places\n";
     let (diagram, problems) = diagrams::parse(text);
     let placed: Vec<(u32, Severity, &str)> = problems.iter().map(|p| (p.span.line, p.severity, p.message.as_str())).collect();
     assert_eq!(placed.len(), 3, "{placed:?}");
     assert_eq!((placed[0].0, placed[0].1), (3, Severity::Error));
-    assert!(placed[0].2.contains("'blob'"), "{}", placed[0].2);
+    assert!(placed[0].2.contains("'widget'"), "{}", placed[0].2);
     assert_eq!((placed[1].0, placed[1].1), (4, Severity::Error));
     assert!(placed[1].2.contains("decimal(10, 2)"), "{}", placed[1].2);
     assert_eq!((placed[2].0, placed[2].1), (6, Severity::Error));

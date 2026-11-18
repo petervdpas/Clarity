@@ -165,6 +165,34 @@ foldButtons: boolean,
  */
 readingWidth: boolean, 
 /**
+ * `extensions ".png, .jpg, .gif"`: the files a folder or file part
+ * takes, its dialog offering them (`*.*` alone: any file), written as
+ * the list its line and the designer show.
+ */
+extensions: string | null, 
+/**
+ * `hidden`: a folder or file part's hidden files and folders, whose
+ * name starts with a dot, count too.
+ */
+hidden: boolean, 
+/**
+ * `start folder "videos"`: where a folder or file part's dialog (the
+ * system's) opens while nothing is chosen; a relative one is in the
+ * program's folder.
+ */
+startFolder: string | null, 
+/**
+ * `store uploads`: the file store a web app keeps a file in that a
+ * person picks in a file part bound to a file field (step 5 of
+ * docs/ledger/files-pictures.md).
+ */
+store: string | null, 
+/**
+ * `new file`: a file part's dialog may name a file that is not there
+ * yet, to save to.
+ */
+newFile: boolean, 
+/**
  * `order by field [desc]`: the order a table's rows show in first.
  */
 order: TableOrder | null, 

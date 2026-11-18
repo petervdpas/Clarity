@@ -2,4 +2,4 @@
 // before it runs; once a step has run on a database, it never changes.
 migration "Tags and booklets of albums"
     add field Album.tags: list<text>
-    add field Album.booklet: file
+    add field Album.booklet: blob

@@ -771,6 +771,16 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 			return answer(nil, err)
 		}
 		return answer(clarity.DataURL(b))
+	case "store_upload":
+		// A file a person picked in a web app, kept in a file store: its path on the server.
+		b, err := clarity.FromFileData(a.Data)
+		if err != nil {
+			return failed(err)
+		}
+		return answer(db.StoreUpload(a.Store, a.Name, b))
+	case "stores":
+		// The file stores and their folders, which a folder part picks from in a web app.
+		return answer(db.Stores(), nil)
 	case "open_link":
 		if !opensLink(a.Address) {
 			return Answer{Error: "a link opens only an http, https or mailto address, not " + a.Address}

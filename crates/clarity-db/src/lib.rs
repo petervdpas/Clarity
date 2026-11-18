@@ -198,7 +198,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         return true;
     }
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret | FieldType::Enum { .. } | FieldType::Values { .. } => k == Kind::Text,
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret | FieldType::Enum { .. } | FieldType::Values { .. } => k == Kind::Text,
         FieldType::Integer | FieldType::Id | FieldType::Duration => matches!(k, Kind::Integer | Kind::Number),
         FieldType::Decimal { .. } | FieldType::Money => matches!(k, Kind::Number | Kind::Integer),
         FieldType::Bool => matches!(k, Kind::Bool | Kind::Integer),
@@ -206,7 +206,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         FieldType::DateTime => matches!(k, Kind::DateTime | Kind::Text),
         FieldType::Ref { .. } => k == Kind::Integer,
         // The picture itself, or the path of its file in a file store.
-        FieldType::Image | FieldType::File => matches!(k, Kind::Blob | Kind::Text),
+        FieldType::Image | FieldType::Blob => matches!(k, Kind::Blob | Kind::Text),
         // Held inside a web API's record, never in a column.
         FieldType::List { .. } | FieldType::Record { .. } => false,
     }

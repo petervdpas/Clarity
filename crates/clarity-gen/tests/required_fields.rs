@@ -14,7 +14,7 @@ entity Customer
 
 entity Order
     customer: ref Customer, required
-    sheet: file, required
+    sheet: blob, required
     paid: bool
 
 settings

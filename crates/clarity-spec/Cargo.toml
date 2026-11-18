@@ -8,9 +8,9 @@ license.workspace = true
 [dependencies]
 serde.workspace = true
 # The catalog of formats code reads and writes (docs/ledger/formats.md).
-clarity-formats = { path = "../../runtimes/rust-formats", version = "0.2.0" }
+clarity-formats = { path = "../../runtimes/rust-formats", version = "0.3.0" }
 # The catalog of sign-in strategies (docs/ledger/signin.md).
-clarity-auth = { path = "../../runtimes/rust-auth", version = "0.2.0" }
+clarity-auth = { path = "../../runtimes/rust-auth", version = "0.3.0" }
 serde_json.workspace = true
 ts-rs.workspace = true
 # The files of the engines beside the screen, carried in the model for the renderer.

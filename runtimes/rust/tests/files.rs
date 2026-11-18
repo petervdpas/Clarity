@@ -144,3 +144,38 @@ fn a_folder_lists_and_writes_the_files_of_its_patterns() {
     assert!(db.files_in("folder:", &[], false).is_err(), "no folder chosen");
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A blob or file field that says its extensions takes only those files;
+/// one of another type is refused in Clarity's own words (conformance/files.json, fieldFiles).
+#[test]
+fn a_field_takes_only_the_files_of_its_extensions() {
+    let strings = |v: &Value| v.as_array().unwrap().iter().map(|p| p.as_str().unwrap().to_string()).collect::<Vec<String>>();
+    for case in cases()["fieldFiles"].as_array().unwrap() {
+        let patterns = strings(&case["patterns"]);
+        let name = case["name"].as_str().unwrap();
+        let taken = clarity_runtime::files::check_file_type("video", &patterns, case["hidden"].as_bool().unwrap(), name);
+        assert_eq!(taken.is_ok(), case["taken"].as_bool().unwrap(), "{patterns:?} {name}");
+    }
+    let refused = clarity_runtime::files::check_file_type("video", &["*.mp4".to_string()], false, "notes.txt").unwrap_err();
+    let said = clarity_runtime::program::said(&refused);
+    assert_eq!(said.key.as_deref(), Some("fileTypeRefused"));
+    assert_eq!(said.show(), "video takes *.mp4 files, not notes.txt");
+}
+
+/// A file a person picked in a web app goes into a file store on the server,
+/// in a folder named by its contents as a blob's is, and its path there is
+/// what a `file` field keeps (docs/ledger/files-pictures.md, step 5).
+#[test]
+fn an_upload_goes_into_a_store_and_gives_its_path() {
+    let (db, root) = store("uploads");
+    let path = db.store_upload("photos", "C:\\me\\cat.png", b"meow").unwrap();
+    let inside = clarity_runtime::record_file::store_path(b"meow", "cat.png");
+    assert_eq!(std::path::PathBuf::from(&path), root.join(&inside));
+    assert_eq!(std::fs::read(&path).unwrap(), b"meow");
+    // The same file again lands at the same place; nothing is written over.
+    assert_eq!(db.store_upload("photos", "cat.png", b"meow").unwrap(), path);
+    assert!(db.store_upload("nowhere", "a.txt", b"x").is_err());
+    let stores = db.stores();
+    assert_eq!(stores, vec![("photos".to_string(), root.display().to_string())]);
+    std::fs::remove_dir_all(root).unwrap();
+}

@@ -608,6 +608,19 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "ui.{method}({}, {code});", string(&part));
                     return;
                 }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = crate::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        crate::FileName::Path => self.value(value),
+                        crate::FileName::StoreFile => format!("{}.name", self.value(value)),
+                        crate::FileName::RecordFile => {
+                            let file = self.place(value);
+                            format!("({file} ? {file}->name : std::string())")
+                        }
+                    };
+                    let patterns = check.patterns.iter().map(|p| string(p)).collect::<Vec<_>>().join(", ");
+                    let _ = writeln!(out, "clarity::check_file_type({}, {{{patterns}}}, {}, {file});", string(&check.field), check.hidden);
+                }
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target);
@@ -1699,7 +1712,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity::sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity::sql::decimal(clarity::Decimal({}))", self.value(value)),
             FieldType::Bool => format!("clarity::sql::boolean({})", self.value(value)),
@@ -1712,7 +1725,7 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("clarity::sql::integer({}.id)", self.value(value)),
                 _ => format!("clarity::sql::reference({})", self.value(value)),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
+            FieldType::Image | FieldType::Blob | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list is compared with none only".into());
                 String::new()
             }

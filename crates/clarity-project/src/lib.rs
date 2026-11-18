@@ -1269,6 +1269,10 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
         let message = "the project has no version for app.version to show: write version \"1.0.0\" in the project file";
         found.push(if path.is_empty() { clarity_spec::Diagnostic::error(message, span).in_file(file) } else { clarity_spec::Diagnostic::error(message, span).in_file(&path) });
     }
+    // A web app keeps a file a person picks in a file store on the server (docs/ledger/files-pictures.md, step 5).
+    if settings.stack.has(Target::Web) {
+        found.extend(clarity_spec::file_parts_without_store(project));
+    }
     let cli = settings.stack.has(Target::Cli);
     // The keys window opens where the project file allows it (manual/app.keys.md).
     if !settings.keys_editable

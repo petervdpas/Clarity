@@ -18,7 +18,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use crate::files::{safe_name, ChosenFile, FileFilter, FilePicker};
+use crate::files::{safe_name, FileFilter, StorageProvider, PickerOptions, StorageFile, StorageFolder};
 
 /// What a dialog chooses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,13 +28,18 @@ pub enum Kind {
     Folder,
 }
 
-/// A dialog to show: what it chooses, its title, the name it suggests (saving) and the kinds of file it offers (opening).
+/// A dialog to show: what it chooses, its title, the name it suggests
+/// (saving), the kinds of file it offers (opening) and the folder it opens
+/// in (none: where the system opens it).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ask {
     pub kind: Kind,
     pub title: String,
     pub name: Option<String>,
     pub filter: Option<FileFilter>,
+    pub folder: Option<String>,
+    /// Hidden files and folders show too, where the dialog can show them (macOS, Windows).
+    pub hidden: bool,
 }
 
 /// The systems Clarity knows the dialogs of.
@@ -114,16 +119,16 @@ pub type Starter = Box<dyn Fn(&Program) + Send + Sync>;
 /// name one), and while one is open the windows take no input, as under a
 /// dialog of their own (`showing`). A dialog waits off the screen's thread
 /// (the part asks through `Cx::later`), so the windows go on drawing.
-pub struct SystemFilePicker {
+pub struct SystemStorageProvider {
     choose: Chooser,
     run: Starter,
     owner: Mutex<Option<SystemWindow>>,
     showing: AtomicUsize,
 }
 
-impl Default for SystemFilePicker {
-    fn default() -> SystemFilePicker {
-        SystemFilePicker::with(Box::new(|ask, owner| choose(Os::current(), ask, owner)), Box::new(start))
+impl Default for SystemStorageProvider {
+    fn default() -> SystemStorageProvider {
+        SystemStorageProvider::with(Box::new(|ask, owner| choose(Os::current(), ask, owner)), Box::new(start))
     }
 }
 
@@ -136,10 +141,10 @@ impl Drop for Open<'_> {
     }
 }
 
-impl SystemFilePicker {
+impl SystemStorageProvider {
     /// A picker whose dialogs `choose` answers and whose programs `run` starts: a test's.
-    pub fn with(choose: Chooser, run: Starter) -> SystemFilePicker {
-        SystemFilePicker { choose, run, owner: Mutex::new(None), showing: AtomicUsize::new(0) }
+    pub fn with(choose: Chooser, run: Starter) -> SystemStorageProvider {
+        SystemStorageProvider { choose, run, owner: Mutex::new(None), showing: AtomicUsize::new(0) }
     }
 
     /// The window the person works in, which a dialog belongs to; none while there is none.
@@ -163,31 +168,28 @@ impl SystemFilePicker {
     }
 }
 
-impl FilePicker for SystemFilePicker {
+impl StorageProvider for SystemStorageProvider {
     fn picks_folders(&self) -> bool {
         true
     }
 
-    fn open_file(&self, title: &str, filter: Option<&FileFilter>) -> Option<ChosenFile> {
-        let path = self.ask(Ask { kind: Kind::Open, title: title.to_string(), name: None, filter: filter.cloned() })?;
-        let bytes = std::fs::read(&path).map_err(|e| eprintln!("{path}: {e}")).ok()?;
-        let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        Some(ChosenFile { name, bytes })
+    fn open_file(&self, options: &PickerOptions) -> Option<StorageFile> {
+        let path = self.ask(Ask { kind: Kind::Open, title: options.title.clone(), name: None, filter: options.file_type.clone(), folder: options.start.clone(), hidden: options.hidden })?;
+        Some(StorageFile::at(&path))
     }
 
-    fn save_file(&self, title: &str, name: &str, bytes: &[u8]) -> Option<String> {
-        let path = self.ask(Ask { kind: Kind::Save, title: title.to_string(), name: Some(name.to_string()), filter: None })?;
-        match std::fs::write(&path, bytes) {
-            Ok(()) => Some(path),
-            Err(e) => {
-                eprintln!("{path}: {e}");
-                None
-            }
-        }
+    fn save_file(&self, options: &PickerOptions) -> Option<StorageFile> {
+        let path = self.ask(Ask { kind: Kind::Save, title: options.title.clone(), name: options.suggested_name.clone(), filter: options.file_type.clone(), folder: options.start.clone(), hidden: options.hidden })?;
+        Some(StorageFile::at(&path))
     }
 
-    fn choose_folder(&self, title: &str) -> Option<String> {
-        self.ask(Ask { kind: Kind::Folder, title: title.to_string(), name: None, filter: None })
+    fn write(&self, file: &StorageFile, bytes: &[u8]) -> Option<String> {
+        crate::files::write_at(file, bytes)
+    }
+
+    fn open_folder(&self, options: &PickerOptions) -> Option<StorageFolder> {
+        let path = self.ask(Ask { kind: Kind::Folder, title: options.title.clone(), name: None, filter: options.file_type.clone(), folder: options.start.clone(), hidden: options.hidden })?;
+        Some(StorageFolder::at(&path))
     }
 
     /// Opens a copy of the file, in a folder of its own among the system's temporary files, in the system's program for its kind.
@@ -300,10 +302,20 @@ fn zenity(ask: &Ask, owner: Option<u64>) -> Program {
     if let Some(owner) = owner {
         args.extend(["--modal".to_string(), format!("--attach={owner}")]);
     }
+    // A folder ending in a slash: zenity opens in it.
+    let folder = ask.folder.as_deref().map(|f| format!("{}/", f.trim_end_matches('/')));
     match ask.kind {
-        Kind::Save => args.extend(["--save".to_string(), "--confirm-overwrite".to_string(), format!("--filename={}", ask.name.clone().unwrap_or_default())]),
-        Kind::Folder => args.push("--directory".to_string()),
+        Kind::Save => args.extend(["--save".to_string(), "--confirm-overwrite".to_string(), format!("--filename={}{}", folder.unwrap_or_default(), ask.name.clone().unwrap_or_default())]),
+        Kind::Folder => {
+            args.extend(folder.map(|f| format!("--filename={f}")));
+            args.push("--directory".to_string());
+            // The files of the folder part's extensions show while a folder is chosen.
+            if let Some(filter) = &ask.filter {
+                args.push(format!("--file-filter={} | {}", filter.name, filter.patterns.join(" ")));
+            }
+        }
         Kind::Open => {
+            args.extend(folder.map(|f| format!("--filename={f}")));
             if let Some(filter) = &ask.filter {
                 args.push(format!("--file-filter={} | {}", filter.name, filter.patterns.join(" ")));
             }
@@ -313,7 +325,8 @@ fn zenity(ask: &Ask, owner: Option<u64>) -> Program {
 }
 
 fn kdialog(ask: &Ask, owner: Option<u64>) -> Program {
-    let home = std::env::var("HOME").unwrap_or_default();
+    // It opens in the start folder, else the home folder.
+    let home = ask.folder.clone().unwrap_or_else(|| std::env::var("HOME").unwrap_or_default());
     let mut args = vec!["--title".to_string(), ask.title.clone()];
     if let Some(owner) = owner {
         args.extend(["--attach".to_string(), owner.to_string()]);
@@ -334,15 +347,18 @@ fn kdialog(ask: &Ask, owner: Option<u64>) -> Program {
 /// The AppleScript of the dialog, its texts quoted as AppleScript strings.
 pub fn apple_script(ask: &Ask) -> String {
     let prompt = format!("with prompt {}", quoted(&ask.title));
+    let location = ask.folder.as_deref().map(|f| format!(" default location (POSIX file {})", quoted(f))).unwrap_or_default();
+    // Hidden files and folders show with `invisibles`; choosing a name to save has none.
+    let invisibles = if ask.hidden { " with invisibles" } else { "" };
     match ask.kind {
-        Kind::Save => format!("POSIX path of (choose file name {prompt} default name {})", quoted(ask.name.as_deref().unwrap_or(""))),
-        Kind::Folder => format!("POSIX path of (choose folder {prompt})"),
+        Kind::Save => format!("POSIX path of (choose file name {prompt} default name {}{location})", quoted(ask.name.as_deref().unwrap_or(""))),
+        Kind::Folder => format!("POSIX path of (choose folder {prompt}{location}{invisibles})"),
         Kind::Open => {
             let kinds = extensions(ask.filter.as_ref());
             if kinds.is_empty() {
-                format!("POSIX path of (choose file {prompt})")
+                format!("POSIX path of (choose file {prompt}{location}{invisibles})")
             } else {
-                format!("POSIX path of (choose file {prompt} of type {{{}}})", kinds.iter().map(|k| quoted(k)).collect::<Vec<_>>().join(", "))
+                format!("POSIX path of (choose file {prompt}{location} of type {{{}}}{invisibles})", kinds.iter().map(|k| quoted(k)).collect::<Vec<_>>().join(", "))
             }
         }
     }

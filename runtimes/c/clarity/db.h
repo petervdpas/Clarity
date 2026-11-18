@@ -208,6 +208,12 @@ bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, Cla
 /// case; empty or `"*.*"`: any file), a hidden one (its name starting with a
 /// dot) only with `hidden` (conformance/files.json).
 bool clarity_folder_takes(const char* patterns, bool hidden, const char* name);
+/// Whether a blob or file field that says its extensions (`patterns`, by
+/// spaces) takes the file `name` (a name or a path): its last part matched
+/// as a folder matches, a hidden one only with `hidden`; no file (an empty
+/// name) is always taken. One of another type is refused in Clarity's own
+/// words, fileTypeRefused (conformance/files.json, fieldFiles).
+bool clarity_check_file_type(const char* field, const char* patterns, bool hidden, const char* name);
 /// The files of a folder ("folder:" and its path) its extensions take, in
 /// its folders too, sorted by path; hidden ones only with `hidden`.
 bool clarity_files_in(ClarityDb* db, const char* folder, const char* patterns, bool hidden, ClarityFileList* out);
@@ -224,6 +230,14 @@ bool clarity_record_file_from(ClarityDb* db, const ClarityFile* file, const char
 /// The bytes of the file `path` of a store: a picture linked from a file
 /// before its record is saved.
 bool clarity_store_file(ClarityDb* db, const char* store, const char* path, ClarityBytes* out);
+/// Keeps a file a person picked in a web app in the file store `store` on
+/// the server: in a folder named by its contents, as a blob's is, so nothing
+/// is written over; `out` is its path on the server (step 5 of
+/// docs/ledger/files-pictures.md).
+bool clarity_store_upload(ClarityDb* db, const char* store, const char* name, ClarityBytes bytes, const char** out);
+/// The file stores and their folders on this machine, by name, as
+/// `[{"name", "folder"}]`; one whose folder cannot be found is left out.
+cJSON* clarity_stores(ClarityDb* db);
 /// Another record's picture for a field kept in `to` (NULL: the database),
 /// as code copies it (album.cover = other.cover); `*out` is NULL for none.
 /// `value` is field `column` of record `id`, kept in `from`. A picture in

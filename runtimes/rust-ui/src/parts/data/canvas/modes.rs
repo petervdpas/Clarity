@@ -396,7 +396,8 @@ impl CanvasPart {
                 let picker = crate::files::system();
                 let title = locale::translate("importPicture", "Import a picture");
                 let filter = crate::files::FileFilter { name: title.clone(), patterns: ["*.png", "*.jpg", "*.jpeg", "*.webp"].iter().map(|p| p.to_string()).collect() };
-                cx.later(self.base.node.id(), move || Imported(picker.open_file(&title, Some(&filter)).map(|c| c.bytes)));
+                let options = crate::files::PickerOptions { file_type: Some(filter), ..crate::files::PickerOptions::titled(&title) };
+                cx.later(self.base.node.id(), move || Imported(picker.open_file(&options).and_then(|f| f.read())));
             }
             Some(super::toolbox::Ask::Export) => {
                 let bytes = clarity_image::encode(&self.painted_pixels());
@@ -404,7 +405,10 @@ impl CanvasPart {
                 let title = locale::translate("exportPicture", "Export the picture");
                 let name = format!("{}.png", self.base.name().unwrap_or("picture"));
                 cx.later(self.base.node.id(), move || {
-                    picker.save_file(&title, &name, &bytes);
+                    let options = crate::files::PickerOptions { suggested_name: Some(name), ..crate::files::PickerOptions::titled(&title) };
+                    if let Some(file) = picker.save_file(&options) {
+                        picker.write(&file, &bytes);
+                    }
                     Exported
                 });
             }

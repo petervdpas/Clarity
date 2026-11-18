@@ -359,14 +359,23 @@ pub(crate) fn login(stream: &mut UnixStream) -> Result<(), String> {
     stream.write_all(b"BEGIN\r\n").map_err(|e| e.to_string())
 }
 
-/// The options of the dialog: its token, modal, a folder, the name to save, the kinds of file.
-fn options(ask: &Ask, token: &str) -> Dbus {
+/// The options of the dialog: its token, modal, a folder, the name to
+/// save, the kinds of file, and the folder it opens in (`current_folder`,
+/// the path's bytes ending in a nul).
+pub fn options(ask: &Ask, token: &str) -> Dbus {
     let entry = |key: &str, sig: &str, value: Dbus| Dbus::Entry(Box::new(Dbus::Str(key.into())), Box::new(Dbus::Variant(sig.into(), Box::new(value))));
     let mut entries = vec![entry("handle_token", "s", Dbus::Str(token.into())), entry("modal", "b", Dbus::Bool(true))];
+    if let Some(folder) = &ask.folder {
+        let bytes = folder.bytes().chain(std::iter::once(0)).map(Dbus::Byte).collect();
+        entries.push(entry("current_folder", "ay", Dbus::Array(bytes)));
+    }
     match ask.kind {
-        Kind::Folder => entries.push(entry("directory", "b", Dbus::Bool(true))),
         Kind::Save => entries.push(entry("current_name", "s", Dbus::Str(ask.name.clone().unwrap_or_default()))),
-        Kind::Open => {
+        // A folder part's extensions: those files show while a folder is chosen.
+        Kind::Open | Kind::Folder => {
+            if ask.kind == Kind::Folder {
+                entries.push(entry("directory", "b", Dbus::Bool(true)));
+            }
             if let Some(filter) = &ask.filter {
                 // filters: a(sa(us)), each a name and its patterns (0 is a glob).
                 let patterns = filter.patterns.iter().map(|p| Dbus::Struct(vec![Dbus::U32(0), Dbus::Str(p.clone())])).collect();

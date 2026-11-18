@@ -180,6 +180,13 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
             let (store, path): (String, String) = (arg(&args, "store")?, arg(&args, "path")?);
             Ok(base64(&app.store_file(&store, &path)?))
         })()),
+        // A file picked in a web app, kept in a store: its path on the server.
+        "store_upload" => given((|| {
+            let (store, name, data): (String, String, String) = (arg(&args, "store")?, arg(&args, "name")?, arg(&args, "data")?);
+            let bytes = crate::record_file::from_data(&data).map_err(|e| Text::plain(e.to_string()))?;
+            Ok(app.store_upload(&store, &name, &bytes)?)
+        })()),
+        "stores" => given((|| Ok(app.stores()?.into_iter().map(|(name, folder)| json!({ "name": name, "folder": folder })).collect::<Vec<_>>()))()),
         "read_settings" => json!({ "value": app.read_settings() }),
         "keep_settings" => given((|| app.keep_settings(arg::<Option<Map<String, Value>>>(&args, "settings")?.unwrap_or_default()))()),
         "set_language" => given((|| {

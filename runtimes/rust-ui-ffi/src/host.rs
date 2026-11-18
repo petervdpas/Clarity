@@ -129,6 +129,9 @@ fn field_of(value: &Value) -> FieldFacts {
         color: flag("color"),
         folder: flag("folder"),
         help: text("help"),
+        // The files a folder, file or blob field takes, as patterns, and whether hidden ones count.
+        extensions: value.get("extensions").and_then(Value::as_array).map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect()).unwrap_or_default(),
+        hidden: flag("hidden"),
     }
 }
 

@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 
 use clarity_runtime::ui::{Level, Message, Text};
 use clarity_ui::desktop::fail_safe::{FailSafe, QUIET};
-use clarity_ui::desktop::files::{commands_for, Ask, Kind, Os, SystemFilePicker, SystemWindow};
+use clarity_ui::desktop::files::{commands_for, Ask, Kind, Os, SystemStorageProvider, SystemWindow};
 use clarity_ui::desktop::window_system::{first_context, icon, scale_of, software_asked, CONTEXTS, ICON_SIZES};
 use clarity_ui::desktop::{blocks_input, hand_down, standard_of, WHEEL_NOTCH};
-use clarity_ui::files::FilePicker;
+use clarity_ui::files::StorageProvider;
 use clarity_ui::input::Cursor;
 use winit::window::CursorIcon;
 
@@ -84,7 +84,7 @@ fn a_window_asks_for_opengl_3_3_core_then_older_contexts_and_can_draw_in_softwar
 #[test]
 fn a_file_dialog_belongs_to_the_window_it_was_asked_from() {
     let owner = SystemWindow { x11: 0x3a00007, win32: 0 };
-    let ask = Ask { kind: Kind::Open, title: "Choose a file".into(), name: None, filter: None };
+    let ask = Ask { kind: Kind::Open, title: "Choose a file".into(), name: None, filter: None, folder: None, hidden: false };
     let commands = commands_for(Os::Linux, &ask, Some(owner));
     assert_eq!(vec!["--file-selection", "--title=Choose a file", "--modal", "--attach=60817415"], commands[0].args);
     assert_eq!(vec!["--title", "Choose a file", "--attach", "60817415"], commands[1].args[..4]);
@@ -101,7 +101,7 @@ fn while_a_file_dialog_is_open_the_windows_take_no_input() {
     let released = Mutex::new(released);
     let asked: Arc<Mutex<Option<SystemWindow>>> = Arc::default();
     let kept = asked.clone();
-    let picker = SystemFilePicker::with(
+    let picker = SystemStorageProvider::with(
         Box::new(move |_, owner| {
             *kept.lock().unwrap() = owner;
             let _ = released.lock().unwrap().recv();
@@ -112,7 +112,7 @@ fn while_a_file_dialog_is_open_the_windows_take_no_input() {
     picker.set_owner(Some(SystemWindow { x11: 7, win32: 0 }));
     assert!(!picker.showing());
     std::thread::scope(|scope| {
-        let choosing = scope.spawn(|| picker.choose_folder("Choose a folder"));
+        let choosing = scope.spawn(|| picker.open_folder(&clarity_ui::files::PickerOptions::titled("Choose a folder")));
         let until = Instant::now() + Duration::from_secs(5);
         while !picker.showing() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
@@ -183,7 +183,7 @@ fn a_window_shows_the_application_s_icon_or_clarity_s() {
 
 #[test]
 fn a_picker_is_the_parts_file_dialogs() {
-    let picker = SystemFilePicker::with(Box::new(|_, _| None), Box::new(|_| {}));
+    let picker = SystemStorageProvider::with(Box::new(|_, _| None), Box::new(|_| {}));
     assert!(picker.picks_folders());
 }
 

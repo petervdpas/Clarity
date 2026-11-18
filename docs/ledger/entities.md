@@ -14,7 +14,7 @@ Progress: 65%
 
 ## Tests
 - `conformance/required.json`, `conformance/list-fields.json`: run by R, Go, C, C++, C#
-- spec `crates/clarity-spec/tests/` parse.rs, defaults.rs, cascade.rs, file_fields.rs, records.rs, list_fields.rs, value_lists.rs, data_events.rs, names.rs, rename_field.rs, dictionary_edit.rs
+- spec `crates/clarity-spec/tests/` parse.rs, defaults.rs, cascade.rs, blob_fields.rs, records.rs, list_fields.rs, value_lists.rs, data_events.rs, names.rs, rename_field.rs, dictionary_edit.rs
 - gen `crates/clarity-gen/tests/` required_fields.rs, cascade.rs, list_fields.rs, date_defaults.rs, ref_copy.rs
 
 ## Open

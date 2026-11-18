@@ -14,6 +14,7 @@ use clarity_ui::input::PointerButton;
 use clarity_ui::locale;
 use clarity_ui::parts::containers::container::ContainerButton;
 use clarity_ui::parts::inputs::file::{saved_where, FilePart};
+use clarity_ui::parts::inputs::path::PathPart;
 use clarity_ui::parts::inputs::testing::InputsHost;
 use clarity_ui::parts::PartHost;
 use clarity_ui::testing::{part_named, window_of, Shot};
@@ -222,4 +223,139 @@ fn keep(shot: &mut Shot, name: &str) {
     if let Ok(dir) = std::env::var("CLARITY_SHOTS") {
         shot.save(std::path::Path::new(&dir).join(name)).expect("the picture is written");
     }
+}
+
+/// `extensions` and `start folder` (docs/ledger/files-pictures.md): the
+/// system's dialog offers only those files, named by their patterns, and
+/// opens in the start folder, a relative one inside the program's folder;
+/// a copy is saved from there too. Without them, any file, where the system opens it.
+#[test]
+fn its_dialog_offers_its_extensions_and_opens_in_its_start_folder() {
+    let (mut screen, _, picker) = make(None, r#"<File at="1,1" span="12" name="doc" bind="task.attachment" extensions="*.pdf *.docx" startFolder="papers" />"#);
+    click(&mut screen, FilePart::choose_button);
+    let filter = picker.filter().expect("a filter");
+    assert_eq!(filter.patterns, ["*.pdf", "*.docx"]);
+    assert_eq!(filter.name, "*.pdf *.docx");
+    let papers = std::env::current_dir().unwrap().join("papers").to_string_lossy().into_owned();
+    assert_eq!(picker.starts(), [Some(papers.clone())]);
+    let (mut screen, _, picker) = make(Some(RecordFile { name: "manual.pdf".into(), content: Picture::New(vec![1]) }), r#"<File at="1,1" span="12" name="doc" bind="task.attachment" startFolder="/srv/papers" />"#);
+    click(&mut screen, FilePart::save_button);
+    assert_eq!(picker.starts(), [Some("/srv/papers".to_string())]);
+    let (mut screen, _, picker) = make(None, MARKUP);
+    click(&mut screen, FilePart::choose_button);
+    assert_eq!((picker.filter(), picker.starts()), (None, vec![None]));
+}
+
+// -- A file part bound to a `file` field: a file on the disk, by its path ------------
+
+fn make_path(markup: &str) -> (Screen, Rc<InputsHost>, std::sync::Arc<TestPicker>) {
+    let picker = TestPicker::installed();
+    let host = InputsHost::new();
+    host.set("movie", json!({}));
+    host.set("movie.video", json!("/home/ada/videos/old.mp4"));
+    host.types.borrow_mut().insert("movie.video".into(), "file".into());
+    let mut screen = window_of(markup, host.clone());
+    screen.resize(800.0, 60.0, 1.0);
+    Shot::of(&mut screen, 800, 60, 1.0);
+    (screen, host, picker)
+}
+
+fn path_part(screen: &Screen) -> &PathPart {
+    screen.element(part_named(screen, "video")).and_then(|e| e.as_any().downcast_ref::<PathPart>()).expect("a file part bound to a file field shows its path")
+}
+
+fn click_path_button(screen: &mut Screen) {
+    let b = path_part(screen).choose_button().bounds;
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    screen.pointer_pressed(x, y, PointerButton::Left, 1);
+    screen.pointer_released(x, y, PointerButton::Left);
+    screen.finish_later();
+}
+
+/// It shows the path, typed or chosen with the system's open dialog of its
+/// extensions; the path chosen is written, and nothing is read.
+#[test]
+fn a_file_field_shows_its_path_and_chooses_a_file_on_the_disk() {
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" extensions="*.mp4" onchange="moved" />"#);
+    assert_eq!("/home/ada/videos/old.mp4", path_part(&screen).editor().text());
+    picker.next_file_at("/home/ada/videos/new.mp4");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("/home/ada/videos/new.mp4")), host.read("movie.video"));
+    assert_eq!(vec![format!("open {}", locale::translate("chooseFile", "Choose a file"))], picker.asked());
+    assert_eq!(picker.filter().map(|f| f.patterns), Some(vec!["*.mp4".to_string()]));
+    // It opens beside the file it holds.
+    assert_eq!(picker.starts(), [Some("/home/ada/videos".to_string())]);
+    assert!(host.logged().iter().any(|l| l == "run video change moved"), "{:?}", host.logged());
+}
+
+/// With `new file` it asks the save dialog, suggesting the file it holds, so a file that is not there yet can be named.
+#[test]
+fn with_new_file_it_names_a_file_that_is_not_there_yet() {
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" newFile="true" />"#);
+    picker.save_to("/home/ada/videos/cut.mp4");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("/home/ada/videos/cut.mp4")), host.read("movie.video"));
+    assert_eq!(vec![format!("save {} old.mp4", locale::translate("chooseFile", "Choose a file"))], picker.asked());
+    assert!(picker.saved().is_empty(), "choosing where writes nothing");
+}
+
+/// A file of a type the part does not take is refused in Clarity's own
+/// words and not written: chosen or typed, a hidden one only with `hidden`.
+#[test]
+fn a_file_of_another_type_is_refused() {
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" extensions=".mp4, .webm" onchange="moved" />"#);
+    picker.next_file_at("/home/ada/notes.txt");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("/home/ada/videos/old.mp4")), host.read("movie.video"), "not written");
+    assert_eq!(host.said.borrow().clone(), ["Error: video takes *.mp4 *.webm files, not notes.txt"]);
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" extensions="*.*" />"#);
+    picker.next_file_at("/home/ada/.env");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("/home/ada/videos/old.mp4")), host.read("movie.video"), "a hidden one only with hidden");
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" extensions="*.*" hidden="true" />"#);
+    picker.next_file_at("/home/ada/.env");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("/home/ada/.env")), host.read("movie.video"));
+    // A record's file too.
+    let (mut screen, host, picker) = make(None, r#"<File at="1,1" span="12" name="doc" bind="task.attachment" extensions=".pdf" />"#);
+    picker.next_file("budget.xlsx", vec![1]);
+    click(&mut screen, FilePart::choose_button);
+    assert_eq!(Some(Value::Null), host.read("task.attachment"));
+    assert_eq!(host.said.borrow().clone(), ["Error: doc takes *.pdf files, not budget.xlsx"]);
+}
+
+/// A field's own extensions hold for a part that names none.
+#[test]
+fn the_field_s_extensions_hold_where_the_part_names_none() {
+    let picker = TestPicker::installed();
+    let host = InputsHost::new();
+    host.set("movie", json!({}));
+    host.set("movie.video", json!(""));
+    host.types.borrow_mut().insert("movie.video".into(), "file".into());
+    host.facts("movie.video", clarity_ui::parts::FieldFacts { label: "Video".into(), extensions: vec!["*.mp4".into()], ..Default::default() });
+    let mut screen = window_of(r#"<File at="1,1" span="12" name="video" bind="movie.video" />"#, host.clone());
+    screen.resize(800.0, 60.0, 1.0);
+    Shot::of(&mut screen, 800, 60, 1.0);
+    picker.next_file_at("/srv/a.avi");
+    click_path_button(&mut screen);
+    assert_eq!(Some(json!("")), host.read("movie.video"));
+    assert_eq!(host.said.borrow().clone(), ["Error: Video takes *.mp4 files, not a.avi"]);
+    assert_eq!(picker.filter().map(|f| f.patterns), Some(vec!["*.mp4".to_string()]), "its dialog offers them");
+}
+
+/// In a web app the browser gives the picked file's bytes and no path: the
+/// part keeps it in its store on the server and writes the path it got
+/// there (docs/ledger/files-pictures.md, step 5).
+#[test]
+fn in_a_browser_a_picked_file_is_kept_in_the_part_s_store() {
+    let (mut screen, host, picker) = make_path(r#"<File at="1,1" span="12" name="video" bind="movie.video" extensions=".mp4" store="uploads" />"#);
+    picker.no_folders();
+    picker.next_file("clip.mp4", b"film".to_vec());
+    click_path_button(&mut screen);
+    assert_eq!(host.uploaded.borrow().clone(), [("uploads".to_string(), "clip.mp4".to_string(), b"film".to_vec())]);
+    assert_eq!(Some(json!("/srv/uploads/clip.mp4")), host.read("movie.video"));
+    // One of another type is refused before it is sent.
+    picker.next_file("notes.txt", b"x".to_vec());
+    click_path_button(&mut screen);
+    assert_eq!(host.uploaded.borrow().len(), 1);
 }

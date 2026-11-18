@@ -77,7 +77,8 @@ entity Album
     favourite: bool, label @albumFavourite
     rating: decimal(3, 1), min 0, max 5, label @albumRating
     tint: color, default "#3b82f6", label @albumTint
-    booklet: file, label @albumBooklet
+    booklet: blob, extensions ".pdf", label @albumBooklet
+    scan: file, extensions ".pdf, .png", hidden, label @albumScan
     tags: list<text>, search, label @albumTags
     formats: list<Format>, label @albumFormats
     plays: list<date>, label @albumPlays
@@ -170,6 +171,8 @@ code Albums
         if album.booklet != none and album.booklet.extension != "pdf"
             lendingBusy.visible = album.booklet.name == ""
             album.booklet = none
+        // A file on the disk, checked against its extensions before it is set.
+        album.scan = "scans/booklet.pdf"
 
     handler tagsChanged
         if album.tags contains "live" and count(album.tags) > 1

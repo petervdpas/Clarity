@@ -61,10 +61,10 @@ impl Column {
         self.column.clone().unwrap_or_else(|| snake_case(&self.name))
     }
 
-    /// The column beside a `file` field that holds the file's name
+    /// The column beside a `blob` field that holds the file's name
     /// (`manual_name`), which comes and goes with it; none for other fields.
     pub fn name_column(&self) -> Option<Column> {
-        (self.ty == FieldType::File).then(|| Column {
+        (self.ty == FieldType::Blob).then(|| Column {
             name: format!("{}_name", self.name),
             ty: FieldType::Text { max_length: Some(FILE_NAME_LENGTH) },
             unique: false,
@@ -109,7 +109,7 @@ impl Column {
     }
 }
 
-/// The longest name of a file of a `file` field.
+/// The longest name of a file of a `blob` field.
 pub const FILE_NAME_LENGTH: u32 = 255;
 
 /// The stored shape of an entity.
@@ -328,7 +328,7 @@ impl Schema {
             Op::ChangeField { entity, field, ty, store } => {
                 let column = self.table_mut(entity)?.column_mut(field)?;
                 // A file has a column for its name, which no other value has.
-                if (column.ty == FieldType::File) != (*ty == FieldType::File) {
+                if (column.ty == FieldType::Blob) != (*ty == FieldType::Blob) {
                     return Err(format!("{entity}.{field} cannot become a file or stop being one; remove it and add a new field"));
                 }
                 // A list keeps its items as JSON, which no other value is.

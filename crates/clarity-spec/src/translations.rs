@@ -101,7 +101,10 @@ pub const PAINT_TOOLBOX_KEYS: [(&str, &str); 22] = [
 ];
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
-/// Clarity's words of a file part bound to a file field: its empty state,
+/// Why code or a part refused a file of a type its blob or file field does
+/// not take (`extensions`, conformance/files.json fieldFiles).
+pub const FILE_TYPE_KEYS: [(&str, &str); 1] = [("fileTypeRefused", "{field} takes {extensions} files, not {name}")];
+/// Clarity's words of a file part bound to a blob field: its empty state,
 /// its buttons, and what it says when a copy was saved.
 pub const FILE_KEYS: [(&str, &str); 7] = [
     ("noFile", "No file"),
@@ -375,6 +378,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&STEP_KEYS)
         .chain(&TAB_KEYS)
         .chain(&FILE_KEYS)
+        .chain(&FILE_TYPE_KEYS)
         .chain(&TEXT_EDIT_KEYS)
         .chain(&CALENDAR_KEYS)
         .chain(&FOLDER_KEYS)
@@ -829,6 +833,8 @@ fn shown(project: &Project) -> Shown {
     }));
     let wizard = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
     let available_tabs = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Tabs && w.props.available));
+    // A blob or file field that names its extensions refuses a file of another type.
+    let typed_files = project.entities().any(|e| e.fields.iter().any(|f| matches!(f.ty, FieldType::File | FieldType::Blob) && !f.modifiers.extensions.is_empty()));
     let bound_file = part_lists(project).any(|p| any_widget(p, &|w| {
         w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
     }));
@@ -909,6 +915,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
         .chain(if available_tabs { TAB_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
+        .chain(if typed_files { FILE_TYPE_KEYS.as_slice() } else { &[] })
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
         .chain(if paints { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
@@ -1359,6 +1366,17 @@ fn part_lists(project: &Project) -> impl Iterator<Item = &[Widget]> {
     let frames = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame)));
     let framed = frames.flat_map(|frame| frame.sidebars.iter().map(|s| s.widgets.as_slice()).chain(frame.footer.iter().map(|f| f.widgets.as_slice())));
     project.files.iter().flat_map(|f| &f.pages).map(|p| p.widgets.as_slice()).chain(framed)
+}
+
+/// Every part of `widgets`, inside containers and pages too.
+pub(crate) fn each_widget(widgets: &[Widget], visit: &mut impl FnMut(&Widget)) {
+    for w in widgets {
+        visit(w);
+        each_widget(&w.children, visit);
+        for page in &w.pages {
+            each_widget(&page.children, visit);
+        }
+    }
 }
 
 pub(crate) fn any_widget(widgets: &[Widget], test: &impl Fn(&Widget) -> bool) -> bool {

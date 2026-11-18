@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use clarity_runtime::ui::Hear;
 use clarity_ui::element::{Composition, Cx, Element, Node};
-use clarity_ui::files::{ChosenFile, FileFilter, FilePicker};
+use clarity_ui::files::{FileFilter, PickerOptions, StorageFile, StorageFolder, StorageProvider};
 use clarity_ui::later::Done;
 use clarity_ui::parts::PartHost;
 use clarity_ui::parts::sound::{self, Music, MusicPlayer, MusicProblem, Playing, SoundOutput, SoundPart};
@@ -407,7 +407,7 @@ fn a_timer_stops_as_its_window_leaves_the_screen() {
 /// An element that asks a file dialog through its host's picker, off the screen's thread.
 struct Asker {
     node: Node,
-    picker: Arc<dyn FilePicker>,
+    picker: Arc<dyn StorageProvider>,
     got: Rc<RefCell<Vec<String>>>,
 }
 
@@ -417,12 +417,13 @@ impl Element for Asker {
     fn on_click(&mut self, cx: &mut Cx) {
         let picker = self.picker.clone();
         let id = self.node.id();
-        cx.later(id, move || picker.open_file("Open", Some(&FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into()] })));
+        let options = PickerOptions { file_type: Some(FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into()] }), ..PickerOptions::titled("Open") };
+        cx.later(id, move || picker.open_file(&options));
     }
 
     fn on_later(&mut self, done: Done, _cx: &mut Cx) {
-        if let Ok(chosen) = done.downcast::<Option<ChosenFile>>() {
-            self.got.borrow_mut().push(chosen.map(|c| format!("{} {}", c.name, c.bytes.len())).unwrap_or_else(|| "none".to_string()));
+        if let Ok(chosen) = done.downcast::<Option<StorageFile>>() {
+            self.got.borrow_mut().push(chosen.map(|c| format!("{} {}", c.name, c.read().map_or(0, |b| b.len()))).unwrap_or_else(|| "none".to_string()));
         }
     }
 
@@ -434,18 +435,21 @@ impl Element for Asker {
 /// A picker that answers at once with a file, and keeps what it was asked.
 struct Answers(Mutex<Vec<String>>);
 
-impl FilePicker for Answers {
+impl StorageProvider for Answers {
     fn picks_folders(&self) -> bool {
         true
     }
-    fn open_file(&self, title: &str, filter: Option<&FileFilter>) -> Option<ChosenFile> {
-        self.0.lock().unwrap().push(format!("{title} {}", filter.map(|f| f.patterns.join(" ")).unwrap_or_default()));
-        Some(ChosenFile { name: "cat.png".into(), bytes: vec![1, 2, 3] })
+    fn open_file(&self, options: &PickerOptions) -> Option<StorageFile> {
+        self.0.lock().unwrap().push(format!("{} {}", options.title, options.file_type.as_ref().map(|f| f.patterns.join(" ")).unwrap_or_default()));
+        Some(StorageFile::given("cat.png", vec![1, 2, 3]))
     }
-    fn save_file(&self, _: &str, _: &str, _: &[u8]) -> Option<String> {
+    fn save_file(&self, _: &PickerOptions) -> Option<StorageFile> {
         None
     }
-    fn choose_folder(&self, _: &str) -> Option<String> {
+    fn write(&self, _: &StorageFile, _: &[u8]) -> Option<String> {
+        None
+    }
+    fn open_folder(&self, _: &PickerOptions) -> Option<StorageFolder> {
         None
     }
     fn show(&self, _: &str, _: &[u8]) {}
@@ -470,10 +474,10 @@ fn work_off_the_screens_thread_comes_back_to_the_element_that_asked() {
 
 #[test]
 fn a_host_without_file_dialogs_picks_nothing_and_a_files_name_is_made_safe() {
-    // The dialogs are Clarity.UI's own: a host that set none has NoFilePicker.
+    // The dialogs are Clarity.UI's own: a host that set none has NoStorageProvider.
     let picker = clarity_ui::files::system();
     assert!(!picker.picks_folders());
-    assert_eq!(None, picker.open_file("Open", None));
+    assert_eq!(None, picker.open_file(&PickerOptions::titled("Open")));
     assert_eq!("b.txt", clarity_ui::files::safe_name("../a/b.txt"));
     assert_eq!("c_d.txt", clarity_ui::files::safe_name("C:\\x\\c:d.txt"));
     assert_eq!("file", clarity_ui::files::safe_name(".."));
@@ -482,7 +486,7 @@ fn a_host_without_file_dialogs_picks_nothing_and_a_files_name_is_made_safe() {
 #[test]
 fn an_input_methods_composing_goes_to_the_element_with_the_focus() {
     let got = Rc::new(RefCell::new(Vec::new()));
-    let picker: Arc<dyn FilePicker> = Arc::new(clarity_ui::files::NoFilePicker);
+    let picker: Arc<dyn StorageProvider> = Arc::new(clarity_ui::files::NoStorageProvider);
     let mut screen = Screen::new(Box::new(Asker { node: Node::new(), picker, got: got.clone() }), ThemeLook::clarity(false));
     screen.resize(100.0, 100.0, 1.0);
     let root = screen.root().node().id();
@@ -503,7 +507,7 @@ mod desktop {
     use clarity_ui::files::FileFilter;
 
     fn ask(kind: Kind) -> Ask {
-        Ask { kind, title: "Pick \"one\"".into(), name: Some("report.pdf".into()), filter: Some(FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into(), "*.jpg".into()] }) }
+        Ask { kind, title: "Pick \"one\"".into(), name: Some("report.pdf".into()), filter: Some(FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into(), "*.jpg".into()] }), folder: None, hidden: false }
     }
 
     #[test]

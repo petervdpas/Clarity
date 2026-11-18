@@ -20,7 +20,7 @@ use clarity_runtime::ui::{Level, Text};
 use serde_json::Value;
 
 use crate::element::{Cx, Element, ElementId};
-use crate::files::ChosenFile;
+use crate::files::{PickerOptions, StorageFile};
 use crate::geometry::Rect;
 use crate::later::Done;
 use crate::locale;
@@ -105,23 +105,32 @@ impl Facts {
         let Some(bytes) = self.bytes_of(&file.content) else { return };
         let picker = crate::files::system();
         let title = locale::translate("saveFileCopy", "Save a copy");
-        cx.later(self.part, move || Asked::Saved(picker.save_file(&title, &file.name, &bytes)));
+        let options = PickerOptions { suggested_name: Some(file.name.clone()), start: self.start(), ..PickerOptions::titled(&title) };
+        cx.later(self.part, move || Asked::Saved(picker.save_file(&options).and_then(|place| picker.write(&place, &bytes))));
     }
 
-    /// Asks the system's dialog for a file, off the screen's thread.
+    /// Asks the system's dialog for a file of its extensions, off the screen's thread.
     fn choose(&self, cx: &mut Cx) {
         if self.read_only() || !self.enabled() {
             return;
         }
         let picker = crate::files::system();
         let title = locale::translate("chooseFile", "Choose a file");
-        cx.later(self.part, move || Asked::Chosen(picker.open_file(&title, None)));
+        let takes = super::picker::Takes::of(&self.spec, &*self.host);
+        let options = PickerOptions { file_type: crate::files::filter_of(&takes.patterns), hidden: takes.hidden, start: self.start(), ..PickerOptions::titled(&title) };
+        // Its bytes are read off the screen's thread too.
+        cx.later(self.part, move || Asked::Chosen(picker.open_file(&options).and_then(|f| f.read().map(|bytes| (f, bytes)))));
+    }
+
+    /// Where its dialogs open: its start folder; none: where the system opens them.
+    fn start(&self) -> Option<String> {
+        crate::files::start_folder(self.spec.text("startFolder"))
     }
 }
 
 /// What a dialog gave back.
 enum Asked {
-    Chosen(Option<ChosenFile>),
+    Chosen(Option<(StorageFile, Vec<u8>)>),
     Saved(Option<String>),
 }
 
@@ -135,7 +144,13 @@ pub struct FilePart {
     drawn_name: RefCell<String>,
 }
 
+/// A file part bound to a `file` field shows its path, chosen with the
+/// system's file dialog (the path part); bound to a blob, the record's file.
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
+    let on_disk = spec.text("bind").filter(|b| !b.is_empty()).and_then(|b| host.type_of(b)).is_some_and(|ty| ty == "file");
+    if on_disk {
+        return Box::new(crate::parts::inputs::path::PathPart::new(spec, host, crate::parts::inputs::path::Chooses::File));
+    }
     Box::new(FilePart::new(spec, host))
 }
 
@@ -229,9 +244,13 @@ impl FilePart {
         self.saved.as_deref()
     }
 
-    /// A file chosen: it replaces what the record had, a change.
+    /// A file chosen: it replaces what the record had, a change; one of a
+    /// type the part or its field does not take is refused in Clarity's own words.
     pub fn take(&self, chosen: &str, bytes: Vec<u8>) {
         if self.facts.read_only() || self.facts.bound().is_none() {
+            return;
+        }
+        if !super::picker::Takes::of(&self.facts.spec, &*self.facts.host).take(&*self.facts.host, chosen) {
             return;
         }
         let file = FieldFile { name: clean_name(chosen), content: FieldContent::New(bytes) };
@@ -287,7 +306,7 @@ impl Element for FilePart {
     fn on_later(&mut self, done: Done, cx: &mut Cx) {
         let Ok(asked) = done.downcast::<Asked>() else { return };
         match *asked {
-            Asked::Chosen(Some(chosen)) => self.take(&chosen.name, chosen.bytes),
+            Asked::Chosen(Some((chosen, bytes))) => self.take(&chosen.name, bytes),
             Asked::Saved(Some(place)) => {
                 self.base.host.say(Level::Info, Text::plain(saved_where(&place)));
                 self.saved = Some(place);

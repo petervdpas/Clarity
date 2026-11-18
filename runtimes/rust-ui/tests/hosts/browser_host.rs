@@ -10,7 +10,7 @@ use clarity_ui::Key;
 use clarity_ui::browser::host::{BrowserHost, PointerKind};
 use clarity_ui::browser::input::{button_of, cursor_css, key_of, modifiers_of, typed_text, wheel_of};
 use clarity_ui::browser::page::{PageClipboard, PageFiles, Tell};
-use clarity_ui::files::FilePicker;
+use clarity_ui::files::StorageProvider;
 use clarity_ui::input::{Cursor, Modifiers, PointerButton};
 use clarity_ui::overlay::Clipboard;
 use clarity_ui::Element;
@@ -145,13 +145,16 @@ fn the_clipboard_and_files_go_through_the_page() {
 
     let files = PageFiles::new(tell);
     assert!(!files.picks_folders());
-    assert_eq!(files.save_file("Save", "a/b:c.txt", b"hi").as_deref(), Some("b_c.txt"));
+    let download = files.save_file(&clarity_ui::files::PickerOptions { suggested_name: Some("a/b:c.txt".into()), ..clarity_ui::files::PickerOptions::titled("Save") }).unwrap();
+    assert_eq!(download.path, None, "a download has no path");
+    assert_eq!(files.write(&download, b"hi").as_deref(), Some("b_c.txt"));
     assert_eq!(tells(&said, "download"), [json!({ "tell": "download", "name": "b_c.txt", "data": "aGk=" })]);
     // Opening asks the page's file input; the file it gives is taken by the next open.
-    assert_eq!(files.open_file("Open", None), None);
+    assert_eq!(files.open_file(&clarity_ui::files::PickerOptions::titled("Open")), None);
     assert_eq!(tells(&said, "pick").len(), 1);
-    files.give(clarity_ui::files::ChosenFile { name: "x.txt".into(), bytes: b"x".to_vec() });
-    assert_eq!(files.open_file("Open", None).map(|f| f.name).as_deref(), Some("x.txt"));
+    files.give(clarity_ui::files::StorageFile::given("x.txt", b"x".to_vec()));
+    let given = files.open_file(&clarity_ui::files::PickerOptions::titled("Open")).unwrap();
+    assert_eq!((given.name.as_str(), given.path.as_deref(), given.read()), ("x.txt", None, Some(b"x".to_vec())));
 }
 
 /// A long call in the browser: the handler's request goes out without
@@ -703,4 +706,22 @@ fn a_value_set_from_the_mirror_on_a_bound_input_is_kept() {
     let tree = host.step(&json!({ "do": "access" }));
     let node = tree["access"]["nodes"].as_array().unwrap().iter().find(|n| n["part"] == json!("note")).unwrap().clone();
     assert_eq!(node["value"], json!("Grace"));
+}
+
+/// The IDE's preview of a desktop project draws its parts as the desktop
+/// does (`"desktop": true` in its files.json): a folder part has its button;
+/// a press on it picks nothing there, and no browser dialog opens
+/// (docs/ledger/files-pictures.md, step 6).
+#[test]
+fn a_desktop_project_s_preview_has_the_desktop_shape() {
+    let said: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let kept = said.clone();
+    let tell: Tell = Arc::new(move |v: Value| kept.lock().unwrap().push(v));
+    let files = PageFiles::new(tell);
+    assert!(!files.picks_folders(), "a web app's page picks no folder");
+    files.set_desktop(true);
+    assert!(files.picks_folders());
+    assert_eq!(files.open_file(&clarity_ui::files::PickerOptions::titled("Open")), None);
+    assert_eq!(files.open_folder(&clarity_ui::files::PickerOptions::titled("Choose")), None);
+    assert!(said.lock().unwrap().is_empty(), "nothing asks the page for a file");
 }

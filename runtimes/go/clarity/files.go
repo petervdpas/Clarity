@@ -66,6 +66,27 @@ func Takes(patterns []string, hidden bool, name string) bool {
 	return false
 }
 
+// CheckFileType is whether a blob or file field that says its extensions
+// takes the file name (a name or a path): its last part matched as a folder
+// matches, a hidden one only with hidden; no file (an empty name) is always
+// taken. One of another type is refused in Clarity's own words,
+// fileTypeRefused (conformance/files.json, fieldFiles).
+func CheckFileType(field string, patterns []string, hidden bool, name string) error {
+	last := name[strings.LastIndexAny(name, "/\\")+1:]
+	if last == "" || Takes(patterns, hidden, last) {
+		return nil
+	}
+	holds := strings.Join(patterns, " ")
+	if strings.HasPrefix(last, ".") && !hidden {
+		holds = "no hidden"
+	} else if len(patterns) == 0 {
+		holds = "any"
+	}
+	text := KeyedText("fileTypeRefused", "{field} takes {extensions} files, not {name}").
+		With("field", SlotText(field)).With("extensions", SlotText(holds)).With("name", SlotText(last))
+	return Refuse(text)
+}
+
 // FilesIn is the files of a folder ("folder:" and its path) its extensions
 // take, in its folders too, sorted by path; hidden ones only with hidden.
 func (db *Db) FilesIn(folder string, patterns []string, hidden bool) ([]FileEntry, error) {

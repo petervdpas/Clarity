@@ -72,9 +72,12 @@
   let open = $state<Record<number, boolean>>({});
   let error = $state<string | null>(null);
 
+  /** The field kinds a file store can keep: pictures and blobs. */
+  const STORED: string[] = ["image", "blob"];
+
   /** Format and Store are columns only when a field of this entity can have one. */
   const hasFormat = $derived(fields.some((f) => (preview.formats[f.type.kind] ?? []).length > 0 || f.modifiers.format !== null));
-  const hasStore = $derived(!settings && fields.some((f) => f.type.kind === "image"));
+  const hasStore = $derived(!settings && fields.some((f) => STORED.includes(f.type.kind)));
 
   function specOf(field: Field): FieldSpec {
     return { name: field.name.name, typeText: field.typeText, modifiers: field.modifiers };
@@ -300,7 +303,7 @@
             </td>{/if}
             <td><TextField {preview} {onapplied} text={m.help} onwrite={(text) => update(field, { modifiers: { help: text } })} /></td>
             {#if hasStore}<td>
-              {#if field.type.kind === "image"}
+              {#if STORED.includes(field.type.kind)}
                 <select value={m.store ?? ""} onchange={(e) => update(field, { modifiers: { store: e.currentTarget.value || null } })}>
                   <option value="">database</option>
                   {#each stores as store (store)}<option value={store}>{store}</option>{/each}

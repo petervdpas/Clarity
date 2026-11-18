@@ -619,6 +619,17 @@ pub fn attach_stores(project: &mut Project, stores: Vec<String>) {
             }
         }
     }
+    // A file part's upload store (step 5 of docs/ledger/files-pictures.md).
+    for file in &project.files {
+        for page in &file.pages {
+            translations::each_widget(&page.widgets, &mut |w| {
+                let Some(store) = w.props.store.as_ref().filter(|s| !stores.contains(s)) else { return };
+                let have = if stores.is_empty() { "add it there".to_string() } else { format!("they have {}", stores.join(", ")) };
+                let part = w.props.name.clone().unwrap_or_else(|| "a file part".to_string());
+                found.push(diagnostic::Diagnostic::error(format!("{part} uploads into file store '{store}', which the project settings do not have; {have}"), w.span).in_file(&file.path));
+            });
+        }
+    }
     for (path, store) in code::check::code_stores(project) {
         if !stores.contains(&store.name) {
             let have = if stores.is_empty() { "add one in the project settings".to_string() } else { format!("the project settings have {}", stores.join(", ")) };
@@ -627,6 +638,33 @@ pub fn attach_stores(project: &mut Project, stores: Vec<String>) {
     }
     project.diagnostics.extend(found);
     project.stores = Some(stores);
+}
+
+/// The file parts bound to a file field that name no store: a web app keeps
+/// what a person picks in a file store on the server, so the project file's
+/// check calls this for a stack with the web target (step 5 of
+/// docs/ledger/files-pictures.md).
+pub fn file_parts_without_store(project: &Project) -> Vec<diagnostic::Diagnostic> {
+    let mut found = Vec::new();
+    for file in &project.files {
+        for page in &file.pages {
+            translations::each_widget(&page.widgets, &mut |w| {
+                if w.props.kind != widgets::WidgetKind::File || w.props.store.is_some() {
+                    return;
+                }
+                let Some((data, field)) = w.props.bind.as_deref().and_then(|b| b.split_once('.')) else { return };
+                let entity = page.data.iter().find(|d| d.name.name == data).and_then(|d| match &d.of {
+                    model::DataKind::Record { entity } => project.entity(&entity.name),
+                    _ => None,
+                });
+                if entity.and_then(|e| e.field(field)).is_some_and(|f| f.ty == model::FieldType::File) {
+                    let part = w.props.name.clone().unwrap_or_else(|| "a file part".to_string());
+                    found.push(diagnostic::Diagnostic::error(format!("{part} is a file part in a web app, which keeps a picked file in a file store on the server: name one, as in store uploads"), w.span).in_file(&file.path));
+                }
+            });
+        }
+    }
+    found
 }
 
 /// Checks the file stores' locations, as (name, location) from the project

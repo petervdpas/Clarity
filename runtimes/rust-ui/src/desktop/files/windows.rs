@@ -15,6 +15,7 @@ struct Guid(u32, u16, u16, [u8; 8]);
 const CLSID_OPEN: Guid = Guid(0xDC1C5A9C, 0xE88A, 0x4DDE, [0xA5, 0xA1, 0x60, 0xF8, 0x2A, 0x20, 0xAE, 0xF7]);
 const CLSID_SAVE: Guid = Guid(0xC0B4E2F3, 0xBA21, 0x4773, [0x8D, 0xBA, 0x33, 0x5E, 0xC9, 0x46, 0xEB, 0x8B]);
 const IID_FILE_DIALOG: Guid = Guid(0x42F85136, 0xDB7E, 0x439C, [0x85, 0xF1, 0xE4, 0x07, 0x5D, 0x13, 0x5F, 0xC8]);
+const IID_SHELL_ITEM: Guid = Guid(0x43826D1E, 0xE718, 0x42EE, [0xBC, 0x55, 0xA1, 0xE2, 0x61, 0xC3, 0x7B, 0xFE]);
 
 const CLSCTX_INPROC_SERVER: u32 = 0x1;
 const COINIT_APARTMENTTHREADED: u32 = 0x2;
@@ -23,6 +24,7 @@ const PICK_FOLDERS: u32 = 0x20;
 const FORCE_FILE_SYSTEM: u32 = 0x40;
 const PATH_MUST_EXIST: u32 = 0x800;
 const FILE_MUST_EXIST: u32 = 0x1000;
+const FORCE_SHOW_HIDDEN: u32 = 0x1000_0000;
 const FILE_SYSTEM_PATH: u32 = 0x8005_8000;
 const CANCELLED: Hresult = 0x8007_04C7_u32 as i32;
 
@@ -49,7 +51,7 @@ struct FileDialogVtbl {
     set_options: unsafe extern "system" fn(*mut c_void, u32) -> Hresult,
     get_options: unsafe extern "system" fn(*mut c_void, *mut u32) -> Hresult,
     set_default_folder: usize,
-    set_folder: usize,
+    set_folder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult,
     get_folder: usize,
     get_current_selection: usize,
     set_file_name: unsafe extern "system" fn(*mut c_void, *const u16) -> Hresult,
@@ -78,6 +80,11 @@ unsafe extern "system" {
     fn CoUninitialize();
     fn CoCreateInstance(class: *const Guid, outer: *mut c_void, context: u32, iid: *const Guid, out: *mut *mut c_void) -> Hresult;
     fn CoTaskMemFree(memory: *mut c_void);
+}
+
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn SHCreateItemFromParsingName(path: *const u16, context: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult;
 }
 
 fn wide(text: &str) -> Vec<u16> {
@@ -125,6 +132,9 @@ unsafe fn dialog(ask: &Ask, owner: isize) -> Result<Option<String>, String> {
                 Kind::Folder => PICK_FOLDERS,
                 Kind::Open => FILE_MUST_EXIST,
             };
+            if ask.hidden {
+                options |= FORCE_SHOW_HIDDEN;
+            }
             (vtbl.set_options)(made, options);
             let title = wide(&ask.title);
             (vtbl.set_title)(made, title.as_ptr());
@@ -136,6 +146,16 @@ unsafe fn dialog(ask: &Ask, owner: isize) -> Result<Option<String>, String> {
             if let Some((name, spec)) = &filter {
                 let specs = [FilterSpec { name: name.as_ptr(), spec: spec.as_ptr() }];
                 (vtbl.set_file_types)(made, 1, specs.as_ptr());
+            }
+            // The folder it opens in; one that is not there leaves it where Windows opens it.
+            if let Some(folder) = &ask.folder {
+                let path = wide(&folder.replace('/', "\\"));
+                let mut item: *mut c_void = std::ptr::null_mut();
+                if !failed(SHCreateItemFromParsingName(path.as_ptr(), std::ptr::null_mut(), &IID_SHELL_ITEM, &mut item)) && !item.is_null() {
+                    (vtbl.set_folder)(made, item);
+                    let item_vtbl = &**(item as *mut *const ShellItemVtbl);
+                    (item_vtbl.release)(item);
+                }
             }
             let shown = (vtbl.show)(made, owner as *mut c_void);
             if shown == CANCELLED {

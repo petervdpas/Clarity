@@ -412,6 +412,16 @@ impl<'a> Emitter<'a> {
                     }
                     return;
                 }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = crate::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        crate::FileName::Path => self.value(value),
+                        crate::FileName::StoreFile => format!("{}.Name", self.value(value)),
+                        crate::FileName::RecordFile => format!("{}?.Name", self.value(value)),
+                    };
+                    let patterns = check.patterns.iter().map(|p| crate::csharp::names::string(p)).collect::<Vec<_>>().join(", ");
+                    out.push_str(&format!("{pad}Db.CheckFileType({}, [{patterns}], {}, {file});\n", crate::csharp::names::string(&check.field), check.hidden));
+                }
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target);
@@ -1525,8 +1535,8 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("{}.Id", self.value(value)),
                 _ => self.value(value),
             },
-            FieldType::List { .. } | FieldType::File => {
-                self.errors.push("a list or a file field cannot be compared in a query".into());
+            FieldType::List { .. } | FieldType::Blob => {
+                self.errors.push("a list or a blob field cannot be compared in a query".into());
                 String::new()
             }
             _ => self.value(value),

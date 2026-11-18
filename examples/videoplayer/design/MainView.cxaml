@@ -7,10 +7,10 @@
   <Data name="played" type="decimal" />
   <Data name="chosen" type="text" />
   <Data name="shown" type="text" />
+  <Folder name="videoFolderBox" at="3,1" span="10" bind="settings.videoFolder" extensions=".mp4" onchange="folderChanged" />
   <Video name="screen" at="1,2" span="8" rows="9" source="welcome.mp4" volume="80" onend="clipEnded" onfail="clipFailed" />
   <Timer name="ticker" at="1,1" span="1" every="0.5" ontick="tickerTicked" />
   <Label name="folderLabel" at="1,1" span="2" caption="@folderLabel" for="videoFolderBox" />
-  <Folder name="videoFolderBox" at="3,1" span="10" bind="settings.videoFolder" onchange="folderChanged" />
   <Table name="clipTable" at="9,2" span="4" rows="9" bind="clips" columns="title" resizable="true" sortable="true" onselect="clipSelected" onopen="playClicked" />
   <Slider name="progressSlider" at="1,11" span="12" bind="played" max="1000" min="0" onchange="progressMoved" />
   <Text name="shownText" at="1,12" span="4" bind="shown" />

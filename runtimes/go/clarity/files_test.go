@@ -34,6 +34,12 @@ type fileCases struct {
 		Path     string
 		Written  bool
 	} `json:"folderWrites"`
+	FieldFiles []struct {
+		Patterns []string
+		Hidden   bool
+		Name     string
+		Taken    bool
+	} `json:"fieldFiles"`
 	Bytes []struct {
 		Path   string
 		Base64 string
@@ -229,5 +235,47 @@ func TestAFolderListsAndWritesTheFilesOfItsExtensions(t *testing.T) {
 	}
 	if _, err := db.FilesIn("folder:", nil, false); err == nil {
 		t.Fatal("a folder that was never chosen was listed")
+	}
+}
+
+// A blob or file field that says its extensions takes only those files; one
+// of another type is refused in Clarity's own words (conformance/files.json, fieldFiles).
+func TestAFieldTakesOnlyTheFilesOfItsExtensions(t *testing.T) {
+	cases := loadFileCases(t)
+	for _, c := range cases.FieldFiles {
+		err := CheckFileType("video", c.Patterns, c.Hidden, c.Name)
+		if (err == nil) != c.Taken {
+			t.Errorf("%v %q: taken %v, want %v", c.Patterns, c.Name, err == nil, c.Taken)
+		}
+	}
+	err := CheckFileType("video", []string{"*.mp4"}, false, "notes.txt")
+	refused, ok := err.(*RefusedError)
+	if !ok || refused.Text.Key != "fileTypeRefused" || refused.Text.Show() != "video takes *.mp4 files, not notes.txt" {
+		t.Errorf("refused as %#v", err)
+	}
+}
+
+// A file a person picked in a web app goes into a file store on the server,
+// in a folder named by its contents as a blob's is, and its path there is
+// what a file field keeps (docs/ledger/files-pictures.md, step 5).
+func TestAnUploadGoesIntoAStoreAndGivesItsPath(t *testing.T) {
+	db, err := Memory()
+	must(t, err)
+	t.Cleanup(func() { db.Close() })
+	root := t.TempDir()
+	must(t, db.AddStore("photos", root))
+	path, err := db.StoreUpload("photos", "C:\\me\\cat.png", []byte("meow"))
+	must(t, err)
+	if want := filepath.Join(root, filepath.FromSlash(StorePath([]byte("meow"), "cat.png"))); path != want {
+		t.Fatalf("uploaded to %s, want %s", path, want)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "meow" {
+		t.Fatalf("it holds %q", b)
+	}
+	if _, err := db.StoreUpload("nowhere", "a.txt", []byte("x")); err == nil {
+		t.Fatal("a store that is not there took it")
+	}
+	if got := db.Stores(); len(got) != 1 || got[0] != (StoreFolder{"photos", root}) {
+		t.Fatalf("stores %v", got)
 	}
 }

@@ -228,6 +228,20 @@ pub trait Program: Send + Sync + 'static {
     /// A file of a store: a picture linked from a file before its record is saved.
     fn store_file(&self, store: &str, path: &str) -> Answer<Vec<u8>>;
 
+    /// Keeps a file a person picked in a web app in the file store `store`;
+    /// its path on the server, which a `file` field keeps (step 5 of
+    /// docs/ledger/files-pictures.md). A program with no stores refuses it.
+    fn store_upload(&self, store: &str, name: &str, bytes: &[u8]) -> Answer<String> {
+        let _ = (name, bytes);
+        Err(Text::plain(format!("there is no file store '{store}'")))
+    }
+
+    /// The file stores and their folders on the machine the program runs on,
+    /// which a folder part picks from in a web app; none for a program with none.
+    fn stores(&self) -> Answer<Vec<(String, String)>> {
+        Ok(Vec::new())
+    }
+
     /// The settings the person kept (manual/data.settings.md).
     fn read_settings(&self) -> Map<String, Value>;
 

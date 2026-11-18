@@ -166,7 +166,7 @@
     "type": {
       "patterns": [
         {
-          "match": "\\b(text|integer|decimal|money|bool|date|datetime|duration|file|bytes|list|email|url|color|id|ref|image|picture)\\b",
+          "match": "\\b(text|integer|decimal|money|bool|date|datetime|duration|file|blob|bytes|list|email|url|color|id|ref|image|picture)\\b",
           "name": "storage.type.clarity"
         },
         {

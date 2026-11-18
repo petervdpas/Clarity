@@ -93,10 +93,10 @@ impl Sql {
     pub fn storage(self, column: &Column, enum_first: impl Fn(&str) -> Option<String>) -> (String, Option<String>) {
         let default = column.default.as_ref();
         let number = |n: &str| if self == Sql::Sqlite { self.text(n) } else { n.to_string() };
-        let ty = if matches!(column.ty, FieldType::Image | FieldType::File) { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
+        let ty = if matches!(column.ty, FieldType::Image | FieldType::Blob) { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
         let value = match (&column.ty, default) {
-            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(self.text(s)),
-            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some(self.text("")),
+            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(self.text(s)),
+            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some(self.text("")),
             (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
             (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => Some("0".into()),
             (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(number(n)),
@@ -112,7 +112,7 @@ impl Sql {
             }
             // A list starts empty.
             (FieldType::Values { .. }, _) => Some(self.text("[]")),
-            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Image | FieldType::File, _) => None,
+            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Image | FieldType::Blob, _) => None,
         };
         // MySQL takes a default for long text only as an expression.
         let value = match value {
@@ -161,8 +161,8 @@ impl Sql {
                 _ if *n > MSSQL_SHORT_TEXT => "NVARCHAR(MAX)".into(),
                 _ => format!("NVARCHAR({n})"),
             },
-            (Sql::Mssql, FieldType::Text { max_length: None } | FieldType::Url | FieldType::Folder) => "NVARCHAR(MAX)".into(),
-            (_, FieldType::Text { max_length: None } | FieldType::Url | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret) => "TEXT".into(),
+            (Sql::Mssql, FieldType::Text { max_length: None } | FieldType::Url | FieldType::Folder | FieldType::File) => "NVARCHAR(MAX)".into(),
+            (_, FieldType::Text { max_length: None } | FieldType::Url | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret) => "TEXT".into(),
             // The longest address there can be.
             (Sql::Mssql, FieldType::Email) => "NVARCHAR(320)".into(),
             (_, FieldType::Email) => "VARCHAR(320)".into(),
@@ -178,7 +178,7 @@ impl Sql {
             (Sql::Postgres, FieldType::DateTime) => "TIMESTAMP".into(),
             (Sql::Mysql, FieldType::DateTime) => "DATETIME".into(),
             (_, FieldType::DateTime) => "DATETIME2".into(),
-            (_, FieldType::Image | FieldType::File) => self.picture_type(false),
+            (_, FieldType::Image | FieldType::Blob) => self.picture_type(false),
             (Sql::Postgres, FieldType::Enum { .. }) => "TEXT".into(),
             (Sql::Mssql, FieldType::Enum { .. }) => "NVARCHAR(100)".into(),
             (_, FieldType::Enum { .. }) => "VARCHAR(100)".into(),
@@ -262,7 +262,7 @@ impl Sql {
         let name = self.quote(&column.stored());
         let index = self.index_name(table, column);
         let on = self.quote(&table.table_name());
-        let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret);
+        let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret);
         let optional = matches!(column.ty, FieldType::Date | FieldType::DateTime | FieldType::Ref { .. });
         let missing = if baseline { " IF NOT EXISTS" } else { "" };
         match self {
@@ -416,7 +416,7 @@ EXEC sp_executesql @sql;",
     /// The value of `name`, a column stored as `old`, as a column of type
     /// `new` stores it.
     pub fn convert(self, name: &str, old: &FieldType, new: &FieldType, new_ty: &str) -> String {
-        let textual = |ty: &FieldType| matches!(ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret | FieldType::Enum { .. });
+        let textual = |ty: &FieldType| matches!(ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret | FieldType::Enum { .. });
         // Empty text is no value, so it does not become a number or a date.
         let value = if textual(old) && !textual(new) {
             format!("NULLIF({name}, '')")

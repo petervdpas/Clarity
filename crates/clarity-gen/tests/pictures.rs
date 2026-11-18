@@ -140,7 +140,7 @@ entity Album
     title: text(120)
     cover: image
     photo: image, store photos
-    booklet: file
+    booklet: blob
 
 page AlbumForm: window
     data album: Album

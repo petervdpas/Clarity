@@ -147,7 +147,7 @@ pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The value a new record starts with, when it is not the type's own.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => Some("0".into()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(decimal(n)),
@@ -168,7 +168,7 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
 fn to_value(f: &Field) -> String {
     let value = ident(&f.name.name);
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity::sql::integer({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("clarity::sql::decimal({value})"),
         FieldType::Bool => format!("clarity::sql::boolean({value})"),
@@ -178,7 +178,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Ref { .. } => format!("clarity::sql::reference({value})"),
         FieldType::Image => format!("clarity::sql::picture({value})"),
         // Its content, then its name in the column beside it.
-        FieldType::File => format!("clarity::file_content({value}), clarity::file_name_value({value})"),
+        FieldType::Blob => format!("clarity::file_content({value}), clarity::file_name_value({value})"),
         FieldType::Values { .. } => format!("clarity::sql::list({value})"),
         FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
@@ -189,7 +189,7 @@ fn read(i: usize, f: &Field) -> String {
     let column = string(&f.name.name);
     let get = |what: &str| format!("clarity::sql::get_{what}({column}, values[{i}])");
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => get("text"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => get("text"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => get("integer"),
         FieldType::Decimal { .. } | FieldType::Money => get("decimal"),
         FieldType::Bool => get("boolean"),
@@ -197,7 +197,7 @@ fn read(i: usize, f: &Field) -> String {
         FieldType::DateTime => get("date_time"),
         FieldType::Ref { .. } => get("reference"),
         FieldType::Image => get("picture"),
-        FieldType::File => format!("clarity::get_file({column}, values[{i}], values[{}])", i + 1),
+        FieldType::Blob => format!("clarity::get_file({column}, values[{i}], values[{}])", i + 1),
         FieldType::Enum { name } => format!("{}({})", from_name(&name.name), get("text")),
         FieldType::Values { .. } => format!("{}.get<{}>()", get("list"), field_type(&f.ty)),
         FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
@@ -236,7 +236,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let columns: Vec<String> = stored(entity)
         .flat_map(|f| {
             let column = entity.column_of(&f.name.name).to_string();
-            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
             std::iter::once(column).chain(name)
         })
         .map(|c| string(&c))
@@ -244,11 +244,11 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::Blob))
         .map(|f| {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("std::nullopt".to_string(), string);
-            let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
+            let name = if f.ty == FieldType::Blob { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
             format!("{{{}, {store}{name}}}", string(&column))
         })
         .collect();
@@ -321,7 +321,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let mut i = 0;
     for f in stored(entity) {
         let _ = writeln!(reads, "    r.{} = {};", ident(&f.name.name), read(i, f));
-        i += if f.ty == FieldType::File { 2 } else { 1 };
+        i += if f.ty == FieldType::Blob { 2 } else { 1 };
     }
     let _ = write!(source, "{name} {name}::from_values(int64_t id, const clarity::Row& values) {{\n    {name} r;\n    r.id = id;\n{reads}    return r;\n}}\n\n");
     if !pictures.is_empty() {
@@ -410,7 +410,7 @@ fn record_slots(entity: &Entity, var: &str, path: &str, ref_ids: bool) -> Vec<(S
         let format = string(f.modifiers.format.as_deref().unwrap_or_default());
         let at = format!("{path}.{}", f.name.name);
         let slot = match &f.ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme => format!("clarity::slot_text({value})"),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme => format!("clarity::slot_text({value})"),
             FieldType::Integer | FieldType::Id => format!("clarity::slot_integer({value}, {format})"),
             FieldType::Duration => format!("clarity::slot_duration({value})"),
             FieldType::Decimal { scale, .. } => format!("clarity::slot_decimal({value}, {scale}, {format})"),
@@ -427,7 +427,7 @@ fn record_slots(entity: &Entity, var: &str, path: &str, ref_ids: bool) -> Vec<(S
                 }
                 continue;
             }
-            FieldType::Secret | FieldType::Image | FieldType::File | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => continue,
+            FieldType::Secret | FieldType::Image | FieldType::Blob | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => continue,
         };
         slots.push((at, slot));
     }

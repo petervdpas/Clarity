@@ -74,7 +74,7 @@ use crate::theme::ThemeLook;
 use crate::window::{Apart, ApartClosed, Running, WindowStack};
 
 use self::fail_safe::{panic_text, FailSafe};
-use self::files::SystemFilePicker;
+use self::files::SystemStorageProvider;
 use self::input::{key_of, modifiers_of, typed_text, wheel_of, PointerPlace};
 use self::window_system::{SoftwareSurface, CONTEXTS};
 
@@ -126,7 +126,7 @@ impl ShowOptions {
 }
 
 thread_local! {
-    static FILES: RefCell<Option<Arc<SystemFilePicker>>> = const { RefCell::new(None) };
+    static FILES: RefCell<Option<Arc<SystemStorageProvider>>> = const { RefCell::new(None) };
 }
 
 /// What the desktop gives the parts before its first window: sound through
@@ -134,7 +134,7 @@ thread_local! {
 /// file dialogs, which every window's parts use. The picker given is the
 /// one the host asks whether a dialog is open. With the `audio` feature,
 /// songs play through Clarity.Audio.
-pub fn prepare() -> Arc<SystemFilePicker> {
+pub fn prepare() -> Arc<SystemStorageProvider> {
     crate::parts::sound::set_output(Rc::new(self::sound::Speakers::default()));
     #[cfg(feature = "audio")]
     crate::parts::sound::set_music(Some(Rc::new(self::music::ClarityAudio::default())));
@@ -144,11 +144,11 @@ pub fn prepare() -> Arc<SystemFilePicker> {
 }
 
 /// The system's file dialogs the desktop gave its parts; made and given the first time.
-fn desktop_files() -> Arc<SystemFilePicker> {
+fn desktop_files() -> Arc<SystemStorageProvider> {
     FILES.with(|f| {
         f.borrow_mut()
             .get_or_insert_with(|| {
-                let files = Arc::new(SystemFilePicker::default());
+                let files = Arc::new(SystemStorageProvider::default());
                 crate::files::set_system(files.clone());
                 files
             })
@@ -301,7 +301,7 @@ pub fn hand_down(from: &mut Vec<Message>, to: &mut Vec<Message>) {
 }
 
 /// Whether a window takes no input: a dialog of its own is open over it, or a file dialog of the system's.
-pub fn blocks_input(modal_child: bool, files: &SystemFilePicker) -> bool {
+pub fn blocks_input(modal_child: bool, files: &SystemStorageProvider) -> bool {
     modal_child || files.showing()
 }
 
@@ -576,7 +576,7 @@ struct Host {
     untold: bool,
     /// The window the person works in: what fails is said there, and file dialogs belong to it.
     active: Option<u64>,
-    files: Arc<SystemFilePicker>,
+    files: Arc<SystemStorageProvider>,
     icon: Option<Icon>,
     /// The app starting behind its splash screen; none once the splash closed, or without one.
     starting: Option<Starting>,

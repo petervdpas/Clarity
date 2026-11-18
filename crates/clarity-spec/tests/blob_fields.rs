@@ -1,4 +1,4 @@
-//! The file field type of U1c: any file a record keeps, with its name; in
+//! The blob field type of U1c (called `file` before): any file a record keeps, with its name; in
 //! the database (its bytes, and its name in a column beside them) or, with
 //! `store`, as a file of a file store. The `file` input chooses, opens,
 //! saves a copy of and removes it. Code reads its name and extension,
@@ -14,8 +14,8 @@ const SHOP: &str = "module shop
 
 entity Product
     name: text(80), required
-    manual: file
-    sheet: file, store documents
+    manual: blob
+    sheet: blob, store documents
 
 page ProductCard: window
     data product: Product
@@ -47,12 +47,12 @@ fn a_file_field_and_its_input_read_and_write_back() {
     let (file, diagnostics) = parse(SHOP, "shop.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let product = &file.entities[0];
-    assert_eq!(product.field("manual").unwrap().ty, FieldType::File);
+    assert_eq!(product.field("manual").unwrap().ty, FieldType::Blob);
     assert_eq!(product.field("sheet").unwrap().modifiers.store.as_deref(), Some("documents"));
     let part = &file.pages[0].widgets[0];
     assert_eq!(part.props.kind, WidgetKind::File);
     assert_eq!(widgets::widget_line(&part.props), "file name manualBox at 1,1 span 6 bind product.manual on change: manualChanged");
-    assert_eq!(widgets::widget_for(&FieldType::File), WidgetKind::File, "a dropped file field gets a file input");
+    assert_eq!(widgets::widget_for(&FieldType::Blob), WidgetKind::File, "a dropped file field gets a file input");
 }
 
 #[test]
@@ -75,11 +75,11 @@ fn the_rules_of_a_file_field() {
         let found = errors(&page, CODE);
         assert!(found.iter().any(|m| m.contains(wanted)), "{wanted}: {found:#?}");
     };
-    says(SHOP.replace("    manual: file\n", "    manual: file, unique\n"), "a file cannot be unique ('manual')");
-    says(SHOP.replace("    manual: file\n", "    manual: file, default \"a.pdf\"\n"), "a file has no default; it starts empty ('manual')");
-    says(SHOP.replace("    name: text(80), required\n", "    name: text(80), required, store documents\n"), "only an image or a file field has a store ('name')");
-    says(SHOP.replace("    file name manualBox at 1,1 span 6 bind product.manual", "    file name manualBox at 1,1 span 6 bind product.name"), "'name' is text; a file shows file");
-    says(format!("{SHOP}\npage Browse: window\n    data products: list<Product>\n    table name grid at 1,1 span 12 rows 4 bind products columns name, manual\n"), "'manual' is a file; show it in a file part");
+    says(SHOP.replace("    manual: blob\n", "    manual: blob, unique\n"), "a blob cannot be unique ('manual')");
+    says(SHOP.replace("    manual: blob\n", "    manual: blob, default \"a.pdf\"\n"), "a blob has no default; it starts empty ('manual')");
+    says(SHOP.replace("    name: text(80), required\n", "    name: text(80), required, store documents\n"), "only an image or a blob field has a store ('name')");
+    says(SHOP.replace("    file name manualBox at 1,1 span 6 bind product.manual", "    file name manualBox at 1,1 span 6 bind product.name"), "'name' is text; a file shows blob");
+    says(format!("{SHOP}\npage Browse: window\n    data products: list<Product>\n    table name grid at 1,1 span 12 rows 4 bind products columns name, manual\n"), "'manual' is a blob; show it in a file part");
 }
 
 #[test]

@@ -98,7 +98,7 @@ pub fn string(text: &str) -> String {
 /// The Go type of a field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "string".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => "string".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "int64".into(),
         FieldType::Decimal { .. } | FieldType::Money => "decimal.Decimal".into(),
         FieldType::Bool => "bool".into(),
@@ -107,7 +107,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "*int64".into(),
         FieldType::Image => "*clarity.Picture".into(),
-        FieldType::File => "*clarity.RecordFile".into(),
+        FieldType::Blob => "*clarity.RecordFile".into(),
         FieldType::List { item } => format!("[]{}", item.name),
         FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => format!("[]{}", value_type(&ValueItem::of_list(item).info())),

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -287,6 +288,23 @@ func TestAPictureLinkedFromAFileIsReadFromItsStore(t *testing.T) {
 		t.Fatal(got)
 	}
 	if got := wire(t, call(t, c, "store_file", `{"store":"photos","path":"../x.png"}`)); got != `{"error":"invalid value: '../x.png' is not a picture of its file store"}` {
+		t.Fatal(got)
+	}
+}
+
+// A file picked in a web app is kept in a file store, and the stores are
+// listed for a folder part (docs/ledger/files-pictures.md, step 5).
+func TestAnUploadIsKeptInAStoreAndTheStoresAreListed(t *testing.T) {
+	c, _ := service(t)
+	store := t.TempDir()
+	if err := c.options.Db.AddStore("uploads", store); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(store, filepath.FromSlash(clarity.StorePath([]byte("hi"), "a.txt")))
+	if got := wire(t, call(t, c, "store_upload", `{"store":"uploads","name":"a.txt","data":"aGk="}`)); got != `{"value":`+strconv.Quote(want)+`}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "stores", `{}`)); got != `{"value":[{"name":"uploads","folder":`+strconv.Quote(store)+`}]}` {
 		t.Fatal(got)
 	}
 }

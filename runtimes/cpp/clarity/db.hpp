@@ -34,6 +34,12 @@ inline const std::string folder_store = "folder:";
 /// extensions (`*.md`, ignoring case; none or `*.*`: any file), a hidden one
 /// (its name starting with a dot) only with `hidden` (conformance/files.json).
 bool folder_takes(const std::vector<std::string>& patterns, bool hidden, const std::string& name);
+/// Whether a blob or file field that says its extensions takes the file
+/// `name` (a name or a path): its last part matched as a folder matches, a
+/// hidden one only with `hidden`; no file (an empty name) is always taken.
+/// One of another type is refused (RefusedError) in Clarity's own words,
+/// fileTypeRefused (conformance/files.json, fieldFiles).
+void check_file_type(const std::string& field, const std::vector<std::string>& patterns, bool hidden, const std::string& name);
 
 class Db;
 /// A data source that is a file in a format (formats/file_source.hpp).
@@ -420,6 +426,14 @@ public:
     /// The bytes of the file `path` of a store: a picture linked from a file
     /// before its record is saved.
     Bytes store_file(const std::string& store, const std::string& path);
+    /// Keeps a file a person picked in a web app in the file store `store`
+    /// on the server: in a folder named by its contents, as a blob's is, so
+    /// nothing is written over; its path on the server (step 5 of
+    /// docs/ledger/files-pictures.md).
+    std::string store_upload(const std::string& store, const std::string& name, const Bytes& bytes);
+    /// The file stores and their folders on this machine, by name, as
+    /// `[{"name", "folder"}]`; one whose folder cannot be found is left out.
+    nlohmann::json stores();
 
 private:
     /// The sign-in of auth/auth.cpp reads and adds people in their table.

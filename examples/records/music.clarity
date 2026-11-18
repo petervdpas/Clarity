@@ -34,7 +34,7 @@ entity Album
     cover: image, help @albumCoverHelp, label @albumCoverLabel
     notes: text, search, label @albumNotesLabel
     tags: list<text>, search, label @albumTagsLabel
-    booklet: file, label @albumBookletLabel
+    booklet: blob, label @albumBookletLabel
 
 // A track of an album; the album form lists them in order.
 entity Track

@@ -1,5 +1,5 @@
 {
-  "about": "The files of a file store, alike in every runtime. Listing a store gives every file in it and in its folders, leaving out files and folders whose name starts with a dot, sorted by path (byte order), with '/' between folders whatever the system writes. A file has its path inside the store, its name, its extension in lower case without the dot (empty without one), its size in bytes and when it was last changed (UTC, to the second). Text is read and written as UTF-8. Writing takes a path inside the store, making its folders; a path that would leave the store is refused (refused). Bytes are read and written as they are, whatever they hold (bytes: written from base64, read back the same, with their size). A folder that is no store (a folder field) is reached the same way through the store 'folder:' and its path; its extensions ('*.md', ignoring case, or '*.*' alone for any file; none: any file) and whether it shows hidden files and folders (hidden: a name starting with a dot) say which files it lists (folders: extensions, hidden, and the paths listed, from the same tree) and which it writes (folderWrites: extensions, hidden, a path, and whether it is written).",
+  "about": "The files of a file store, alike in every runtime. Listing a store gives every file in it and in its folders, leaving out files and folders whose name starts with a dot, sorted by path (byte order), with '/' between folders whatever the system writes. A file has its path inside the store, its name, its extension in lower case without the dot (empty without one), its size in bytes and when it was last changed (UTC, to the second). Text is read and written as UTF-8. Writing takes a path inside the store, making its folders; a path that would leave the store is refused (refused). Bytes are read and written as they are, whatever they hold (bytes: written from base64, read back the same, with their size). A folder that is no store (a folder field) is reached the same way through the store 'folder:' and its path; its extensions ('*.md', ignoring case, or '*.*' alone for any file; none: any file) and whether it shows hidden files and folders (hidden: a name starting with a dot) say which files it lists (folders: extensions, hidden, and the paths listed, from the same tree) and which it writes (folderWrites: extensions, hidden, a path, and whether it is written). A blob or file field that says its extensions takes only those files (fieldFiles: extensions, whether it takes hidden files, the file's name or path, and whether it is taken); its last part is matched as a folder matches, a hidden one only with hidden, and no file (an empty name) is always taken. One not taken is refused with Clarity's own words, fileTypeRefused: '{field} takes {extensions} files, not {name}'.",
   "tree": [
     {
       "path": "notes.txt",
@@ -206,6 +206,87 @@
       "hidden": false,
       "path": "data/x.bin",
       "written": true
+    }
+  ],
+  "fieldFiles": [
+    {
+      "patterns": [
+        "*.mp4",
+        "*.webm"
+      ],
+      "hidden": false,
+      "name": "clips/a.MP4",
+      "taken": true
+    },
+    {
+      "patterns": [
+        "*.mp4",
+        "*.webm"
+      ],
+      "hidden": false,
+      "name": "C:\\clips\\b.webm",
+      "taken": true
+    },
+    {
+      "patterns": [
+        "*.mp4",
+        "*.webm"
+      ],
+      "hidden": false,
+      "name": "notes.txt",
+      "taken": false
+    },
+    {
+      "patterns": [
+        "*.mp4"
+      ],
+      "hidden": false,
+      "name": "README",
+      "taken": false
+    },
+    {
+      "patterns": [
+        "*.mp4"
+      ],
+      "hidden": false,
+      "name": "",
+      "taken": true
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": false,
+      "name": "README",
+      "taken": true
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": false,
+      "name": "keys/.env",
+      "taken": false
+    },
+    {
+      "patterns": [
+        "*.*"
+      ],
+      "hidden": true,
+      "name": "keys/.env",
+      "taken": true
+    },
+    {
+      "patterns": [],
+      "hidden": false,
+      "name": ".hidden",
+      "taken": false
+    },
+    {
+      "patterns": [],
+      "hidden": true,
+      "name": ".hidden",
+      "taken": true
     }
   ]
 }

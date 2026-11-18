@@ -89,7 +89,7 @@ pub fn string_or_null(text: Option<&str>) -> String {
 /// The C type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "const char*".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => "const char*".into(),
         // A reference holds the id of its record; 0 is none.
         FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Ref { .. } => "int64_t".into(),
         FieldType::Decimal { .. } | FieldType::Money => "ClarityDecimal".into(),
@@ -98,7 +98,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::DateTime => "ClarityDateTime".into(),
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Image => "ClarityPicture*".into(),
-        FieldType::File => "ClarityRecordFile*".into(),
+        FieldType::Blob => "ClarityRecordFile*".into(),
         FieldType::List { item } => list_type(&item.name),
         FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => values_type(&ValueItem::of_list(item)),

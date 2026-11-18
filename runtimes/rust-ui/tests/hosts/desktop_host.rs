@@ -9,22 +9,22 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use clarity_ui::desktop::files::{answer, commands, extensions, show_command, ways, Ask, Kind, Os, SystemFilePicker, Way};
+use clarity_ui::desktop::files::{answer, commands, extensions, show_command, ways, Ask, Kind, Os, SystemStorageProvider, Way};
 use clarity_ui::desktop::sound::Speakers;
-use clarity_ui::files::{safe_name, FileFilter, FilePicker};
+use clarity_ui::files::{safe_name, FileFilter, PickerOptions, StorageProvider};
 use clarity_ui::melodies::{self, Note};
 use clarity_ui::parts::sound::SoundOutput;
 
 fn open() -> Ask {
-    Ask { kind: Kind::Open, title: "Choose a file".into(), name: None, filter: Some(FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into(), "*.jpg".into()] }) }
+    Ask { kind: Kind::Open, title: "Choose a file".into(), name: None, filter: Some(FileFilter { name: "Pictures".into(), patterns: vec!["*.png".into(), "*.jpg".into()] }), folder: None, hidden: false }
 }
 
 fn save() -> Ask {
-    Ask { kind: Kind::Save, title: "Save a copy".into(), name: Some("notes.txt".into()), filter: None }
+    Ask { kind: Kind::Save, title: "Save a copy".into(), name: Some("notes.txt".into()), filter: None, folder: None, hidden: false }
 }
 
 fn folder() -> Ask {
-    Ask { kind: Kind::Folder, title: "Choose a folder".into(), name: None, filter: None }
+    Ask { kind: Kind::Folder, title: "Choose a folder".into(), name: None, filter: None, folder: None, hidden: false }
 }
 
 fn args(program: &clarity_ui::desktop::files::Program) -> Vec<&str> {
@@ -100,6 +100,66 @@ fn linux_asks_zenity_then_kdialog() {
     assert_eq!(vec!["--title", "Choose a folder", "--getexistingdirectory", home.as_str()], args(&folder[1]));
 }
 
+/// A part's `start folder` (or the folder it holds already): each system's
+/// dialog opens there; without one, where the system opens it.
+#[test]
+fn each_system_opens_its_dialog_in_the_start_folder() {
+    let at = |ask: Ask| Ask { folder: Some("/home/ada/videos".into()), ..ask };
+    let opening = commands(Os::Linux, &at(open()));
+    assert_eq!(vec!["--file-selection", "--title=Choose a file", "--filename=/home/ada/videos/", "--file-filter=Pictures | *.png *.jpg"], args(&opening[0]));
+    assert_eq!(vec!["--title", "Choose a file", "--getopenfilename", "/home/ada/videos", "Pictures (*.png *.jpg)"], args(&opening[1]));
+    let saving = commands(Os::Linux, &at(save()));
+    assert_eq!(vec!["--file-selection", "--title=Save a copy", "--save", "--confirm-overwrite", "--filename=/home/ada/videos/notes.txt"], args(&saving[0]));
+    assert_eq!(vec!["--title", "Save a copy", "--getsavefilename", "/home/ada/videos/notes.txt"], args(&saving[1]));
+    let choosing = commands(Os::Linux, &at(folder()));
+    assert_eq!(vec!["--file-selection", "--title=Choose a folder", "--filename=/home/ada/videos/", "--directory"], args(&choosing[0]));
+    assert_eq!(vec!["--title", "Choose a folder", "--getexistingdirectory", "/home/ada/videos"], args(&choosing[1]));
+    assert_eq!(vec!["-e", "POSIX path of (choose file with prompt \"Choose a file\" default location (POSIX file \"/home/ada/videos\") of type {\"png\", \"jpg\"})"], args(&commands(Os::MacOs, &at(open()))[0]));
+    assert_eq!(vec!["-e", "POSIX path of (choose file name with prompt \"Save a copy\" default name \"notes.txt\" default location (POSIX file \"/home/ada/videos\"))"], args(&commands(Os::MacOs, &at(save()))[0]));
+    assert_eq!(vec!["-e", "POSIX path of (choose folder with prompt \"Choose a folder\" default location (POSIX file \"/home/ada/videos\"))"], args(&commands(Os::MacOs, &at(folder()))[0]));
+}
+
+/// A folder part's extensions go to the folder dialogs that show files
+/// while a folder is chosen (the portal, zenity), so the person sees which
+/// folder holds them; kdialog and Windows show folders alone, and macOS
+/// shows every file.
+#[test]
+fn a_folder_dialog_shows_the_files_of_its_extensions_where_it_can() {
+    let videos = Ask { filter: Some(FileFilter { name: ".mp4".into(), patterns: vec!["*.mp4".into()] }), ..folder() };
+    assert_eq!(vec!["--file-selection", "--title=Choose a folder", "--directory", "--file-filter=.mp4 | *.mp4"], args(&commands(Os::Linux, &videos)[0]));
+    assert_eq!(args(&commands(Os::Linux, &videos)[1]), args(&commands(Os::Linux, &folder())[1]));
+    assert_eq!(args(&commands(Os::MacOs, &videos)[0]), args(&commands(Os::MacOs, &folder())[0]));
+}
+
+/// With `hidden`, the dialogs that can show hidden files do: macOS's, and
+/// Windows' (FOS_FORCESHOWHIDDEN, tested where it runs); zenity, kdialog and
+/// the portal have no such choice.
+#[test]
+fn a_dialog_shows_hidden_files_where_the_system_can() {
+    let hidden = |ask: Ask| Ask { hidden: true, ..ask };
+    assert_eq!(vec!["-e", "POSIX path of (choose file with prompt \"Choose a file\" of type {\"png\", \"jpg\"} with invisibles)"], args(&commands(Os::MacOs, &hidden(open()))[0]));
+    assert_eq!(vec!["-e", "POSIX path of (choose folder with prompt \"Choose a folder\" with invisibles)"], args(&commands(Os::MacOs, &hidden(folder()))[0]));
+    assert_eq!(commands(Os::Linux, &hidden(open())), commands(Os::Linux, &open()));
+}
+
+/// The desktop portal takes the start folder as `current_folder`: its path's bytes, ending in a nul.
+#[cfg(unix)]
+#[test]
+fn the_portal_opens_in_the_start_folder() {
+    use clarity_ui::desktop::files::portal::{options, Dbus};
+    let with = options(&Ask { folder: Some("/home/ada/videos".into()), ..open() }, "t1");
+    let Dbus::Array(entries) = with else { panic!("options are a dictionary") };
+    let current = entries.iter().find_map(|e| match e {
+        Dbus::Entry(key, value) if **key == Dbus::Str("current_folder".into()) => Some(value.as_ref().clone()),
+        _ => None,
+    });
+    let mut bytes: Vec<Dbus> = "/home/ada/videos".bytes().map(Dbus::Byte).collect();
+    bytes.push(Dbus::Byte(0));
+    assert_eq!(current, Some(Dbus::Variant("ay".into(), Box::new(Dbus::Array(bytes)))));
+    let Dbus::Array(without) = options(&open(), "t2") else { panic!() };
+    assert!(!without.iter().any(|e| matches!(e, Dbus::Entry(key, _) if **key == Dbus::Str("current_folder".into()))));
+}
+
 #[test]
 fn macos_asks_applescript() {
     assert_eq!(vec!["-e", "POSIX path of (choose file with prompt \"Choose a file\" of type {\"png\", \"jpg\"})"], args(&commands(Os::MacOs, &open())[0]));
@@ -154,13 +214,14 @@ fn what_the_person_chose_comes_back_to_the_part() {
     let file = Scratch::new("chosen.bin");
     std::fs::write(&file.0, [1, 2, 3]).unwrap();
     let path = file.0.to_string_lossy().into_owned();
-    let picker = SystemFilePicker::with(Box::new(move |_, _| Some(path.clone())), Box::new(|_| {}));
-    let got = picker.open_file("Choose a file", None).unwrap();
+    let picker = SystemStorageProvider::with(Box::new(move |_, _| Some(path.clone())), Box::new(|_| {}));
+    let got = picker.open_file(&PickerOptions::titled("Choose a file")).unwrap();
     assert_eq!("chosen.bin", got.name);
-    assert_eq!(vec![1, 2, 3], got.bytes);
-    let none = SystemFilePicker::with(Box::new(|_, _| None), Box::new(|_| {}));
-    assert_eq!(None, none.choose_folder("Choose a folder"));
-    assert_eq!(None, none.open_file("Choose a file", None));
+    assert_eq!(Some(file.0.to_string_lossy().into_owned()), got.path, "a file on the disk keeps its path");
+    assert_eq!(Some(vec![1, 2, 3]), got.read());
+    let none = SystemStorageProvider::with(Box::new(|_, _| None), Box::new(|_| {}));
+    assert_eq!(None, none.open_folder(&PickerOptions::titled("Choose a folder")));
+    assert_eq!(None, none.open_file(&PickerOptions::titled("Choose a file")));
 }
 
 #[test]
@@ -170,14 +231,16 @@ fn saving_writes_the_copy_where_the_person_chose() {
     let asked: Arc<Mutex<Option<Ask>>> = Arc::default();
     let kept = asked.clone();
     let chosen = path.clone();
-    let picker = SystemFilePicker::with(
+    let picker = SystemStorageProvider::with(
         Box::new(move |ask, _| {
             *kept.lock().unwrap() = Some(ask.clone());
             Some(chosen.clone())
         }),
         Box::new(|_| {}),
     );
-    assert_eq!(Some(path), picker.save_file("Save a copy", "notes.txt", &[7, 8]));
+    let place_chosen = picker.save_file(&PickerOptions { suggested_name: Some("notes.txt".into()), ..PickerOptions::titled("Save a copy") }).unwrap();
+    assert!(std::fs::read(&place.0).is_err(), "choosing the place writes nothing yet");
+    assert_eq!(Some(path), picker.write(&place_chosen, &[7, 8]));
     assert_eq!(Some(save()), asked.lock().unwrap().clone());
     assert_eq!(vec![7, 8], std::fs::read(&place.0).unwrap());
 }
@@ -186,7 +249,7 @@ fn saving_writes_the_copy_where_the_person_chose() {
 fn a_shown_file_goes_to_the_system_s_program_as_a_copy() {
     let started: Arc<Mutex<Vec<String>>> = Arc::default();
     let kept = started.clone();
-    let picker = SystemFilePicker::with(Box::new(|_, _| None), Box::new(move |program| kept.lock().unwrap().push(program.args.last().cloned().unwrap_or_default())));
+    let picker = SystemStorageProvider::with(Box::new(|_, _| None), Box::new(move |program| kept.lock().unwrap().push(program.args.last().cloned().unwrap_or_default())));
     picker.show("../report.pdf", b"%PDF");
     let shown = started.lock().unwrap().clone();
     let path = std::path::Path::new(&shown[0]);

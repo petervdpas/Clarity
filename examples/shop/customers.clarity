@@ -14,7 +14,7 @@ entity Customer
     since: date, label @customerSinceLabel
     notes: text, search, help @customerNotesHelp, label @customerNotesLabel
     tags: list<text>, search, label @customerTagsLabel
-    contract: file, label @customerContractLabel
+    contract: blob, label @customerContractLabel
 
 code CustomerBrowse
     handler filterChanged

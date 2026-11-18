@@ -54,6 +54,8 @@ fn field_facts(value: &Value) -> FieldFacts {
         color: value.get("color").and_then(Value::as_bool).unwrap_or(false),
         folder: value.get("folder").and_then(Value::as_bool).unwrap_or(false),
         help: None,
+        extensions: Vec::new(),
+        hidden: false,
     }
 }
 

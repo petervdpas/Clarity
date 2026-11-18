@@ -73,8 +73,8 @@ pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 fn default_value(project: &Project, field: &Field) -> String {
     let literal = field.modifiers.default.as_ref();
     match (&field.ty, literal) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => format!("String::from({s:?})"),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => "String::new()".into(),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => format!("String::from({s:?})"),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => "String::new()".into(),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => format!("{n}i64"),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => "0".into(),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => decimal(n),
@@ -148,7 +148,7 @@ fn field_slots(field: &Field, path: &str, var: &str) -> Vec<(String, String)> {
         None => "None".to_string(),
     };
     let slot = match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("Slot::text({var}.clone())"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("Slot::text({var}.clone())"),
         FieldType::Integer | FieldType::Id => format!("Slot::integer({var}, {format})"),
         FieldType::Duration => format!("Slot::duration({var})"),
         FieldType::Decimal { scale, .. } => format!("Slot::decimal({var}, Some({scale}), {format})"),
@@ -162,7 +162,7 @@ fn field_slots(field: &Field, path: &str, var: &str) -> Vec<(String, String)> {
             let id = format!("Slot::integer({var}.unwrap_or(0), None)");
             return vec![(path.to_string(), id.clone()), (format!("{path}.id"), id)];
         }
-        FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => return Vec::new(),
+        FieldType::Image | FieldType::Blob | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => return Vec::new(),
     };
     vec![(path.to_string(), slot)]
 }
@@ -170,7 +170,7 @@ fn field_slots(field: &Field, path: &str, var: &str) -> Vec<(String, String)> {
 fn to_sql(field: &Field) -> String {
     let value = format!("self.{}", ident(&field.name.name));
     match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("sql::decimal({value})"),
         FieldType::Bool => format!("sql::boolean({value})"),
@@ -180,7 +180,7 @@ fn to_sql(field: &Field) -> String {
         FieldType::Ref { .. } => format!("sql::reference({value})"),
         FieldType::Image => format!("sql::picture(&{value})"),
         // Its content, then its name in the column beside it.
-        FieldType::File => format!("sql::file_content(&{value}),\n            sql::file_name(&{value})"),
+        FieldType::Blob => format!("sql::file_content(&{value}),\n            sql::file_name(&{value})"),
         FieldType::Values { .. } => format!("sql::list(&{value})"),
         FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
@@ -188,7 +188,7 @@ fn to_sql(field: &Field) -> String {
 
 fn from_sql(field: &Field) -> &'static str {
     match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "get_text",
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => "get_text",
         FieldType::Integer | FieldType::Id | FieldType::Duration => "get_integer",
         FieldType::Decimal { .. } | FieldType::Money => "get_decimal",
         FieldType::Bool => "get_boolean",
@@ -197,7 +197,7 @@ fn from_sql(field: &Field) -> &'static str {
         FieldType::Enum { .. } => "get_name",
         FieldType::Ref { .. } => "get_reference",
         FieldType::Image => "get_picture",
-        FieldType::File => "get_file",
+        FieldType::Blob => "get_file",
         FieldType::Values { .. } => "get_list",
         FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
@@ -302,7 +302,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     let columns = stored(entity)
         .flat_map(|f| {
             let column = entity.column_of(&f.name.name).to_string();
-            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
             std::iter::once(column).chain(name)
         })
         .map(|c| format!("{c:?}"))
@@ -312,9 +312,9 @@ fn record(project: &Project, entity: &Entity) -> String {
     let mut at = 0;
     let mut from_values = String::new();
     for f in stored(entity) {
-        let values = if f.ty == FieldType::File { format!("&values[{at}], &values[{}]", at + 1) } else { format!("&values[{at}]") };
+        let values = if f.ty == FieldType::Blob { format!("&values[{at}], &values[{}]", at + 1) } else { format!("&values[{at}]") };
         from_values.push_str(&format!("            {}: sql::{}({:?}, {values})?,\n", ident(&f.name.name), from_sql(f), f.name.name));
-        at += if f.ty == FieldType::File { 2 } else { 1 };
+        at += if f.ty == FieldType::Blob { 2 } else { 1 };
     }
     let lists: String = entity
         .fields
@@ -339,10 +339,10 @@ fn record(project: &Project, entity: &Entity) -> String {
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::Blob))
         .map(|f| {
             let column = entity.column_of(&f.name.name);
-            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
             format!("PictureColumn {{ column: {column:?}, store: {:?}, name: {name:?} }}", f.modifiers.store.as_deref())
         })
         .collect();

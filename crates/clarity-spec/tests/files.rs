@@ -213,13 +213,13 @@ fn a_folder_field_names_its_extensions_and_code_keeps_to_them() {
     assert_eq!(field.modifiers.extensions, ["*.md", "*.txt"]);
     let spec = clarity_spec::dictionary::FieldSpec { name: "folder".into(), type_text: "folder".into(), modifiers: field.modifiers.clone() };
     let line = clarity_spec::dictionary::field_line(&spec);
-    assert!(line.ends_with("folder: folder, extensions \"*.md *.txt\""), "{line}");
+    assert!(line.ends_with("folder: folder, extensions \".md, .txt\""), "{line}");
     let refused = |source: &str, says: &str| {
         let found = errors(&load(source, &[]));
         assert!(found.iter().any(|m| m.contains(says)), "{says}: {found:#?}");
     };
     refused(&FOLDERS.replace("name + \".md\"", "\"notes.csv\""), "category.folder holds *.md *.txt files, not 'notes.csv'");
-    refused(&FOLDERS.replace("folder: folder, extensions \"*.md *.txt\"", "folder: text(200), extensions \"*.md\""), "only a folder field has extensions ('folder')");
+    refused(&FOLDERS.replace("folder: folder, extensions \"*.md *.txt\"", "folder: text(200), extensions \"*.md\""), "only a folder, file or blob field has extensions ('folder')");
     let (_, diagnostics) = parse(&FOLDERS.replace("extensions \"*.md *.txt\"", "extensions \"md\""), "notes.clarity");
     assert!(diagnostics.iter().any(|d| d.message.contains("'md' is no extension of files")), "{diagnostics:#?}");
     // Hidden files only with the folder's hidden option.

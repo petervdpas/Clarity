@@ -15,7 +15,7 @@ use crate::design_edit::Designed;
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
 use crate::model::{App, Command, CommandKind, Frame, Literal, Page, Widget, WidgetProps};
 use crate::widgets::WidgetKind;
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, TAB_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FILE_TYPE_KEYS, FOLDER_KEYS, TAB_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -114,6 +114,14 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
     let pages = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) || designs.pages().next().is_some();
     let canvas = |test: &dyn Fn(&crate::model::WidgetProps) -> bool| designs.part(|p| p.kind == WidgetKind::Canvas && test(p));
     let drawn = |p: &crate::model::WidgetProps| matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector));
+    // A blob or file field that names its extensions: `video: file, extensions ".mp4"`.
+    let typed_files = modules.iter().any(|(_, text)| {
+        text.lines().any(|l| {
+            let words: Vec<&str> = l.split([' ', ',', ':']).filter(|w| !w.is_empty()).collect();
+            words.len() > 2 && matches!(words[1], "file" | "blob") && words.contains(&"extensions")
+        })
+    });
+    let folder_parts = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) || designs.part(|p| p.kind == WidgetKind::Folder);
     let own = RENDERER_KEYS
         .iter()
         .chain(if pages { UNDO_KEYS.as_slice() } else { &[] })
@@ -123,7 +131,8 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
         .chain(if available_tabs { TAB_KEYS.as_slice() } else { &[] })
         .chain(if files { FILE_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) || designs.part(|p| p.kind == WidgetKind::Folder) { FOLDER_KEYS.as_slice() } else { &[] })
+        .chain(if typed_files { FILE_TYPE_KEYS.as_slice() } else { &[] })
+        .chain(if folder_parts { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "zoom"))) || canvas(&|p| p.zoom) { ZOOM_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) || canvas(&drawn) { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("uses ") && l.split([' ', ',']).any(|w| w == "progress"))) { PROGRESS_KEYS.as_slice() } else { &[] })

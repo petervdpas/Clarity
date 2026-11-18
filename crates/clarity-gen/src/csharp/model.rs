@@ -113,8 +113,8 @@ fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The initial value of a field, when it has one beyond C#'s own default.
 fn initial(field: &Field) -> Option<String> {
     match (&field.ty, field.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
@@ -295,7 +295,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
         FieldType::Enum { .. } => format!("Sql.Name({value})"),
         FieldType::Image => format!("Sql.Picture({value})"),
         // Its content, then its name in the column beside it.
-        FieldType::File => format!("Sql.FileContent({value}), Sql.FileName({value})"),
+        FieldType::Blob => format!("Sql.FileContent({value}), Sql.FileName({value})"),
         // Its items as JSON.
         FieldType::Values { .. } => format!("ListFields.Kept({value})"),
         _ => value,
@@ -304,7 +304,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
 
 fn from_sql(field: &Field) -> String {
     let read = match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "GetText".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => "GetText".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
         FieldType::Bool => "GetBoolean".into(),
@@ -313,7 +313,7 @@ fn from_sql(field: &Field) -> String {
         FieldType::Enum { name } => format!("GetName<{}>", name.name),
         FieldType::Ref { .. } => "GetReference".into(),
         FieldType::Image => "GetPicture".into(),
-        FieldType::File => "GetFile".into(),
+        FieldType::Blob => "GetFile".into(),
         FieldType::Values { item } => return format!("ListFields.Read<{}>", value_type(&ValueItem::of_list(item).info())),
         FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     };
@@ -326,7 +326,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     let columns = stored(entity)
         .flat_map(|f| {
             let column = entity.column_of(&f.name.name).to_string();
-            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
             std::iter::once(column).chain(name)
         })
         .map(|c| string(&c))
@@ -347,9 +347,9 @@ fn record(project: &Project, entity: &Entity) -> String {
     let mut at = 0;
     let mut from_values = String::new();
     for f in stored(entity) {
-        let values = if f.ty == FieldType::File { format!("values[{at}], values[{}]", at + 1) } else { format!("values[{at}]") };
+        let values = if f.ty == FieldType::Blob { format!("values[{at}], values[{}]", at + 1) } else { format!("values[{at}]") };
         from_values.push_str(&format!("        {} = {}({}, {values}),\n", property(name, &f.name.name), from_sql(f), string(&f.name.name)));
-        at += if f.ty == FieldType::File { 2 } else { 1 };
+        at += if f.ty == FieldType::Blob { 2 } else { 1 };
     }
     // The data events written in the entity's code block; each runs the
     // method generated from it.
@@ -488,7 +488,7 @@ fn saved_since(project: &Project, entity: &Entity) -> String {
 fn slot_of(field: &Field, at: String) -> Option<String> {
     let format = field.modifiers.format.as_deref().map_or("null".to_string(), string);
     Some(match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme => format!("Clarity.Runtime.Slot.OfText({at})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme => format!("Clarity.Runtime.Slot.OfText({at})"),
         FieldType::Integer | FieldType::Id => format!("Clarity.Runtime.Slot.OfInteger({at}, {format})"),
         FieldType::Duration => format!("Clarity.Runtime.Slot.OfDuration({at})"),
         FieldType::Decimal { scale, .. } => format!("Clarity.Runtime.Slot.OfDecimal({at}, {scale}, {format})"),
@@ -515,11 +515,11 @@ fn pictures(entity: &Entity) -> String {
     let columns: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::Blob))
         .map(|f| {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("null".to_string(), string);
-            let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
+            let name = if f.ty == FieldType::Blob { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
             format!("new({}, {store}{name})", string(&column))
         })
         .collect();

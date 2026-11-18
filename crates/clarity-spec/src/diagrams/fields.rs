@@ -9,7 +9,7 @@ use super::{DiagramField, Line};
 
 /// Clarity's own type words.
 pub(super) const CLARITY_TYPES: [&str; 16] =
-    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "folder", "ref", "list"];
+    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "blob", "email", "url", "color", "folder", "ref", "list"];
 
 /// Type words of other languages and databases, read as Clarity's.
 const FOREIGN_TYPES: [(&str, &str); 8] = [

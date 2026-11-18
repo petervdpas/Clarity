@@ -661,6 +661,14 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!clarity_store_file(db, text_of(args, "store"), text_of(args, "path"), &bytes) || !clarity_data_url(bytes, &url)) return failed();
         return value(cJSON_CreateString(url));
     }
+    if (strcmp(command, "store_upload") == 0) {
+        // A file a person picked in a web app, kept in a file store: its path on the server.
+        const char* path = NULL;
+        if (!clarity_store_upload(db, text_of(args, "store"), text_of(args, "name"), clarity_from_base64(text_of(args, "data")), &path)) return failed();
+        return value(cJSON_CreateString(path));
+    }
+    // The file stores and their folders, which a folder part picks from in a web app.
+    if (strcmp(command, "stores") == 0) return value(clarity_stores(db));
     if (strcmp(command, "set_language") == 0) {
         // The language the screen picked, which text code makes is translated to.
         const cJSON* language = cJSON_GetObjectItemCaseSensitive(args, "language");

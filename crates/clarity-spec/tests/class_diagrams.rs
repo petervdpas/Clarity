@@ -128,7 +128,7 @@ fn what_clarity_does_not_map_is_drawn_with_a_warning() {
     class Customer {
         +String name
         +greet() text
-        +blob photo
+        +widget photo
         +nickname
     }
     this is no class line

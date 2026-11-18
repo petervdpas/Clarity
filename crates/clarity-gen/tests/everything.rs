@@ -39,6 +39,7 @@ fn type_name(ty: &FieldType) -> &'static str {
         FieldType::DateTime => "datetime",
         FieldType::Duration => "duration",
         FieldType::Image => "image",
+        FieldType::Blob => "blob",
         FieldType::File => "file",
         FieldType::Email => "email",
         FieldType::Url => "url",
@@ -58,8 +59,8 @@ fn type_name(ty: &FieldType) -> &'static str {
 
 /// Every field type, by name. `record` is only a web API's (manual/data.entities.md),
 /// which the project meets when it has one (D2).
-const TYPES: [&str; 22] = [
-    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "secret", "folder", "language", "theme", "id", "enum", "ref", "list", "values",
+const TYPES: [&str; 23] = [
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "blob", "file", "email", "url", "color", "secret", "folder", "language", "theme", "id", "enum", "ref", "list", "values",
 ];
 
 fn page_kind(kind: &PageKind) -> &'static str {

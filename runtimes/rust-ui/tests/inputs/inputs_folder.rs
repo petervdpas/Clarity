@@ -9,7 +9,8 @@ use std::rc::Rc;
 
 use clarity_ui::input::{Key, KeyInput, PointerButton};
 use clarity_ui::locale;
-use clarity_ui::parts::inputs::folder::{choose_name, type_name, FolderPart};
+use clarity_ui::parts::inputs::folder::{choose_name, type_name};
+use clarity_ui::parts::inputs::path::PathPart;
 use clarity_ui::parts::inputs::testing::InputsHost;
 use clarity_ui::parts::text_box::InputIcon;
 use clarity_ui::parts::PartHost;
@@ -30,13 +31,13 @@ fn make(markup: &str) -> (Screen, Rc<InputsHost>, std::sync::Arc<TestPicker>) {
     (screen, host, picker)
 }
 
-fn part(screen: &Screen) -> &FolderPart {
-    screen.element(part_named(screen, "export")).and_then(|e| e.as_any().downcast_ref::<FolderPart>()).expect("a folder part")
+fn part(screen: &Screen) -> &PathPart {
+    screen.element(part_named(screen, "export")).and_then(|e| e.as_any().downcast_ref::<PathPart>()).expect("a folder part")
 }
 
-fn with_part<R>(screen: &mut Screen, act: impl FnOnce(&mut FolderPart) -> R) -> R {
+fn with_part<R>(screen: &mut Screen, act: impl FnOnce(&mut PathPart) -> R) -> R {
     let id = part_named(screen, "export");
-    screen.act(id, |e, _| act(e.as_any_mut().downcast_mut::<FolderPart>().unwrap())).unwrap()
+    screen.act(id, |e, _| act(e.as_any_mut().downcast_mut::<PathPart>().unwrap())).unwrap()
 }
 
 fn type_in(screen: &mut Screen, text: &str) {
@@ -90,6 +91,25 @@ fn a_chosen_folder_is_taken_at_once() {
     // Choosing none leaves it.
     click_button(&mut screen);
     assert_eq!(2, changes(&host).len());
+}
+
+/// The dialog opens in the folder the part holds, else in its `start
+/// folder` (a relative one inside the program's folder), else where the
+/// system opens it.
+#[test]
+fn its_dialog_opens_in_its_folder_or_its_start_folder() {
+    let (mut screen, host, picker) = make(r#"<Folder at="1,1" span="12" name="export" bind="settings.exportFolder" startFolder="exports" />"#);
+    click_button(&mut screen);
+    host.set("settings.exportFolder", json!(""));
+    Shot::of(&mut screen, 800, 60, 1.0);
+    click_button(&mut screen);
+    let exports = std::env::current_dir().unwrap().join("exports").to_string_lossy().into_owned();
+    assert_eq!(picker.starts(), [Some("/mnt/photos".to_string()), Some(exports)]);
+    let (mut screen, host, picker) = make(MARKUP);
+    host.set("settings.exportFolder", json!(""));
+    Shot::of(&mut screen, 800, 60, 1.0);
+    click_button(&mut screen);
+    assert_eq!(picker.starts(), [None]);
 }
 
 /// It says "Choose a folder" when the pointer rests on it, and shows three dots.
@@ -185,4 +205,30 @@ fn it_draws() {
         shot.save(std::path::Path::new(&dir).join("inputs-folder.png")).unwrap();
     }
     assert_eq!(60, shot.height());
+}
+
+/// In a web app the folders are the server's: the button opens a list of the
+/// program's file stores, and the one picked sets the folder (step 5 of
+/// docs/ledger/files-pictures.md).
+#[test]
+fn in_a_browser_the_button_picks_one_of_the_program_s_stores() {
+    let (mut screen, host, picker) = make(MARKUP);
+    picker.no_folders();
+    host.stores.borrow_mut().extend([("photos".to_string(), "/srv/photos".to_string()), ("scans".to_string(), "/srv/scans".to_string())]);
+    Shot::of(&mut screen, 800, 60, 1.0);
+    assert!(part(&screen).choose_button().is_shown(), "a browser picks a store");
+    click_button(&mut screen);
+    let list = part(&screen).stores_open().expect("the list of stores is open");
+    assert_eq!(list, ["photos", "scans"]);
+    with_part(&mut screen, |p| p.pick_store(1));
+    assert_eq!(Some(json!("/srv/scans")), host.read("settings.exportFolder"));
+}
+
+/// Its extensions go to the folder dialog, which shows those files where the
+/// system can, so the person sees which folder holds them.
+#[test]
+fn its_extensions_go_to_the_folder_dialog() {
+    let (mut screen, _, picker) = make(r#"<Folder at="1,1" span="12" name="export" bind="settings.exportFolder" extensions=".mp4, .webm" />"#);
+    click_button(&mut screen);
+    assert_eq!(picker.filter().map(|f| f.patterns), Some(vec!["*.mp4".to_string(), "*.webm".to_string()]));
 }

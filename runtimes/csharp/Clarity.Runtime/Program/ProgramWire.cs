@@ -382,6 +382,12 @@ internal sealed class ProgramWire : IDesktop
                 return Value(FieldBytes(given["entity"]?.GetValue<string>() ?? "", given["id"]?.GetValue<long>() ?? 0, given["field"]?.GetValue<string>() ?? "") is { } bytes ? Convert.ToBase64String(bytes) : null);
             case "store_file":
                 return StoreFile(given["path"]?.GetValue<string>() ?? "");
+            case "store_upload":
+                // A file a person picked in a web app, kept in a file store: its path on the server.
+                return Value((db ?? throw new StorageException("the program keeps no files")).StoreUpload(given["store"]?.GetValue<string>() ?? "", given["name"]?.GetValue<string>() ?? "", Convert.FromBase64String(given["data"]?.GetValue<string>() ?? "")));
+            case "stores":
+                // The file stores and their folders, which a folder part picks from in a web app.
+                return Value(new JsonArray([.. (db?.Stores() ?? []).Select(s => (JsonNode?)new JsonObject { ["name"] = s.Name, ["folder"] = s.Folder })]));
             case "read_settings":
                 return Value(SettingsNow());
             case "keep_settings":

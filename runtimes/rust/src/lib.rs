@@ -597,8 +597,13 @@ impl Db {
         self.held.borrow_mut().insert(setting.to_string(), serde_json::Value::String(value.to_string()));
     }
 
+    /// The names of the file stores, in the order they were added.
+    pub(crate) fn store_names(&self) -> Vec<String> {
+        self.stores.iter().map(|(n, _)| n.clone()).collect()
+    }
+
     /// The folder of the file store `name`, made when it is not there yet.
-    fn store_folder(&self, name: &str) -> Result<std::path::PathBuf> {
+    pub(crate) fn store_folder(&self, name: &str) -> Result<std::path::PathBuf> {
         // A folder that is no store, by its path: just a folder.
         if let Some(path) = name.strip_prefix(files::FOLDER) {
             if path.is_empty() {

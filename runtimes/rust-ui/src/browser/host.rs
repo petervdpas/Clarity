@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use crate::app_files::AppFiles;
 use crate::element::Composition;
-use crate::files::ChosenFile;
+use crate::files::StorageFile;
 use crate::geometry::Rect;
 use crate::headless::Driven;
 use crate::input::{Cursor, KeyInput, Modifiers, PointerButton, PressCounter};
@@ -252,6 +252,11 @@ impl BrowserHost {
     }
 
     /// The browser shows dark (true) or light.
+    /// Whether the page previews a desktop project, whose parts take the desktop's shape.
+    pub fn set_desktop(&mut self, desktop: bool) {
+        self.files.set_desktop(desktop);
+    }
+
     pub fn set_dark(&mut self, dark: bool) {
         self.screen().set_dark(dark);
     }
@@ -351,7 +356,7 @@ impl BrowserHost {
 
     /// The person chose a file in the page's file input: the click that asked for it is done again, and the picker gives it.
     pub fn file_chosen(&mut self, name: &str, bytes: Vec<u8>) {
-        self.files.give(ChosenFile { name: crate::wire::clean_name(name), bytes });
+        self.files.give(StorageFile::given(&crate::wire::clean_name(name), bytes));
         if let Some((x, y)) = self.pressed_at {
             let screen = self.screen();
             screen.pointer_pressed_with(x, y, PointerButton::Left, 1, Modifiers::NONE);

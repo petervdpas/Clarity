@@ -726,7 +726,7 @@ fn parse_field_typed(cursor: &mut Cursor, span: Span, value: bool) -> ParseResul
 }
 
 /// The plain types a list field cannot hold.
-const VALUE_WORDS: [&str; 12] = ["bool", "money", "datetime", "duration", "image", "file", "email", "url", "color", "id", "ref", "list"];
+const VALUE_WORDS: [&str; 12] = ["bool", "money", "datetime", "duration", "image", "blob", "email", "url", "color", "id", "ref", "list"];
 
 pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
     parse_type_of(cursor, false)
@@ -770,6 +770,7 @@ fn parse_type_of(cursor: &mut Cursor, value: bool) -> ParseResult<FieldType> {
         "color" => FieldType::Color,
         "secret" => FieldType::Secret,
         "folder" => FieldType::Folder,
+        "blob" => FieldType::Blob,
         "file" => FieldType::File,
         "id" => FieldType::Id,
         "ref" => FieldType::Ref {
@@ -861,8 +862,8 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         ),
         "extensions" => {
             let at = cursor.peek().map(|t| t.span).unwrap_or(keyword.span);
-            let written = cursor.expect_string("the files it holds as patterns, as in 'extensions \"*.md *.csv\"'")?;
-            let found: Vec<String> = written.split_whitespace().map(str::to_string).collect();
+            let written = cursor.expect_string("the files it holds, as in 'extensions \".md, .csv\"'")?;
+            let found = crate::files::patterns_of(&written);
             if let Some(problem) = crate::files::patterns_problem(&found) {
                 return Err(Diagnostic::error(problem, at));
             }
@@ -2038,6 +2039,11 @@ fn parse_widget_props(
         striped: false,
         fold_buttons: false,
         reading_width: false,
+        extensions: None,
+        hidden: false,
+        start_folder: None,
+        store: None,
+        new_file: false,
         reorder: None,
         reorder_from: None,
         mode: None,
@@ -2458,6 +2464,43 @@ fn parse_widget_props(
                     return Err(Diagnostic::error(format!("expected buttons after fold, as in fold buttons, not '{}'", word.name), word.span));
                 }
                 props.fold_buttons = true;
+            }
+            // `extensions "*.pdf"`: the files a file part's dialog offers.
+            "extensions" => {
+                applies(WidgetProperty::Extensions)?;
+                let written = cursor.expect_string("the files it offers, as in 'extensions \".png, .jpg, .gif\"', or \"*.*\" for any file")?;
+                let patterns = crate::files::patterns_of(&written);
+                if let Some(problem) = crate::files::patterns_problem(&patterns) {
+                    return Err(Diagnostic::error(problem, clause.span));
+                }
+                props.extensions = Some(crate::files::written_of(&patterns));
+            }
+            "hidden" => {
+                applies(WidgetProperty::Hidden)?;
+                props.hidden = true;
+            }
+            // `start folder "videos"`: where the dialog opens while nothing is chosen.
+            "start" => {
+                applies(WidgetProperty::StartFolder)?;
+                let word = cursor.expect_ident("folder, as in start folder \"videos\"")?;
+                if word.name != "folder" {
+                    return Err(Diagnostic::error(format!("expected folder after start, as in start folder \"videos\", not '{}'", word.name), word.span));
+                }
+                props.start_folder = Some(cursor.expect_string("the folder, as in start folder \"videos\"")?);
+            }
+            // `store uploads`: the file store a web app keeps a picked file in.
+            "store" => {
+                applies(WidgetProperty::Store)?;
+                props.store = Some(cursor.expect_ident("a file store, as in store uploads")?.name);
+            }
+            // `new file`: the dialog may name a file that is not there yet.
+            "new" => {
+                applies(WidgetProperty::NewFile)?;
+                let word = cursor.expect_ident("file, as in new file")?;
+                if word.name != "file" {
+                    return Err(Diagnostic::error(format!("expected file after new, as in new file, not '{}'", word.name), word.span));
+                }
+                props.new_file = true;
             }
             // `reading width`: Markdown in a column of a reading width.
             "reading" => {

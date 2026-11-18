@@ -58,6 +58,10 @@ pub struct FieldFacts {
     pub folder: bool,
     /// The help it declares (`help @customerVatNumberHelp`), a key or the text itself; none for none.
     pub help: Option<String>,
+    /// The files a folder, file or blob field takes (`extensions ".png, .jpg"`), as patterns (`*.png`); none: any file.
+    pub extensions: Vec<String>,
+    /// A folder, file or blob field whose hidden files count too (`hidden`).
+    pub hidden: bool,
 }
 
 /// The person's formats for numbers and dates: their language and currency.
@@ -164,6 +168,19 @@ pub trait PartHost {
     fn fetch(&self, bind: &str, store_path: Option<&str>) -> Option<Vec<u8>> {
         let _ = (bind, store_path);
         None
+    }
+
+    /// Keeps a file a person picked in a web app in the file store `store` on
+    /// the server; its path there, or why it could not be kept (step 5 of
+    /// docs/ledger/files-pictures.md).
+    fn upload(&self, store: &str, name: &str, bytes: &[u8]) -> Result<String, Text> {
+        let _ = (name, bytes);
+        Err(Text::plain(format!("there is no file store '{store}'")))
+    }
+
+    /// The program's file stores and their folders, which a folder part picks from in a web app.
+    fn stores(&self) -> Vec<(String, String)> {
+        Vec::new()
     }
 
     /// Says something to the person among the window's messages.

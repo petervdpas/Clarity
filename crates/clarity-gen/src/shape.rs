@@ -207,7 +207,7 @@ impl Kinds {
                     }
                 }
             }
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => self.text(r#""kind":"text""#),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => self.text(r#""kind":"text""#),
             FieldType::Integer | FieldType::Duration | FieldType::Id => self.text(r#""kind":"integer""#),
             FieldType::Decimal { .. } | FieldType::Money => self.text(r#""kind":"decimal""#),
             FieldType::Bool => self.text(r#""kind":"bool""#),
@@ -227,7 +227,7 @@ impl Kinds {
                 };
                 self.text(&format!(r#""kind":"values","item":{item}"#));
             }
-            FieldType::Ref { .. } | FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } => self.text(r#""kind":"other""#),
+            FieldType::Ref { .. } | FieldType::Image | FieldType::Blob | FieldType::List { .. } | FieldType::Record { .. } => self.text(r#""kind":"other""#),
         }
     }
 }

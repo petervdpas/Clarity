@@ -185,6 +185,26 @@ fn the_checks_cover_guards_tests_of_changed_crates_and_examples() {
     assert_eq!(keys.len(), checks.len(), "each check has its own key");
 }
 
+/// A release bumps Clarity.UI's library before its release exists: an
+/// example's build then takes the library DevTools built from the
+/// repository, never an empty CLARITY_UI.
+#[test]
+fn an_example_build_has_a_library_while_its_release_is_not_out() {
+    let repo = repo();
+    let Some(built) = clarity_gen::clarity_ui::repository_library(&repo, std::env::consts::OS) else {
+        eprintln!("Clarity.UI's library is not built in this repository");
+        return;
+    };
+    let checks = release::checks(&repo, &["examples/todo/todo.clarity".to_string()]);
+    let build = checks.iter().find(|c| c.key == "build:todo").expect("the changed example builds");
+    // The last one given is the one the command gets (the IDE's own are emptied first).
+    let library = build.run.env.iter().rev().find(|(name, _)| name == "CLARITY_UI").map(|(_, v)| v.clone()).unwrap_or_default();
+    assert!(!library.is_empty(), "CLARITY_UI names a library");
+    if let clarity_gen::clarity_ui::Library::ToFetch { .. } | clarity_gen::clarity_ui::Library::Unavailable { .. } = clarity_gen::clarity_ui::library() {
+        assert_eq!(std::path::PathBuf::from(&library), built, "the repository's build, while the release is not here");
+    }
+}
+
 #[test]
 fn an_agents_ask_to_build_is_answered_through_the_file() {
     use clarity_project::dev_asks;

@@ -216,6 +216,19 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
         base64_of(Some(self.answer::<String>("store_file", args(json!({ "store": store, "path": path })))?)).map(Option::unwrap_or_default)
     }
 
+    fn store_upload(&self, store: &str, name: &str, bytes: &[u8]) -> Answer<String> {
+        self.answer("store_upload", args(json!({ "store": store, "name": name, "data": clarity_runtime::record_file::data(bytes) })))
+    }
+
+    fn stores(&self) -> Answer<Vec<(String, String)>> {
+        #[derive(serde::Deserialize)]
+        struct Store {
+            name: String,
+            folder: String,
+        }
+        Ok(self.answer::<Vec<Store>>("stores", Map::new())?.into_iter().map(|s| (s.name, s.folder)).collect())
+    }
+
     fn read_settings(&self) -> Map<String, Value> {
         match self.maybe("read_settings", Map::new()) {
             Some(Value::Object(settings)) => settings,

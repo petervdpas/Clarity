@@ -13,7 +13,7 @@ use crate::widgets::is_identifier;
 /// The field types that take nothing more (`text` and `decimal` take a
 /// length, a precision and a scale), as the tools and the IDE offer them.
 pub const SIMPLE_TYPES: &[&str] = &[
-    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "secret", "folder", "file", "language", "theme", "id",
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "secret", "folder", "file", "blob", "language", "theme", "id",
 ];
 
 /// The field types that name what they hold: `ref Customer`, an enum by its
@@ -23,7 +23,7 @@ pub const NAMED_TYPES: &[&str] = &["ref", "enum", "record", "list"];
 /// The types a setting of the settings block takes: a plain value or a
 /// reference (`language` and `theme` are Clarity's own bare words).
 pub const SETTING_TYPES: &[&str] = &[
-    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "email", "url", "color", "secret", "folder", "ref", "enum",
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "email", "url", "color", "secret", "folder", "file", "ref", "enum",
 ];
 
 /// A field as the designer sends it.
@@ -57,6 +57,7 @@ pub fn type_text(ty: &FieldType) -> String {
         FieldType::Color => "color".to_string(),
         FieldType::Secret => "secret".to_string(),
         FieldType::Folder => "folder".to_string(),
+        FieldType::Blob => "blob".to_string(),
         FieldType::File => "file".to_string(),
         FieldType::Language => "language".to_string(),
         FieldType::Theme => "theme".to_string(),
@@ -121,7 +122,7 @@ pub fn field_line(spec: &FieldSpec) -> String {
         parts.push(format!("store {store}"));
     }
     if !m.extensions.is_empty() {
-        parts.push(format!("extensions {}", quote(&m.extensions.join(" "))));
+        parts.push(format!("extensions {}", quote(&crate::files::written_of(&m.extensions))));
     }
     parts.join(", ")
 }

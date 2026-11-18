@@ -94,7 +94,7 @@ fn fields_json(project: &Project, entity: &Entity, lines: &[clarity_spec::code::
     for field in &entity.fields {
         let name = &field.name.name;
         let kind = match &field.ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => json!({ "kind": "text" }),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => json!({ "kind": "text" }),
             FieldType::Integer | FieldType::Duration | FieldType::Id => json!({ "kind": "integer" }),
             FieldType::Decimal { .. } | FieldType::Money => json!({ "kind": "decimal" }),
             FieldType::Bool => json!({ "kind": "bool" }),
@@ -117,7 +117,7 @@ fn fields_json(project: &Project, entity: &Entity, lines: &[clarity_spec::code::
                 let Value::Array(fields) = fields_json(project, inner, &inside.fields) else { continue };
                 json!({ "kind": "records", "entity": inner.name.name, "fields": fields, "base": {} })
             }
-            FieldType::Ref { .. } | FieldType::Image | FieldType::File => continue,
+            FieldType::Ref { .. } | FieldType::Image | FieldType::Blob => continue,
         };
         let mut kind = kind;
         kind["name"] = Value::String(name.clone());

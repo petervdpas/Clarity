@@ -12,7 +12,7 @@ use windows::Win32::Media::MediaFoundation::{
     MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE, MF_SOURCE_READERF_ENDOFSTREAM, MF_VERSION, MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Video, MFSTARTUP_FULL, MFStartup, MFVideoFormat_RGB32,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::System::Com::CoIncrementMTAUsage;
 use windows::Win32::System::Variant::VT_I8;
 use windows::core::{GUID, HSTRING};
 
@@ -21,9 +21,13 @@ use crate::{Picture, Problem, Source};
 const VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 
 /// Media Foundation started once for the program; false where it cannot start.
+/// COM's multithreaded apartment is kept for the whole program, so the
+/// threads that open and decode videos work in it without joining one:
+/// a thread is never made multithreaded, as the UI thread must stay free
+/// for the window's single-threaded apartment (winit's OleInitialize).
 fn started() -> bool {
     static STARTED: OnceLock<bool> = OnceLock::new();
-    *STARTED.get_or_init(|| unsafe { MFStartup(MF_VERSION, MFSTARTUP_FULL).is_ok() })
+    *STARTED.get_or_init(|| unsafe { CoIncrementMTAUsage().is_ok() && MFStartup(MF_VERSION, MFSTARTUP_FULL).is_ok() })
 }
 
 /// A video read by Media Foundation's Source Reader.
@@ -50,8 +54,7 @@ pub fn open(path: &Path) -> Option<Result<Box<dyn Source>, Problem>> {
 impl MfSource {
     unsafe fn open(path: &Path) -> windows::core::Result<MfSource> {
         unsafe {
-            // The calling thread joins COM (a thread that has already is fine).
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            // The calling thread's apartment is left as it is (see `started`).
             if !started() {
                 return Err(windows::core::Error::empty());
             }

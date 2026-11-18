@@ -42,6 +42,10 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_LibraryLoader"] }
 
+# The tests ask a thread's COM apartment, as the window's library does.
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62", features = ["Win32_System_Com"] }
+
 # macOS: AVFoundation's asset reader, part of every macOS (user's choice, 2026-11-07).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

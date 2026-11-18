@@ -27,7 +27,7 @@ const FLAGS: &[(&str, &str)] = &[
     ("computed", "Worked out, not entered."),
     ("search", "In the record's full-text index."),
     ("cascade", "On a ref: deleting the record it refers to deletes this one first."),
-    ("hidden", "On a folder: its hidden files and folders, whose name starts with a dot, count too."),
+    ("hidden", "On a folder, file or blob: hidden files and folders, whose name starts with a dot, count too."),
 ];
 
 /// The modifiers that hold a value: a number, a text, true or false, or an enum's value.
@@ -41,7 +41,7 @@ const TEXTS: &[(&str, &str)] = &[
     ("format", "How the value is shown, a format name."),
     ("column", "The existing column of an external entity the field is stored in."),
     ("store", "An image field's file store, from the project settings."),
-    ("extensions", "On a folder: the files it holds, as a file browser writes them, like \"*.md *.csv\", or \"*.*\" alone for any file."),
+    ("extensions", "On a folder, file or blob: the files it takes, like \".md, .csv\", or \"*.*\" alone for any file."),
 ];
 
 pub fn definitions() -> Vec<ToolDef> {
@@ -549,7 +549,7 @@ mod tests {
         ok(&mut tools, "add_field", json!({"entity": "Customer", "name": "limit", "type": "decimal", "precision": 10, "scale": 2, "min": 0}));
         assert!(module().contains("    limit: decimal(10, 2), min 0"), "{}", module());
         ok(&mut tools, "add_field", json!({"entity": "Customer", "name": "notes", "type": "folder", "extensions": "*.md *.txt", "hidden": true}));
-        assert!(module().contains("    notes: folder, hidden, extensions \"*.md *.txt\""), "{}", module());
+        assert!(module().contains("    notes: folder, hidden, extensions \".md, .txt\""), "{}", module());
         assert!(refused(&mut tools, "change_field", json!({"entity": "Customer", "field": "notes", "extensions": "md"})).contains("'md' is no extension of files"));
         assert!(refused(&mut tools, "add_field", json!({"entity": "Client", "name": "x", "type": "text"})).contains("there is no entity Client; the entities are Customer"));
         assert!(refused(&mut tools, "add_field", json!({"entity": "Customer", "name": "x", "type": "texts"})).contains("there is no type texts; the types are text, integer"));

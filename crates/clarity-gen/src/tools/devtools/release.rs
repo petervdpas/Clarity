@@ -794,18 +794,6 @@ pub fn held_back(repo: &Path) -> Result<Vec<String>, String> {
     Ok(held_back_of(checks, &check_records(repo)))
 }
 
-/// Whether `message` is the fix routine's commit message after a failed
-/// release: `Fix the failed Clarity <version> release`, the version as `1.4.0`.
-pub fn is_fix_line(message: &str) -> bool {
-    message
-        .strip_prefix("Fix the failed Clarity ")
-        .and_then(|rest| rest.strip_suffix(" release"))
-        .is_some_and(|version| {
-            let parts: Vec<&str> = version.split('.').collect();
-            parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-        })
-}
-
 /// Whether `stamp` is a plan's name: `YYYY-MM-DD-HHMM`.
 fn plan_stamp(stamp: &str) -> bool {
     let b = stamp.as_bytes();
@@ -836,7 +824,7 @@ pub fn write_plan(repo: &Path, stamp: &str, plan: &Value) -> Result<PathBuf, Str
 }
 
 /// Gives the plan `releases/<stamp>.json` the commit message `message`, its
-/// steps as they are: the fix after a failed release.
+/// steps as they are (after a failed release, or for the Go sums).
 pub fn set_commit_message(repo: &Path, stamp: &str, message: &str) -> Result<PathBuf, String> {
     let file = repo.join("releases").join(format!("{stamp}.json"));
     let text = std::fs::read_to_string(&file).map_err(|_| format!("there is no plan {stamp} in releases/"))?;
@@ -905,16 +893,6 @@ fn required_features(manifest: &str, test: &str) -> Vec<String> {
 /// the repository's runtimes and Clarity.UI's library or browser files of
 /// its own. Empty is unset to each of them.
 const IDE_ONLY: [&str; 4] = ["CLARITY_RUNTIME", "CLARITY_UI", "CLARITY_UI_BROWSER", "CLARITY_PROJECT"];
-
-/// Clarity.UI's library as the IDE builds apps with it now (chosen in
-/// DevTools, named, carried or fetched before); none while it is still to fetch.
-fn library_in_use() -> Option<PathBuf> {
-    use crate::clarity_ui::Library;
-    match crate::clarity_ui::library() {
-        Library::Chosen(f) | Library::Named(f) | Library::Bundled(f) | Library::Fetched(f) => Some(f),
-        Library::ToFetch { .. } | Library::Unavailable { .. } => None,
-    }
-}
 
 fn node_tool(name: &str) -> String {
     if cfg!(windows) { format!("{name}.cmd") } else { name.to_string() }
@@ -1192,12 +1170,10 @@ pub fn checks(repo: &Path, changed: &[String]) -> Vec<Check> {
             inputs: Inputs::Crate("clarity-cli".into()),
         });
     }
-    // A Go, C or C++ desktop example builds with Clarity.UI's library as the IDE gives it to apps;
-    // while a bumped library's release is not out, with the one DevTools built from this repository.
-    let library = library_in_use()
-        .or_else(|| crate::clarity_ui::repository_library(repo, std::env::consts::OS))
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default();
+    // A Go, C or C++ desktop example builds with Clarity.UI's library built from this repository
+    // (DevTools' clarityUi), whatever the IDE builds apps with, so the check counts the same from the
+    // IDE and from its MCP server; without that build, the release's.
+    let library = crate::clarity_ui::repository_library(repo, std::env::consts::OS).map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
     for example in EXAMPLES.iter().filter(|e| under(&format!("examples/{e}"))) {
         let exact = format!("the_{example}_example_builds_without_warnings");
         checks.push(Check {

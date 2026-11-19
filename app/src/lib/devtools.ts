@@ -74,6 +74,11 @@ export function bytesText(bytes: number): string {
 export const DISK_TAB = "disk";
 export const RELEASE_TAB = "releasePlanning";
 
+/** The tab an agent's ask works in, which Clarity settings open at: a build in its piece's tab, a removal in Disk. */
+export function askedTab(ask: { action: string; key: string }): string {
+  return ask.action === "remove" ? DISK_TAB : ask.key;
+}
+
 /** The tabs in their order: Disk and Release planning first, then the pieces marked with a signal, then the others, each in the order given. */
 export function tabOrder(pieces: { key: string; signal: string | null }[]): string[] {
   return [DISK_TAB, RELEASE_TAB, ...pieces.filter((p) => p.signal).map((p) => p.key), ...pieces.filter((p) => !p.signal).map((p) => p.key)];

@@ -2,7 +2,7 @@
 // what a release's changes come to.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DISK_TAB, RELEASE_TAB, bytesText, changeText, checkState, cycle, stateText, tabOrder, verdict } from "./devtools.ts";
+import { DISK_TAB, RELEASE_TAB, askedTab, bytesText, changeText, checkState, cycle, stateText, tabOrder, verdict } from "./devtools.ts";
 
 const check = (title: string, last: boolean | null = null, current = true) => ({ job: `check:${title}`, title, last: last === null ? null : { passed: last, current } });
 
@@ -67,4 +67,9 @@ test("a result of another tree counts as not run, and holds the plan back", () =
   assert.equal(held.planText, "Held back: 2 checks not passed on this tree");
   assert.equal(verdict([check("A", true), check("B", true)], {}).planText, "A plan can be written");
   assert.equal(verdict([check("A", true), check("B", false)], { "check:B": { state: "running" } }).planText, "Held back: 1 check not passed on this tree");
+});
+
+test("an agent's ask opens the tab it works in", () => {
+  assert.equal(askedTab({ action: "build", key: "clarityUi" }), "clarityUi", "a build shows in its piece's tab");
+  assert.equal(askedTab({ action: "remove", key: "release" }), DISK_TAB, "a removal of a build folder shows in Disk");
 });

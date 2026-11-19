@@ -18,6 +18,7 @@
   import DiskSettings from "./DiskSettings.svelte";
   import ReleasePlanning from "./ReleasePlanning.svelte";
   import { browserFiles } from "./browserFilesStore.svelte";
+  import { appSettings } from "./appSettings.svelte";
   import { busy, devtools } from "./devtoolsStore.svelte";
   import { DISK_TAB as DISK, RELEASE_TAB as RELEASE, cycle, tabOrder } from "./devtools";
 
@@ -82,6 +83,15 @@
     shown = key;
     void call("devtools_add_tab", { key });
   }
+
+  // An agent's ask opens the tab it works in (appSettings.openDevTools); a piece not shown is added.
+  $effect(() => {
+    const asked = appSettings.devToolsTab;
+    if (!asked || !view) return;
+    appSettings.devToolsTab = null;
+    shown = asked;
+    if (asked !== DISK && asked !== RELEASE && !view.tabs.some((t) => t.key === asked)) void call("devtools_add_tab", { key: asked });
+  });
 
   function close(key: string) {
     if (shown === key) shown = DISK;

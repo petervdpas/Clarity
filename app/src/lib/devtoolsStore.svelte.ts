@@ -5,12 +5,15 @@
 // for agents: never, after asking, or without asking; and an agent's ask to
 // remove a build folder of the Disk tab (remove_folder), which cannot be
 // undone, so it is always asked first unless agents may never (src-tauri/src/devtools).
+// Each ask opens Clarity settings at the DevTools tab it works in.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { BuildAsk } from "@clarity/ui/generated/BuildAsk.ts";
 import type { JobView } from "@clarity/ui/generated/JobView.ts";
 import { agent } from "./agentStore.svelte";
+import { openDevTools } from "./appSettings.svelte";
+import { askedTab } from "./devtools";
 import { dialogs } from "./dialogStore.svelte";
 
 /** What an agent hears when the person keeps agents from building. */
@@ -56,6 +59,8 @@ class DevToolsStore {
   }
 
   async #asked(ask: BuildAsk): Promise<void> {
+    // The person sees what the agent asks where it happens: its piece's tab, or Disk.
+    openDevTools(askedTab(ask));
     if (ask.action === "remove") {
       // Removing cannot be undone: asked first even when agents may run things.
       if (agent.runs === "never") {

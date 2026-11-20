@@ -81,3 +81,33 @@ fn the_installer_carries_each_stack_s_runtimes_archive() {
         assert_eq!(installed_as(resources, &staged).as_deref(), Some(staged.as_str()), "the installer moves {staged}");
     }
 }
+
+/// The browser files come in two sets, the one without reports in the
+/// folder and the one with them in `reports/` (web_browser::REPORTS_SET): the
+/// installer keeps both, each file at its own path, so neither set is lost and
+/// no path is added twice (a duplicate fails the rpm, deb and msi bundles).
+#[test]
+fn the_installer_keeps_both_sets_of_browser_files_apart() {
+    let conf = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../app/src-tauri/tauri.clarity-ui.conf.json")).unwrap();
+    let conf: serde_json::Value = serde_json::from_str(&conf).unwrap();
+    let resources = conf["bundle"]["resources"].as_object().unwrap();
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("installed-clarity-ui-browser");
+    let _ = std::fs::remove_dir_all(&root);
+    // What runtimes/rust-ui-browser/build.sh and .github/scripts/stage-clarity-ui.sh stage.
+    let mut staged: Vec<String> = vec!["clarity-ui-browser/LICENSE".to_string()];
+    for set in ["clarity-ui-browser".to_string(), format!("clarity-ui-browser/{}", clarity_gen::web_browser::REPORTS_SET)] {
+        staged.extend(clarity_gen::clarity_ui::BROWSER_FILES.iter().map(|name| format!("{set}/{name}")));
+    }
+    let mut installed = std::collections::BTreeSet::new();
+    for file in &staged {
+        let to = installed_as(resources, file).unwrap_or_else(|| panic!("the installer does not carry {file}"));
+        assert!(installed.insert(to.clone()), "the installer puts {file} at {to}, where another file goes too");
+        let path = root.join(&to);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"").unwrap();
+    }
+    let folder = root.join("clarity-ui-browser");
+    assert!(clarity_gen::clarity_ui::browser_complete(&folder), "the installed set without reports is not complete");
+    assert_eq!(clarity_gen::web_browser::widest_set(&folder), folder.join(clarity_gen::web_browser::REPORTS_SET), "the installed set with reports is not complete");
+    let _ = std::fs::remove_dir_all(&root);
+}

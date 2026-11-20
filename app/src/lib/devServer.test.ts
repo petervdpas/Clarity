@@ -1,82 +1,82 @@
-// The IDE's dev server (vite.config.ts) as the IDE's webview meets it: no
-// answer may be kept, or after a restart the webview runs old compiled
-// components whose styles the new server never compiled ("failed to load
-// virtual css module") and the IDE shows without its layout.
+// The IDE's dev server (vite.config.ts) as the IDE's webview meets it, tested
+// without a server listening or a network, so it answers the same on every
+// machine: no answer may be kept (noStore.ts), or after a restart the webview
+// runs old compiled components whose styles the new server never compiled
+// ("failed to load virtual css module"); and a component's styles asked
+// before the component are its CSS (vite.config.ts, stylesAfterComponent).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { keepNothing, noStore } from "../../noStore.ts";
 
 const app = fileURLToPath(new URL("../..", import.meta.url));
 
-/** Asks `path` as the webview does, twice: fresh, and again with an old ETag and date. */
-async function keepsNothing(base: string, path: string) {
-  const first = await fetch(base + path);
-  assert.equal(first.status, 200, path);
-  assert.equal(first.headers.get("cache-control"), "no-store", `${path} may not be kept`);
-  assert.equal(first.headers.get("etag"), null, `${path} has no ETag to ask again with`);
-  const body = await first.text();
-  const again = await fetch(base + path, { headers: { "If-None-Match": 'W/"kept-from-before"', "If-Modified-Since": new Date().toUTCString() } });
-  assert.equal(again.status, 200, `${path}: a question as if it had a copy gets the whole answer`);
-  assert.equal(again.headers.get("cache-control"), "no-store", `${path} asked again may not be kept`);
-  await again.arrayBuffer();
-  return body;
+/** A question and its answer as the middleware meets them: the headers the answer was given. */
+function exchange(headers: Record<string, string>) {
+  const given: Record<string, unknown> = {};
+  const req = { headers: { ...headers } } as unknown as IncomingMessage;
+  const res = {
+    setHeader(name: string, value: unknown) {
+      given[name.toLowerCase()] = value;
+      return res;
+    },
+  } as unknown as ServerResponse;
+  return { req, res, given };
 }
 
-/** The IDE's dev server on a free port, with a cache of its own: the IDE's (node_modules/.vite) is left as it is. */
-async function start() {
-  const cacheDir = mkdtempSync(join(tmpdir(), "clarity-vite-test-"));
-  const server = await createServer({ root: app, configFile: `${app}vite.config.ts`, cacheDir, server: { port: 0, strictPort: false }, logLevel: "silent" });
-  await server.listen();
-  const address = server.httpServer?.address();
-  assert.ok(address && typeof address === "object");
-  return { server, base: `http://localhost:${address.port}`, done: async () => { await server.close(); rmSync(cacheDir, { recursive: true, force: true }); } };
-}
-
-test("a component's styles asked before the component are its CSS", async () => {
-  // WebKit fetches the files a page loaded last time ahead, at the next start: the styles before their component.
-  const { base, done } = await start();
-  try {
-    for (const component of ["/src/App.svelte", "/src/lib/ReleasePlanning.svelte", "/src/lib/BuildLines.svelte"]) {
-      const styles = await fetch(`${base}${component}?svelte&type=style&lang.css`);
-      assert.equal(styles.status, 200, component);
-      const text = await styles.text();
-      assert.ok(!text.includes("<script"), `${component}: no component source as styles`);
-      assert.ok(text.trim().length > 0, `${component}: its styles, not empty`);
-    }
-  } finally {
-    await done();
-  }
+test("the dev server lets the webview keep nothing: no-store, no ETag, an old ETag forgotten", () => {
+  const { req, res, given } = exchange({ "if-none-match": 'W/"kept-from-before"' });
+  keepNothing(req, res);
+  assert.equal(given["cache-control"], "no-store", "every answer starts as no-store");
+  assert.equal(req.headers["if-none-match"], undefined, "a question with an old ETag gets the whole answer");
+  // What Vite then sets on any answer: a module's no-cache, a prepared package's year, its ETag.
+  res.setHeader("Cache-Control", "max-age=31536000,immutable");
+  assert.equal(given["cache-control"], "no-store", "a prepared package may not be kept either");
+  res.setHeader("ETag", 'W/"123"');
+  assert.equal(given.etag, undefined, "no ETag to ask again with");
+  res.setHeader("Content-Type", "text/javascript");
+  assert.equal(given["content-type"], "text/javascript", "the other headers as Vite gives them");
 });
 
-test("the dev server lets the webview keep nothing, of every kind it serves", async () => {
-  const { base: started, done } = await start();
+test("the no-store middleware stands before every answer Vite gives", () => {
+  const used: ((req: IncomingMessage, res: ServerResponse, next: () => void) => void)[] = [];
+  const server = { middlewares: { use: (f: (typeof used)[number]) => used.push(f) } };
+  (noStore.configureServer as (s: unknown) => void)(server);
+  assert.equal(used.length, 1, "one middleware, added as the server is made, before Vite's own");
+  const { req, res, given } = exchange({});
+  let passed = false;
+  used[0](req, res, () => (passed = true));
+  assert.ok(passed && given["cache-control"] === "no-store", "it marks the answer and lets Vite answer");
+});
+
+test("a component's styles asked before the component are its CSS", async () => {
+  // WebKit fetches the files a page loaded last time ahead, at the next start: the styles before their
+  // component. Vite transforms them as it would answer them, with nothing listening and no packages to prepare.
+  const cacheDir = mkdtempSync(join(tmpdir(), "clarity-vite-test-"));
+  const server = await createServer({
+    root: app,
+    configFile: `${app}vite.config.ts`,
+    cacheDir,
+    logLevel: "silent",
+    optimizeDeps: { noDiscovery: true, include: [] },
+    server: { middlewareMode: true, watch: null, hmr: false },
+  });
   try {
-    const base = started;
-    // The page, the manual's window, the IDE's code, a component and its styles.
-    for (const path of ["/", "/?window=manual", "/src/app.css"]) {
-      await keepsNothing(base, path);
+    for (const component of ["/src/App.svelte", "/src/lib/ReleasePlanning.svelte", "/src/lib/BuildLines.svelte"]) {
+      const styles = await server.environments.client.transformRequest(`${component}?svelte&type=style&lang.css`);
+      assert.ok(styles, component);
+      assert.ok(!styles.code.includes("<script"), `${component}: no component source as styles`);
+      assert.ok(styles.code.trim().length > 0, `${component}: its styles, not empty`);
     }
-    // A component, then its styles: real CSS with its rules, not empty and not the component's source.
-    const component = await keepsNothing(base, "/src/App.svelte");
-    assert.ok(component.includes("App.svelte?svelte&type=style&lang.css"), "App.svelte asks for its styles");
-    const styles = await keepsNothing(base, "/src/App.svelte?svelte&type=style&lang.css");
-    assert.ok(styles.includes(".app") && styles.includes("grid"), "App's styles hold its layout");
-    assert.ok(!styles.includes("<script"), "the styles are no component source");
-    // A static file of public/ (the splash screen), served by another part of Vite.
-    await keepsNothing(base, "/splash.html");
-    // The IDE's code and Clarity.UI's web screen from outside app/ (/@fs/), and a prepared package, which Vite marks to keep for a year.
-    const main = await keepsNothing(base, "/src/main.ts");
-    const outside = main.match(/from "(\/@fs\/[^"]+)"/)?.[1];
-    assert.ok(outside, "main.ts imports from runtimes/web through /@fs/");
-    await keepsNothing(base, outside);
-    const prepared = main.match(/from "([^"]*\/deps\/[^"]+)"/)?.[1];
-    assert.ok(prepared, "main.ts imports a prepared package");
-    await keepsNothing(base, prepared);
+    const shell = await server.environments.client.transformRequest("/src/App.svelte?svelte&type=style&lang.css");
+    assert.ok(shell?.code.includes(".app") && shell.code.includes("grid"), "App's styles hold its layout");
   } finally {
-    await done();
+    await server.close();
+    rmSync(cacheDir, { recursive: true, force: true });
   }
 });

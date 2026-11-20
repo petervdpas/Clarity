@@ -1,29 +1,7 @@
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { shared } from "./vite.shared";
-
-// The IDE's webview keeps no copy of the dev server's answers. Vite answers
-// modules with "no-cache" and an ETag, which the webview stored on disk and,
-// after a restart, ran old compiled components from: their styles, asked of
-// a Vite that never compiled them, came back empty ("failed to load virtual
-// css module") and the IDE showed without its layout. So every answer says
-// "no-store", has no ETag, and a question with an old ETag gets a full answer.
-const noStore: Plugin = {
-  name: "clarity:no-store",
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      delete req.headers["if-none-match"];
-      const setHeader = res.setHeader.bind(res);
-      res.setHeader = (name: string, value: number | string | readonly string[]) => {
-        const lower = name.toLowerCase();
-        if (lower === "etag") return res;
-        return setHeader(name, lower === "cache-control" ? "no-store" : value);
-      };
-      res.setHeader("Cache-Control", "no-store");
-      next();
-    });
-  },
-};
+import { noStore } from "./noStore";
 
 // A component's styles asked before the component compiles it first. WebKit
 // fetches what a page loaded last time ahead at the next start, the styles

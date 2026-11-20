@@ -8,6 +8,7 @@ mod logging;
 mod links;
 mod foundry;
 mod diagrams;
+mod reports;
 mod resources;
 mod engines;
 mod environment;
@@ -879,8 +880,12 @@ pub fn run() {
             if let Ok(dir) = app.path().resource_dir() {
                 clarity_gen::carried::set_carried(dir.join(clarity_gen::carried::FOLDER));
             }
-            if repository().is_some() {
+            if let Some(repo) = repository() {
                 clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
+                // The release it fetches is the newest one tagged: a version bumped for the next release is not out yet.
+                if let Some(version) = clarity_gen::tools::devtools::release::released_library(&repo) {
+                    clarity_gen::clarity_ui::set_release_version(version);
+                }
             }
             // The preview and the design canvas draw with the same browser files (manual/design.parts.md).
             splash::status(app.handle(), "Starting the preview");
@@ -1068,6 +1073,11 @@ pub fn run() {
             resources::save_readme,
             resources::guidance_sections,
             resources::save_guidance_section,
+            reports::add_report,
+            reports::save_report,
+            reports::delete_report,
+            reports::report_preview,
+            reports::save_report_stylesheet,
             diagrams::diagram_kinds,
             diagrams::check_diagram,
             diagrams::read_erd,

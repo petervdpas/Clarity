@@ -90,3 +90,12 @@ export function cycle(order: string[], current: string, step: number): string {
   const at = Math.max(0, order.indexOf(current));
   return order[(((at + step) % order.length) + order.length) % order.length];
 }
+
+/** The piece of Clarity.UI's browser files, which the design and preview draw with. */
+export const BROWSER_PIECE = "clarityUiBrowser";
+
+/** Whether every canvas loads the browser files again: they were swapped, or a build of them just passed. */
+export function reloadsBrowserFiles(change: { swapped: string } | { job: { key: string; state: string; ended: number | null }; before?: { ended: number | null } }): boolean {
+  if ("swapped" in change) return change.swapped === BROWSER_PIECE;
+  return change.job.key === `piece:${BROWSER_PIECE}` && change.job.state === "passed" && change.before?.ended !== change.job.ended;
+}

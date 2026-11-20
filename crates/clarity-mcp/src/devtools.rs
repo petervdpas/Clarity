@@ -2,7 +2,8 @@
 //! piece's Build (build_piece), read how Clarity's releases and their checks
 //! stand (release_state), read how big the build folders are and how much
 //! room is left (disk_state), and ask to remove a build folder
-//! (remove_folder). Compiled only into a server built from Clarity's
+//! (remove_folder), and pick a piece's own build or the release
+//! (swap_piece). Compiled only into a server built from Clarity's
 //! repository (lib.rs, `#[cfg(debug_assertions)]`): a release has none, as
 //! an installed Clarity has no DevTools. A build and a removal go to the IDE
 //! as asks (clarity_project::dev_asks), which the person allows.
@@ -18,8 +19,12 @@ use crate::{ClarityServer, NOT_ALLOWED};
 
 /// The tool that presses a DevTools tab's Build.
 pub const BUILD_PIECE: &str = "build_piece";
+/// The tool that picks a DevTools tab's own build or the release, as its Swap does.
+pub const SWAP_PIECE: &str = "swap_piece";
 /// The tool that says how Clarity's releases and their checks stand.
 pub const RELEASE_STATE: &str = "release_state";
+/// The tool that bumps every release in the chain to the version it would release.
+pub const BUMP_VERSIONS: &str = "bump_versions";
 /// The tool that says how big the build folders are and how much room is left.
 pub const DISK_STATE: &str = "disk_state";
 /// The tool that asks to remove a build folder.
@@ -33,8 +38,10 @@ pub(crate) const NAME: &str = "clarity-cdev";
 /// What the agent is told of these tools, beside the server's own lines.
 pub(crate) const LINE: &str = "This server is clarity-cdev, the developer's build of Clarity from its repository (a debug build, started by \
 ./mcp.sh); an installed Clarity serves as clarity, without the tools below. Working on Clarity itself, build a piece of Clarity (its library, browser files, runtimes) with build_piece, \
-which presses its Build in Clarity settings > DevTools, never with cargo or a script of your own. Read how its releases stand with \
-release_state before writing a release plan, and write it only with write_release_plan, which refuses while a release check \
+which presses its Build in Clarity settings > DevTools, never with cargo or a script of your own. When a build or a test needs \
+a piece the release lacks or your own build is newer, pick its own build with swap_piece (use own), and the release again once a \
+release carries it. Read how its releases stand with \
+release_state before writing a release plan, bump the versions with bump_versions before the release checks, and write it only with write_release_plan, which refuses while a release check \
 has not passed on the tree as it is. Read disk_state before a build or the release checks; when room is short, ask the person \
 with remove_folder, never remove build folders yourself.";
 
@@ -58,12 +65,36 @@ agents. Waits for the build and gives how it ended with its last lines. Pieces: 
             input_schema: json!({ "type": "object", "properties": { "piece": { "type": "string", "enum": pieces } }, "required": ["piece"] }),
         },
         ToolDef {
+            name: SWAP_PIECE.into(),
+            description: format!(
+                "For working on Clarity itself: picks which build of a piece the programs Clarity builds use, as the Swap of its tab in \
+Clarity settings > DevTools does, in a Clarity run from its repository (./dev.sh): `own` for the cDdev's own build (build it first with \
+build_piece), `release` for the release. The person allows it as they chose for agents. Pieces: {}.",
+                pieces.join(", ")
+            ),
+            input_schema: json!({
+                "type": "object",
+                "properties": { "piece": { "type": "string", "enum": pieces }, "use": { "type": "string", "enum": ["own", "release"] } },
+                "required": ["piece", "use"]
+            }),
+        },
+        ToolDef {
             name: RELEASE_STATE.into(),
             description: "For working on Clarity itself: how each of Clarity's releases stands, read from its repository (the newest tag, \
 the version in source, the files changed since the tag sorted into code, manifest, tests and docs), the chain of steps releasing every \
 release whose code changed would start (the checks on main, each tag with its workflow and where it shows, what it waits for), and how \
 the release checks last ended, which the person runs in Clarity settings > DevTools > Release planning. Read it to write the Release \
 Helper's plan; it changes nothing."
+                .into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        ToolDef {
+            name: BUMP_VERSIONS.into(),
+            description: "For working on Clarity itself, before the release checks: bumps every release in release_state's chain to the \
+version it would release (its `next`), in its manifest (Cargo.toml, the C# props, the VS Code package.json), and every Cargo.toml that \
+names its crate with a version (the carried crates' pin too); the Go runtime is left for its sums step, after its tag. Gives each \
+change; a second call changes nothing. A manifest change restarts a Clarity run from the repository; run the generated-file guards and \
+the carried guard after it."
                 .into(),
             input_schema: json!({ "type": "object", "properties": {} }),
         },
@@ -120,7 +151,7 @@ impl ClarityServer {
 
     /// Calls the DevTools tool `name` for `client`; none when `name` is no DevTools tool.
     pub(crate) fn devtools_call(&self, client: &str, name: &str, input: &Value) -> Option<ToolResult> {
-        if ![BUILD_PIECE, RELEASE_STATE, DISK_STATE, REMOVE_FOLDER, WRITE_RELEASE_PLAN].contains(&name) {
+        if ![BUILD_PIECE, SWAP_PIECE, RELEASE_STATE, BUMP_VERSIONS, DISK_STATE, REMOVE_FOLDER, WRITE_RELEASE_PLAN].contains(&name) {
             return None;
         }
         if !clarity_project::ide::outside_agents_in(&self.ide_file) {
@@ -128,7 +159,9 @@ impl ClarityServer {
         }
         Some(match name {
             BUILD_PIECE => self.build_piece(client, input),
+            SWAP_PIECE => self.swap_piece(client, input),
             RELEASE_STATE => json_of(repo().and_then(|repo| release_state(&repo))),
+            BUMP_VERSIONS => json_of(repo().and_then(|repo| clarity_gen::tools::devtools::bump::bump(&repo)).map(|done| serde_json::to_value(done).unwrap_or_default())),
             DISK_STATE => json_of(repo().map(|repo| disk_state(&repo))),
             WRITE_RELEASE_PLAN => write_release_plan(input),
             _ => self.remove_folder(client, input),
@@ -143,6 +176,25 @@ impl ClarityServer {
             return failed(format!("there is no piece '{key}': one of {}", keys.join(", ")));
         }
         self.ask_and_wait(Action::Build, key, client, &format!("The build of {key}"), "press Build in Clarity settings > DevTools")
+    }
+
+    /// Asks the IDE to swap the piece `input.piece` to its own build or the release (`input.use`), and waits for the answer.
+    fn swap_piece(&self, client: &str, input: &Value) -> ToolResult {
+        let key = input["piece"].as_str().unwrap_or_default();
+        if swap::piece(key).is_none() {
+            let keys: Vec<&str> = swap::PIECES.iter().map(|p| p.key).collect();
+            return failed(format!("there is no piece '{key}': one of {}", keys.join(", ")));
+        }
+        let mine = match input["use"].as_str().unwrap_or_default() {
+            "own" => true,
+            "release" => false,
+            other => return failed(format!("'use' is own (the cDdev's own build) or release, not '{other}'")),
+        };
+        let id = match dev_asks::ask_swap(&self.asks, key, mine, client) {
+            Ok(id) => id,
+            Err(why) => return failed(why),
+        };
+        self.wait_for(&id, &format!("Swapping {key}"), "pick it in its tab's Swap in Clarity settings > DevTools")
     }
 
     /// Asks the IDE to remove the build folder `input.folder`, and waits for the person's answer.
@@ -161,6 +213,12 @@ impl ClarityServer {
             Ok(id) => id,
             Err(why) => return failed(why),
         };
+        self.wait_for(&id, what, by_hand)
+    }
+
+    /// Waits for a Clarity run from its repository to take the ask `id`, then for its answer.
+    fn wait_for(&self, id: &str, what: &str, by_hand: &str) -> ToolResult {
+        let id = id.to_string();
         let start = std::time::Instant::now();
         while !dev_asks::taken(&self.asks, &id) {
             if start.elapsed() >= self.take_waits {

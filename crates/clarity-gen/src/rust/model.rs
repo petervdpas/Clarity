@@ -335,7 +335,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         .filter(|b| b.name.name == *name)
         .flat_map(|b| b.events.iter().map(|e| e.event))
         .collect();
-    let mut hooks = String::new();
+    let mut hooks = held_lists(project, entity);
     let pictures: Vec<String> = entity
         .fields
         .iter()
@@ -433,4 +433,27 @@ fn record(project: &Project, entity: &Entity) -> String {
         source = project.source_of(name).unwrap_or_default()
     ));
     out
+}
+
+/// The stored lists of an entity's record (`order.lines`), which load with
+/// it one level deep (`Record::load_lists`): each list's records by its one
+/// reference back, in the order they were stored (docs/ledger/runtime-data.md).
+fn held_lists(project: &Project, entity: &Entity) -> String {
+    let lists = project.held_lists(&entity.name.name);
+    if lists.is_empty() {
+        return String::new();
+    }
+    let body: String = lists
+        .iter()
+        .map(|(list, listed, key)| {
+            format!(
+                "        self.{} = db.find_alone::<{}>(&clarity_runtime::Query::new().filter(clarity_runtime::Cond::compare({:?}, clarity_runtime::Op::Eq, SqlValue::Integer(self.id))).order({:?}, false))?;\n",
+                ident(&list.name.name),
+                listed.name.name,
+                listed.column_of(&key.name.name),
+                listed.key_column()
+            )
+        })
+        .collect();
+    format!("\n    fn load_lists(&mut self, db: &Db) -> Result<()> {{\n{body}        Ok(())\n    }}\n")
 }

@@ -66,6 +66,15 @@ function clarityUiWorker(scope) {
     scope.post(message);
   }
 
+  // The engine's last lines on its error output: a panic says its words and
+  // place there before the engine stops, which then reaches the page with it.
+  const said = [];
+  function saidErr(line) {
+    said.push(String(line));
+    if (said.length > 5) said.shift();
+    console.error(line);
+  }
+
   // The library stopped while `doing`: the page hears it once, with the
   // engine's words and where, and nothing is drawn or called any more.
   function fail(doing, why) {
@@ -76,7 +85,8 @@ function clarityUiWorker(scope) {
     waking = null;
     const words = why && why.message ? why.message : String(why);
     const where = why && why.stack ? String(why.stack).split("\n").slice(0, 8).join("\n") : "";
-    post({ type: "failed", what: "Clarity.UI stopped while " + doing + ": " + words, stack: where });
+    const last = said.length ? " (it said: " + said.join(" / ") + ")" : "";
+    post({ type: "failed", what: "Clarity.UI stopped while " + doing + ": " + words + last, stack: where });
   }
 
   // The program's answer to a command, as the server gives it; the person's
@@ -223,7 +233,7 @@ function clarityUiWorker(scope) {
       // The wasm is clarity-ui.wasm beside the script, whatever Emscripten named it.
       locateFile: (path) => new URL(path.endsWith(".wasm") ? "clarity-ui.wasm" : path, message.base || scope.base).href,
       print: (line) => console.log(line),
-      printErr: (line) => console.error(line),
+      printErr: saidErr,
     });
     // Stopped while the module was made: it is let go unused.
     if (ended) return;

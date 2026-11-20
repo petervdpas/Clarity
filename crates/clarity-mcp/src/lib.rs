@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 #[cfg(debug_assertions)]
 mod devtools;
 #[cfg(debug_assertions)]
-pub use devtools::{BUILD_PIECE, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER, WRITE_RELEASE_PLAN};
+pub use devtools::{BUILD_PIECE, BUMP_VERSIONS, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER, SWAP_PIECE, WRITE_RELEASE_PLAN};
 
 /// Clarity's icon, as the installers have it (app/src-tauri/icons): a PNG
 /// every MCP client takes and the SVG it is made from.

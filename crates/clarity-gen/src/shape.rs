@@ -1,8 +1,9 @@
 //! What a program reads from a format or writes in one, as Clarity.Formats
 //! is told it (docs/ledger/formats.md): the kind, as JSON, the same on every
 //! stack. A record lists every field of its entity in order with what it
-//! takes: a reference, a picture, a file and a list of stored records are
-//! never read (`other`), and a record held inside an entity of a web API,
+//! takes: a reference, a picture and a file are never read (`other`); a
+//! stored record's list (`order.lines`) is its records, one level deep, as
+//! it loads with the record; and a record held inside an entity of a web API,
 //! and its lists of records, are read as the entity they hold (DESIGN
 //! 5.25), down to where an entity would repeat inside itself. What a record
 //! leaves out keeps its value in a new record of it, its `base`, which only
@@ -170,7 +171,9 @@ impl Kinds {
                 self.text(",");
             }
             self.text(&format!(r#"{{"name":{},"#, quoted(&field.name.name)));
-            self.field(project, entity, &field.ty, path);
+            // A stored record's list loads with it, one level deep (docs/ledger/runtime-data.md, step 2).
+            let held = path.len() == 1 && project.held_list_key(name, &field.name.name).is_some();
+            self.field(project, entity, &field.ty, held, path);
             self.text("}");
         }
         self.text(r#"],"base":"#);
@@ -183,10 +186,10 @@ impl Kinds {
     }
 
     /// What a field takes, written inside its object after its name (without the braces).
-    fn field(&mut self, project: &Project, owner: &Entity, ty: &FieldType, path: &mut Vec<String>) {
+    fn field(&mut self, project: &Project, owner: &Entity, ty: &FieldType, held: bool, path: &mut Vec<String>) {
         let nested = |name: &str, path: &Vec<String>| (!path.iter().any(|p| p == name)).then(|| project.entity(name)).flatten();
         match ty {
-            FieldType::Record { entity } | FieldType::List { item: entity } if !matches!(ty, FieldType::List { .. }) || project.in_web_api(&owner.name.name) => {
+            FieldType::Record { entity } | FieldType::List { item: entity } if !matches!(ty, FieldType::List { .. }) || held || project.in_web_api(&owner.name.name) => {
                 let Some(decl) = nested(&entity.name, path) else { return self.text(r#""kind":"other""#) };
                 // The nested record's own object, unwrapped into this field's.
                 let mut inner = Kinds { pieces: Vec::new(), bases: self.bases };
@@ -255,5 +258,14 @@ mod tests {
         assert!(written.starts_with(r#"{"kind":"record","entity":"Order""#) && written.ends_with(r#""base":{}}"#), "{written}");
         assert!(clarity_formats::Kind::from_json(&written).is_ok(), "{written}");
         assert_eq!(write_kind(&project, &TypeInfo::Values(ValueItem::Enum("Kind".into()))).unwrap(), r#"{"kind":"values","item":{"kind":"enum","values":["Person","Business"]}}"#);
+    }
+
+    #[test]
+    fn a_stored_record_s_list_is_its_records_one_level_deep() {
+        let source = "module shop\n\nentity Order\n    number: text\n    lines: list<Line>, owned\n\nentity Line\n    order: ref Order\n    product: text\n    notes: list<Note>, owned\n\nentity Note\n    line: ref Line\n    text: text\n";
+        let project = clarity_spec::load_converted([("shop.clarity", source)]);
+        let written = write_kind(&project, &TypeInfo::Record("Order".into())).unwrap();
+        assert!(written.contains(r#"{"name":"lines","kind":"records","entity":"Line","fields":[{"name":"order","kind":"other"},{"name":"product","kind":"text"},{"name":"notes","kind":"other"}]"#), "{written}");
+        assert!(clarity_formats::Kind::from_json(&written).is_ok(), "{written}");
     }
 }

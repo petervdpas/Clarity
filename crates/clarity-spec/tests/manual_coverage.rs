@@ -43,13 +43,14 @@ const DECLARATIONS: [(&str, &str); 21] = [
 ];
 
 /// The page of each section of the IDE's project tree (app/src/lib/ProjectTree.svelte).
-const TREE: [(&str, &str); 16] = [
+const TREE: [(&str, &str); 17] = [
     ("Windows", "design.windows"),
     ("Views", "design.windows"),
     ("Data", "data.entities"),
     ("Mappings", "code.formats"),
     ("Web APIs", "code.web-apis"),
     ("Diagrams", "data.diagrams"),
+    ("Reports", "design.reports"),
     ("Themes", "themes"),
     ("i18n", "languages"),
     ("Resources", "data.pictures-files"),
@@ -193,7 +194,7 @@ fn every_operator_is_in_the_operators_table() {
 }
 
 /// The words on code.expressions that teach each kind of expression.
-const EXPRESSIONS: [(&str, &str); 24] = [
+const EXPRESSIONS: [(&str, &str); 26] = [
     ("Number", "Numbers are written"),
     ("Str", "Text is written in double quotes"),
     ("Text", "## Text with slots"),
@@ -218,6 +219,8 @@ const EXPRESSIONS: [(&str, &str); 24] = [
     ("FormatOf", "`json of order`"),
     ("ReadFormat", "`read list<Order> from json"),
     ("Http", "`http get url`"),
+    ("Pdf", "`pdf of text`"),
+    ("PdfReport", "`pdf of Invoice with order = current`"),
 ];
 
 #[test]
@@ -230,7 +233,7 @@ fn every_expression_and_built_in_function_is_on_the_expressions_page() {
             | ExprKind::Member { .. } | ExprKind::Unary { .. } | ExprKind::Binary { .. } | ExprKind::Range { .. } | ExprKind::In { .. }
             | ExprKind::Call { .. } | ExprKind::EngineCall { .. } | ExprKind::Ask { .. } | ExprKind::Find { .. } | ExprKind::Files { .. }
             | ExprKind::ReadText { .. } | ExprKind::ReadBytes { .. } | ExprKind::New { .. } | ExprKind::Key { .. } | ExprKind::ListOf { .. }
-            | ExprKind::Index { .. } | ExprKind::FormatOf { .. } | ExprKind::ReadFormat { .. } | ExprKind::Http { .. } => {}
+            | ExprKind::Index { .. } | ExprKind::FormatOf { .. } | ExprKind::ReadFormat { .. } | ExprKind::Http { .. } | ExprKind::Pdf { .. } | ExprKind::PdfReport { .. } => {}
         }
     }
     listed(&ExprKind::Empty);

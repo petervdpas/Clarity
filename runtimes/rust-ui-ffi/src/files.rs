@@ -247,6 +247,38 @@ pub unsafe extern "C" fn clarity_choices_json(out: *mut *mut c_char) -> ClarityS
     })
 }
 
+/// A PDF of a report of the running program (`pdf of Invoice with order = current`,
+/// docs/ledger/reports-pdf.md): its data as JSON by the report's Data names, laid out
+/// with the program's resources and texts in the language shown. The caller gives
+/// the bytes back with clarity_bytes_free.
+///
+/// # Safety
+/// The texts are (pointer, length); `out` and `out_len` are writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clarity_report_pdf(report: *const c_char, report_len: usize, data: *const c_char, data_len: usize, out: *mut *mut u8, out_len: *mut usize) -> ClarityStatus {
+    guard(|| {
+        let (report, data) = unsafe { (text(report, report_len)?, text(data, data_len)?) };
+        let made = ui::parts::pdf_report::pdf_of(report, data).map_err(|why| crate::Failure { status: crate::CLARITY_FAILED, message: why })?;
+        let boxed = made.into_boxed_slice();
+        let len = boxed.len();
+        unsafe {
+            put(out_len, len)?;
+            put(out, Box::into_raw(boxed).cast::<u8>())
+        }
+    })
+}
+
+/// Gives back bytes the library gave (a report's PDF). NULL is let go.
+///
+/// # Safety
+/// `bytes` and `len` are what the library gave, given back once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clarity_bytes_free(bytes: *mut u8, len: usize) {
+    if !bytes.is_null() {
+        crate::quietly(|| drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(bytes, len)) }));
+    }
+}
+
 /// A translated text of the model by its key.
 ///
 /// # Safety

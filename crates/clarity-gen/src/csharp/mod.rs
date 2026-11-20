@@ -106,6 +106,8 @@ const VIDEO_PACKAGE: &str = "Clarity.Video";
 /// The package of the picture functions of code (docs/ledger/picture-functions.md), with
 /// Clarity.Image's native library, carried only when code calls one.
 pub(crate) const IMAGE_PACKAGE: &str = "Clarity.Image";
+/// Clarity.Pdf's native library (docs/ledger/reports-pdf.md), carried only when code makes a PDF.
+pub(crate) const PDF_PACKAGE: &str = "Clarity.Pdf";
 /// Clarity.Formats' native library (docs/ledger/formats.md), carried only when code reads or writes a format.
 pub(crate) const FORMATS_PACKAGE: &str = "Clarity.Formats";
 
@@ -189,7 +191,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let pictures = crate::uses_picture_functions(project);
     // The commands agents call while the app runs, and `<program> mcp` (docs/ledger/app-mcp.md).
     let agents = ui == DESKTOP_PACKAGE && crate::agent_tools::offers_agents(project);
-    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE), (crate::carries_auth(project), AUTH_PACKAGE), (agents, APP_MCP_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
+    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (project.uses_pdf(), PDF_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE), (crate::carries_auth(project), AUTH_PACKAGE), (agents, APP_MCP_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
     let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &media, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };

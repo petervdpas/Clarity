@@ -122,8 +122,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text(
             "Cargo.toml",
             format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nclarity-runtime = {{ version = \"{}\", default-features = false, features = [{features}] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\n\n# A project of its own, not part of a workspace around it.\n[workspace]\n",
-                super::runtime_version()
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nclarity-runtime = {{ version = \"{}\", default-features = false, features = [{features}] }}\n{}serde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\n\n# A project of its own, not part of a workspace around it.\n[workspace]\n",
+                super::runtime_version(),
+                super::crates_beside(project)
             ),
         ),
         text("src/texts.json", crate::commands::texts_json(project)),
@@ -166,7 +167,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/main.rs", main_rs(project, settings, &databases)));
     files.push(text("README.md", readme(settings, &name)));
     // Built on the runtime in Clarity's repository when CLARITY_RUNTIME names it.
-    files.extend(super::local_patch_file()?);
+    files.extend(super::local_patch_file(project.uses_pdf())?);
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }

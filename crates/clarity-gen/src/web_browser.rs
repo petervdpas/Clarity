@@ -90,7 +90,8 @@ pub fn files_json_as(project: &Project, title: &str, (width, height): (u32, u32)
             .into_iter()
             .filter_map(|f| Some((f.path.strip_prefix("themes/")?.strip_suffix(".json")?.to_string(), json_of(&f.text)))),
     );
-    let resources: Vec<Value> = project.resources.iter().flat_map(|r| &r.files).map(|f| Value::String(f.name.clone())).collect();
+    // The names of exactly the files `site` ships among the resources: the resources folder's, and the reports with theirs.
+    let resources: Vec<Value> = crate::web::resource_files(project, "").into_iter().map(|f| Value::String(f.path.trim_start_matches('/').to_string())).collect();
     object([
         ("title".to_string(), Value::String(title.to_string()).to_string()),
         ("width".to_string(), width.to_string()),
@@ -143,11 +144,43 @@ pub fn needs_library(programs: &[crate::Program]) -> bool {
     programs.iter().any(|p| serves(&p.files))
 }
 
+/// The folder below the browser files that holds the set with reports
+/// (the pdfReport part, Typst and its fonts); the folder itself holds the
+/// set without (runtimes/rust-ui-browser/build.sh).
+pub const REPORTS_SET: &str = "reports";
+
+/// Whether a program carries a report of the project (`reports/*.report` among its resources).
+pub fn carries_reports(files: &[OutFile]) -> bool {
+    let reports = format!("{RESOURCES}/reports/");
+    files.iter().any(|f| f.path.starts_with(&reports) && f.path.ends_with(".report"))
+}
+
+/// The set of browser files below `folder` a program takes: the one with
+/// reports when it carries a report, else the smaller one without.
+pub fn set_for(folder: &Path, reports: bool) -> Result<std::path::PathBuf, String> {
+    if !reports {
+        return Ok(folder.to_path_buf());
+    }
+    let set = folder.join(REPORTS_SET);
+    if crate::clarity_ui::browser_complete(&set) {
+        Ok(set)
+    } else {
+        Err(format!("the program has reports, but Clarity.UI's browser files in {} have no set with reports ({REPORTS_SET}/): build them again with runtimes/rust-ui-browser/build.sh, or take a release that has it", folder.display()))
+    }
+}
+
+/// The set the IDE's preview and designer draw with: the one with reports
+/// when there is one, as any project may show a report; else the folder's own.
+pub fn widest_set(folder: &Path) -> std::path::PathBuf {
+    let set = folder.join(REPORTS_SET);
+    if crate::clarity_ui::browser_complete(&set) { set } else { folder.to_path_buf() }
+}
+
 /// Adds the library's browser files from `folder` to each program served
-/// to a browser, beside its page; the others stay as they are.
+/// to a browser, beside its page, from the set it needs (`set_for`); the others stay as they are.
 pub fn with_library(programs: &mut [crate::Program], folder: &Path) -> Result<(), String> {
     for program in programs.iter_mut().filter(|p| serves(&p.files)) {
-        let library = library(folder)?;
+        let library = library(&set_for(folder, carries_reports(&program.files))?)?;
         program.files.retain(|f| !library.iter().any(|l| l.path == f.path));
         program.files.extend(library);
         program.files.sort_by(|a, b| a.path.cmp(&b.path));

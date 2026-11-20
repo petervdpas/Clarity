@@ -414,6 +414,19 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     } else {
         (format!("clarity_get(db, &{p}_entity, id, out)"), format!("clarity_load(db, &{p}_entity, reference, out)"))
     };
+    // A stored record's lists load with it, one level deep, through clarity_find (which loads no lists).
+    let lists = held_lists(project, entity);
+    let (found, get, load, reload) = if lists.is_empty() {
+        (found, get, load, reload)
+    } else {
+        source.push_str(&lists);
+        (
+            format!("{found}    for (size_t i = 0; i < out->count; i++)\n        if (!{p}_load_lists(db, &out->items[i])) return false;\n"),
+            format!("{get} && {p}_load_lists(db, out)"),
+            format!("{load} && (out->id == 0 || {p}_load_lists(db, out))"),
+            format!("{reload} && {p}_load_lists(db, record)"),
+        )
+    };
     let defaults: Vec<String> = entity.fields.iter().filter_map(|f| initial(project, f).map(|v| format!("        .{} = {v},", ident(&f.name.name)))).collect();
     let new = if defaults.is_empty() { format!("    return ({name}){{0}};\n") } else { format!("    return ({name}){{\n{}\n    }};\n", defaults.join("\n")) };
     let _ = write!(
@@ -500,4 +513,28 @@ fn slot_of(f: &Field, value: &str) -> Option<String> {
         FieldType::Enum { name } => format!("clarity_slot_enum({}_name({value}), {})", prefix(&name.name), string(&name.name)),
         FieldType::Secret | FieldType::Image | FieldType::Blob | FieldType::Values { .. } | FieldType::List { .. } | FieldType::Record { .. } => return None,
     })
+}
+
+/// The stored lists of an entity's record (`order.lines`), which load with
+/// it one level deep: each list's records by its one reference back, in the
+/// order they were stored (docs/ledger/runtime-data.md); empty without them.
+fn held_lists(project: &Project, entity: &Entity) -> String {
+    let lists = project.held_lists(&entity.name.name);
+    if lists.is_empty() {
+        return String::new();
+    }
+    let (name, p) = (&entity.name.name, prefix(&entity.name.name));
+    let mut body = String::new();
+    for (list, listed, key) in &lists {
+        let c = prefix(&listed.name.name);
+        let _ = write!(
+            body,
+            "    {{\n        extern const ClarityEntity {c}_entity;\n        void* items = NULL;\n        size_t count = 0;\n        if (!clarity_find(db, &{c}_entity, clarity_order_by(clarity_where(clarity_query(), clarity_compare({}, CLARITY_EQ, clarity_integer_value(record->id))), {}, false), &items, &count)) return false;\n        record->{} = ({}){{items, count}};\n    }}\n",
+            string(&listed.column_of(&key.name.name)),
+            string(listed.key_column()),
+            ident(&list.name.name),
+            list_type(&listed.name.name)
+        );
+    }
+    format!("/// Loads the record's stored lists, one level deep.\nstatic bool {p}_load_lists(ClarityDb* db, {name}* record) {{\n{body}    return true;\n}}\n\n")
 }

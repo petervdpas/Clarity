@@ -23,6 +23,8 @@
   import ReadmeView from "./lib/ReadmeView.svelte";
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
   import DiagramView from "./lib/DiagramView.svelte";
+  import ReportDesigner from "./lib/ReportDesigner.svelte";
+  import { reportDesigner } from "./lib/reportDesignerStore.svelte";
   import NewDiagramDialog from "./lib/NewDiagramDialog.svelte";
   import type { DiagramKind } from "@clarity/ui/generated/DiagramKind.ts";
   import type { DiagramKindInfo } from "@clarity/ui/generated/DiagramKindInfo.ts";
@@ -109,10 +111,11 @@
   type Open = Selected;
 
   /** The ribbon tabs. Design and Preview are also the two modes. */
-  type Tab = "project" | "design" | "preview" | "vault";
+  type Tab = "project" | "design" | "reports" | "preview" | "vault";
   const TABS: { key: Tab; name: string }[] = [
     { key: "project", name: "Project" },
     { key: "design", name: "Design" },
+    { key: "reports", name: "Reports" },
     { key: "preview", name: "Preview" },
     { key: "vault", name: "Vault" },
   ];
@@ -451,7 +454,7 @@
   /** The window the project starts with: the app's main window, or the first one. */
   /** What each ribbon tab last showed. A tab shows its own view: switching
       clears what the last tab showed, and coming back shows it again. */
-  let tabViews: Record<Tab, Open[]> = { project: [], design: [], preview: [], vault: [] };
+  let tabViews: Record<Tab, Open[]> = { project: [], design: [], reports: [], preview: [], vault: [] };
   /** Whether the view is empty because the tab has nothing chosen yet, so
       a reload does not fill it with the start window. */
   let viewCleared = false;
@@ -528,6 +531,8 @@
         return p.project.resources?.files.some((f) => f.name === o.name) ?? false;
       case "diagram":
         return p.project.diagrams.some((d) => d.name === o.name);
+      case "report":
+        return p.project.reports.some((r) => r.name === o.name);
       case "mapping":
         return all.some((f) => f.mappings.some((m) => m.name.name === o.name));
       case "toast":
@@ -716,6 +721,22 @@
     stack = [o];
     viewCleared = false;
     pageDesigner.selected = null;
+    // A report is designed in the Reports tab, nothing of the window designer;
+    // anything else picked there opens where it is edited, on the Project tab.
+    if (o.kind === "report") tab = "reports";
+    else if (tab === "reports") tab = "project";
+  }
+
+  /** Asks for a new report's name, makes it from the starter and opens it in the Reports tab. */
+  async function startNewReport() {
+    const name = (await dialogs.prompt({ title: "New report", text: "Its name, as a pdfReport part names it: a word starting with a capital, like Invoice.", value: "", placeholder: "Invoice", action: "Add" }))?.trim();
+    if (!name) return;
+    try {
+      applyPreview(await invoke<Preview>("add_report", { name }));
+      select({ kind: "report", name });
+    } catch (err) {
+      actionError = String(err);
+    }
   }
 
   /** Applies an edit from the data or module editors. */
@@ -1165,7 +1186,7 @@
     openFile = trimmed;
     writeLastProject(trimmed);
     stack = [];
-    tabViews = { project: [], design: [], preview: [], vault: [] };
+    tabViews = { project: [], design: [], reports: [], preview: [], vault: [] };
     viewCleared = false;
     applyPreview(result);
     await loadProjectFile();
@@ -1233,7 +1254,7 @@
       openFile = file;
       writeLastProject(file);
       stack = [];
-      tabViews = { project: [], design: [], preview: [], vault: [] };
+      tabViews = { project: [], design: [], reports: [], preview: [], vault: [] };
       viewCleared = false;
       applyPreview(result);
       await loadProjectFile();
@@ -1403,7 +1424,8 @@
   const activeLayers = $derived.by((): Layer[] => {
     if (appSettings.open) return ["global"];
     if (tab === "vault") return [vault.view === "secrets" ? "vault.secrets" : "vault.connections", "vault", "global"];
-    return [tab, "global"];
+    // The Reports tab answers the keys of everywhere; it has no layer of its own yet.
+    return tab === "reports" ? ["global"] : [tab, "global"];
   });
 
   /** A command's keys now, for its ribbon button. */
@@ -1413,6 +1435,45 @@
   function keyTip(text: string, id: string): string {
     const keys = ideKeysOf(id).map((k) => shownKey(k, mac));
     return keys.length ? `${text} (${keys.join(" or ")})` : text;
+  }
+
+  // The ribbon scrolls sideways when it is wider than the window: the wheel
+  // turns it, a drag pulls it along, and a thin scroll bar shows where it is.
+  // A drag that moved is no click on the button it started on.
+  let ribbonPull: { x: number; left: number; moved: boolean } | null = null;
+  let ribbonDragged = false;
+  function ribbonWheel(e: WheelEvent) {
+    const el = e.currentTarget as HTMLElement;
+    if (el.scrollWidth <= el.clientWidth) return;
+    el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    e.preventDefault();
+  }
+  function ribbonPress(e: PointerEvent) {
+    const el = e.currentTarget as HTMLElement;
+    if (e.button !== 0 || el.scrollWidth <= el.clientWidth) return;
+    ribbonPull = { x: e.clientX, left: el.scrollLeft, moved: false };
+    ribbonDragged = false;
+  }
+  function ribbonDrag(e: PointerEvent) {
+    if (!ribbonPull) return;
+    const el = e.currentTarget as HTMLElement;
+    const dx = e.clientX - ribbonPull.x;
+    if (!ribbonPull.moved && Math.abs(dx) > 5) {
+      ribbonPull.moved = true;
+      el.setPointerCapture(e.pointerId);
+    }
+    if (ribbonPull.moved) el.scrollLeft = ribbonPull.left - dx;
+  }
+  function ribbonLetGo() {
+    ribbonDragged = !!ribbonPull?.moved;
+    ribbonPull = null;
+  }
+  function ribbonClick(e: MouseEvent) {
+    if (ribbonDragged) {
+      e.stopPropagation();
+      e.preventDefault();
+      ribbonDragged = false;
+    }
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -1602,6 +1663,7 @@
         onnewlanguage={full ? startNewLanguage : null}
         onnewresource={full ? startNewResource : null}
         onnewdiagram={full ? startNewDiagram : null}
+        onnewreport={full ? startNewReport : null}
         onnewwindow={full ? () => startNewWindow() : null}
         onnewview={full ? () => startNewWindow(true) : null}
         onnewapp={full && preview.project.files[0] ? startNewApp : null}
@@ -1626,7 +1688,7 @@
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title={keyTip("Show or hide the agent", "agent")}>Agent</button>
     </div>
     <PartGuard name="ribbon">
-      <div class="ribbon-body">
+      <div class="ribbon-body" onwheel={ribbonWheel} onpointerdown={ribbonPress} onpointermove={ribbonDrag} onpointerup={ribbonLetGo} onclickcapture={ribbonClick} role="toolbar" tabindex="-1">
         {#if tab === "project"}
           <div class="group">
             <div class="buttons">
@@ -1649,6 +1711,36 @@
               <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" keys={keysFor("project.check")} disabled={!preview} onclick={checkProject} />
             </div>
             <div class="group-name">Check</div>
+          </div>
+        {:else if tab === "reports"}
+          {@const rd = reportDesigner}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="undo" label="Undo" title="Ctrl+Z" disabled={rd.actions ? !rd.canUndo : history.undo === 0} onclick={() => (rd.actions ? rd.actions.undo() : replay("undo_edit"))} />
+              <RibbonButton icon="redo" label="Redo" title="Ctrl+Y" disabled={rd.actions ? !rd.canRedo : history.redo === 0} onclick={() => (rd.actions ? rd.actions.redo() : replay("redo_edit"))} />
+              <RibbonButton icon="cut" label="Cut" title="Ctrl+X: cut the picked parts, to paste into another band" disabled={!rd.actions || rd.picked === 0} onclick={() => rd.actions?.cut()} />
+              <RibbonButton icon="copy" label="Copy" title="Ctrl+C" disabled={!rd.actions || rd.picked === 0} onclick={() => rd.actions?.copy()} />
+              <RibbonButton icon="paste" label="Paste" title="Ctrl+V: into the picked band" disabled={!rd.canPaste} onclick={() => rd.actions?.paste()} />
+              <RibbonButton icon="delete" label="Delete" title="Delete: the picked parts or band" disabled={!rd.actions || rd.picked === 0} onclick={() => rd.actions?.remove()} />
+            </div>
+            <div class="group-name">Edit</div>
+          </div>
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="snap" label={rd.grid > 0 ? `Snap ${rd.grid} mm` : "No snap"} title="What parts snap to: off, 0.5, 1, 2.5 or 5 mm" disabled={!rd.actions} onclick={() => (rd.grid = [0, 0.5, 1, 2.5, 5][([0, 0.5, 1, 2.5, 5].indexOf(rd.grid) + 1) % 5])} />
+              <RibbonButton icon="grid" label="Grid" title="Show the grid's dots on the paper" active={rd.showGrid} disabled={!rd.actions} onclick={() => (rd.showGrid = !rd.showGrid)} />
+              <RibbonButton icon="preview" label="Preview" title="The report laid out with sample data" active={rd.previewing} disabled={!rd.actions} onclick={() => (rd.previewing = !rd.previewing)} />
+              <RibbonButton icon="xml" label="XML" title="Read and change the report's file" active={rd.xml} disabled={!rd.actions} onclick={() => (rd.xml = !rd.xml)} />
+            </div>
+            <div class="group-name">View</div>
+          </div>
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="new" label="New report" disabled={!preview} onclick={startNewReport} />
+              <RibbonButton icon="settings" label="Report" title="The report's paper, margin, stylesheet and data" disabled={!rd.actions} onclick={() => rd.actions?.showReport()} />
+              <RibbonButton icon="delete" label="Delete report" title="Delete this report; Undo brings it back" disabled={!rd.actions} onclick={() => rd.actions?.deleteReport()} />
+            </div>
+            <div class="group-name">Reports</div>
           </div>
         {:else if tab === "design"}
           <div class="group">
@@ -1840,6 +1932,11 @@
             </label>
             <p class="none">Every change is written to the project files at once; Undo and Redo in the ribbon take changes back.</p>
           </section>
+        {:else if tab === "reports"}
+          <section class="side-section fill">
+            <h2>Reports</h2>
+            {@render tree(true)}
+          </section>
         {:else if tab === "vault"}
           <VaultSide />
         {:else if tab === "preview"}
@@ -1894,12 +1991,26 @@
     <Splitter axis="x" label="Width of the sidebar" onmove={(d) => layout.resize("sidebar", d)} />
 
     <div class="work">
-      <!-- A command's or function's code takes the whole area, edge to edge. -->
-      <main class:edge={!!(openCommand || openFunction)}>
+      <!-- A command's or function's code, and the report designer, take the whole area, edge to edge. -->
+      <main class:edge={!!(openCommand || openFunction) || (tab === "reports" && current?.kind === "report")}>
         <!-- What is open, guarded: an error drawing it shows in its place. -->
         <Guarded shows={`${tab} ${current?.kind ?? ""} ${current?.name ?? ""}`}>
           {#if tab === "vault"}
             <VaultView />
+          {:else if tab === "reports" && preview && current?.kind === "report"}
+            <ReportDesigner
+              {preview}
+              name={current.name}
+              onapplied={applyPreview}
+              ondeleted={(next) => {
+                applyPreview(next);
+                select({ kind: "readme", name: "" });
+              }}
+            />
+          {:else if tab === "reports" && preview}
+            <div class="placeholder">
+              <p>Pick a report under Reports in the tree, or make one with New report.</p>
+            </div>
           {:else if !preview}
             <div class="placeholder">
               <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
@@ -2462,6 +2573,14 @@
     gap: 4px;
     padding: 6px 10px 4px;
     min-height: 76px;
+    /* Wider than the window, it scrolls sideways (wheel, drag, thin bar) instead of widening the IDE. */
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .ribbon-body > :global(*) {
+    flex: none;
   }
 
   .group {

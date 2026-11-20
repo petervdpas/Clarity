@@ -47,6 +47,22 @@ pub fn runtime_version() -> &'static str {
 /// it, the runtimes folder or the repository.
 pub const RUNTIME_VARIABLE: &str = "CLARITY_RUNTIME";
 
+/// The version of Clarity.Pdf's crate a generated project that makes PDFs
+/// requires: the one in this repository.
+pub fn pdf_version() -> &'static str {
+    const MANIFEST: &str = include_str!("../../../../runtimes/rust-pdf/Cargo.toml");
+    let start = MANIFEST.find("\nversion = \"").expect("the crate's manifest sets its version") + "\nversion = \"".len();
+    let end = MANIFEST[start..].find('"').expect("the version is closed");
+    &MANIFEST[start..start + end]
+}
+
+/// The crates beside the runtime a program takes for what its code does:
+/// Clarity.Pdf when it makes PDFs (`pdf of`), which is a crate of its own
+/// since it reads Markdown through the runtime.
+pub(crate) fn crates_beside(project: &Project) -> String {
+    if project.uses_pdf() { format!("clarity-pdf = \"{}\"\n", pdf_version()) } else { String::new() }
+}
+
 /// `.cargo/config.toml` of a project that builds on the runtime in Clarity's
 /// repository (`runtime`). The path is absolute, with `/` between folders (a
 /// backslash is an escape in TOML). Fails when `runtime` holds no
@@ -68,11 +84,22 @@ pub fn local_patch(named: &std::path::Path) -> Result<String, String> {
 /// The patch file when a folder is chosen for the Rust crates in Clarity
 /// settings > DevTools, else when the environment's CLARITY_RUNTIME names
 /// the runtime (`local_patch`); none when neither does.
-pub(crate) fn local_patch_file() -> Result<Option<OutFile>, Vec<String>> {
+/// Clarity.Pdf's crate beside the runtime is patched too when the program
+/// makes PDFs (`pdf`), and only then, so cargo finds no patch it does not use.
+pub(crate) fn local_patch_file(pdf: bool) -> Result<Option<OutFile>, Vec<String>> {
     let chosen = crate::tools::environment::library_in_use(crate::tools::environment::Choosable::RustCrates);
     match chosen.or_else(|| std::env::var_os(RUNTIME_VARIABLE).filter(|v| !v.is_empty()).map(std::path::PathBuf::from)) {
-        Some(folder) => local_patch(&folder).map(|t| Some(text(".cargo/config.toml", t))).map_err(|e| vec![e]),
+        Some(folder) => local_patch(&folder).map(|t| Some(text(".cargo/config.toml", if pdf { with_pdf_patch(t) } else { t }))).map_err(|e| vec![e]),
         None => Ok(None),
+    }
+}
+
+/// A patch file with Clarity.Pdf's crate beside the runtime's it names.
+fn with_pdf_patch(patch: String) -> String {
+    let runtime = patch.lines().find_map(|l| l.strip_prefix("clarity-runtime = { path = \"")?.strip_suffix("\" }")).map(str::to_string);
+    match runtime {
+        Some(runtime) => format!("{patch}clarity-pdf = {{ path = \"{}/rust-pdf\" }}\n", runtime.rsplit_once('/').map_or(runtime.as_str(), |(up, _)| up)),
+        None => patch,
     }
 }
 
@@ -164,6 +191,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
+                &crates_beside(project),
             ),
         ),
         text("src/model.json", crate::web::model_json(project)),
@@ -265,7 +293,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let main_text = if crate::window_program_only(settings) { main_text.replacen(HEADER, &format!("{HEADER}// A window program: no console of its own on Windows.\n#![windows_subsystem = \"windows\"]\n"), 1) } else { main_text };
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
-    files.extend(local_patch_file()?);
+    files.extend(local_patch_file(project.uses_pdf())?);
     // The program file's icon and version on Windows, linked by build.rs;
     // on the desktop, build.rs links the ready-made library too.
     let icons = crate::windows_resources::object_files(project, &clarity_project::title(settings), &crate_name, crate::windows_resources::object_path);
@@ -753,7 +781,7 @@ pub(crate) fn runtime_features() -> Vec<&'static str> {
 
 /// The manifest of the application, with the runtime features it uses
 /// (the databases of its data sources, `native-ui` on the desktop).
-fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)], beside: &str) -> String {
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // With custom parts, every dependency (a part's game engine) builds optimized in a debug
     // build too, so the windows run at speed, while the program's own code stays quick to build.
@@ -771,7 +799,7 @@ edition = "2024"
 
 [dependencies]
 clarity-runtime = {{ version = "{version}", default-features = false, features = [{features}] }}
-{COMPANIONS}
+{beside}{COMPANIONS}
 {parts}
 {profile}# A project of its own, not part of a workspace around it.
 [workspace]

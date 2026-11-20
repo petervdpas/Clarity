@@ -162,8 +162,13 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
     let mut rows = vec![vec!["ID".to_string(), "int64".into(), "`json:\"id\"`".into()]];
-    // An entity of a web API holds its records inside (manual/data.entities.md); a stored one keeps them in their own table.
-    let held: Vec<&Field> = if project.in_web_api(name) { entity.fields.iter().filter(|f| f.ty.is_held()).collect() } else { Vec::new() };
+    // An entity of a web API holds its records inside (manual/data.entities.md); a stored one keeps them in their own table
+    // and holds the lists that load with it (docs/ledger/runtime-data.md).
+    let held: Vec<&Field> = if project.in_web_api(name) {
+        entity.fields.iter().filter(|f| f.ty.is_held()).collect()
+    } else {
+        project.held_lists(name).into_iter().map(|(list, _, _)| list).collect()
+    };
     let fields: Vec<&Field> = stored(entity).chain(held.iter().copied()).collect();
     for f in &fields {
         rows.push(vec![field(&f.name.name), field_type(&f.ty), format!("`json:\"{}\"`", f.name.name)]);
@@ -243,6 +248,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         out,
         "func (r *{name}) Load(id int64, values []any) error {{\n\tread := clarity.NewReader(values)\n\tr.ID = id\n{load}\treturn read.Err()\n}}\n\n"
     );
+    out.push_str(&held_lists(project, entity));
     // The data events written in the entity's code block; each runs the
     // function generated from it.
     let events: Vec<DataEvent> =
@@ -359,4 +365,26 @@ fn field_slot(f: &Field, value: &str, path: &str) -> String {
         FieldType::Ref { .. } => format!("if {value} != nil {{\n\ttext = text.With({}, clarity.SlotInteger(*{value}, \"\"))\n}}\n", string(path)),
         _ => slot_of(f, value).map(|slot| format!("text = text.With({}, {slot})\n", string(path))).unwrap_or_default(),
     }
+}
+
+/// The stored lists of an entity's record (`order.lines`), which load with
+/// it one level deep (clarity.HoldsLists): each list's records by its one
+/// reference back, in the order they were stored (docs/ledger/runtime-data.md).
+pub(crate) fn held_lists(project: &Project, entity: &Entity) -> String {
+    let lists = project.held_lists(&entity.name.name);
+    if lists.is_empty() {
+        return String::new();
+    }
+    let mut body = String::new();
+    for (list, listed, key) in &lists {
+        let _ = write!(
+            body,
+            "\t{{\n\t\tfound, err := clarity.FindAlone[{}](db, clarity.Query{{}}.Filter(clarity.Compare({}, clarity.Eq, r.ID)).Order({}, false))\n\t\tif err != nil {{\n\t\t\treturn err\n\t\t}}\n\t\tr.{} = found\n\t}}\n",
+            listed.name.name,
+            string(&listed.column_of(&key.name.name)),
+            string(listed.key_column()),
+            field(&list.name.name)
+        );
+    }
+    format!("// LoadLists loads the record's stored lists, one level deep.\nfunc (r *{}) LoadLists(db *clarity.Db) error {{\n{body}\treturn nil\n}}\n\n", entity.name.name)
 }

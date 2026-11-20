@@ -12,6 +12,8 @@
 //! and says which handler a click would run.
 
 use std::collections::BTreeMap;
+
+use crate::OutFile;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -55,6 +57,36 @@ impl Shown {
 /// `showing` gives each tabs, steps or accordion part (by its item) the page
 /// the designer switched to, from 0.
 pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, showing: &BTreeMap<String, usize>) -> String {
+    with_samples(project, files_json_shown(project, title, shown, design, showing))
+}
+
+/// The resources the preview and the designer serve: what a program carries
+/// (`web::resource_files`: the resources folder's, the reports with theirs),
+/// and each report's sample data (`reports/<Name>.sample.json`), which a
+/// pdfReport part shows while no code gives it data. Programs never carry it.
+pub fn resources(project: &Project) -> Vec<OutFile> {
+    let mut files = crate::web::resource_files(project, "");
+    for report in &project.reports {
+        let sample = clarity_spec::reports::sample_data(project, &report.name);
+        files.push(OutFile { path: format!("/{}/{}.sample.json", clarity_spec::reports::REPORTS_DIR, report.name), text: sample.to_string(), bytes: None });
+    }
+    files
+}
+
+/// `files.json` with the sample data of the reports among its resources.
+fn with_samples(project: &Project, text: String) -> String {
+    if project.reports.is_empty() {
+        return text;
+    }
+    let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
+    if let Some(named) = files.get_mut("resources").and_then(Value::as_array_mut) {
+        named.clear();
+        named.extend(resources(project).into_iter().map(|f| Value::String(f.path.trim_start_matches('/').to_string())));
+    }
+    files.to_string() + "\n"
+}
+
+fn files_json_shown(project: &Project, title: &str, shown: &Shown, design: bool, showing: &BTreeMap<String, usize>) -> String {
     let size = match shown {
         Shown::Window(name) => crate::window_size(project, name),
         Shown::App(_) => (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT),
@@ -560,11 +592,6 @@ pub fn media_type(name: &str) -> &'static str {
     }
 }
 
-/// A name that stays inside its folder: no `..`, no root, no backslash.
-fn inside(name: &str) -> bool {
-    !name.is_empty() && !name.starts_with('/') && !name.contains('\\') && name.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
-}
-
 fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Result<()> {
     let Some(request) = read_request(&mut stream) else { return Ok(()) };
     if request.method == "OPTIONS" {
@@ -575,7 +602,8 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
     };
     match (request.method.as_str(), path) {
         ("GET", name) if crate::clarity_ui::BROWSER_FILES.contains(&name) => match (serving.library)() {
-            Ok(folder) => match std::fs::read(folder.join(name)) {
+            // The set with reports, as any project the IDE shows may have them.
+            Ok(folder) => match std::fs::read(crate::web_browser::widest_set(&folder).join(name)) {
                 Ok(bytes) => respond(&mut stream, "200 OK", media_type(name), &bytes),
                 Err(err) => respond(&mut stream, "404 Not Found", "text/plain", err.to_string().as_bytes()),
             },
@@ -610,11 +638,13 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
                 Err(why) => respond(&mut stream, "404 Not Found", "text/plain", why.as_bytes()),
             }
         }
+        // The resources `resources` names: what a program carries, and the reports' sample data.
         ("GET", name) if name.starts_with("resources/") => {
             let name = &name["resources/".len()..];
-            let dir = serving.loaded.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|l| l.dir.clone());
-            match dir.filter(|_| inside(name)).map(|d| d.join(clarity_spec::resources::RESOURCES_DIR).join(name)).and_then(|p| std::fs::read(p).ok()) {
-                Some(bytes) => respond(&mut stream, "200 OK", media_type(name), &bytes),
+            let project = serving.loaded.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|l| l.project.clone());
+            let found = project.and_then(|p| resources(&p).into_iter().find(|f| f.path.trim_start_matches('/') == name));
+            match found {
+                Some(file) => respond(&mut stream, "200 OK", media_type(name), file.bytes.as_deref().unwrap_or(file.text.as_bytes())),
                 None => respond(&mut stream, "404 Not Found", "text/plain", b"no such resource"),
             }
         }

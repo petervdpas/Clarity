@@ -5,6 +5,6 @@
  */
 export type BuildAsk = { id: string, 
 /**
- * `build` a piece or `remove` a build folder of the Disk tab.
+ * `build` a piece, `useOwn` or `useRelease` for its Swap, or `remove` a build folder of the Disk tab.
  */
 action: string, key: string, name: string, by: string, };

@@ -51,7 +51,7 @@ const fn native(key: &'static str, name: &'static str, uses: &'static str, core:
 }
 
 /// Every piece, the core ones first.
-pub const PIECES: [Piece; 11] = [
+pub const PIECES: [Piece; 12] = [
     native("clarityUi", "Clarity.UI's library", "Go, C, C++ and Rust desktop programs", true, "clarity_ui", "clarity-ui-ffi", "runtimes/rust-ui-ffi/include", &["runtimes/rust-ui/src", "runtimes/rust-ui-ffi/src", "runtimes/rust/src"]),
     Piece { key: "clarityUiBrowser", name: "Clarity.UI's browser files", uses: "the design, the preview and web programs", core: true, kind: Kind::Browser, sources: &crate::clarity_ui::BROWSER_SOURCES },
     Piece { key: "rustCrates", name: "Rust crates", uses: "Rust programs (clarity-runtime and the crates it takes)", core: true, kind: Kind::Runtime { folder: "runtimes/rust" }, sources: &[] },
@@ -60,7 +60,8 @@ pub const PIECES: [Piece; 11] = [
     native("clarityAudio", "Clarity.Audio's library", "programs that play songs", false, "clarity_audio", "clarity-audio-ffi", "runtimes/rust-audio-ffi/include", &["runtimes/rust-audio/src", "runtimes/rust-audio-ffi/src"]),
     native("clarityVideo", "Clarity.Video's library", "programs that play videos", false, "clarity_video", "clarity-video-ffi", "runtimes/rust-video-ffi/include", &["runtimes/rust-video/src", "runtimes/rust-video-ffi/src"]),
     native("clarityImage", "Clarity.Image's library", "programs with picture functions", false, "clarity_image", "clarity-image-ffi", "runtimes/rust-image-ffi/include", &["runtimes/rust-image/src", "runtimes/rust-image-ffi/src"]),
-    native("clarityFormats", "Clarity.Formats' library", "programs reading data formats", false, "clarity_formats", "clarity-formats-ffi", "runtimes/rust-formats-ffi/include", &["runtimes/rust-formats/src", "runtimes/rust-formats-ffi/src"]),
+    native("clarityPdf", "Clarity.Pdf's library", "programs that make PDFs", false, "clarity_pdf", "clarity-pdf-ffi", "runtimes/rust-pdf-ffi/include", &["runtimes/rust-pdf/src", "runtimes/rust-pdf-ffi/src"]),
+    native("clarityFormats", "Clarity.Formats' library", "programs reading data formats", false, "clarity_formats", "clarity-formats-ffi", "runtimes/rust-formats-ffi/include", &["runtimes/rust-data/src", "runtimes/rust-formats/src", "runtimes/rust-formats-ffi/src"]),
     native("clarityAuth", "Clarity.Auth's library", "programs that sign in", false, "clarity_auth", "clarity-auth-ffi", "runtimes/rust-auth-ffi/include", &["runtimes/rust-auth/src", "runtimes/rust-auth-ffi/src"]),
     native("clarityAppMcp", "Clarity.AppMcp's library", "programs offering commands to AI agents", false, "clarity_app_mcp", "clarity-app-mcp-ffi", "runtimes/rust-app-mcp-ffi/include", &["runtimes/rust-app-mcp/src", "runtimes/rust-app-mcp-ffi/src"]),
 ];
@@ -169,7 +170,8 @@ pub fn built_at(repo: &Path, piece: &Piece, os: &str) -> Option<SystemTime> {
 pub fn build(repo: &Path, piece: &Piece) -> Runnable {
     match piece.kind {
         Kind::Native { package, .. } => Runnable::new("cargo", &["build", "--release", "-p", package], repo).with_env("CARGO_BUILD_JOBS", "2"),
-        Kind::Browser => Runnable::new(&crate::tools::bash(), &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "2"),
+        // Thin LTO for the cDdev's own browser files (Cargo.toml's browser-own); releases build `browser`.
+        Kind::Browser => Runnable::new(&crate::tools::bash(), &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "2").with_env("CLARITY_BROWSER_PROFILE", "browser-own"),
         Kind::Runtime { folder: "runtimes/rust" } => Runnable::new("cargo", &["build", "-p", "clarity-runtime"], repo).with_env("CARGO_BUILD_JOBS", "2"),
         // The NuGet packages come from the Release build, into each project's bin/Release.
         Kind::Runtime { folder: "runtimes/csharp" } => Runnable::new("dotnet", &["build", "-c", "Release", "Clarity.slnx"], &repo.join("runtimes/csharp")).with_env("MSBUILDDISABLENODEREUSE", "1"),

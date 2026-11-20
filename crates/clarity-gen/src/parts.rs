@@ -22,6 +22,9 @@ pub(crate) const SOUND_KIND: &str = "sound";
 /// The kind under which a video part keeps what code reads of it (docs/ledger/video-camera.md).
 pub(crate) const VIDEO_KIND: &str = "video";
 
+/// The kind under which a pdfReport keeps the data its report takes, before the report's name: `report:Invoice`.
+pub(crate) const REPORT_KIND: &str = "report:";
+
 /// The kind under which a text box or memo keeps where the person types: its caret and selected text (Writer gap 21).
 pub(crate) const TYPING_KIND: &str = "typing";
 
@@ -31,6 +34,7 @@ pub(crate) fn kept_of(props: &clarity_spec::model::WidgetProps) -> Option<(Strin
     match props.kind {
         clarity_spec::widgets::WidgetKind::Sound => Some((SOUND_KIND.to_string(), Default::default())),
         clarity_spec::widgets::WidgetKind::Video => Some((VIDEO_KIND.to_string(), Default::default())),
+        clarity_spec::widgets::WidgetKind::PdfReport => props.report.as_ref().map(|r| (format!("{REPORT_KIND}{r}"), Default::default())),
         clarity_spec::widgets::WidgetKind::Textbox | clarity_spec::widgets::WidgetKind::Memo | clarity_spec::widgets::WidgetKind::Markdown => Some((TYPING_KIND.to_string(), Default::default())),
         _ => props.part.clone().map(|kind| (kind, props.values.clone())),
     }
@@ -46,6 +50,9 @@ pub(crate) fn keeps(project: &Project, kind: &str, property: &str) -> bool {
     }
     if kind == TYPING_KIND {
         return clarity_spec::typing::read(property).is_some();
+    }
+    if let Some(report) = kind.strip_prefix(REPORT_KIND) {
+        return clarity_spec::reports::report_data(project, report).is_some_and(|d| d.iter().any(|(n, _)| n == property));
     }
     declaration(project, kind).is_some_and(|d| d.properties.iter().any(|p| p.name.name == property))
 }

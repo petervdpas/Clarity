@@ -82,6 +82,13 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
 
     /// <summary>Deletes the records that refer to this one with <c>cascade</c>, each as any record is deleted.</summary>
     void Cascade(Db db) { }
+
+    /// <summary>
+    /// Loads the record's stored lists (order.lines), one level deep, each by
+    /// its one reference back (docs/ledger/runtime-data.md); a record without
+    /// stored lists has none to load.
+    /// </summary>
+    void LoadLists(Db db) { }
 }
 
 /// <summary>Whether a record may be saved: none of its required fields is empty (conformance/required.json).</summary>

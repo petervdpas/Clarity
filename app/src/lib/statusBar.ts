@@ -19,6 +19,7 @@ const KIND_NAMES: Record<Selected["kind"], string> = {
   language: "Language",
   resource: "Resource",
   diagram: "Diagram",
+  report: "Report",
   module: "Module",
   settings: "Project settings",
   api: "Web API",

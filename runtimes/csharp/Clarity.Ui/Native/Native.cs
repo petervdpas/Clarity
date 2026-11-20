@@ -86,6 +86,12 @@ internal static unsafe partial class Lib
     [LibraryImport(Name, EntryPoint = "clarity_answer_set")]
     public static partial Status AnswerSet(nint answer, byte* data, nuint len);
 
+    [LibraryImport(Name, EntryPoint = "clarity_report_pdf")]
+    public static partial Status ReportPdf(byte* report, nuint reportLen, byte* data, nuint dataLen, out byte* made, out nuint madeLen);
+
+    [LibraryImport(Name, EntryPoint = "clarity_bytes_free")]
+    public static partial void BytesFree(byte* bytes, nuint len);
+
     [LibraryImport(Name, EntryPoint = "clarity_agent_ask")]
     public static partial Status AgentAsk(byte* question, nuint questionLen, byte* form, nuint formLen, out byte* answer);
 

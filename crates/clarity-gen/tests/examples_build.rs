@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 21] = clarity_gen::tools::devtools::release::EXAMPLES;
+const EXAMPLES: [&str; 22] = clarity_gen::tools::devtools::release::EXAMPLES;
 
 #[test]
 #[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]
@@ -45,6 +45,12 @@ fn the_dial_example_builds_without_warnings() {
 #[ignore = "builds the invaders example (go web); run with --ignored, one at a time"]
 fn the_invaders_example_builds_without_warnings() {
     builds_without_warnings("invaders");
+}
+
+#[test]
+#[ignore = "builds the invoices example (go desktop); run with --ignored, one at a time"]
+fn the_invoices_example_builds_without_warnings() {
+    builds_without_warnings("invoices");
 }
 
 #[test]

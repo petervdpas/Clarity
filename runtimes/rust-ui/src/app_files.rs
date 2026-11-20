@@ -2,6 +2,19 @@
 //! and apps' markup (`.cxaml`), its resolved themes, its texts and its
 //! resources, each by name, built into the program.
 
+static RUNNING: std::sync::OnceLock<AppFiles> = std::sync::OnceLock::new();
+
+/// The files of the program Clarity.UI runs, as its desktop or a driven run
+/// started with; for what code asks of them while it runs (a report's PDF).
+pub fn running() -> Option<AppFiles> {
+    RUNNING.get().copied()
+}
+
+/// Keeps the files of the program that runs; the first one stays.
+pub fn set_running(files: AppFiles) {
+    let _ = RUNNING.set(files);
+}
+
 /// A program's files, by name.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AppFiles {

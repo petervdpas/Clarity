@@ -15,8 +15,17 @@ publish = false
 name = "clarity-ui"
 path = "src/main.rs"
 
+# The browser files come in two sets (build.sh): without reports, and with them
+# (`pdf`: the pdfReport part, docs/ledger/reports-pdf.md), which a web program
+# with reports, the IDE's preview and its designer take. Typst and its fonts
+# make the set with reports some 34 MB larger.
+[features]
+pdf = ["clarity-ui/pdf"]
+
 [dependencies]
 clarity-ui = { path = "../rust-ui" }
+# Typst hands work to rayon; in the browser rayon runs it on the one thread there is (main.rs).
+rayon = "1.12"
 base64 = "0.22"
 # Skia only from skia-safe's prebuilt binaries: a build that would compile
 # it from source stops instead (hours, and more memory than a laptop has).

@@ -1010,10 +1010,6 @@ impl<'a> Emitter<'a> {
                         let loaded = format!("db.load::<{}>({object}.{})?", target.name, ident(&member.name));
                         self.readable_one(&target.name, loaded)
                     }
-                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
-                        self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
-                        String::new()
-                    }
                     _ => format!("{object}.{}", ident(&member.name)),
                 }
             }
@@ -1187,6 +1183,18 @@ impl<'a> Emitter<'a> {
                 };
                 let (format, options) = self.format_options(mapping);
                 format!("clarity_runtime::formats::write({:?}, &{}, &{options}, {kind:?})", format, self.value(value))
+            }
+            // `pdf of text stylesheet css theme true`: Clarity.Pdf, refusing a stylesheet with errors.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "\"\"".to_string(), |v| self.value(v));
+                let theme = option("theme").map_or_else(|| "\"\"".to_string(), |v| format!("if {} {{ {:?} }} else {{ \"\" }}", self.value(v), crate::pdf_theme(self.project)));
+                format!("clarity_pdf::made(&({}), &({sheet}), {theme}).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?", self.value(text))
+            }
+            // `pdf of Invoice with order = current`: Clarity.UI's library lays the report out with its data as JSON.
+            ExprKind::PdfReport { report, data } => {
+                let given: Vec<String> = data.iter().map(|d| format!("({:?}.to_string(), serde_json::to_value(&{}).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?)", d.name.name, self.value(&d.value))).collect();
+                format!("clarity_runtime::native_ui::report_pdf({:?}, &serde_json::Value::Object([{}].into_iter().collect()))?", report.name, given.join(", "))
             }
             ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {

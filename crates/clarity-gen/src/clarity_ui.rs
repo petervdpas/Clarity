@@ -37,6 +37,24 @@ pub fn version() -> &'static str {
     version_in(FFI_MANIFEST).unwrap_or("0.0.0")
 }
 
+/// The release a Clarity run from its repository fetches, set as it starts:
+/// the newest tagged release, which a version bumped for the next release
+/// is not yet.
+static RELEASED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Sets the release this Clarity fetches (`release_version`); the first one stays.
+pub fn set_release_version(version: String) {
+    let _ = RELEASED.set(version);
+}
+
+/// The release of the library and browser files this Clarity fetches when
+/// nothing of its own is chosen: in a run from Clarity's repository the
+/// newest tagged release, else the version it was built with. Generated
+/// programs name `version`, as they are released with it.
+pub fn release_version() -> &'static str {
+    RELEASED.get().map(String::as_str).unwrap_or_else(version)
+}
+
 /// The version of the `[package]` in a Cargo.toml.
 pub fn version_in(manifest: &str) -> Option<&str> {
     let mut package = false;
@@ -355,7 +373,7 @@ pub fn set_bundled_browser(folder: PathBuf) {
 pub fn browser_library() -> Library {
     let named = std::env::var_os("CLARITY_UI_BROWSER");
     let cache = cache_dir_in(std::env::consts::OS, |name| std::env::var(name).ok());
-    let found = browser_library_in(named.as_deref(), BUNDLED_BROWSER.get().map(PathBuf::as_path), cache.as_deref(), version());
+    let found = browser_library_in(named.as_deref(), BUNDLED_BROWSER.get().map(PathBuf::as_path), cache.as_deref(), release_version());
     chosen_or(crate::tools::environment::library_in_use(crate::tools::environment::Choosable::ClarityUiBrowser), found)
 }
 
@@ -459,6 +477,15 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     }
     if image.iter().all(|(from, _)| from.is_file()) {
         files.extend(image);
+    }
+    let pdf_header = repo.join("runtimes").join("rust-pdf-ffi").join("include").join("clarity_pdf.h");
+    let pdf_file = library_file(os).replace("clarity_ui", "clarity_pdf");
+    let mut pdf = vec![(pdf_header, PathBuf::from("include").join("clarity_pdf.h")), (release.join(&pdf_file), PathBuf::from("lib").join(&pdf_file))];
+    if os == "windows" {
+        pdf.push((release.join("clarity_pdf.dll.lib"), PathBuf::from("lib").join("clarity_pdf.dll.lib")));
+    }
+    if pdf.iter().all(|(from, _)| from.is_file()) {
+        files.extend(pdf);
     }
     let video_header = repo.join("runtimes").join("rust-video-ffi").join("include").join("clarity_video.h");
     let video_file = library_file(os).replace("clarity_ui", "clarity_video");

@@ -78,6 +78,8 @@ unsafe extern "C" {
     fn clarity_desktop_run(program: *const NativeProgram, files: *const Files, exit_code: *mut i32) -> Status;
     fn clarity_desktop_wake();
     fn clarity_translate(key: *const c_char, key_len: usize, english: *const c_char, english_len: usize, out: *mut *mut c_char) -> Status;
+    fn clarity_report_pdf(report: *const c_char, report_len: usize, data: *const c_char, data_len: usize, out: *mut *mut u8, out_len: *mut usize) -> Status;
+    fn clarity_bytes_free(bytes: *mut u8, len: usize);
     fn clarity_agent_ask(question: *const c_char, question_len: usize, form: *const c_char, form_len: usize, out: *mut *mut c_char) -> Status;
     fn clarity_custom_register(kind: *const c_char, kind_len: usize, callbacks: *const CustomCallbacks) -> Status;
     fn clarity_custom_bounds(cx: *const RawCx, x: *mut f64, y: *mut f64, width: *mut f64, height: *mut f64) -> Status;
@@ -99,6 +101,20 @@ unsafe extern "C" {
     fn clarity_canvas_clip(canvas: *mut RawCanvas, x: f64, y: f64, width: f64, height: f64) -> Status;
     fn clarity_canvas_restore(canvas: *mut RawCanvas) -> Status;
     fn clarity_canvas_look_color(canvas: *mut RawCanvas, role: *const c_char, role_len: usize, color: *mut u32) -> Status;
+}
+
+/// A PDF of a report of the running program (`pdf of Invoice with order = current`,
+/// docs/ledger/reports-pdf.md): Clarity.UI lays it out with the report's data, by
+/// the names of its Data, and the program's texts and resources.
+pub fn report_pdf(report: &str, data: &serde_json::Value) -> crate::Result<Vec<u8>> {
+    let data = data.to_string();
+    let (mut out, mut len) = (std::ptr::null_mut(), 0usize);
+    if unsafe { clarity_report_pdf(report.as_ptr() as *const c_char, report.len(), data.as_ptr() as *const c_char, data.len(), &mut out, &mut len) } != OK || out.is_null() {
+        return Err(crate::Error::Invalid(last_error("clarity_report_pdf")));
+    }
+    let made = unsafe { std::slice::from_raw_parts(out, len) }.to_vec();
+    unsafe { clarity_bytes_free(out, len) };
+    Ok(made)
 }
 
 /// Why the last call of the library on this thread failed.

@@ -7,7 +7,8 @@ edition = "2024"
 publish = false
 
 [dependencies]
-clarity-runtime = { version = "=0.62.0", default-features = false, features = ["sqlite", "postgres", "mysql", "mssql", "engines", "http", "pictures", "formats", "auth", "mcp", "secrets", "native-ui"] }
+clarity-runtime = { version = "=0.63.0", default-features = false, features = ["sqlite", "postgres", "mysql", "mssql", "engines", "http", "pictures", "formats", "auth", "mcp", "secrets", "native-ui"] }
+clarity-pdf = "=0.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

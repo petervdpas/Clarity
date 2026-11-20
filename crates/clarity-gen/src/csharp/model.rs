@@ -360,7 +360,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         .filter(|b| b.name.name == *name)
         .flat_map(|b| b.events.iter().map(|e| e.event))
         .collect();
-    let mut hooks = String::new();
+    let mut hooks = held_lists(project, entity);
     // What cascades from it is deleted first, each child as any record is.
     let cascades = crate::cascades(project, name);
     if !cascades.is_empty() {
@@ -527,4 +527,27 @@ fn pictures(entity: &Entity) -> String {
         return String::new();
     }
     format!("    public static IReadOnlyList<PictureColumn> Pictures {{ get; }} = [{}];\n", columns.join(", "))
+}
+
+/// The stored lists of an entity's record (`order.lines`), which load with
+/// it one level deep (`IRecord.LoadLists`): each list's records by its one
+/// reference back, in the order they were stored (docs/ledger/runtime-data.md).
+fn held_lists(project: &Project, entity: &Entity) -> String {
+    let lists = project.held_lists(&entity.name.name);
+    if lists.is_empty() {
+        return String::new();
+    }
+    let body: String = lists
+        .iter()
+        .map(|(list, listed, key)| {
+            format!(
+                "        {} = db.FindAlone<{}>(new Query().Filter(Cond.Compare({:?}, Op.Eq, Id)).Order({:?}, false));\n",
+                super::names::property(&entity.name.name, &list.name.name),
+                listed.name.name,
+                listed.column_of(&key.name.name),
+                listed.key_column()
+            )
+        })
+        .collect();
+    format!("\n    public void LoadLists(Db db)\n    {{\n{body}    }}\n")
 }

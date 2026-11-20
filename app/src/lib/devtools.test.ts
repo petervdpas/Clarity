@@ -2,7 +2,7 @@
 // what a release's changes come to.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DISK_TAB, RELEASE_TAB, askedTab, bytesText, changeText, checkState, cycle, stateText, tabOrder, verdict } from "./devtools.ts";
+import { DISK_TAB, RELEASE_TAB, askedTab, bytesText, changeText, checkState, cycle, reloadsBrowserFiles, stateText, tabOrder, verdict } from "./devtools.ts";
 
 const check = (title: string, last: boolean | null = null, current = true) => ({ job: `check:${title}`, title, last: last === null ? null : { passed: last, current } });
 
@@ -72,4 +72,15 @@ test("a result of another tree counts as not run, and holds the plan back", () =
 test("an agent's ask opens the tab it works in", () => {
   assert.equal(askedTab({ action: "build", key: "clarityUi" }), "clarityUi", "a build shows in its piece's tab");
   assert.equal(askedTab({ action: "remove", key: "release" }), DISK_TAB, "a removal of a build folder shows in Disk");
+  assert.equal(askedTab({ action: "useOwn", key: "clarityPdf" }), "clarityPdf", "a swap shows in its piece's tab");
+});
+
+test("the canvases load the browser files again after they were swapped or built, with DevTools open or not", () => {
+  assert.ok(reloadsBrowserFiles({ swapped: "clarityUiBrowser" }));
+  assert.ok(!reloadsBrowserFiles({ swapped: "clarityUi" }));
+  const built = { key: "piece:clarityUiBrowser", state: "passed", ended: 2 };
+  assert.ok(reloadsBrowserFiles({ job: built, before: { ended: 1 } }));
+  assert.ok(!reloadsBrowserFiles({ job: built, before: { ended: 2 } }), "the same build heard twice");
+  assert.ok(!reloadsBrowserFiles({ job: { ...built, state: "failed" } }));
+  assert.ok(!reloadsBrowserFiles({ job: { ...built, key: "piece:clarityUi" } }));
 });

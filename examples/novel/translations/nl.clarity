@@ -304,3 +304,4 @@ translation nl
     insertWhichResearch "Welk onderzoek voeg je hier in?"
     insertWhichFragment "Welk fragment voeg je hier in?"
     insertWhichDialogue "Welke dialoog voeg je hier in?"
+    myTitle "Dit is MIJN titel"

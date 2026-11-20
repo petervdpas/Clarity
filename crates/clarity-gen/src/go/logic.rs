@@ -1596,10 +1596,6 @@ impl<'a> Emitter<'a> {
                         pre.push_str(&readable_check(self.project, &target.name, &record, &fail));
                         record
                     }
-                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
-                        self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
-                        String::new()
-                    }
                     _ => format!("{object}.{}", field(&member.name)),
                 }
             }
@@ -1822,6 +1818,19 @@ impl<'a> Emitter<'a> {
                 };
                 let (format, options) = self.format_options(mapping, pre);
                 format!("clarity.WriteFormat(formatsWrite, {}, {}, {options}, {})", string(&format), bare(self.value(value, pre)), string(&kind))
+            }
+            // `pdf of text stylesheet css theme true`: pdf.go's call of Clarity.Pdf, able to refuse.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "\"\"".to_string(), |v| bare(self.value(v, pre)));
+                let theme = option("theme").map_or_else(|| "\"\"".to_string(), |v| format!("pdfTheme({})", bare(self.value(v, pre))));
+                let text = bare(self.value(text, pre));
+                self.lift(format!("pdfOf({text}, {sheet}, {theme})"), pre)
+            }
+            // `pdf of Invoice with order = current`: report_pdf.go's call of Clarity.UI's library, able to refuse.
+            ExprKind::PdfReport { report, data } => {
+                let given: Vec<String> = data.iter().map(|d| format!("{}: {}", string(&d.name.name), bare(self.value(&d.value, pre)))).collect();
+                self.lift(format!("reportPdf({}, map[string]any{{{}}})", string(&report.name), given.join(", ")), pre)
             }
             ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {

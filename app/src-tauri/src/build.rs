@@ -954,7 +954,7 @@ mod tests {
         let cache = std::env::temp_dir().join(format!("clarity-ui-fetch-{}", std::process::id()));
         let os = std::env::consts::OS;
         let rid = clarity_ui::rid(os, std::env::consts::ARCH);
-        let library = clarity_ui::library_in(None, None, Some(&cache), rid.as_deref(), clarity_ui::version(), os);
+        let library = clarity_ui::library_in(None, None, Some(&cache), rid.as_deref(), clarity_ui::release_version(), os);
         let folder = clarity_ui::provide(library, clarity_ui::RELEASES, &download, &|line| println!("{line}"));
         let unpacked = folder.as_ref().is_ok_and(|folder| folder.starts_with(&cache) && clarity_ui::complete(folder, os));
         let _ = std::fs::remove_dir_all(&cache);

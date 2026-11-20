@@ -292,12 +292,31 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !cascades.is_empty() {
         methods.push_str("    void cascade(clarity::Db& db) const;\n");
     }
+    // A stored record's lists load with it, one level deep (docs/ledger/runtime-data.md).
+    let lists = project.held_lists(name);
+    if !lists.is_empty() {
+        methods.push_str("    void load_lists(clarity::Db& db);\n");
+    }
     let held = if version.is_some() { "    /// The version it was read or last saved with (conformance/versions.json); 0 for a new one.\n    int64_t version = 0;\n" } else { "" };
     let header = format!(
         "struct {name} {{\n    int64_t id = 0;\n{fields}{held}\n{statics}{methods}}};\nvoid to_json(nlohmann::json& out, const {name}& r);\nvoid from_json(const nlohmann::json& in, {name}& r);\n\n"
     );
 
     let mut source = String::new();
+    if !lists.is_empty() {
+        let _ = writeln!(source, "void {name}::load_lists(clarity::Db& db) {{");
+        for (list, listed, key) in &lists {
+            let _ = writeln!(
+                source,
+                "    {} = db.find_alone<{}>(clarity::Query().filter(clarity::Cond::compare({}, clarity::Op::Eq, clarity::sql::integer(id))).order({}, false));",
+                ident(&list.name.name),
+                listed.name.name,
+                string(&listed.column_of(&key.name.name)),
+                string(listed.key_column())
+            );
+        }
+        source.push_str("}\n\n");
+    }
     if !cascades.is_empty() {
         let _ = writeln!(source, "void {name}::cascade(clarity::Db& db) const {{");
         for (child, _, column) in &cascades {

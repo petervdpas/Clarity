@@ -69,7 +69,7 @@
   </Target>
   <!-- A library older than its Rust stops the build (../ClarityNative.targets). -->
   <PropertyGroup>
-    <ClarityNativeCrates>rust-formats;rust-formats-ffi</ClarityNativeCrates>
+    <ClarityNativeCrates>rust-data;rust-formats;rust-formats-ffi</ClarityNativeCrates>
     <ClarityNativePackage>clarity-formats-ffi</ClarityNativePackage>
   </PropertyGroup>
   <Import Project="../ClarityNative.targets" />

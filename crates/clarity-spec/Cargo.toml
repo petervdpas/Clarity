@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 serde.workspace = true
 # The catalog of formats code reads and writes (docs/ledger/formats.md).
-clarity-formats = { path = "../../runtimes/rust-formats", version = "0.3.0" }
+clarity-formats = { path = "../../runtimes/rust-formats", version = "0.4.0" }
 # The catalog of sign-in strategies (docs/ledger/signin.md).
 clarity-auth = { path = "../../runtimes/rust-auth", version = "0.3.0" }
 serde_json.workspace = true

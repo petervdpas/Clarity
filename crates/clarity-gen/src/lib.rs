@@ -37,6 +37,7 @@ pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
 pub use rust::runtime_version as rust_runtime_version;
 pub use rust::local_patch as rust_local_patch;
+pub use rust::pdf_version as rust_pdf_version;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css};
 
@@ -1032,6 +1033,12 @@ pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, 
     if let Some(why) = pictures_without_library(project, settings) {
         return Err(vec![why]);
     }
+    if let Some(why) = pdf_without_library(project, settings) {
+        return Err(vec![why]);
+    }
+    if let Some(why) = report_pdfs_without_desktop(project, settings) {
+        return Err(vec![why]);
+    }
     let mut programs = Vec::new();
     if settings.stack.backend == Backend::Csharp && settings.stack.has(Target::Desktop) && settings.stack.has(Target::Web) {
         for target in [Target::Desktop, Target::Web] {
@@ -1059,6 +1066,38 @@ pub(crate) fn pictures_without_library(project: &Project, settings: &Settings) -
     (linked && alone && uses_picture_functions(project)).then(|| {
         "the code calls picture functions, which a Go, C or C++ program runs on Clarity.Image beside Clarity.UI's library: only in a desktop program for now (stack ... desktop, which can also serve a browser)".to_string()
     })
+}
+
+/// Why the project's PDFs cannot be made in a program of its stack: Go, C
+/// and C++ link Clarity.Pdf beside Clarity.UI's library, which only their
+/// desktop program has, as with the picture functions.
+pub(crate) fn pdf_without_library(project: &Project, settings: &Settings) -> Option<String> {
+    use clarity_project::Target;
+    let linked = matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
+    let alone = (settings.stack.has(Target::Web) && !settings.stack.has(Target::Desktop)) || settings.stack.has(Target::Cli);
+    (linked && alone && project.uses_pdf()).then(|| {
+        "the code makes PDFs, which a Go, C or C++ program makes with Clarity.Pdf beside Clarity.UI's library: only in a desktop program for now (stack ... desktop, which can also serve a browser)".to_string()
+    })
+}
+
+/// Why the project's PDFs of reports cannot be made in a program of its
+/// stack: Clarity.UI's library lays a report out, which only a desktop
+/// program has (one that also serves a browser makes them too), on every stack.
+pub(crate) fn report_pdfs_without_desktop(project: &Project, settings: &Settings) -> Option<String> {
+    use clarity_project::Target;
+    let alone = !settings.stack.has(Target::Desktop) || settings.stack.has(Target::Cli);
+    (alone && project.makes_report_pdfs()).then(|| {
+        "the code makes PDFs of reports (pdf of Invoice with ...), which Clarity.UI's library lays out: only in a desktop program for now (stack ... desktop, which can also serve a browser)".to_string()
+    })
+}
+
+/// The theme a PDF reads with `theme true` (docs/ledger/reports-pdf.md): the
+/// theme the app starts with, or Clarity's own, in its light colors, since
+/// paper is light; as JSON, the way Clarity.UI reads a theme.
+pub(crate) fn pdf_theme(project: &Project) -> String {
+    let declared = project.themes.first().and_then(|n| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *n));
+    let theme = declared.cloned().unwrap_or_else(clarity_spec::themes::built_in);
+    serde_json::to_string(&clarity_spec::themes::resolve(&theme, false)).expect("a theme writes as JSON")
 }
 
 /// Whether the program is a window program alone: its stack has the
@@ -1605,10 +1644,10 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
 
 /// The crates of the base libraries every Go, C, C++ and Rust desktop program
 /// links: Clarity.UI and Clarity.Audio, Clarity.Video, Clarity.Image,
-/// Clarity.Formats, Clarity.Auth and Clarity.AppMcp beside it (a program of any
+/// Clarity.Pdf, Clarity.Formats, Clarity.Auth and Clarity.AppMcp beside it (a program of any
 /// target whose code uses a format links Clarity.Formats too, one that signs
 /// people in Clarity.Auth, a command-line program with commands for agents Clarity.AppMcp).
-pub const BASE_LIBRARIES: [&str; 7] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi", "clarity-auth-ffi", "clarity-app-mcp-ffi"];
+pub const BASE_LIBRARIES: [&str; 8] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-pdf-ffi", "clarity-formats-ffi", "clarity-auth-ffi", "clarity-app-mcp-ffi"];
 
 /// Clarity's repository holding `from` or a folder above it; none outside one.
 pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {

@@ -543,8 +543,42 @@ func selectColumns(d Dialect, record Record) string {
 	return strings.Join(columns, ", ")
 }
 
-// Find is the records a query finds, in its order.
+// HoldsLists is a record with stored lists (order.lines): they load with it,
+// one level deep, by the one reference of each listed record to it.
+type HoldsLists interface {
+	LoadLists(db *Db) error
+}
+
+// withLists loads the stored lists of each record found.
+func withLists[T any, P interface {
+	*T
+	Record
+}](db *Db, found []T) ([]T, error) {
+	for i := range found {
+		if held, ok := any(P(&found[i])).(HoldsLists); ok {
+			if err := held.LoadLists(db); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return found, nil
+}
+
+// Find is the records a query finds, in its order, each with its stored lists.
 func Find[T any, P interface {
+	*T
+	Record
+}](db *Db, query Query) ([]T, error) {
+	found, err := FindAlone[T, P](db, query)
+	if err != nil {
+		return nil, err
+	}
+	return withLists[T, P](db, found)
+}
+
+// FindAlone is Find without the records' stored lists: what a list loads
+// with, so a list loads one level deep.
+func FindAlone[T any, P interface {
 	*T
 	Record
 }](db *Db, query Query) ([]T, error) {
@@ -588,7 +622,11 @@ func Get[T any, P interface {
 	if len(found) == 0 {
 		return probe, &NotFoundError{record.Table(), &id}
 	}
-	return found[len(found)-1], nil
+	found, err = withLists[T, P](db, found[len(found)-1:])
+	if err != nil {
+		return probe, err
+	}
+	return found[0], nil
 }
 
 // Load is the record a reference field points at.

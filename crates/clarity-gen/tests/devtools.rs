@@ -233,6 +233,36 @@ fn the_repository_says_how_every_release_stands() {
     assert!(!ide.bumpable && ide.source.is_none(), "the IDE's version is its tag alone");
 }
 
+/// A crate never released (no tag, as clarity-data and clarity-pdf when they
+/// were new) is released with the others, in the table's order, before what
+/// names it: its chain has it, as a release whose code changed.
+#[test]
+fn a_release_never_made_joins_the_chain_before_what_needs_it() {
+    let never = release::Standing { key: "clarityData".into(), name: "clarity-data".into(), tag: None, released: None, source: Some("0.1.0".into()), changed: vec![], changes: Default::default(), next: "0.1.0".into(), bumped: true, bumpable: true };
+    let changed = release::Standing { key: "clarityFormats".into(), name: "clarity-formats".into(), tag: Some("runtimes/rust-formats/v0.3.0".into()), released: Some("0.3.0".into()), source: Some("0.3.0".into()), changed: vec!["runtimes/rust-formats/src/lib.rs".into()], changes: release::changes(&["runtimes/rust-formats/src/lib.rs".to_string()]), next: "0.4.0".into(), bumped: false, bumpable: true };
+    let titles: Vec<String> = release::chain(&repo(), &[never.with_never_released(), changed]).into_iter().map(|e| e.title).collect();
+    let (data, formats) = (titles.iter().position(|t| t == "clarity-data 0.1.0"), titles.iter().position(|t| t == "clarity-formats 0.4.0"));
+    assert!(data.is_some() && data < formats, "{titles:?}");
+    // As the repository reads it: every release without a tag counts as changed.
+    for row in release::standing(&repo()).unwrap().iter().filter(|r| r.tag.is_none() && r.bumpable) {
+        assert!(!row.changes.code.is_empty(), "{} was never released, so it is released", row.name);
+    }
+}
+
+/// What a Clarity run from its repository fetches as the release is the
+/// newest tagged library, not a version bumped for the next release.
+#[test]
+fn the_release_fetched_is_the_newest_tagged_library() {
+    let repo = repo();
+    let tags = release::tags(&repo).unwrap();
+    match release::released_library(&repo) {
+        Some(version) => assert!(tags.contains(&format!("runtimes/rust-ui-ffi/v{version}")), "{version} is a tag"),
+        None => assert!(!tags.iter().any(|t| t.starts_with("runtimes/rust-ui-ffi/v")), "a checkout without the library's tags has none"),
+    }
+    // Until a run sets it, the release is the version this Clarity was built with.
+    assert_eq!(clarity_gen::clarity_ui::release_version(), clarity_gen::clarity_ui::version());
+}
+
 #[test]
 fn a_line_drawn_over_with_a_carriage_return_is_one_line_as_in_a_terminal() {
     // cargo draws its progress bar over itself with \r: the build shows the last drawing, not every one after the other.

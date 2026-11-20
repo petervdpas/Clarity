@@ -1147,9 +1147,21 @@ pub struct WidgetProps {
     pub digits: Option<u32>,
     /// The units a canvas draws in: `units 200 x 100`.
     pub units: Option<CanvasUnits>,
-    /// `zoom`: the person zooms and scrolls the canvas's drawing.
+    /// `zoom`: the person zooms and scrolls the canvas's drawing, or a pdfReport's pages.
     #[serde(default)]
     pub zoom: bool,
+    /// `report Invoice`: the report (`reports/Invoice.report`) a pdfReport shows.
+    #[serde(default)]
+    pub report: Option<String>,
+    /// `save`: a pdfReport offers saving its PDF where the person picks.
+    #[serde(default)]
+    pub save: bool,
+    /// `print`: a pdfReport offers printing its PDF through the system.
+    #[serde(default)]
+    pub print: bool,
+    /// `pages`: a pdfReport offers page arrows and which page of how many.
+    #[serde(default)]
+    pub pages: bool,
     /// `grid 20`: a canvas shows a grid, every so many of its units.
     #[serde(default)]
     pub grid: Option<u32>,
@@ -1639,6 +1651,11 @@ pub struct Project {
     /// The written diagrams of the project's `diagrams` folder (DESIGN
     /// 5.13), by name; empty when there are none or the folder was not read.
     pub diagrams: Vec<crate::diagrams::DiagramFile>,
+    /// The reports of the project's `reports` folder (docs/ledger/reports-pdf.md), by
+    /// name, each with the stylesheet it names; empty when there are none or
+    /// the folder was not read.
+    #[serde(default)]
+    pub reports: Vec<crate::reports::ReportFile>,
     /// The project's README.md (its design goal and guide for whoever works
     /// on it next), from its folder; None when it has none or the folder was
     /// not read.
@@ -1748,6 +1765,29 @@ impl Project {
         self.files.iter().flat_map(|f| &f.pages).find(|page| names.iter().any(|name| shows_setting(&page.widgets, name)))
     }
 
+    /// The field of a stored record's list (`order.lines`) that ties each
+    /// listed record to its owner: the one `ref Order` of Line. A list loads
+    /// with its record by it, on every stack; none when Line has no such ref
+    /// or more than one, or the list is held in a web API's record.
+    pub fn held_list_key(&self, owner: &str, list: &str) -> Option<(&Entity, &Field)> {
+        if self.in_web_api(owner) {
+            return None;
+        }
+        let FieldType::List { item } = &self.entity(owner)?.field(list)?.ty else { return None };
+        let listed = self.entity(&item.name)?;
+        let mut back = listed.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity } if entity.name == owner));
+        match (back.next(), back.next()) {
+            (Some(key), None) => Some((listed, key)),
+            _ => None,
+        }
+    }
+
+    /// The stored lists of entity `owner` that load with its records: each list field with the listed entity and its key.
+    pub fn held_lists(&self, owner: &str) -> Vec<(&Field, &Entity, &Field)> {
+        let Some(entity) = self.entity(owner) else { return Vec::new() };
+        entity.fields.iter().filter_map(|f| self.held_list_key(owner, &f.name.name).map(|(listed, key)| (f, listed, key))).collect()
+    }
+
     pub fn in_web_api(&self, entity: &str) -> bool {
         self.source_of(entity).is_some_and(|source| self.sources.iter().any(|s| s.name == source && !s.sql))
     }
@@ -1786,6 +1826,16 @@ impl Project {
     /// Whether the code reads or writes a format (docs/ledger/formats.md), so its program carries Clarity.Formats.
     pub fn uses_formats(&self) -> bool {
         self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::ReadFormat { .. } | crate::code::ExprKind::FormatOf { .. }))
+    }
+
+    /// Whether the code makes a PDF (`pdf of`), so the program carries Clarity.Pdf.
+    pub fn uses_pdf(&self) -> bool {
+        self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::Pdf { .. }))
+    }
+
+    /// Whether the code makes a PDF of a report (`pdf of Invoice with ...`), which Clarity.UI's library lays out.
+    pub fn makes_report_pdfs(&self) -> bool {
+        self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::PdfReport { .. }))
     }
 
     /// Whether the code calls a function `wanted` says yes to, such as a picture function.

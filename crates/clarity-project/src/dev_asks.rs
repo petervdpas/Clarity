@@ -1,5 +1,6 @@
 //! An agent's ask to press a DevTools tab's Build (the MCP tool
-//! build_piece) or to remove a build folder of the Disk tab (remove_folder),
+//! build_piece), to pick its own build or the release (swap_piece), or to
+//! remove a build folder of the Disk tab (remove_folder),
 //! and its answer, as files in a folder both read: the
 //! agent's side writes `<id>.ask.json`; the IDE takes it (renamed to
 //! `<id>.taken.json`), lets the person allow it as they chose for agents,
@@ -31,6 +32,8 @@ pub enum Action {
     Build,
     /// Remove a build folder of the Disk tab.
     Remove,
+    /// Pick a piece's own build (`mine`) or the release, as its tab's Swap does.
+    Swap,
 }
 
 /// An ask to build a piece or remove a build folder.
@@ -44,6 +47,9 @@ pub struct Ask {
     pub key: String,
     /// Who asks: the MCP client's name.
     pub by: String,
+    /// For a swap: the own build, else the release.
+    #[serde(default)]
+    pub mine: bool,
 }
 
 /// How the build ended, or why it did not run.
@@ -68,10 +74,19 @@ pub fn ask(dir: &Path, key: &str, by: &str) -> Result<String, String> {
 
 /// Writes an ask to do `action` with `key`; its id.
 pub fn ask_to(dir: &Path, action: Action, key: &str, by: &str) -> Result<String, String> {
+    ask_with(dir, action, key, by, false)
+}
+
+/// Writes an ask to swap the piece `key` to its own build (`mine`) or the release; its id.
+pub fn ask_swap(dir: &Path, key: &str, mine: bool, by: &str) -> Result<String, String> {
+    ask_with(dir, Action::Swap, key, by, mine)
+}
+
+fn ask_with(dir: &Path, action: Action, key: &str, by: &str, mine: bool) -> Result<String, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let id = format!("{nanos}-{}", std::process::id());
-    let text = serde_json::to_string(&Ask { id: id.clone(), action, key: key.to_string(), by: by.to_string() }).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string(&Ask { id: id.clone(), action, key: key.to_string(), by: by.to_string(), mine }).map_err(|e| e.to_string())?;
     // Written aside first, so the IDE never reads half an ask.
     let aside = path(dir, &id, "writing");
     std::fs::write(&aside, text).map_err(|e| format!("cannot write {}: {e}", aside.display()))?;

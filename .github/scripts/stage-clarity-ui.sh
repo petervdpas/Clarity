@@ -8,6 +8,8 @@
 #   lib/ the same of clarity_video, include/clarity_video.h: Clarity.Video
 #   lib/ the same of clarity_image, include/clarity_image.h: Clarity.Image,
 #        for programs whose code calls picture functions
+#   lib/ the same of clarity_pdf, include/clarity_pdf.h: Clarity.Pdf,
+#        for programs whose code makes PDFs
 #   lib/ Cisco's openh264 for this system, which every app with video carries
 #        (fetched from Cisco and checked, docs/ledger/video-camera.md)
 # The installed Clarity hands it to Go, C and C++ builds. Beside it, the
@@ -32,12 +34,12 @@ if [ "$browser_ready" = 0 ]; then
 fi
 cp LICENSE "$browser/"
 
-cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi
+cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-pdf-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi
 
 stage=app/src-tauri/clarity-ui
 rm -rf "$stage"
 mkdir -p "$stage/include" "$stage/lib"
-cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h runtimes/rust-app-mcp-ffi/include/clarity_app_mcp.h "$stage/include/"
+cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-pdf-ffi/include/clarity_pdf.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h runtimes/rust-app-mcp-ffi/include/clarity_app_mcp.h "$stage/include/"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) files="clarity_ui.dll clarity_ui.dll.lib" ;;
     Darwin) files="libclarity_ui.dylib" ;;
@@ -48,6 +50,7 @@ for f in $files; do
     cp "target/release/${f/clarity_ui/clarity_audio}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_video}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_image}" "$stage/lib/"
+    cp "target/release/${f/clarity_ui/clarity_pdf}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_formats}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_auth}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_app_mcp}" "$stage/lib/"

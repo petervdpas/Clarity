@@ -1796,10 +1796,6 @@ impl<'a> Emitter<'a> {
                         let id = arrow(&object, &ident(&member.name));
                         self.lift_record(&target.name, &format!("{}_load(db, {id}, {{out}})", prefix(&target.name)), pre)
                     }
-                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
-                        self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
-                        String::new()
-                    }
                     // A record held inside (manual/data.entities.md) is a value of the record; code reaches records through a pointer.
                     Some(FieldType::Record { .. }) => format!("&{}", arrow(&object, &ident(&member.name))),
                     _ => arrow(&object, &ident(&member.name)),
@@ -2093,6 +2089,26 @@ impl<'a> Emitter<'a> {
                 };
                 let (format, options) = self.format_options(mapping, pre);
                 format!("clarity_formats_write({}, clarity_json_of({json}), {options}, {})", string(&format), string(&kind))
+            }
+            // `pdf of text stylesheet css theme true`: pdf/pdf.c's call of Clarity.Pdf, able to refuse.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "\"\"".to_string(), |v| bare(self.value(v, pre)));
+                let theme = option("theme").map_or_else(|| "\"\"".to_string(), |v| format!("(({}) ? {} : \"\")", bare(self.value(v, pre)), string(&crate::pdf_theme(self.project))));
+                let text = bare(self.value(text, pre));
+                self.lift("ClarityBytes", &format!("clarity_pdf_of({text}, {sheet}, {theme}, {{out}})"), pre)
+            }
+            // `pdf of Invoice with order = current`: desktop.c's call of Clarity.UI's library with the data as JSON, able to refuse.
+            ExprKind::PdfReport { report, data } => {
+                let object = self.temp();
+                let _ = writeln!(pre, "cJSON* {object} = cJSON_CreateObject();");
+                for d in data {
+                    let json = self.json(&d.value, pre);
+                    let _ = writeln!(pre, "cJSON_AddItemToObject({object}, {}, {json});", string(&d.name.name));
+                }
+                let text = self.temp();
+                let _ = writeln!(pre, "const char* {text} = clarity_json_of({object});\ncJSON_Delete({object});");
+                self.lift("ClarityBytes", &format!("clarity_desktop_report_pdf({}, {text}, {{out}})", string(&report.name)), pre)
             }
             ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {

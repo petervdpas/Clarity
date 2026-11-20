@@ -80,10 +80,11 @@ fn typed(p: &ParamSpec, at: usize) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool, formats: bool, auth: bool, agents: bool) -> String {
+fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool, pdf: bool, formats: bool, auth: bool, agents: bool) -> String {
     let version = runtime_version();
     let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE)
         .chain(pictures.then_some(super::IMAGE_PACKAGE))
+        .chain(pdf.then_some(super::PDF_PACKAGE))
         .chain(formats.then_some(super::FORMATS_PACKAGE))
         .chain(auth.then_some(super::AUTH_PACKAGE))
         .chain(agents.then_some(super::APP_MCP_PACKAGE))
@@ -141,7 +142,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         .filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql) || (s.sql == crate::ddl::Sql::Sqlite && !crate::file_sources(project, settings).unwrap_or_default().is_empty()))
         .collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), crate::carries_formats(project, settings), crate::carries_auth(project), crate::agent_tools::offers_agents(project)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), project.uses_pdf(), crate::carries_formats(project, settings), crate::carries_auth(project), crate::agent_tools::offers_agents(project)))];
     if crate::agent_tools::offers_agents(project) {
         files.push(text("tools.json", crate::agent_tools::tool_list_file(project, settings)));
     }

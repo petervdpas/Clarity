@@ -83,7 +83,11 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
         Backend::Rust => {
             std::fs::create_dir_all(dir.join(".cargo")).unwrap();
             let runtime = repo().join("runtimes/rust");
-            let patch = clarity_gen::rust_local_patch(&runtime).unwrap();
+            let mut patch = clarity_gen::rust_local_patch(&runtime).unwrap();
+            // A program that makes PDFs takes Clarity.Pdf's crate beside the runtime, as Generate patches it.
+            if std::fs::read_to_string(dir.join("Cargo.toml")).is_ok_and(|m| m.contains("\nclarity-pdf = ")) {
+                patch.push_str(&format!("clarity-pdf = {{ path = \"{}\" }}\n", clarity_project::slashed(&repo().join("runtimes/rust-pdf").canonicalize().unwrap())));
+            }
             std::fs::write(dir.join(".cargo/config.toml"), patch).unwrap();
             // One target folder for every run, so the dependencies compile once.
             command.env("CARGO_TARGET_DIR", rust_target(dir));

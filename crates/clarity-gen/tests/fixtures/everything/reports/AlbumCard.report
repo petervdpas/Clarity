@@ -1,0 +1,10 @@
+<Report name="AlbumCard" paper="A5" margin="15mm" stylesheet="cards.css">
+  <Data name="album" type="Album" />
+  <ReportHeader height="20mm">
+    <Field at="0,0" size="100,10" bind="album.title" class="title" />
+    <Field at="100,0" size="18,6" bind="album.price" align="right" />
+  </ReportHeader>
+  <PageFooter height="8mm">
+    <PageNumber at="55,0" size="10,5" align="center" />
+  </PageFooter>
+</Report>

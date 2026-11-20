@@ -1611,6 +1611,48 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             let (options, end) = parse_format_options(cursor, &format.name, false, value.span)?;
             return Ok(Expr { span: join(token.span, end), kind: ExprKind::FormatOf { value: Box::new(value), mapping: MappingUse::Inline { format, options } } });
         }
+        // `pdf of Invoice with order = current`: a PDF of a report of the reports folder, with its data (docs/ledger/reports-pdf.md).
+        TokenKind::Ident
+            if token.text == "pdf"
+                && cursor.peek_at(1).is_some_and(|t| t.text == "of")
+                && cursor.peek_at(2).is_some_and(|t| t.kind == TokenKind::Ident)
+                && cursor.peek_at(3).is_some_and(|t| t.text == "with") =>
+        {
+            cursor.next();
+            cursor.next();
+            let report = cursor.expect_ident("a report, as in pdf of Invoice with order = current")?;
+            cursor.next();
+            let mut data = Vec::new();
+            let mut end;
+            loop {
+                let name = cursor.expect_ident("the report's data, as in pdf of Invoice with order = current")?;
+                if !cursor.eat(TokenKind::Assign) {
+                    return Err(cursor.error_here("expected '=' and a value, as in pdf of Invoice with order = current"));
+                }
+                let value = parse_expr(cursor)?;
+                end = value.span;
+                data.push(crate::code::FormatOption { name, value });
+                if !cursor.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::PdfReport { report, data } });
+        }
+        // `pdf of text stylesheet css theme true`: a PDF of a Markdown text (docs/ledger/reports-pdf.md).
+        TokenKind::Ident if token.text == "pdf" && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
+            cursor.next();
+            cursor.next();
+            let text = parse_postfix(cursor)?;
+            let mut end = text.span;
+            let mut options = Vec::new();
+            while let Some(name) = cursor.peek().filter(|t| t.kind == TokenKind::Ident && (t.text == "stylesheet" || t.text == "theme")).cloned() {
+                cursor.next();
+                let value = parse_expr(cursor)?;
+                end = value.span;
+                options.push(crate::code::FormatOption { name: Ident { name: name.text.clone(), span: name.span }, value });
+            }
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::Pdf { text: Box::new(text), options } });
+        }
         // `text of orders using OrderFeed`: records written as a mapping says.
         TokenKind::Ident if token.text == "text" && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
             cursor.next();

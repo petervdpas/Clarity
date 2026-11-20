@@ -1,7 +1,7 @@
 //! Markdown read into blocks and spans as every renderer reads it
 //! (conformance/markdown.json).
 
-use clarity_runtime::markdown::{self, Block, BlockKind, Span};
+use clarity_runtime::markdown::{self, Block, BlockKind, ColumnAlign, Span};
 use serde_json::{Map, Value, json};
 
 fn written(block: &Block) -> Value {
@@ -16,6 +16,22 @@ fn written(block: &Block) -> Value {
         BlockKind::Quote => json!({ "kind": "quote", "depth": block.depth, "spans": spans }),
         BlockKind::Rule => json!({ "kind": "rule" }),
         BlockKind::Code => json!({ "kind": "code", "text": block.text }),
+        BlockKind::Math => json!({ "kind": "math", "text": block.text }),
+        BlockKind::Table => {
+            let cells = |row: &Vec<Vec<Span>>| -> Vec<Value> { row.iter().map(|cell| Value::Array(cell.iter().map(written_span).collect())).collect() };
+            let align: Vec<&str> = block
+                .align
+                .iter()
+                .map(|a| match a {
+                    ColumnAlign::None => "none",
+                    ColumnAlign::Left => "left",
+                    ColumnAlign::Center => "center",
+                    ColumnAlign::Right => "right",
+                })
+                .collect();
+            let rows: Vec<Vec<Value>> = block.rows.iter().map(cells).collect();
+            json!({ "kind": "table", "align": align, "header": cells(&block.header), "rows": rows })
+        }
     }
 }
 
@@ -33,6 +49,9 @@ fn written_span(span: &Span) -> Value {
     }
     if let Some(link) = &span.link {
         out.insert("link".into(), json!(link));
+    }
+    if span.math {
+        out.insert("math".into(), json!(true));
     }
     Value::Object(out)
 }

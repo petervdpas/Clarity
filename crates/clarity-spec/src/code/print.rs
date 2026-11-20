@@ -39,6 +39,8 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
         ExprKind::FormatOf { value, mapping: super::MappingUse::Inline { format, options } } => format!("{} of {}{}", format.name, expr(value), format_options(options)),
         ExprKind::FormatOf { value, mapping: super::MappingUse::Named { name } } => format!("text of {} using {}", expr(value), name.name),
+        ExprKind::Pdf { text, options } => format!("pdf of {}{}", expr(text), format_options(options)),
+        ExprKind::PdfReport { report, data } => format!("pdf of {} with {}", report.name, data.iter().map(|d| format!("{} = {}", d.name.name, expr(&d.value))).collect::<Vec<_>>().join(", ")),
         ExprKind::ReadFormat { ty, input, mapping } => {
             let read = match &ty.kind {
                 super::TypeRefKind::Named { name } => name.clone(),

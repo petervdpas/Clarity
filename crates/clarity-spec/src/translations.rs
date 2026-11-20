@@ -115,6 +115,15 @@ pub const FILE_KEYS: [(&str, &str); 7] = [
     ("fileCopySaved", "A copy is in your Downloads folder"),
     ("fileCopySavedAt", "A copy is saved as {place}"),
 ];
+/// Clarity's words of a pdfReport part (docs/ledger/reports-pdf.md): its buttons and why it shows nothing.
+pub const REPORT_KEYS: [(&str, &str); 6] = [
+    ("savePdf", "Save as PDF"),
+    ("printPdf", "Print"),
+    ("previousPage", "Previous page"),
+    ("nextPage", "Next page"),
+    ("pageOfPages", "Page {page} of {pages}"),
+    ("reportNotShown", "The report cannot be shown: {why}"),
+];
 /// Clarity's words of the menu a right click opens on a text input.
 pub const TEXT_EDIT_KEYS: [(&str, &str); 4] = [("cutText", "Cut"), ("copyText", "Copy"), ("pasteText", "Paste"), ("selectAllText", "Select all")];
 /// Clarity's words of the calendar a date input opens: its buttons by month,
@@ -383,6 +392,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&CALENDAR_KEYS)
         .chain(&FOLDER_KEYS)
         .chain(&ZOOM_KEYS)
+        .chain(&REPORT_KEYS)
         .chain(&CANVAS_TOOL_KEYS)
         .chain(&TOOLBOX_KEYS)
         .chain(&PAINT_TOOLBOX_KEYS)
@@ -846,6 +856,7 @@ fn shown(project: &Project) -> Shown {
     let signin_part = project.signin.is_some() && part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Signin || crate::widgets::info(w.props.kind).category == crate::widgets::Category::Signin));
     // A graph has the zoom bar a zooming canvas has.
     let zooms = graphs || part_lists(project).any(|p| any_widget(p, &|w| w.props.zoom));
+    let reports = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::PdfReport));
     let paints = part_lists(project).any(|p| {
         any_widget(p, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
     });
@@ -918,6 +929,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if typed_files { FILE_TYPE_KEYS.as_slice() } else { &[] })
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
+        .chain(if reports { REPORT_KEYS.as_slice() } else { &[] })
         .chain(if paints { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if toolboxes { TOOLBOX_KEYS.as_slice() } else { &[] })
         .chain(if paint_toolboxes { PAINT_TOOLBOX_KEYS.as_slice() } else { &[] })
@@ -952,6 +964,17 @@ fn shown(project: &Project) -> Shown {
         .chain(if signin_part && project.signin.as_ref().is_some_and(|s| s.remember_asks) { SIGNIN_REMEMBER_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.as_ref().is_some_and(|s| s.strategies.iter().any(|line| line.minimum.is_some())) { SECRET_RULE_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.as_ref().is_some_and(|s| s.targets.iter().any(|t| t == "cli")) { SIGNIN_CLI_KEYS.as_slice() } else { &[] });
+    // A report's Text parts use their keys; the report fills their slots from its data, so they are not checked here.
+    for report in &project.reports {
+        let Ok(root) = crate::xml::read(&report.text) else { continue };
+        for band in &root.children {
+            for part in band.children.iter().filter(|p| p.name == "Text") {
+                if let Some(key) = part.get("key").filter(|k| !k.is_empty()) {
+                    shown.uses.push(Use { key: key.to_string(), place: format!("report {}", report.name), path: report.path.clone(), span: part.span, args: None, from_fields: false, declared: true });
+                }
+            }
+        }
+    }
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false, declared: false });

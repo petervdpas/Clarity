@@ -12,6 +12,7 @@ name: Release Clarity.UI library
 #   lib/libclarity_audio.so | libclarity_audio.dylib | clarity_audio.dll and clarity_audio.dll.lib
 #   lib/ the same of clarity_video, include/clarity_video.h (Clarity.Video)
 #   lib/ the same of clarity_image, include/clarity_image.h (Clarity.Image)
+#   lib/ the same of clarity_pdf, include/clarity_pdf.h (Clarity.Pdf)
 #   lib/ the same of clarity_formats, include/clarity_formats.h (Clarity.Formats)
 #   lib/ the same of clarity_auth, include/clarity_auth.h (Clarity.Auth)
 #   lib/ the same of clarity_app_mcp, include/clarity_app_mcp.h (Clarity.AppMcp)
@@ -108,7 +109,7 @@ jobs:
 
       - name: Build the library
         shell: bash
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-pdf-ffi -p clarity-formats-ffi -p clarity-auth-ffi -p clarity-app-mcp-ffi --target ${{ matrix.target }}
 
       - name: Pack the archive
         shell: bash
@@ -117,12 +118,13 @@ jobs:
           version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
           name="clarity-ui-$version-${{ matrix.rid }}"
           mkdir -p "out/$name/include" "out/$name/lib"
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h runtimes/rust-app-mcp-ffi/include/clarity_app_mcp.h "out/$name/include/"
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-pdf-ffi/include/clarity_pdf.h runtimes/rust-formats-ffi/include/clarity_formats.h runtimes/rust-auth-ffi/include/clarity_auth.h runtimes/rust-app-mcp-ffi/include/clarity_app_mcp.h "out/$name/include/"
           for f in ${{ matrix.files }}; do
             cp "target/${{ matrix.target }}/release/$f" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_audio}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_video}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_image}" "out/$name/lib/"
+            cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_pdf}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_formats}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_auth}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_app_mcp}" "out/$name/lib/"

@@ -25,6 +25,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with Bevy, written in your project's own language.
 - [Sound](design.sound.md): How a window plays sound files, tones and melodies with the sound part, on every stack.
 - [Video](design.video.md): How a window plays a video with the video part, on every stack.
+- [Reports](design.reports.md): A report designed on paper, its bands, parts, data and stylesheet, shown by the pdfReport part.
 - [Design as text](design.text.md): The inspector's Code and Text tabs: a window as its `.cxaml` text, with the canvas following what you type, and the code of what is picked.
 
 ## Parts

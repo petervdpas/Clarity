@@ -1,0 +1,81 @@
+module invoices
+
+entity Order
+    number: text(12), required, unique, label @orderNumberLabel
+    notes: text(400), label @orderNotesLabel
+    lines: list<Line>, owned, label @orderLinesLabel
+
+entity Line
+    order: ref Order, required, cascade, label @lineOrderLabel
+    product: text(80), required, label @lineProductLabel
+    price: money, label @linePriceLabel
+
+code Orders
+    // The first order is picked as the window opens, with its lines and its invoice.
+    handler ordersOpened
+        orders = find o in Order order by o.number
+        lines = []
+        if count(orders) > 0
+            current = orders[1]
+            ordersTable.selected = current
+            lines = find l in Line where l.order == current
+            invoicePdf.order = current
+
+code OrdersView
+    // The order picked: its lines, and the invoice laid out again.
+    handler orderPicked
+        current = ordersTable.selected
+        lines = find l in Line where l.order == current
+        invoicePdf.order = current
+
+    handler newOrderClicked
+        let order = new Order
+        order.number = @newOrderNumber
+        save order
+        orders = find o in Order order by o.number
+
+    handler orderChanged
+        save ordersTable.selected
+        if current.id > 0
+            reload current
+            invoicePdf.order = current
+
+    handler removeOrderClicked
+        delete ordersTable.selected
+        orders = find o in Order order by o.number
+
+    handler newLineClicked
+        let line = new Line
+        line.order = current
+        line.product = @newLineProduct
+        save line
+        lines = find l in Line where l.order == current
+        reload current
+        invoicePdf.order = current
+
+    handler lineChanged
+        save linesTable.selected
+        reload current
+        invoicePdf.order = current
+
+    handler removeLineClicked
+        delete linesTable.selected
+        lines = find l in Line where l.order == current
+        reload current
+        invoicePdf.order = current
+
+    // The pdfReport part asks for its data when it shows. The order is read
+    // again, so its lines, which load with it, are as they are stored now.
+    handler invoiceGathered
+        if current.id > 0
+            reload current
+        invoicePdf.order = current
+
+    // The same invoice made by code, as a file in the exports folder.
+    handler savePdfClicked
+        if current.id == 0
+            return
+        reload current
+        let file = pdf of Invoice with order = current
+        write file to exports "invoice-" + current.number + ".pdf"
+        message @invoiceSaved(number = current.number)

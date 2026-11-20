@@ -13,9 +13,11 @@ const source = readFileSync(new URL("../../../runtimes/rust-ui-browser/js/clarit
 type Message = { type: string; what?: string };
 
 /** The worker with a stand-in library: `stops` says where its wasm stops. */
-function worker(stops: "start" | "frame") {
+function worker(stops: "start" | "frame" | "panic") {
   const frames: (() => void)[] = [];
   const posted: Message[] = [];
+  // The options the worker made the library with: its error output among them.
+  let made: { printErr?: (line: string) => void } = {};
   const library = {
     stringToNewUTF8: () => 1,
     UTF8ToString: () => "",
@@ -23,6 +25,10 @@ function worker(stops: "start" | "frame") {
     _clarity_ui_string_free: () => {},
     _clarity_ui_start: () => {
       if (stops === "start") throw new WebAssembly.RuntimeError("Out of bounds call_indirect");
+      if (stops === "panic") {
+        made.printErr?.("panicked: no pool (src/report.rs:12)");
+        throw new WebAssembly.RuntimeError("Unreachable code should not be executed");
+      }
       return 0;
     },
     _clarity_ui_frame: () => {
@@ -54,7 +60,7 @@ function worker(stops: "start" | "frame") {
   const make = context.clarityUiWorker as (scope: object) => (message: object) => void;
   const handle = make({
     post: (message: Message) => posted.push(message),
-    load: async () => async () => library,
+    load: async () => async (options: typeof made) => ((made = options), library),
     frame: (act: () => void) => frames.push(act),
     base: "http://x/",
   });
@@ -87,4 +93,14 @@ test("a frame the wasm stops in says failed once and draws no more", async () =>
   assert.equal(w.frames.length, 0, "no more frames asked for");
   w.handle({ type: "resize", width: 10, height: 10, dpr: 1 });
   assert.equal(w.posted.filter((m) => m.type === "failed").length, 1, "a stopped library is not called again");
+});
+
+test("an engine that panics and stops says its panic's words and place", async () => {
+  const w = worker("panic");
+  w.handle({ type: "start", canvas: w.canvas, width: 800, height: 600, dpr: 1, files: "http://x/files.json" });
+  await settle();
+  const failed = w.posted.filter((m) => m.type === "failed");
+  assert.equal(failed.length, 1, JSON.stringify(w.posted));
+  assert.match(failed[0].what ?? "", /Unreachable code/);
+  assert.match(failed[0].what ?? "", /panicked: no pool \(src\/report\.rs:12\)/);
 });

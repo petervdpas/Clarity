@@ -14,9 +14,13 @@ type Sizes = {
   manualTopics: number;
   /** The places and recent projects beside the cards of the project browser. */
   browserPlaces: number;
+  /** The report designer's palette: parts, bands and fields. */
+  reportPalette: number;
+  /** The report designer's slide-out: the properties of what is picked, or the XML. */
+  reportProperties: number;
 };
 
-const DEFAULTS: Sizes = { sidebar: 300, properties: 380, diagram: 320, output: 240, agent: 380, manualTopics: 250, browserPlaces: 220 };
+const DEFAULTS: Sizes = { sidebar: 300, properties: 380, diagram: 320, output: 240, agent: 380, manualTopics: 250, browserPlaces: 220, reportPalette: 240, reportProperties: 320 };
 
 /** The smallest and largest size of each panel, in pixels. */
 const LIMITS: Record<keyof Sizes, [number, number]> = {
@@ -27,6 +31,8 @@ const LIMITS: Record<keyof Sizes, [number, number]> = {
   agent: [280, 900],
   manualTopics: [180, 480],
   browserPlaces: [150, 420],
+  reportPalette: [200, 560],
+  reportProperties: [240, 900],
 };
 
 function read(): Sizes {

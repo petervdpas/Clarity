@@ -1,7 +1,8 @@
 //! The markdown part: Markdown read into blocks the same way on every stack
 //! (`blocks`, conformance/markdown.json), shown as a page: headings by their
 //! level in the theme's heading font, paragraphs, list items, quotes set in
-//! with a bar, centred scene breaks and code, in a column as wide as the part
+//! with a bar, centred scene breaks, code, tables in columns as wide as
+//! their texts, and math as its TeX (as code, until Clarity draws formulas), in a column as wide as the part
 //! (a reading width with `readingWidth`) from its left with room around it, scrolling when longer than its place. Its text is a Markdown file of the application's resources
 //! (its `source`, by name, as the host gives the file), the text a key gives
 //! in the language shown (its `caption`), or the text it binds. A link opens
@@ -28,7 +29,7 @@ use crate::part_element;
 use crate::parts::{Part, PartBase, PartHost};
 use crate::theme::ThemeLook;
 
-use blocks::{BlockKind, Span};
+use blocks::{BlockKind, ColumnAlign, Span};
 
 /// The room at the right kept for the scroll bar, as C#'s ScrollView keeps it.
 pub const BAR_ROOM: f64 = 8.0;
@@ -72,6 +73,8 @@ pub struct MarkdownLayout {
     /// The bars beside the quotes, and the scene breaks.
     pub quote_bars: Vec<Rect>,
     pub rules: Vec<Rect>,
+    /// The lines under a table's rows, each with whether it is under a header.
+    pub table_lines: Vec<(Rect, bool)>,
     /// The column of text: where it starts and how wide it is.
     pub column: (f64, f64),
     pub height: f64,
@@ -158,7 +161,7 @@ impl Flow<'_> {
             font: piece.font.to_string(),
             bold: piece.bold,
             italic: piece.span.italic,
-            code: piece.span.code || self.code_block,
+            code: piece.span.code || piece.span.math || self.code_block,
             link: piece.span.link.clone(),
         }
     }
@@ -208,7 +211,7 @@ impl Flow<'_> {
         let mut word: Vec<Piece> = Vec::new();
         let first = runs.len();
         for span in spans {
-            let span_font = if span.code { "mono" } else { font };
+            let span_font = if span.code || span.math { "mono" } else { font };
             let span_bold = bold || span.bold;
             for text in pieces(&span.text) {
                 let width = self.measure(text, span_font, span_bold);
@@ -237,6 +240,72 @@ impl Flow<'_> {
     }
 }
 
+/// The room in a table's cell around its text, in the text's size.
+const CELL_PAD: f64 = 0.5;
+
+/// A table laid out from `y`: columns as wide as their widest text (narrowed
+/// together when they do not fit the column of text), its header bold, each
+/// cell aligned as its column says, a line under each row. Gives where the
+/// next block starts.
+fn lay_out_table(block: &blocks::Block, fonts: &Fonts, size: f64, (left, column): (f64, f64), y: f64, runs: &mut Vec<MarkdownRun>, lines: &mut Vec<(Rect, bool)>) -> f64 {
+    let columns = block.align.len();
+    let pad = size * CELL_PAD;
+    let natural = |cell: &[Span], bold: bool| -> f64 { cell.iter().map(|s| fonts.measure(&s.text, if s.code || s.math { "mono" } else { "text" }, size, bold || s.bold)).sum() };
+    let mut widths = vec![0.0f64; columns];
+    for (c, cell) in block.header.iter().enumerate() {
+        widths[c] = widths[c].max(natural(cell, true));
+    }
+    for row in &block.rows {
+        for (c, cell) in row.iter().enumerate() {
+            widths[c] = widths[c].max(natural(cell, false));
+        }
+    }
+    let mut widths: Vec<f64> = widths.iter().map(|w| (w + 2.0 * pad).ceil()).collect();
+    let total: f64 = widths.iter().sum();
+    if total > column && total > 0.0 {
+        let least = size * 3.0 + 2.0 * pad;
+        let scale = column / total;
+        for w in &mut widths {
+            *w = (*w * scale).max(least.min(*w)).floor();
+        }
+    }
+    let rows = std::iter::once((&block.header, true)).chain(block.rows.iter().map(|r| (r, false)));
+    let mut top = y;
+    for (cells, header) in rows {
+        let mut x = left;
+        let mut bottom = top;
+        for (c, width) in widths.iter().enumerate() {
+            let first = runs.len();
+            let flow = Flow { fonts, size, left: x + pad, right: x + width - pad, code_block: false };
+            let end = flow.spans(runs, &cells[c], top + pad / 2.0, "text", header);
+            align_cell(&mut runs[first..], fonts, (x + pad, x + width - pad), block.align[c]);
+            bottom = bottom.max(end);
+            x += width;
+        }
+        top = bottom + pad / 2.0;
+        lines.push((Rect::new(left, top.round(), x - left, 1.0), header));
+        top += 1.0;
+    }
+    top
+}
+
+/// A cell's lines moved to the centre or right of the cell, as its column says.
+fn align_cell(runs: &mut [MarkdownRun], fonts: &Fonts, (left, right): (f64, f64), align: ColumnAlign) {
+    if !matches!(align, ColumnAlign::Center | ColumnAlign::Right) {
+        return;
+    }
+    let mut lines: Vec<f64> = runs.iter().map(|r| r.place.y).collect();
+    lines.dedup();
+    for line in lines {
+        let ends = runs.iter().filter(|r| r.place.y == line).map(|r| r.place.x + fonts.measure(r.text.trim_end(), &r.font, r.size, r.bold)).fold(left, f64::max);
+        let room = right - ends;
+        let shift = if align == ColumnAlign::Right { room } else { room / 2.0 };
+        for run in runs.iter_mut().filter(|r| r.place.y == line) {
+            run.place.x += shift;
+        }
+    }
+}
+
 impl MarkdownLayout {
     /// The blocks of `markdown` laid out to `width`, in the look's text size
     /// and fonts; with `reading`, in a column no wider than a reading width.
@@ -245,6 +314,7 @@ impl MarkdownLayout {
         let mut code_boxes = Vec::new();
         let mut quote_bars = Vec::new();
         let mut rules = Vec::new();
+        let mut table_lines = Vec::new();
         let size = look.size("text");
         let heading = look.size("heading");
         // The column of text: the whole width, with room around it; a reading width at most when the part asks.
@@ -299,7 +369,10 @@ impl MarkdownLayout {
                     rules.push(Rect::new(left + column * 3.0 / 8.0, (y + line / 2.0).round(), column / 4.0, 1.0));
                     y += line;
                 }
-                BlockKind::Code => {
+                BlockKind::Table => {
+                    y = lay_out_table(block, fonts, size, (left, column), y, &mut runs, &mut table_lines);
+                }
+                BlockKind::Code | BlockKind::Math => {
                     let top = y;
                     y += CODE_DOWN;
                     for line in block.text.split('\n') {
@@ -314,7 +387,7 @@ impl MarkdownLayout {
                 }
             }
         }
-        MarkdownLayout { runs, code_boxes, quote_bars, rules, column: (left, column), height: (y + PAD).ceil() }
+        MarkdownLayout { runs, code_boxes, quote_bars, rules, table_lines, column: (left, column), height: (y + PAD).ceil() }
     }
 
     /// The address of the link at a point of the page, from its top left; none off a link.
@@ -398,6 +471,11 @@ impl MarkdownPart {
         self.laid.rules.clone()
     }
 
+    /// The lines under its tables' rows in its page, each with whether it is under a header, as last laid out.
+    pub fn table_lines(&self) -> Vec<(Rect, bool)> {
+        self.laid.table_lines.clone()
+    }
+
     /// How wide its column of text is, as last laid out.
     pub fn column_width(&self) -> f64 {
         self.laid.column.1
@@ -469,6 +547,9 @@ impl MarkdownPart {
         }
         for rule in &self.laid.rules {
             p.fill(rule.offset(page.x, page.y), look.color("muted"), 0.0);
+        }
+        for (line, header) in &self.laid.table_lines {
+            p.fill(line.offset(page.x, page.y), look.color(if *header { "strong_border" } else { "border" }), 0.0);
         }
         for run in &self.laid.runs {
             let place = run.place.offset(page.x, page.y);

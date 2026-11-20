@@ -26,25 +26,46 @@ mod entry {
         CString::new(text.replace('\0', "")).map(CString::into_raw).unwrap_or(std::ptr::null_mut())
     }
 
+    thread_local! {
+        /// The words and place of the last panic, which the panic hook keeps (`main`).
+        static PANICKED: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Keeps each panic's words and place, for `guarded` to give the canvas.
+    pub fn keep_panics() {
+        std::panic::set_hook(Box::new(|info| {
+            let words = info.payload().downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_else(|| "Clarity.UI stopped".to_string());
+            let place = info.location().map(|l| format!(" ({}:{})", l.file(), l.line())).unwrap_or_default();
+            // On the error output too, which the worker gives the page when the engine stops.
+            eprintln!("panicked: {words}{place}");
+            PANICKED.with(|p| *p.borrow_mut() = Some(format!("{words}{place}")));
+        }));
+    }
+
+    /// Runs an entry point that starts the program: a panic inside becomes
+    /// why it could not start, with its words and place, instead of stopping
+    /// Clarity.UI (no panic crosses into the worker's JavaScript).
+    fn guarded(run: impl FnOnce() -> Result<(), String>) -> *mut c_char {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
+            Ok(Ok(())) => std::ptr::null_mut(),
+            Ok(Err(why)) => given(why),
+            Err(_) => given(PANICKED.with(|p| p.borrow_mut().take()).unwrap_or_else(|| "Clarity.UI stopped".to_string())),
+        }
+    }
+
     /// Starts the program from `files.json`'s text, with the person's
     /// `choices` the page kept (JSON), on a canvas of `width` by `height` CSS
     /// pixels at `scale`: NULL, or why it could not start.
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_start(files: *const c_char, choices: *const c_char, width: f64, height: f64, scale: f64, dark: i32) -> *mut c_char {
-        match web::start(text(files), text(choices), width, height, scale as f32, dark != 0) {
-            Ok(()) => std::ptr::null_mut(),
-            Err(why) => given(why),
-        }
+        guarded(|| web::start(text(files), text(choices), width, height, scale as f32, dark != 0))
     }
 
     /// Starts the program again from new `files` (files.json's text) on the
     /// same canvas, with the person's `choices` (JSON): NULL, or why it could not.
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_reload(files: *const c_char, choices: *const c_char) -> *mut c_char {
-        match web::reload(text(files), text(choices)) {
-            Ok(()) => std::ptr::null_mut(),
-            Err(why) => given(why),
-        }
+        guarded(|| web::reload(text(files), text(choices)))
     }
 
     /// Where the design's parts and grids show, as JSON.
@@ -185,7 +206,13 @@ mod entry {
 }
 
 fn main() {
-    // Emscripten runs main as the module loads; the worker calls the entry points after.
+    // Emscripten runs main as the module loads, on the thread that calls the entry points after.
+    // It has no threads here: rayon, which Typst hands work to (a report's layout), gets this one
+    // thread as its pool, so its work runs in place instead of a spawn that fails and aborts.
+    #[cfg(target_os = "emscripten")]
+    entry::keep_panics();
+    #[cfg(target_os = "emscripten")]
+    let _ = rayon::ThreadPoolBuilder::new().num_threads(1).use_current_thread().build_global();
     #[cfg(not(target_os = "emscripten"))]
     eprintln!("clarity-ui is the browser program: build it for wasm32-unknown-emscripten (runtimes/rust-ui-browser/build.sh)");
 }

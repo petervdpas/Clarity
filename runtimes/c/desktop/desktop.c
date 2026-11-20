@@ -263,6 +263,24 @@ ClarityFiles* clarity_desktop_files(const ClarityDesktopOptions* options) {
     return NULL;
 }
 
+bool clarity_desktop_report_pdf(const char* report, const char* data_json, ClarityBytes* out) {
+    report = report ? report : "";
+    data_json = data_json ? data_json : "{}";
+    uint8_t* bytes = NULL;
+    size_t len = 0;
+    if (clarity_report_pdf(report, strlen(report), data_json, strlen(data_json), &bytes, &len) != CLARITY_OK) {
+        char* why = clarity_last_error();
+        bool failed = clarity_fail(CLARITY_INVALID, "%s", why ? why : "the report's PDF could not be made");
+        clarity_string_free(why);
+        return failed;
+    }
+    uint8_t* copy = CLARITY_NEW(uint8_t, len ? len : 1);
+    memcpy(copy, bytes, len);
+    clarity_bytes_free(bytes, len);
+    *out = (ClarityBytes){copy, len};
+    return true;
+}
+
 /// Says why the library refused, on the standard error.
 static int refused(const char* what) {
     char* why = clarity_last_error();

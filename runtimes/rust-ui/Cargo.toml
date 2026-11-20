@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.29.0"
+version = "0.30.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -23,13 +23,18 @@ audio = ["desktop", "dep:clarity-audio"]
 # Videos through Clarity.Video, with their sound through Clarity.Audio: the
 # generator turns it on for a program with video parts.
 video = ["audio", "dep:clarity-video"]
+# Reports' pages (pdfReport) drawn from Clarity.Pdf's laid-out pages with
+# Skia (docs/ledger/reports-pdf.md): the generator turns it on for a program
+# with a pdfReport part.
+pdf = ["dep:clarity-pdf"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.62.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.63.0", default-features = false }
 clarity-auth = { path = "../rust-auth", version = "0.3.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/ledger/canvas-toolbox.md).
 clarity-image = { path = "../rust-image", version = "0.2.0" }
 clarity-graph = { path = "../rust-graph", version = "0.2.0" }
+clarity-pdf = { path = "../rust-pdf", version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # A new picture or file goes to the program as base64 in its JSON value.

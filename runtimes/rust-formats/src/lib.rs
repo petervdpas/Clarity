@@ -13,24 +13,22 @@
 //! describe for Import (`describe`) are written once for every format. The catalog is the list of the
 //! formats' implementations.
 
+// The runtime data these formats read into and write from: Clarity.Data, given on as it was here.
+pub use clarity_data::{fit, kind, normal, numbers, tree};
+
 pub mod build;
 pub mod check;
 pub mod csv;
 pub mod describe;
 pub mod doc;
 pub mod encoding;
-pub mod fit;
 pub mod format;
 pub mod json;
-pub mod kind;
 pub mod mapping;
 pub mod markup;
-pub mod normal;
-pub mod numbers;
 pub mod path;
 pub mod shape;
 pub mod table;
-pub mod tree;
 pub mod xml;
 pub mod xsd;
 pub mod yaml;

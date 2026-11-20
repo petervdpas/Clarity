@@ -1,0 +1,101 @@
+/* Clarity's own stylesheet: how a PDF looks before a stylesheet of the
+   project's own goes over it. The theme's roles come in as custom
+   properties; the fallbacks are Clarity's light theme, so a PDF made with no
+   theme looks as one made with it. */
+
+@page {
+  size: A4;
+  margin: 25mm;
+}
+
+body {
+  font-family: var(--textFont, sans-serif);
+  font-size: 10.5pt;
+  line-height: 1.4;
+  color: var(--text, #1d2330);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--headingFont, sans-serif);
+  font-weight: bold;
+  margin-top: 1.1em;
+  margin-bottom: 0.35em;
+}
+
+h1 { font-size: 18.2pt; }
+h2 { font-size: 14.9pt; }
+h3 { font-size: 12pt; }
+h4, h5, h6 { font-size: 10.5pt; }
+
+p {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+
+ul, ol {
+  padding-left: 1.25em;
+}
+
+ul { list-style-type: disc; }
+ol { list-style-type: decimal; }
+
+li {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+
+blockquote {
+  border-left: 2.25pt solid var(--strongBorder, #b7bec9);
+  padding-left: 0.9em;
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+
+pre {
+  font-family: var(--monoFont, monospace);
+  background-color: var(--codeBackground, #f4f6f9);
+  padding: 4.5pt 6pt;
+  border-radius: 4.5pt;
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+
+code {
+  font-family: var(--monoFont, monospace);
+  background-color: var(--codeBackground, #f4f6f9);
+  padding: 0 1.5pt;
+  border-radius: 2pt;
+}
+
+a {
+  color: var(--accent, #1f5fbf);
+  text-decoration: none;
+}
+
+hr {
+  border-top: 0.75pt solid var(--muted, #5d6677);
+  width: 25%;
+  margin-top: 0.9em;
+  margin-bottom: 0.9em;
+}
+
+table {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+
+th {
+  font-weight: bold;
+  text-align: left;
+  padding: 3pt 6pt;
+  border-bottom: 0.75pt solid var(--strongBorder, #b7bec9);
+}
+
+td {
+  text-align: left;
+  padding: 3pt 6pt;
+  border-bottom: 0.75pt solid var(--border, #d5d9e0);
+}
+
+strong { font-weight: bold; }
+em { font-style: italic; }

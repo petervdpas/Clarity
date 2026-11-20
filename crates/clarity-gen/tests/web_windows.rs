@@ -239,6 +239,35 @@ fn the_library_s_browser_files_join_the_programs_served_to_a_browser() {
     assert!(missing.contains("clarity-ui.js"), "{missing}");
 }
 
+/// The browser files come in two sets: a web program that carries a report
+/// takes the set with reports (the folder's `reports/`), one without the
+/// smaller set; with no set with reports, a program with reports is refused.
+#[test]
+fn a_web_program_with_a_report_takes_the_browser_files_with_reports() {
+    let folder = std::env::current_dir().unwrap().join("../../target/tmp").join(format!("clarity-browser-sets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    for (set, word) in [(folder.clone(), "plain"), (folder.join(clarity_gen::web_browser::REPORTS_SET), "reports")] {
+        std::fs::create_dir_all(&set).unwrap();
+        for name in clarity_gen::clarity_ui::BROWSER_FILES {
+            std::fs::write(set.join(name), word.as_bytes()).unwrap();
+        }
+    }
+    let page = clarity_gen::OutFile { path: clarity_gen::web_browser::PAGE.into(), text: String::new(), bytes: None };
+    let report = clarity_gen::OutFile { path: format!("{}/reports/Invoice.report", clarity_gen::web_browser::RESOURCES), text: "<Report />".into(), bytes: None };
+    let mut programs = vec![
+        clarity_gen::Program { target: clarity_project::Target::Web, files: vec![page.clone(), report] },
+        clarity_gen::Program { target: clarity_project::Target::Web, files: vec![page] },
+    ];
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    let wasm = |p: &clarity_gen::Program| p.files.iter().find(|f| f.path == "browser/clarity-ui.wasm").and_then(|f| f.bytes.as_deref().map(<[u8]>::to_vec));
+    assert_eq!(wasm(&programs[0]).as_deref(), Some(&b"reports"[..]), "the program with a report");
+    assert_eq!(wasm(&programs[1]).as_deref(), Some(&b"plain"[..]), "the program without");
+    std::fs::remove_dir_all(folder.join(clarity_gen::web_browser::REPORTS_SET)).unwrap();
+    let why = clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap_err();
+    assert!(why.contains("reports"), "{why}");
+    std::fs::remove_dir_all(&folder).unwrap();
+}
+
 // The IDE's preview and design canvas on Clarity.UI (manual/design.parts.md, clarity_gen::preview).
 
 use clarity_gen::preview::{self, PreviewProgram, Shown};
@@ -770,4 +799,28 @@ fn the_preview_s_files_say_whether_the_project_is_a_desktop_one() {
     assert_eq!(files["desktop"], true);
     let files: serde_json::Value = serde_json::from_str(&preview::with_desktop("{\"windows\":{}}\n", false)).unwrap();
     assert_eq!(files["desktop"], false);
+}
+
+/// The preview serves what a program carries among its resources (a
+/// report among them) and each report's sample data, which its pdfReport
+/// part shows while no code gives it data; files.json names them all.
+#[test]
+fn the_preview_serves_the_reports_and_their_sample_data() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/invoices.clarity");
+    let dir = clarity_project::module_dir(&file);
+    let library = Path::new(env!("CARGO_TARGET_TMPDIR")).join("preview-library-reports");
+    std::fs::create_dir_all(&library).unwrap();
+    let (loaded_file, loaded_dir) = (file.clone(), dir.clone());
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), "s3cret").unwrap();
+    let address = server.address().to_string();
+    let path = |rest: &str| format!("/s3cret/{rest}");
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Orders&design=0"), "");
+    let read: Value = serde_json::from_slice(&body).unwrap();
+    let named: Vec<&str> = read["resources"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+    assert!(named.contains(&"reports/Invoice.report") && named.contains(&"reports/Invoice.sample.json"), "{named:?}");
+    let (head, body) = ask(&address, "GET", &path("resources/reports/Invoice.sample.json"), "");
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    let sample: Value = serde_json::from_slice(&body).unwrap();
+    assert!(sample["order"]["lines"].as_array().is_some_and(|l| !l.is_empty()), "{sample}");
+    assert!(ask(&address, "GET", &path("resources/reports/Invoice.report"), "").0.starts_with("HTTP/1.1 200"));
 }

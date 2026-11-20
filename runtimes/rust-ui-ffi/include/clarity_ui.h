@@ -133,6 +133,15 @@ CLARITY_API ClarityStatus clarity_theme_choose(const char *name, size_t name_len
  * {"language":"nl","languages":[{"name","label","current"}],"theme":"NightOwl"|null,"themes":[...]} */
 CLARITY_API ClarityStatus clarity_choices_json(char **out);
 
+/* A PDF of a report of the running program (`pdf of Invoice with order = current`):
+ * its data as JSON by the report's Data names. The caller gives the bytes back
+ * with clarity_bytes_free. Fails, with clarity_last_error, for a report the
+ * program does not carry or data that does not fit. */
+CLARITY_API ClarityStatus clarity_report_pdf(const char *report, size_t report_len, const char *data, size_t data_len, uint8_t **out, size_t *out_len);
+
+/* Gives back bytes the library gave. NULL is let go. */
+CLARITY_API void clarity_bytes_free(uint8_t *bytes, size_t len);
+
 /* A translated text of the model by its key; `english` when the model has none. */
 CLARITY_API ClarityStatus clarity_translate(const char *key, size_t key_len, const char *english, size_t english_len, char **out);
 

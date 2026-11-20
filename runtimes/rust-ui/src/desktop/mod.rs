@@ -165,6 +165,7 @@ pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
 
 /// Runs a program held elsewhere too (one the C interface gives), as `run` does.
 pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
+    crate::app_files::set_running(files);
     // Driven without a window, step by step from standard input (manual/start.how-it-works.md).
     if std::env::var_os(crate::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {
         return crate::headless::run_shared(program, files);

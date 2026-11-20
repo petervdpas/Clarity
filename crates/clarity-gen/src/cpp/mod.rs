@@ -228,6 +228,13 @@ pub(crate) const PICTURE_FILES: [(&str, &str); 2] = [
     ("pictures/pictures.hpp", include_str!("../../../../runtimes/cpp/pictures/pictures.hpp")),
 ];
 
+/// The PDFs of code on Clarity.Pdf's library (docs/ledger/reports-pdf.md),
+/// carried only when the code makes one (clarity_use_pdf links them).
+pub(crate) const PDF_FILES: [(&str, &str); 2] = [
+    ("pdf/pdf.cpp", include_str!("../../../../runtimes/cpp/pdf/pdf.cpp")),
+    ("pdf/pdf.hpp", include_str!("../../../../runtimes/cpp/pdf/pdf.hpp")),
+];
+
 pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
     ("http/http.cpp", include_str!("../../../../runtimes/cpp/http/http.cpp")),
     ("http/http.hpp", include_str!("../../../../runtimes/cpp/http/http.hpp")),
@@ -298,7 +305,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines || screen_engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
-    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project));
+    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project)).chain(PDF_FILES.iter().filter(|_| project.uses_pdf()));
     let formats_files = FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     let secret_files = SECRET_FILES.iter().filter(|_| keeps_secrets(project, settings));
     let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
@@ -316,7 +323,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // The HTTP client, for code that calls out (manual/code.web-apis.md).
     let http_include = if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" };
     // The picture functions, for code that calls one (docs/ledger/picture-functions.md).
-    let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.hpp\"\n" } else { "" };
+    let pictures_include = format!(
+        "{}{}",
+        if crate::uses_picture_functions(project) { "#include \"pictures/pictures.hpp\"\n" } else { "" },
+        if project.uses_pdf() { "#include \"pdf/pdf.hpp\"\n" } else { "" }
+    ) + if project.makes_report_pdfs() { "#include \"ui/ui.hpp\"\n" } else { "" };
     // The data formats, for code that reads or writes one (docs/ledger/formats.md).
     let formats_include = if crate::carries_formats(project, settings) { "#include \"formats/formats.hpp\"\n#include \"formats/file_source.hpp\"\n" } else { "" };
     // Signing people in, for a project that does (docs/ledger/signin.md).

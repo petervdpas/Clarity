@@ -3358,6 +3358,33 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+    /// `pdf of text stylesheet css theme true`: a Markdown text made into a
+    /// PDF's bytes (docs/ledger/reports-pdf.md). Pure, so functions make PDFs
+    /// too; an engine keeps to its own values.
+    fn pdf(&mut self, text: &Expr, options: &[super::FormatOption], span: Span) -> Ty<'a> {
+        if self.engine.is_some() {
+            self.error("'pdf of' runs in the program, not in an engine", span);
+        }
+        let given = self.expr(text, Some(Ty::Text));
+        if !Ty::Text.accepts(&given) && !matches!(given, Ty::Unknown) {
+            self.error(format!("'pdf of' takes a Markdown text, not {}", given.name()), text.span);
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for option in options {
+            let name = option.name.name.as_str();
+            if seen.contains(&name) {
+                self.error(format!("the option '{name}' is given twice"), option.name.span);
+            }
+            seen.push(name);
+            let (wanted, kind) = if name == "theme" { (Ty::Bool, "bool") } else { (Ty::Text, "text") };
+            let ty = self.expr(&option.value, Some(wanted.clone()));
+            if !wanted.accepts(&ty) && !matches!(ty, Ty::Unknown) {
+                self.error(format!("the option '{name}' of pdf is {kind}, not {}", ty.name()), option.value.span);
+            }
+        }
+        Ty::Bytes
+    }
+
     /// `read Order from json text at "path"`: an entity or a list of one,
     /// read from a format of the catalog (docs/ledger/formats.md), from text,
     /// with the format's options. Pure, so functions read formats too; an
@@ -3896,6 +3923,9 @@ impl<'a> BodyChecker<'_, 'a> {
                 let writable = if crate::typing::settable(property) { Ok(()) } else { Err(format!("{name}.{property} is read, not set: it is what the person chose")) };
                 Some(Place::Value { ty, writable })
             }
+            // The data a pdfReport's report takes (`invoicePdf.order`): the report's own file says
+            // which (reports::check, once the reports are read), and what it holds.
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::PdfReport) => value(Ty::Unknown),
             // A spin box's range, whole numbers: as its line writes it, until code sets it.
             "min" | "max" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Spinbox) => value(Ty::Integer),
             // A pinnable slide-out pinned open beside the window's parts.
@@ -4259,6 +4289,25 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Text
             }
             ExprKind::ReadFormat { ty, input, mapping } => self.read_format(ty, input, mapping, expr.span),
+            ExprKind::Pdf { text, options } => self.pdf(text, options, expr.span),
+            // The report and the data it takes are checked once the reports are read (reports::check); here each value, a record.
+            ExprKind::PdfReport { data, .. } => {
+                if self.engine.is_some() {
+                    self.error("'pdf of' runs in the program, not in an engine", expr.span);
+                }
+                let mut seen: Vec<&str> = Vec::new();
+                for given in data {
+                    if seen.contains(&given.name.name.as_str()) {
+                        self.error(format!("the data '{}' is given twice", given.name.name), given.name.span);
+                    }
+                    seen.push(&given.name.name);
+                    let ty = self.expr(&given.value, None);
+                    if !matches!(ty, Ty::Record(_) | Ty::Unknown) {
+                        self.error(format!("a report's data is a record, as its Data says; '{}' is {}", given.name.name, ty.name()), given.value.span);
+                    }
+                }
+                Ty::Bytes
+            }
             ExprKind::ReadBytes { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -5201,6 +5250,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::Http { url, body, headers, query, .. } => crate::code::http_exprs(url, body.as_deref(), headers, query).iter().any(|e| mentions(e, var)),
         ExprKind::FormatOf { value, mapping } => mentions(value, var) || mapping.options().iter().any(|o| mentions(&o.value, var)),
+        ExprKind::Pdf { text, options } => mentions(text, var) || options.iter().any(|o| mentions(&o.value, var)),
+        ExprKind::PdfReport { data, .. } => data.iter().any(|o| mentions(&o.value, var)),
         ExprKind::ReadFormat { input, mapping, .. } => mentions(input, var) || mapping.options().iter().any(|o| mentions(&o.value, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
@@ -5261,6 +5312,68 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
         }
     }
     project.diagnostics.extend(found);
+}
+
+/// A stored record's list of records (`order.lines`, kept in its own table)
+/// loads with the record by the one `ref Order` of Line
+/// (`Project::held_list_key`); without exactly one, code cannot read it.
+/// Setting it is refused: the listed records are saved each by itself.
+pub(crate) fn check_held_lists(project: &mut crate::model::Project) {
+    let types = types(&project.files);
+    let mut found = Vec::new();
+    for file in &project.files {
+        let Some(file_types) = types.get(&file.path) else { continue };
+        let bodies = file
+            .code
+            .iter()
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body).chain(b.events.iter().map(|e| &e.body)))
+            .chain(file.functions.iter().map(|f| &f.body))
+            .chain(file.commands.iter().map(|c| &c.body));
+        for body in bodies {
+            set_held_lists(body, project, file_types, &mut |e: &Expr| {
+                found.push(Diagnostic::error(format!("'{}' comes from the database with its record: save each record of it by itself", super::print::expr(e)), e.span).in_file(&file.path));
+            });
+            super::each_expr_in(body, &mut |e| {
+                let ExprKind::Member { object, member } = &e.kind else { return };
+                let TypeInfo::Record(entity) = file_types.type_of(object) else { return };
+                let Some(FieldType::List { item }) = project.entity(&entity).and_then(|en| en.field(&member.name)).map(|f| &f.ty) else { return };
+                if project.in_web_api(&entity) || project.held_list_key(&entity, &member.name).is_some() {
+                    return;
+                }
+                found.push(
+                    Diagnostic::error(format!("'{}' loads by the one field 'ref {entity}' of {}, which it needs exactly once", super::print::expr(e), item.name), e.span)
+                        .in_file(&file.path),
+                );
+            });
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// Each assignment in `body` whose target is a stored record's list.
+fn set_held_lists(body: &[Stmt], project: &crate::model::Project, types: &FileTypes, found: &mut dyn FnMut(&Expr)) {
+    for stmt in body {
+        if let StmtKind::Assign { target, .. } = &stmt.kind
+            && let ExprKind::Member { object, member } = &target.kind
+            && let TypeInfo::Record(entity) = types.type_of(object)
+            && !project.in_web_api(&entity)
+            && matches!(project.entity(&entity).and_then(|en| en.field(&member.name)).map(|f| &f.ty), Some(FieldType::List { .. }))
+        {
+            found(target);
+        }
+        match &stmt.kind {
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    set_held_lists(&branch.body, project, types, found);
+                }
+                if let Some(otherwise) = otherwise {
+                    set_held_lists(otherwise, project, types, found);
+                }
+            }
+            StmtKind::For { body, .. } => set_held_lists(body, project, types, found),
+            _ => {}
+        }
+    }
 }
 
 /// Entities in a web API (manual/code.web-apis.md) are not in a database, so `find`,
@@ -5689,6 +5802,17 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             each_expr(value, found);
             for option in mapping.options() {
                 each_expr(&option.value, found);
+            }
+        }
+        ExprKind::Pdf { text, options } => {
+            each_expr(text, found);
+            for option in options {
+                each_expr(&option.value, found);
+            }
+        }
+        ExprKind::PdfReport { data, .. } => {
+            for given in data {
+                each_expr(&given.value, found);
             }
         }
         ExprKind::ReadFormat { input, mapping, .. } => {

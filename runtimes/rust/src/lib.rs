@@ -43,6 +43,7 @@ pub mod ranges;
 pub mod record_file;
 pub mod reorder;
 pub mod required;
+pub mod shown;
 pub mod screen;
 #[cfg(feature = "secrets")]
 pub mod secrets;
@@ -340,6 +341,12 @@ pub trait Record: Sized + Clone {
         0
     }
     fn set_version(&mut self, _version: i64) {}
+    /// Loads the record's stored lists (`order.lines`), one level deep, each
+    /// by its one reference back (docs/ledger/runtime-data.md); a record
+    /// without stored lists has none to load.
+    fn load_lists(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
     /// Why a save or delete of this record is refused when someone saved it
     /// since: `current` is the record as it is stored now, whose fields an
     /// entity's own text may name, and `db` loads what they refer to
@@ -1300,12 +1307,25 @@ impl Db {
         Ok(())
     }
 
-    /// The records a query finds, in its order.
+    /// The records a query finds, in its order, each with its stored lists.
     pub fn find<R: Record>(&self, query: &Query) -> Result<Vec<R>> {
+        self.with_lists(self.find_alone(query)?)
+    }
+
+    /// `find` without the records' stored lists: what a list loads with, so a list loads one level deep.
+    pub fn find_alone<R: Record>(&self, query: &Query) -> Result<Vec<R>> {
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
         let (sql, params) = query.sql(d, R::TABLE, R::KEY, &select_columns::<R>(d));
         records(&mut **conn, &sql, &params)
+    }
+
+    /// Loads the stored lists of each record found.
+    fn with_lists<R: Record>(&self, mut found: Vec<R>) -> Result<Vec<R>> {
+        for record in &mut found {
+            record.load_lists(self)?;
+        }
+        Ok(found)
     }
 
     fn select<R: Record>(&self, filter: impl Fn(Dialect) -> String, params: &[SqlValue]) -> Result<Vec<R>> {
@@ -1317,16 +1337,19 @@ impl Db {
 
     /// Every stored record of an entity, in the order they were stored.
     pub fn all<R: Record>(&self) -> Result<Vec<R>> {
-        self.select(|d| format!(" ORDER BY {}", d.quote(R::KEY)), &[])
+        self.with_lists(self.select(|d| format!(" ORDER BY {}", d.quote(R::KEY)), &[])?)
     }
 
     pub fn get<R: Record>(&self, id: Id) -> Result<R> {
-        self.select::<R>(|d| format!(" WHERE {} = {}", d.quote(R::KEY), d.mark(1)), &[SqlValue::Integer(id)])?
+        let mut record = self
+            .select::<R>(|d| format!(" WHERE {} = {}", d.quote(R::KEY), d.mark(1)), &[SqlValue::Integer(id)])?
             .pop()
             .ok_or(Error::NotFound {
                 table: R::TABLE,
                 id: Some(id),
-            })
+            })?;
+        record.load_lists(self)?;
+        Ok(record)
     }
 
     /// The record a `ref` field points at.

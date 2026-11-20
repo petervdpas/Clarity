@@ -1,7 +1,8 @@
 <script lang="ts">
   // The markdown part: Markdown read into blocks the same way on every stack
   // (markdownBlocks.ts, conformance/markdown.json), shown as headings,
-  // paragraphs, list items and code, wrapped, scrolling when longer than the
+  // paragraphs, list items, code, tables, and math as its TeX (as code, until
+  // Clarity draws formulas), wrapped, scrolling when longer than the
   // part. A link opens in the browser, through `onlink`.
   import { markdownBlocks, type Span } from "../screen/markdownBlocks";
 
@@ -18,9 +19,9 @@
 {#snippet spans(list: Span[])}
   {#each list as span, i (i)}
     {#if span.link}
-      <a href={span.link} class:bold={span.bold} class:italic={span.italic} class:code={span.code} onclick={(e) => follow(e, span.link!)}>{span.text}</a>
+      <a href={span.link} class:bold={span.bold} class:italic={span.italic} class:code={span.code || span.math} onclick={(e) => follow(e, span.link!)}>{span.text}</a>
     {:else}
-      <span class:bold={span.bold} class:italic={span.italic} class:code={span.code}>{span.text}</span>
+      <span class:bold={span.bold} class:italic={span.italic} class:code={span.code || span.math}>{span.text}</span>
     {/if}
   {/each}
 {/snippet}
@@ -40,6 +41,25 @@
       <blockquote style:margin-left="{(block.depth - 1) * 1.2}em">{@render spans(block.spans)}</blockquote>
     {:else if block.kind === "rule"}
       <hr />
+    {:else if block.kind === "table"}
+      <table>
+        <thead>
+          <tr>
+            {#each block.header as cell, c (c)}
+              <th style:text-align={block.align[c] === "none" ? null : block.align[c]}>{@render spans(cell)}</th>
+            {/each}
+          </tr>
+        </thead>
+        <tbody>
+          {#each block.rows as row, r (r)}
+            <tr>
+              {#each row as cell, c (c)}
+                <td style:text-align={block.align[c] === "none" ? null : block.align[c]}>{@render spans(cell)}</td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {:else}
       <pre>{block.text}</pre>
     {/if}
@@ -85,6 +105,24 @@
 
   .heading {
     font-weight: 600;
+  }
+
+  /* A table as wide as its texts, a line under each row, the header's the strong one. */
+  table {
+    border-collapse: collapse;
+    align-self: flex-start;
+  }
+
+  th,
+  td {
+    padding: 0.25em 0.5em;
+    text-align: left;
+    border-bottom: 1px solid var(--border, #ccc);
+  }
+
+  th {
+    font-weight: 600;
+    border-bottom-color: var(--border-strong, #888);
   }
 
   .level1 {

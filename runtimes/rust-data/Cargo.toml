@@ -1,0 +1,16 @@
+[package]
+name = "clarity-data"
+description = "Clarity.Data: the runtime data of the programs Clarity generates (records, their lists and their values), decided once for every stack"
+# Released on its own (tag runtimes/rust-data/vX.Y.Z), before Clarity.Formats, which is built on it.
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "records", "data", "runtime"]
+categories = ["data-structures"]
+include = ["src/**", "README.md", "LICENSE"]
+
+# No dependencies: its own tree keeps numbers exactly as written and object
+# names in their order.
+[dependencies]

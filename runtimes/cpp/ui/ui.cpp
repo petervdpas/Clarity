@@ -1,5 +1,7 @@
 #include "ui/ui.hpp"
 
+#include "clarity/errors.hpp"
+
 #include <cstdio>
 #include <utility>
 
@@ -24,6 +26,18 @@ void quietly(const char* where, F&& f) {
 }
 
 }  // namespace
+
+std::vector<uint8_t> report_pdf(const std::string& report, const std::string& data_json) {
+    uint8_t* bytes = nullptr;
+    size_t len = 0;
+    if (clarity_report_pdf(report.data(), report.size(), data_json.data(), data_json.size(), &bytes, &len) != CLARITY_OK) {
+        std::string why = take(clarity_last_error());
+        throw clarity::InvalidError(why.empty() ? "the report's PDF could not be made" : why);
+    }
+    std::vector<uint8_t> made(bytes, bytes + len);
+    clarity_bytes_free(bytes, len);
+    return made;
+}
 
 void check(ClarityStatus status) {
     if (status == CLARITY_OK) return;

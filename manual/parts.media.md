@@ -90,12 +90,35 @@ code ScreenView
 
 The checker refuses a volume above 100, a source that is not an `.mp4` file or is not in the resources folder, and in code a word a video does not hear ("a video hears play, pause, resume, seek, stop or volume"), the wrong number of values, and setting what it plays ("is read, not set").
 
+### `pdfReport`
+
+Shows a report of the project (`reports/Invoice.report`, see [Reports](design.reports.md)) laid out with the data its handler gathers, page under page, sharp at any zoom.
+
+```clarity
+page Orders: window
+    data current: Order
+    pdfReport name invoicePdf at 1,1 span 12 rows 10 report Invoice save print zoom pages on gather: invoiceGather
+
+code Orders
+    handler invoiceGather
+        invoicePdf.order = current
+```
+
+In the window's file: `<PdfReport name="invoicePdf" zoom="true" report="Invoice" save="true" print="true" pages="true" ongather="invoiceGather" />`.
+
+- `report` names the report it shows. When the part shows, its `gather` handler runs and sets the report's data: `invoicePdf.order` for a report whose `<Data name="order" type="Order" />` says it takes an order. Setting it again shows the new data.
+- Its options, off unless written: `save` (a Save as PDF button, which asks where with the system's dialog), `print` (opens the PDF in the system's program for PDFs, which prints it), `zoom` (zoom out, back to the width, zoom in; Ctrl with the wheel too) and `pages` (previous and next page, and which page of how many). The wheel scrolls its pages.
+- A report the program does not carry, or data that does not fit, is said in its place; the rest of the window goes on.
+
+The checker refuses a pdfReport without `report`, a report that is not in the reports folder ("there is no report 'Invoce' in the reports folder; it has Invoice"), and code setting data the report does not take ("report Invoice takes no data 'ordr'; it takes order").
+
 ## See also
 
 - [Sound](design.sound.md): what code tells a sound and reads of it, and songs.
 - [Video](design.video.md): what code tells a video, its decoders and codecs.
 - [Time](parts.time.md): a timer that moves a slider along as a song plays.
 - [Handlers](code.handlers.md): the code behind that tells them what to play.
+- [Reports](design.reports.md): what a report holds, its bands and parts, and its stylesheet.
 
 ## The parts at a glance
 
@@ -105,5 +128,6 @@ The checker refuses a volume above 100, a source that is not an `.mp4` file or i
 |---|---|---|---|---|---|---|
 | Sound | `sound` | nothing | 1 x 1 | no | `source`, `volume`, `repeat` | `end`, `fail` |
 | Video | `video` | nothing | 8 x 6 | no | `source`, `volume`, `repeat` | `end`, `fail` |
+| PDF report | `pdfReport` | nothing | 8 x 10 | no | `report`, `save`, `print`, `zoom`, `pages` | `gather` |
 
 <!-- /catalog -->

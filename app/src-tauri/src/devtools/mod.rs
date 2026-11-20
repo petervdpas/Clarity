@@ -119,7 +119,7 @@ pub struct DevToolsView {
 #[ts(export)]
 pub struct BuildAsk {
     pub id: String,
-    /// `build` a piece or `remove` a build folder of the Disk tab.
+    /// `build` a piece, `useOwn` or `useRelease` for its Swap, or `remove` a build folder of the Disk tab.
     pub action: String,
     pub key: String,
     pub name: String,
@@ -131,7 +131,7 @@ fn release_of(piece: &Piece) -> String {
         "rustCrates" => clarity_gen::rust_runtime_version().to_string(),
         "nugetPackages" => clarity_gen::csharp_runtime_version().to_string(),
         "goModule" => clarity_gen::go_runtime_version().to_string(),
-        _ => clarity_ui::version().to_string(),
+        _ => clarity_ui::release_version().to_string(),
     }
 }
 
@@ -184,12 +184,19 @@ fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
 fn release_libraries() -> Result<PathBuf, String> {
     let os = std::env::consts::OS;
     let cache = clarity_ui::cache_dir_in(os, |name| std::env::var(name).ok());
-    let release = clarity_ui::library_in(None, None, cache.as_deref(), clarity_ui::rid(os, std::env::consts::ARCH).as_deref(), clarity_ui::version(), os);
+    let release = clarity_ui::library_in(None, None, cache.as_deref(), clarity_ui::rid(os, std::env::consts::ARCH).as_deref(), clarity_ui::release_version(), os);
     clarity_ui::provide(release, clarity_ui::RELEASES, &crate::build::download, &|line| eprintln!("{line}"))
 }
 
 /// Takes `swaps`: the library choices they give are kept and used from now on.
-fn apply(repo: &Path, swaps: Swaps) -> Result<(), String> {
+/// `why` names what changed them; the IDE's log keeps each change, with the
+/// swaps before and after, so a swap that went shows where it went.
+fn apply(repo: &Path, swaps: Swaps, why: &str) -> Result<(), String> {
+    let before = Environment::current().swaps().clone();
+    if before != swaps {
+        let own = |s: &Swaps| s.tabs().into_iter().filter(|k| s.mine(k)).collect::<Vec<_>>();
+        crate::logging::line(&format!("[devtools] swaps by {why}: open {:?}, own {:?} -> open {:?}, own {:?}", before.tabs(), own(&before), swaps.tabs(), own(&swaps)));
+    }
     let os = std::env::consts::OS;
     let natives = swaps.tabs().into_iter().filter(|k| swaps.mine(k)).filter_map(swap::piece).any(|p| matches!(p.kind, Kind::Native { .. }));
     let release = if natives { Some(release_libraries()?) } else { None };
@@ -221,16 +228,33 @@ pub fn devtools_view(jobs: State<DevJobs>) -> Option<DevToolsView> {
 }
 
 /// Swaps a piece to the cDdev's own build (`mine`) or back to the release.
+/// `ask` is the agent's ask it answers (swap_piece).
 #[tauri::command(async)]
-pub fn devtools_swap(key: String, mine: bool, jobs: State<DevJobs>) -> Result<DevToolsView, String> {
+pub fn devtools_swap(key: String, mine: bool, ask: Option<String>, jobs: State<DevJobs>) -> Result<DevToolsView, String> {
+    let swapped = swap_now(&key, mine, &jobs);
+    if let Some(id) = &ask {
+        let text = match &swapped {
+            Ok(_) => format!("{key} now uses {}.", if mine { "the cDdev's own build" } else { "the release" }),
+            Err(why) => why.clone(),
+        };
+        let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: swapped.is_ok(), text });
+    }
+    swapped
+}
+
+fn swap_now(key: &str, mine: bool, jobs: &State<DevJobs>) -> Result<DevToolsView, String> {
+    let key = key.to_string();
     let repo = repo()?;
     let mut swaps = Environment::current().swaps().clone();
-    // A tab shown by itself (its own build behind its source) is kept once its piece is swapped.
-    if !swaps.tabs().contains(&key.as_str()) && view(&repo, &jobs.0).tabs.iter().any(|t| t.key == key && t.auto) {
+    if !swaps.tabs().contains(&key.as_str()) {
+        // A piece without a tab uses the release already; to its own build, its tab opens and stays.
+        if !mine {
+            return Ok(view(&repo, &jobs.0));
+        }
         swaps.add(&key)?;
     }
     swaps.swap(&key, mine)?;
-    apply(&repo, swaps)?;
+    apply(&repo, swaps, &format!("swap {key} to {}", if mine { "own" } else { "release" }))?;
     Ok(view(&repo, &jobs.0))
 }
 
@@ -241,7 +265,7 @@ pub fn devtools_add_tab(key: String, jobs: State<DevJobs>) -> Result<DevToolsVie
     let mut swaps = Environment::current().swaps().clone();
     swaps.add(&key)?;
     hidden().remove(&key);
-    apply(&repo, swaps)?;
+    apply(&repo, swaps, &format!("add tab {key}"))?;
     Ok(view(&repo, &jobs.0))
 }
 
@@ -252,7 +276,7 @@ pub fn devtools_close_tab(key: String, jobs: State<DevJobs>) -> Result<DevToolsV
     let mut swaps = Environment::current().swaps().clone();
     swaps.close(&key)?;
     hidden().insert(key.clone());
-    apply(&repo, swaps)?;
+    apply(&repo, swaps, &format!("close tab {key}"))?;
     Ok(view(&repo, &jobs.0))
 }
 
@@ -284,7 +308,7 @@ pub fn devtools_build(key: String, by: Option<String>, ask: Option<String>, app:
         // A swapped piece built again: the folder builds use is put together again from it.
         let swaps = Environment::current().swaps().clone();
         if job.state == JobState::Passed && swaps.mine(piece.key) {
-            if let Err(why) = apply(&after_repo, swaps) {
+            if let Err(why) = apply(&after_repo, swaps, &format!("build of {} ended", piece.key)) {
                 eprintln!("clarity: {why}");
             }
         }
@@ -323,6 +347,9 @@ pub fn watch_asks(app: AppHandle) {
                 }
                 let named = match ask.action {
                     dev_asks::Action::Build => swap::piece(&ask.key).map(|p| ("build", p.name.to_string())).ok_or_else(|| format!("there is no piece {}", ask.key)),
+                    dev_asks::Action::Swap => swap::piece(&ask.key)
+                        .map(|p| (if ask.mine { "useOwn" } else { "useRelease" }, p.name.to_string()))
+                        .ok_or_else(|| format!("there is no piece {}", ask.key)),
                     dev_asks::Action::Remove => match repo() {
                         Ok(repo) => clarity_gen::tools::devtools::disk::places(&repo)
                             .into_iter()

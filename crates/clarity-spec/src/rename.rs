@@ -440,6 +440,17 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(&option.value, name, found);
             }
         }
+        ExprKind::Pdf { text, options } => {
+            expr(text, name, found);
+            for option in options {
+                expr(&option.value, name, found);
+            }
+        }
+        ExprKind::PdfReport { data, .. } => {
+            for given in data {
+                expr(&given.value, name, found);
+            }
+        }
         ExprKind::ReadFormat { input, mapping, .. } => {
             expr(input, name, found);
             for option in mapping.options() {

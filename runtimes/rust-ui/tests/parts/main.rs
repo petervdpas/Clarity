@@ -31,6 +31,10 @@ mod parts_popover;
 mod parts_read_only_rule;
 mod parts_scroll_view;
 mod parts_video;
+#[cfg(feature = "pdf")]
+mod parts_pdf_report;
+#[cfg(feature = "pdf")]
+mod pdf_painter;
 mod parts_small_display;
 mod parts_small_text_parts;
 mod parts_splitter;

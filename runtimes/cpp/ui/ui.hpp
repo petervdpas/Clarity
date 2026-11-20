@@ -13,6 +13,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <string_view>
 
 #include "clarity_ui.h"
@@ -39,6 +40,11 @@ std::string take(char* text);
 /// docs/ledger/app-mcp.md) `question` of the kind `form`: the answer as the
 /// terminal gives it, or nothing.
 std::optional<std::string> agent_ask(const std::string& question, const std::string& form);
+
+/// A PDF of a report of the running program (`pdf of Invoice with order = current`):
+/// its data as JSON by the report's Data names. Throws InvalidError when the report
+/// is not there or the data does not fit.
+std::vector<uint8_t> report_pdf(const std::string& report, const std::string& data_json);
 
 /// The library's version, and whether its interface is the header's.
 std::string version();

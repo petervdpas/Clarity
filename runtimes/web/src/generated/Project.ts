@@ -2,6 +2,7 @@
 import type { Diagnostic } from "./Diagnostic";
 import type { DiagramFile } from "./DiagramFile";
 import type { Locale } from "./Locale";
+import type { ReportFile } from "./ReportFile";
 import type { Resources } from "./Resources";
 import type { Signin } from "./Signin";
 import type { SpecFile } from "./SpecFile";
@@ -68,6 +69,12 @@ resources: Resources | null,
  * 5.13), by name; empty when there are none or the folder was not read.
  */
 diagrams: Array<DiagramFile>, 
+/**
+ * The reports of the project's `reports` folder (docs/ledger/reports-pdf.md), by
+ * name, each with the stylesheet it names; empty when there are none or
+ * the folder was not read.
+ */
+reports: Array<ReportFile>, 
 /**
  * The project's README.md (its design goal and guide for whoever works
  * on it next), from its folder; None when it has none or the folder was

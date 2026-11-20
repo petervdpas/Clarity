@@ -4,6 +4,7 @@
 //! and a Build button (jobs); and the release planning (release), which
 //! reads the repository as it is, for review and for the agent's plan.
 
+pub mod bump;
 pub mod disk;
 pub mod jobs;
 pub mod release;

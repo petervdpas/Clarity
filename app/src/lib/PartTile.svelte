@@ -284,6 +284,59 @@
       <rect x="3" y="3" width="42" height="22" rx="1" />
       <rect x="3" y="19" width="42" height="6" class="fill" />
       <text x="5" y="23.5" class="ink tiny">Ready</text>
+    {:else if kind === "reportText"}
+      <text x="5" y="18" class="ink bold small">Invoice</text>
+    {:else if kind === "reportField"}
+      <rect x="4" y="8" width="40" height="12" rx="1" class="dashed" />
+      <text x="7" y="17" class="ink tiny">order.number</text>
+    {:else if kind === "reportSum"}
+      <text x="5" y="18" class="ink bold">&#931;</text>
+      <line x1="16" y1="14" x2="44" y2="14" />
+      <text x="26" y="24" class="ink tiny">16.50</text>
+    {:else if kind === "reportMarkdown"}
+      <text x="4" y="10" class="ink bold small"># Note</text>
+      <line x1="4" y1="16" x2="40" y2="16" />
+      <line x1="4" y1="22" x2="32" y2="22" />
+    {:else if kind === "reportPageNumber"}
+      <rect x="14" y="5" width="20" height="18" rx="1" />
+      <text x="24" y="18" text-anchor="middle" class="ink small">1</text>
+    {:else if kind === "reportImage"}
+      <rect x="10" y="4" width="28" height="20" rx="1" />
+      <circle cx="17" cy="10" r="2.5" class="fill" />
+      <polyline points="12,22 20,14 26,19 30,16 36,22" />
+    {:else if kind === "reportLine"}
+      <line x1="4" y1="14" x2="44" y2="14" />
+    {:else if kind === "reportBox"}
+      <rect x="8" y="5" width="32" height="18" />
+    {:else if kind === "bandPageHeader"}
+      <rect x="3" y="3" width="42" height="22" rx="1" />
+      <rect x="3" y="3" width="42" height="6" class="fill" />
+    {:else if kind === "bandReportHeader"}
+      <rect x="3" y="3" width="42" height="22" rx="1" />
+      <rect x="3" y="3" width="42" height="10" class="fill" />
+      <text x="6" y="11" class="ink tiny">Title</text>
+    {:else if kind === "bandGroupHeader"}
+      <rect x="3" y="3" width="42" height="8" rx="1" class="fill" />
+      <line x1="8" y1="15" x2="45" y2="15" />
+      <line x1="8" y1="20" x2="45" y2="20" />
+      <line x1="8" y1="25" x2="45" y2="25" />
+    {:else if kind === "bandGroupFooter"}
+      <line x1="8" y1="5" x2="45" y2="5" />
+      <line x1="8" y1="10" x2="45" y2="10" />
+      <rect x="3" y="15" width="42" height="9" rx="1" class="fill" />
+      <text x="34" y="22.5" class="ink tiny">&#931;</text>
+    {:else if kind === "bandDetail"}
+      <line x1="3" y1="7" x2="45" y2="7" />
+      <line x1="3" y1="12" x2="45" y2="12" />
+      <line x1="3" y1="17" x2="45" y2="17" />
+      <line x1="3" y1="22" x2="45" y2="22" />
+    {:else if kind === "bandReportFooter"}
+      <rect x="3" y="3" width="42" height="22" rx="1" />
+      <rect x="3" y="15" width="42" height="10" class="fill" />
+      <text x="28" y="23" class="ink tiny">&#931;</text>
+    {:else if kind === "bandPageFooter"}
+      <rect x="3" y="3" width="42" height="22" rx="1" />
+      <rect x="3" y="19" width="42" height="6" class="fill" />
     {:else}
       <rect x="4" y="3" width="40" height="22" rx="2" class="dashed" />
     {/if}

@@ -71,13 +71,15 @@ pub const GO_MODULE: &str = "github.com/petervdpas/Clarity/runtimes/go";
 /// Clarity's releases, in the order they go: a crate after the crates it
 /// names (tested against their Cargo.toml), the library before what
 /// fetches it, the Go sums after the Go tag, the IDE last.
-pub const UNITS: [Unit; 15] = [
+pub const UNITS: [Unit; 17] = [
+    krate("clarityData", "clarity-data", "runtimes/rust-data/v", "release-rust-data.yml", "runtimes/rust-data/Cargo.toml", &["runtimes/rust-data"]),
     krate("clarityFormats", "clarity-formats", "runtimes/rust-formats/v", "release-rust-formats.yml", "runtimes/rust-formats/Cargo.toml", &["runtimes/rust-formats"]),
     krate("clarityImage", "clarity-image", "runtimes/rust-image/v", "release-rust-image.yml", "runtimes/rust-image/Cargo.toml", &["runtimes/rust-image"]),
     krate("clarityAuth", "clarity-auth", "runtimes/rust-auth/v", "release-rust-auth.yml", "runtimes/rust-auth/Cargo.toml", &["runtimes/rust-auth"]),
     krate("clarityAppMcp", "clarity-app-mcp", "runtimes/rust-app-mcp/v", "release-rust-app-mcp.yml", "runtimes/rust-app-mcp/Cargo.toml", &["runtimes/rust-app-mcp"]),
     krate("clarityEngine", "clarity-engine", "runtimes/rust-engine/v", "release-rust-engine.yml", "runtimes/rust-engine/Cargo.toml", &["runtimes/rust-engine"]),
     krate("clarityRuntime", "clarity-runtime", "runtimes/rust/v", "release-rust-runtime.yml", "runtimes/rust/Cargo.toml", &["runtimes/rust"]),
+    krate("clarityPdf", "clarity-pdf", "runtimes/rust-pdf/v", "release-rust-pdf.yml", "runtimes/rust-pdf/Cargo.toml", &["runtimes/rust-pdf"]),
     krate("clarityAudio", "clarity-audio", "runtimes/rust-audio/v", "release-rust-audio.yml", "runtimes/rust-audio/Cargo.toml", &["runtimes/rust-audio"]),
     krate("clarityVideo", "clarity-video", "runtimes/rust-video/v", "release-rust-video.yml", "runtimes/rust-video/Cargo.toml", &["runtimes/rust-video"]),
     krate("clarityGraph", "clarity-graph", "runtimes/rust-graph/v", "release-rust-graph.yml", "runtimes/rust-graph/Cargo.toml", &["runtimes/rust-graph"]),
@@ -91,7 +93,7 @@ pub const UNITS: [Unit; 15] = [
         crate_name: None,
         // Its archives hold every native library and the browser files (release-clarity-ui.yml),
         // with Microsoft's C++ runtime beside the Windows libraries (vc_runtime.py, checked by check_dll_imports.py).
-        sources: &[".github/workflows/release-clarity-ui.yml", ".github/scripts/vc_runtime.py", ".github/scripts/check_dll_imports.py", "runtimes/rust", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi"],
+        sources: &[".github/workflows/release-clarity-ui.yml", ".github/scripts/vc_runtime.py", ".github/scripts/check_dll_imports.py", "runtimes/rust", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-pdf", "runtimes/rust-pdf-ffi", "runtimes/rust-data", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi"],
         out: Out::GithubRelease,
         next_after_workflow: false,
     },
@@ -190,7 +192,7 @@ pub fn newest(tags: &[String], prefix: &str) -> Option<String> {
     tags.iter().filter_map(|t| Some((parse(t.strip_prefix(prefix)?)?, t))).max_by(|a, b| a.0.cmp(&b.0)).map(|(_, t)| t.clone())
 }
 
-fn read(repo: &Path, file: &str) -> Result<String, String> {
+pub(crate) fn read(repo: &Path, file: &str) -> Result<String, String> {
     std::fs::read_to_string(repo.join(file)).map_err(|e| format!("cannot read {file}: {e}"))
 }
 
@@ -201,7 +203,7 @@ fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<(usize, &'a str)
     Some((at, &text[at..at + len]))
 }
 
-fn version_in(text: &str, at: VersionAt) -> Option<(usize, String)> {
+pub(crate) fn version_in(text: &str, at: VersionAt) -> Option<(usize, String)> {
     let (pos, v) = match at {
         VersionAt::Cargo(_) => between(text, "\nversion = \"", "\"")?,
         VersionAt::Props(_) => between(text, "<Version>", "</Version>")?,
@@ -211,7 +213,7 @@ fn version_in(text: &str, at: VersionAt) -> Option<(usize, String)> {
     Some((pos, v.to_string()))
 }
 
-fn file_of(at: VersionAt) -> &'static str {
+pub(crate) fn file_of(at: VersionAt) -> &'static str {
     match at {
         VersionAt::Cargo(f) | VersionAt::Props(f) | VersionAt::GoConst(f) | VersionAt::PackageJson(f) => f,
     }
@@ -252,12 +254,20 @@ pub fn needs(repo: &Path, unit: &Unit) -> Vec<String> {
 }
 
 
-fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = clarity_project::background_command("git").args(args).current_dir(repo).output().map_err(|e| format!("cannot run git: {e}"))?;
     if !out.status.success() {
         return Err(format!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// The newest released version of Clarity.UI's library (its newest
+/// `runtimes/rust-ui-ffi/v*` tag), without the `v`; none without such a tag.
+pub fn released_library(repo: &Path) -> Option<String> {
+    let prefix = unit("clarityUiLibrary")?.tag;
+    let tag = newest(&tags(repo).ok()?, prefix)?;
+    Some(tag.strip_prefix(prefix)?.trim_start_matches('v').to_string())
 }
 
 /// The repository's tags.
@@ -337,6 +347,18 @@ pub struct Standing {
     pub bumpable: bool,
 }
 
+impl Standing {
+    /// A release of a version in source that was never made (no tag) is
+    /// released, as one whose code changed: a new crate goes out before what
+    /// names it (clarity-data before clarity-formats), never left behind.
+    pub fn with_never_released(mut self) -> Standing {
+        if self.tag.is_none() && self.bumpable && self.changes.code.is_empty() {
+            self.changes.code = vec![format!("{} was never released", self.name)];
+        }
+        self
+    }
+}
+
 /// How every release stands.
 pub fn standing(repo: &Path) -> Result<Vec<Standing>, String> {
     let tags = tags(repo)?;
@@ -361,7 +383,7 @@ pub fn standing(repo: &Path) -> Result<Vec<Standing>, String> {
                 (None, None) => "0.1.0".to_string(),
             };
             let changes = if tag.is_some() { changes(&changed) } else { Changes::default() };
-            Ok(Standing { key: unit.key.into(), name: unit.name.into(), tag, released, source, changed, changes, next, bumped, bumpable: unit.version.is_some() })
+            Ok(Standing { key: unit.key.into(), name: unit.name.into(), tag, released, source, changed, changes, next, bumped, bumpable: unit.version.is_some() }.with_never_released())
         })
         .collect()
 }
@@ -392,7 +414,7 @@ pub const GUARDS: [Guard; 10] = [
 ];
 
 /// The examples every release checks (crates/clarity-gen/tests/examples_build.rs builds each on its own stack).
-pub const EXAMPLES: [&str; 21] = ["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
+pub const EXAMPLES: [&str; 22] = ["calculator", "dashboard", "dial", "invaders", "invoices", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
 
 /// Where the checks run: a fresh checkout of the repository, as the checks
 /// on GitHub have it, in the tree's ignored target/.

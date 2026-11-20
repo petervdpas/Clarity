@@ -3,6 +3,7 @@
 //! host. Each kind of part is a module of its own; `make` finds it by its
 //! kind's name, and a kind not drawn yet shows that in its place.
 
+pub mod pdf_report;
 pub mod button;
 pub mod custom;
 pub mod containers;
@@ -601,7 +602,7 @@ macro_rules! part_element {
 pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
 
 /// The kinds Clarity.UI draws, each with the module that makes it.
-const DRAWN: [(&str, MakePart); 19] = [
+const DRAWN: [(&str, MakePart); 20] = [
     ("label", label::make),
     ("heading", heading::make),
     ("button", button::make),
@@ -613,6 +614,7 @@ const DRAWN: [(&str, MakePart); 19] = [
     ("custom", custom::make),
     ("sound", sound::make),
     ("video", video::make),
+    ("pdfReport", pdf_report::make),
     ("timer", timer::make),
     ("signin", signin::make),
     // The parts of a toolbox (`page Painting: toolbox`).

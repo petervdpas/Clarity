@@ -52,6 +52,9 @@ fn main() {
         format!("--js-library={}", library.display()),
         // Skia is C++: since Emscripten 6.0.6 emcc links C++'s libraries only when asked.
         "-sDEFAULT_TO_CXX".to_string(),
+        // rustc's Emscripten target always passes -sWASM_BIGINT, which Emscripten 6.0.9
+        // calls deprecated (it is on by default now); a link argument cannot take it away.
+        "-Wno-deprecated".to_string(),
     ];
     for arg in args {
         println!("cargo:rustc-link-arg-bins={arg}");

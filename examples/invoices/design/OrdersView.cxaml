@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Orders shows: the orders and lines left, the invoice right. -->
+<View class="invoices.OrdersView">
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Data name="current" type="Order" />
+  <Data name="lines" type="list&lt;Line&gt;" />
+  <Heading name="ordersHeading" at="1,1" span="6" caption="@ordersHeadingCaption" />
+  <PdfReport name="invoicePdf" at="7,1" span="6" rows="11" zoom="true" report="Invoice" save="true" print="true" pages="true" ongather="invoiceGathered" />
+  <Table name="ordersTable" at="1,2" span="6" rows="4" bind="orders" columns="number, notes" edit="number, notes" add="true" remove="true" confirm="true" onadd="newOrderClicked" onremove="removeOrderClicked" onchange="orderChanged" onselect="orderPicked" />
+  <Heading name="linesHeading" at="1,6" span="6" caption="@linesHeadingCaption" />
+  <Table name="linesTable" at="1,7" span="6" rows="4" bind="lines" columns="product, price" edit="product, price" add="true" remove="true" onadd="newLineClicked" onremove="removeLineClicked" onchange="lineChanged" />
+  <Button name="savePdf" at="1,11" span="2" caption="@savePdfCaption" onclick="savePdfClicked" />
+</View>

@@ -134,6 +134,10 @@ int64_t* held_version(R& record) {
     else return nullptr;
 }
 
+/// Whether a record has stored lists (order.lines) that load with it (docs/ledger/runtime-data.md).
+template <typename R>
+constexpr bool holds_lists = requires(R r, Db& db) { r.load_lists(db); };
+
 template <typename R>
 constexpr bool has_events = requires(R r, Db& db) { r.before_save(db); } || requires(R r, Db& db) { r.after_save(db); } ||
                             requires(R r, Db& db) { r.before_delete(db); } || requires(R r, Db& db) { r.after_delete(db); } ||
@@ -266,9 +270,15 @@ public:
     /// The rows SQL reads in the database of `source`, for tools and tests.
     std::vector<Row> rows(const std::string& source, const std::string& sql, const std::vector<SqlValue>& params) { return select(source, sql, params); }
 
-    /// The records a query finds, in its order.
+    /// The records a query finds, in its order, each with its stored lists.
     template <Record R>
     std::vector<R> find(const Query& query) {
+        return with_lists(find_alone<R>(query));
+    }
+
+    /// find without the records' stored lists: what a list loads with, so a list loads one level deep.
+    template <Record R>
+    std::vector<R> find_alone(const Query& query) {
         std::string source = detail::source_of<R>();
         Dialect d = dialect(source);
         std::string columns = select_columns(d, detail::key_of<R>(), R::columns(), detail::pictures_of<R>(), detail::version_of<R>());
@@ -291,7 +301,17 @@ public:
                           quote(d, key) + " = " + mark(d, 1);
         auto found = records<R>(source, sql, {id});
         if (found.empty()) throw NotFoundError(R::table, id);
-        return found.back();
+        R record = found.back();
+        if constexpr (detail::holds_lists<R>) record.load_lists(*this);
+        return record;
+    }
+
+    /// Loads the stored lists of each record found.
+    template <Record R>
+    std::vector<R> with_lists(std::vector<R> found) {
+        if constexpr (detail::holds_lists<R>)
+            for (auto& record : found) record.load_lists(*this);
+        return found;
     }
 
     /// The record a reference field points at.

@@ -58,6 +58,8 @@ pub const KEYWORDS: &[&str] = &[
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "div", "mod", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit", "copy",
+    // PDFs (manual/code.expressions.md#pdfs).
+    "pdf", "stylesheet",
     // HTTP calls (manual/code.web-apis.md).
     "http", "get", "post", "put", "patch", "header", "query", "when", "every",
     // A web API data source: its paging and its OpenAPI description.

@@ -53,6 +53,7 @@ pub unsafe extern "C" fn clarity_driven_start(program: *const ClarityProgram, fi
         let program: Arc<dyn Program> = unsafe { handle(program) }?.program.clone();
         let files = unsafe { handle(files) }?.app_files();
         ui::fonts::carry_fallbacks(files.resources);
+        ui::app_files::set_running(files);
         let driven = ClarityDriven { driven: Driven::start(program, files), thread: std::thread::current().id() };
         unsafe { put(out, Box::into_raw(Box::new(driven))) }
     })

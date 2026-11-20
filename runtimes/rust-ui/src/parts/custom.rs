@@ -107,6 +107,26 @@ impl<'a> CustomCx<'a> {
         self.cx.invalidate();
     }
 
+    /// Its event `event` happened: the handler on its line for it runs (a pdfReport's `gather`).
+    pub fn fire(&self, event: &str) -> bool {
+        self.base.fire(event)
+    }
+
+    /// A file of the application's resources by its name; none when it carries none.
+    pub fn resource(&self, name: &str) -> Option<Vec<u8>> {
+        self.base.host.resource(name)
+    }
+
+    /// The person's formats for numbers and dates.
+    pub fn formats(&self) -> crate::parts::Formats {
+        self.base.host.formats()
+    }
+
+    /// What its line says.
+    pub fn spec(&self) -> &PartSpec {
+        &self.base.spec
+    }
+
     /// It tells `tell` with its values: the handler wired to it on its line runs with them; a tell nothing is wired to is let go.
     pub fn tell(&mut self, tell: &str, values: Vec<Value>) {
         let Some(name) = self.base.name() else { return };
@@ -289,6 +309,11 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         Ok(None) => (None, Some(locale::fill(&locale::translate("customPartMissing", "the program carries no part {part}"), "part", &kind))),
         Err(panic) => (None, Some(panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())),
     };
+    Box::new(CustomPlace { base: PartBase::new(spec, host), inner, why, started: false, shown_value: None, shown_enabled: None, shown_values: Map::new() })
+}
+
+/// A place holding a part Clarity.UI brings itself (a pdfReport), or saying why it holds none.
+pub(crate) fn holding(spec: PartSpec, host: Rc<dyn PartHost>, inner: Option<Box<dyn CustomPart>>, why: Option<String>) -> Box<dyn Part> {
     Box::new(CustomPlace { base: PartBase::new(spec, host), inner, why, started: false, shown_value: None, shown_enabled: None, shown_values: Map::new() })
 }
 

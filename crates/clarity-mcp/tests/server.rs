@@ -108,7 +108,9 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     let mut offered: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     // Built from the repository (the tests are), the server also offers the cDdev's DevTools Build.
     offered.push(clarity_mcp::BUILD_PIECE.to_string());
+    offered.push(clarity_mcp::SWAP_PIECE.to_string());
     offered.push(clarity_mcp::RELEASE_STATE.to_string());
+    offered.push(clarity_mcp::BUMP_VERSIONS.to_string());
     offered.push(clarity_mcp::DISK_STATE.to_string());
     offered.push(clarity_mcp::REMOVE_FOLDER.to_string());
     offered.push(clarity_mcp::WRITE_RELEASE_PLAN.to_string());
@@ -137,7 +139,9 @@ fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
     let plain = ClarityServer::with_ide_file(dir.join("ide.json"));
     let mut plain_tools: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     plain_tools.push(clarity_mcp::BUILD_PIECE.to_string());
+    plain_tools.push(clarity_mcp::SWAP_PIECE.to_string());
     plain_tools.push(clarity_mcp::RELEASE_STATE.to_string());
+    plain_tools.push(clarity_mcp::BUMP_VERSIONS.to_string());
     plain_tools.push(clarity_mcp::DISK_STATE.to_string());
     plain_tools.push(clarity_mcp::REMOVE_FOLDER.to_string());
     plain_tools.push(clarity_mcp::WRITE_RELEASE_PLAN.to_string());
@@ -296,6 +300,40 @@ fn build_piece_asks_the_ide_and_gives_its_answer() {
     let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
     ide.join().unwrap();
     assert!(!built.is_error && built.text.contains("Finished release"), "{}", built.text);
+}
+
+/// swap_piece picks a DevTools tab's own build or the release, as its Swap
+/// does: the IDE takes the ask with the piece and which build, and answers.
+#[test]
+fn swap_piece_asks_the_ide_to_use_the_own_build_or_the_release() {
+    use clarity_project::dev_asks;
+    let dir = scratch("swap-piece");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
+    assert!(server.tools().iter().any(|t| t.name == clarity_mcp::SWAP_PIECE), "offered by a server run from the repository");
+    let unknown = server.call_from("Claude Code", clarity_mcp::SWAP_PIECE, &json!({ "piece": "nothing", "use": "own" }));
+    assert!(unknown.is_error && unknown.text.contains("clarityPdf"), "{}", unknown.text);
+    let neither = server.call_from("Claude Code", clarity_mcp::SWAP_PIECE, &json!({ "piece": "clarityPdf", "use": "mine" }));
+    assert!(neither.is_error && neither.text.contains("own") && neither.text.contains("release"), "{}", neither.text);
+    for (used, mine) in [("own", true), ("release", false)] {
+        let asks = server.asks();
+        let ide = std::thread::spawn(move || {
+            for _ in 0..100 {
+                if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
+                    assert_eq!((ask.action, ask.key.as_str(), ask.mine), (dev_asks::Action::Swap, "clarityPdf", mine));
+                    assert!(dev_asks::take(&asks, &ask.id));
+                    dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: true, text: "swapped".into() }).unwrap();
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            panic!("no ask came");
+        });
+        let swapped = server.call_from("Claude Code", clarity_mcp::SWAP_PIECE, &json!({ "piece": "clarityPdf", "use": used }));
+        ide.join().unwrap();
+        assert!(!swapped.is_error && swapped.text.contains("swapped"), "{}", swapped.text);
+    }
 }
 
 /// Working on Clarity itself, the agent reads how its releases stand to

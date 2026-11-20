@@ -96,7 +96,7 @@ The checker refuses an entity without fields ("entity 'Customer' has no fields")
 | an enum name | one value of that enum |
 | `ref Entity` | a reference to a record of another entity |
 | an entity name | in an entity of a web API, a record of that entity held inside this one, as the service's JSON nests it: `owner: User` |
-| `list<Entity>` | the records of another entity that belong to this one; in an entity of a web API, held inside it |
+| `list<Entity>` | the records of another entity that belong to this one; in an entity of a web API, held inside it. In a stored entity it loads with the record (a find, a reference, `reload`) by the one `ref Order` of Line, in the order the lines were stored, one level deep (the lines do not load their own lists); code reads it (`for line in order.lines`) and saves each line by itself. The checker says "'order.lines' comes from the database with its record: save each record of it by itself" for setting it, and "'order.lines' loads by the one field 'ref Order' of Line, which it needs exactly once" |
 | `list<text>`, `list<integer>`, `list<decimal>`, `list<date>`, `list<Enum>` | a list of values, kept in one column; see [Lists in records](#lists-in-records) |
 
 `secret` is a type of a setting only; an entity's field of it is an error. See [Settings](data.settings.md). A `folder` field holds the path of a folder, such as the folder of a category's files: code lists, reads and writes the files in it (see [Files in code](data.pictures-files.md#files-in-code)), and a folder part in a window chooses it.

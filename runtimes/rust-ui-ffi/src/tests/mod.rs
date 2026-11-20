@@ -9,6 +9,7 @@ mod basics;
 mod custom;
 mod program;
 mod screen;
+mod report;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;

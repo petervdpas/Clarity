@@ -1,4 +1,4 @@
-//! Markdown read into blocks (headings, paragraphs, list items, quotes, scene breaks, code) and
+//! Markdown read into blocks (headings, paragraphs, list items, quotes, scene breaks, code, tables, math) and
 //! their spans of text, the way every renderer reads it:
 //! conformance/markdown.json says what each case gives. It reads as the
 //! IDE's markdownBlocks.ts does; the markdown part of Clarity.UI shows what it reads.
@@ -12,6 +12,8 @@ pub struct Span {
     pub code: bool,
     /// The address it opens; none for text that is no link.
     pub link: Option<String>,
+    /// TeX math (`$...$`), its text the TeX as written.
+    pub math: bool,
 }
 
 impl Span {
@@ -22,7 +24,7 @@ impl Span {
 
     /// Whether it looks the same as `other`, whatever their texts.
     fn looks_as(&self, other: &Span) -> bool {
-        self.bold == other.bold && self.italic == other.italic && self.code == other.code && self.link == other.link
+        self.bold == other.bold && self.italic == other.italic && self.code == other.code && self.link == other.link && self.math == other.math
     }
 }
 
@@ -37,6 +39,20 @@ pub enum BlockKind {
     /// A scene break (`***`, `---`, `___`).
     Rule,
     Code,
+    /// A table: a header row, rows and each column's alignment.
+    Table,
+    /// TeX math on its own (`$$...$$`), its TeX in `text`.
+    Math,
+}
+
+/// How a table's column is aligned, by the colons of its delimiter cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnAlign {
+    /// `---`: as the renderer sets text.
+    None,
+    Left,
+    Center,
+    Right,
 }
 
 /// A block: a heading with its level, a paragraph, a list item with its
@@ -51,21 +67,30 @@ pub struct Block {
     pub depth: usize,
     /// A numbered list item's number; none for a bullet.
     pub number: Option<u64>,
-    /// A code block's lines as written.
+    /// A code block's lines as written; a math block's TeX.
     pub text: String,
+    /// A table's header cells, each its spans.
+    pub header: Vec<Vec<Span>>,
+    /// A table's rows of cells, as many cells as the header.
+    pub rows: Vec<Vec<Vec<Span>>>,
+    /// A table's columns' alignment.
+    pub align: Vec<ColumnAlign>,
 }
 
 impl Block {
     fn new(kind: BlockKind) -> Block {
-        Block { kind, spans: Vec::new(), level: 0, depth: 0, number: None, text: String::new() }
+        Block { kind, spans: Vec::new(), level: 0, depth: 0, number: None, text: String::new(), header: Vec::new(), rows: Vec::new(), align: Vec::new() }
     }
 }
 
 /// The characters a backslash takes as written.
-const PUNCTUATION: &str = "\\`*_[]()#+-.!{}<>";
+const PUNCTUATION: &str = "\\`*_[]()#+-.!{}<>$";
 
 /// The line that starts and ends a code block.
 const FENCE: &str = "```";
+
+/// The line that starts and ends a math block.
+const MATH: &str = "$$";
 
 /// The look a span gets from what holds it.
 #[derive(Debug, Clone, Default)]
@@ -121,11 +146,34 @@ fn closing_single(s: &[char], mark: char, from: usize) -> Option<usize> {
     None
 }
 
+/// Where the `$` that closes inline math opened at `open` is: math opens
+/// with a letter that is not a space or `$`, and closes at the next `$` after
+/// a letter that is not a space, not followed by a digit (`\$` closes
+/// nothing); none when it does not.
+fn closing_math(s: &[char], open: usize) -> Option<usize> {
+    let first = at(s, open as isize + 1);
+    if first == '\0' || first == '$' || first.is_whitespace() {
+        return None;
+    }
+    let mut j = open + 1;
+    while j < s.len() {
+        if s[j] == '\\' {
+            j += 2;
+            continue;
+        }
+        if s[j] == '$' && j > open + 1 && !s[j - 1].is_whitespace() && !at(s, j as isize + 1).is_ascii_digit() {
+            return Some(j);
+        }
+        j += 1;
+    }
+    None
+}
+
 fn inline(s: &[char], look: &Look, output: &mut Vec<Span>) {
     let mut text = String::new();
     let flush = |text: &mut String, output: &mut Vec<Span>| {
         if !text.is_empty() {
-            output.push(Span { text: std::mem::take(text), bold: look.bold, italic: look.italic, code: false, link: look.link.clone() });
+            output.push(Span { text: std::mem::take(text), bold: look.bold, italic: look.italic, code: false, link: look.link.clone(), math: false });
         }
     };
     let mut i = 0usize;
@@ -145,10 +193,14 @@ fn inline(s: &[char], look: &Look, output: &mut Vec<Span>) {
                 }
                 Some(end) => {
                     flush(&mut text, output);
-                    output.push(Span { text: text_of(&s[i + 1..end]), bold: look.bold, italic: look.italic, code: true, link: look.link.clone() });
+                    output.push(Span { text: text_of(&s[i + 1..end]), bold: look.bold, italic: look.italic, code: true, link: look.link.clone(), math: false });
                     i = end + 1;
                 }
             }
+        } else if c == '$' && let Some(end) = closing_math(s, i) {
+            flush(&mut text, output);
+            output.push(Span { text: text_of(&s[i + 1..end]), bold: look.bold, italic: look.italic, code: false, link: look.link.clone(), math: true });
+            i = end + 1;
         } else if three_marks && i + 3 < s.len() && s[i + 3] != ' ' && !after_word && index_of(s, &s[i..i + 3], i + 3).is_some() {
             // Bold and italic at once.
             let end = index_of(s, &s[i..i + 3], i + 3).unwrap_or(s.len());
@@ -277,6 +329,60 @@ fn breaks(line: &str) -> bool {
     line.ends_with("  ") || line.trim_end().ends_with('\\')
 }
 
+/// A table line's cells, split at each `|` that is not `\|`; the `|` at its
+/// start and end may be left out; none for a line without `|`.
+fn table_cells(line: &str) -> Option<Vec<String>> {
+    let trimmed = line.trim();
+    if !trimmed.contains('|') {
+        return None;
+    }
+    let inner = trimmed.strip_prefix('|').unwrap_or(trimmed);
+    let inner = if inner.ends_with('|') && !inner.ends_with("\\|") { &inner[..inner.len() - 1] } else { inner };
+    let mut cells = Vec::new();
+    let mut cell = String::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                cell.push('|');
+                chars.next();
+            }
+            '|' => cells.push(std::mem::take(&mut cell).trim().to_string()),
+            c => cell.push(c),
+        }
+    }
+    cells.push(cell.trim().to_string());
+    Some(cells)
+}
+
+/// A table's delimiter line: each cell's alignment; none for another line.
+fn delimiter(line: &str) -> Option<Vec<ColumnAlign>> {
+    table_cells(line)?
+        .iter()
+        .map(|cell| {
+            let left = cell.starts_with(':');
+            let right = cell.ends_with(':') && cell.len() > 1;
+            let dashes = cell.trim_start_matches(':').trim_end_matches(':');
+            if dashes.is_empty() || !dashes.chars().all(|c| c == '-') {
+                return None;
+            }
+            Some(match (left, right) {
+                (true, true) => ColumnAlign::Center,
+                (true, false) => ColumnAlign::Left,
+                (false, true) => ColumnAlign::Right,
+                (false, false) => ColumnAlign::None,
+            })
+        })
+        .collect()
+}
+
+/// A table row's cells as spans, as many as the table has columns.
+fn row(cells: Vec<String>, columns: usize) -> Vec<Vec<Span>> {
+    let mut row: Vec<Vec<Span>> = cells.iter().take(columns).map(|cell| spans(cell)).collect();
+    row.resize(columns, Vec::new());
+    row
+}
+
 /// The blocks of a text in Markdown.
 pub fn read(markdown: &str) -> Vec<Block> {
     let text = markdown.replace("\r\n", "\n");
@@ -319,6 +425,48 @@ pub fn read(markdown: &str) -> Vec<Block> {
             }
             blocks.push(Block { text: code.join("\n"), ..Block::new(BlockKind::Code) });
             i += 1;
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix(MATH) {
+            close(&mut blocks, &mut open, &mut open_text);
+            let mut tex = Vec::new();
+            match rest.strip_suffix(MATH) {
+                Some(one_line) => {
+                    tex.push(one_line);
+                    i += 1;
+                }
+                None => {
+                    tex.push(rest);
+                    i += 1;
+                    while i < lines.len() {
+                        let line = lines[i].trim_end();
+                        i += 1;
+                        if let Some(last) = line.strip_suffix(MATH) {
+                            tex.push(last);
+                            break;
+                        }
+                        tex.push(line);
+                    }
+                }
+            }
+            blocks.push(Block { text: tex.join("\n").trim().to_string(), ..Block::new(BlockKind::Math) });
+            broken = false;
+            continue;
+        }
+        if let (Some(header), Some(align)) = (table_cells(line), lines.get(i + 1).and_then(|next| delimiter(next)))
+            && header.len() == align.len()
+        {
+            close(&mut blocks, &mut open, &mut open_text);
+            let columns = align.len();
+            let mut table = Block { header: row(header, columns), align, ..Block::new(BlockKind::Table) };
+            i += 2;
+            while i < lines.len() && !lines[i].trim().is_empty() {
+                let Some(cells) = table_cells(lines[i]) else { break };
+                table.rows.push(row(cells, columns));
+                i += 1;
+            }
+            blocks.push(table);
+            broken = false;
             continue;
         }
         i += 1;

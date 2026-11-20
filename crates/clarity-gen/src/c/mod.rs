@@ -137,6 +137,13 @@ pub(crate) const PICTURE_FILES: [(&str, &str); 2] = [
     ("pictures/pictures.c", include_str!("../../../../runtimes/c/pictures/pictures.c")),
 ];
 
+/// The PDFs of code on Clarity.Pdf's library (docs/ledger/reports-pdf.md),
+/// carried only when the code makes one (clarity_use_pdf links them).
+pub(crate) const PDF_FILES: [(&str, &str); 2] = [
+    ("pdf/pdf.h", include_str!("../../../../runtimes/c/pdf/pdf.h")),
+    ("pdf/pdf.c", include_str!("../../../../runtimes/c/pdf/pdf.c")),
+];
+
 /// Engines (manual/code.engines.md): the host, copied with wasm3 only into an
 /// application that declares an engine.
 /// HTTP calls (manual/code.web-apis.md): the client on libcurl, copied only into an
@@ -284,7 +291,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines || screen_engines).chain(SCREEN_FILES.iter().filter(|_| screen_engines));
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
-    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project));
+    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project)).chain(PDF_FILES.iter().filter(|_| project.uses_pdf()));
     let formats_files = FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     let secret_files = SECRET_FILES.iter().filter(|_| keeps_secrets(project, settings));
     let auth_files = AUTH_FILES.iter().filter(|_| crate::carries_auth(project)).chain(library_folder_files(project, settings, desktop));
@@ -304,7 +311,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // The HTTP client, for code that calls out (manual/code.web-apis.md).
     let http_include = if project.calls_out() { "#include \"http/http.h\"\n" } else { "" };
     // The picture functions, for code that calls one (docs/ledger/picture-functions.md).
-    let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.h\"\n" } else { "" };
+    let pictures_include = format!(
+        "{}{}",
+        if crate::uses_picture_functions(project) { "#include \"pictures/pictures.h\"\n" } else { "" },
+        if project.uses_pdf() { "#include \"pdf/pdf.h\"\n" } else { "" }
+    ) + if project.makes_report_pdfs() { "#include \"desktop/desktop.h\"\n" } else { "" };
     let formats_include = if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" };
     let formats_include = format!("{formats_include}{}", auth_include(project));
     files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{http_include}{pictures_include}{formats_include}{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
@@ -757,6 +768,9 @@ pub(crate) fn audio_cmake_lines(project: &Project, settings: &Settings, program:
     }
     if crate::uses_picture_functions(project) {
         lines.push_str(&format!("\n# The code's picture functions run on Clarity.Image, whose library lies beside Clarity.UI's.\nclarity_use_image({program})\n"));
+    }
+    if project.uses_pdf() {
+        lines.push_str(&format!("\n# The code makes PDFs with Clarity.Pdf, whose library lies beside Clarity.UI's.\nclarity_use_pdf({program})\n"));
     }
     lines
 }

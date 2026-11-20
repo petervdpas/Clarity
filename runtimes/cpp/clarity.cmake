@@ -268,6 +268,32 @@ function(clarity_use_image target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_image> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
+# Clarity.Pdf (docs/ledger/reports-pdf.md) for a program whose code makes a
+# PDF: its library lies beside Clarity.UI's in the folder
+# CLARITY_UI names (include/clarity_pdf.h and lib/), and the runtime's
+# pdf/pdf.cpp calls it. Linked to `target` and put beside it.
+function(clarity_use_pdf target)
+  if(NOT TARGET clarity_pdf)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_pdf.h")
+      message(FATAL_ERROR "The program's code makes PDFs, but Clarity.Pdf's library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_pdf.h and its library in lib/")
+    endif()
+    add_library(clarity_pdf SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_pdf PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_PDF_IMPORT NAMES clarity_pdf.dll.lib libclarity_pdf.dll.a clarity_pdf.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_pdf PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_pdf.dll" IMPORTED_IMPLIB "${CLARITY_PDF_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_pdf PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_pdf.dylib")
+    else()
+      set_target_properties(clarity_pdf PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_pdf.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_sources(${target} PRIVATE ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pdf/pdf.cpp)
+  target_link_libraries(${target} PRIVATE clarity_pdf)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_pdf> $<TARGET_FILE_DIR:${target}>)
+endfunction()
+
 # Clarity.Video (docs/ledger/video-camera.md) for a program with video parts: its
 # library and Cisco's openh264 lie beside Clarity.UI's in the folder CLARITY_UI
 # names. Linked to `target` and put beside it, openh264 too, so videos play

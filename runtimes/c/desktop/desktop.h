@@ -79,3 +79,8 @@ ClarityFiles* clarity_desktop_files(const ClarityDesktopOptions* options);
 /// Shows the program's main window until its last window closed (or, with
 /// CLARITY_HEADLESS set, drives it from standard input): the exit status.
 int clarity_desktop_start(const ClarityDesktopOptions* options);
+
+/// A PDF of a report of the running program (`pdf of Invoice with order = current`):
+/// its data as JSON by the report's Data names, as bytes in the scratch arena;
+/// false with clarity_fail when the report is not there or the data does not fit.
+bool clarity_desktop_report_pdf(const char* report, const char* data_json, ClarityBytes* out);

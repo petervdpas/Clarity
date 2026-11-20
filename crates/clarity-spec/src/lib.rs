@@ -15,6 +15,7 @@ pub mod dictionary;
 pub mod edit;
 pub mod formats;
 pub mod engines;
+pub mod reports;
 pub mod resources;
 pub mod sound;
 pub mod typing;
@@ -150,6 +151,7 @@ pub fn load_sources_signed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a s
         themes: Vec::new(),
         resources: None,
         diagrams: Vec::new(),
+        reports: Vec::new(),
         readme: None,
         guidance: None,
         resource_keys: Default::default(),
@@ -734,6 +736,7 @@ pub fn load_in_signed<'a>(
     project.migrations = Some(steps);
     check::check_sources(&mut project);
     code::check::check_readonly(&mut project);
+    code::check::check_held_lists(&mut project);
     code::check::check_query_sources(&mut project);
     code::check::check_web_sources(&mut project);
     versions::check(&mut project);
@@ -823,6 +826,8 @@ pub fn load_dir_signed(dir: &Path, replaced: &[(&Path, &str)], sources: &[Source
         sources,
         signin,
     );
+    // The reports before the translations: their Text parts use keys.
+    project.reports = reports::report_files(dir)?;
     let translations = translation_sources(dir, replaced)?;
     if let Some(language) = language {
         project.locale.language = Some(language.to_string());
@@ -836,6 +841,9 @@ pub fn load_dir_signed(dir: &Path, replaced: &[(&Path, &str)], sources: &[Source
     let part_files = native::native_files(dir, &project)?;
     native::attach(&mut project, part_files);
     project.diagrams = diagrams::diagram_files(dir)?;
+    // The reports, checked against the entities and the texts.
+    let said = reports::check(&project);
+    project.diagnostics.extend(said);
     // A mapping's schema (`check "orders.xsd"`) is a file of the project's folder.
     let missing = code::mapping::missing_schemas(&project, &|path| dir.join(path).is_file());
     project.diagnostics.extend(missing);

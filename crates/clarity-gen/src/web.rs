@@ -280,12 +280,26 @@ pub fn base_css() -> String {
 
 /// The files of the project's resources folder, in `folder` of the output, each under its own name.
 pub(crate) fn resource_files(project: &Project, folder: &str) -> Vec<OutFile> {
-    let Some(resources) = &project.resources else { return Vec::new() };
-    resources
-        .files
+    let mut files: Vec<OutFile> = project
+        .resources
         .iter()
+        .flat_map(|r| &r.files)
         .map(|f| OutFile { path: format!("{folder}/{}", f.name), text: String::new(), bytes: Some(std::borrow::Cow::Owned(f.bytes.clone())) })
-        .collect()
+        .collect();
+    // The reports a pdfReport shows, with the stylesheets they name, among the resources Clarity.UI reads (docs/ledger/reports-pdf.md).
+    for report in &project.reports {
+        files.push(OutFile { path: format!("{folder}/{}/{}.report", clarity_spec::reports::REPORTS_DIR, report.name), text: report.text.clone(), bytes: None });
+        // How its values show: each bind's field type, which Clarity.UI hands Clarity.Pdf.
+        let formats = serde_json::to_string_pretty(&clarity_spec::reports::formats_of(project, &report.name)).unwrap_or_default() + "\n";
+        files.push(OutFile { path: format!("{folder}/{}/{}.formats.json", clarity_spec::reports::REPORTS_DIR, report.name), text: formats, bytes: None });
+        let named = clarity_spec::xml::read(&report.text).ok().and_then(|root| root.get("stylesheet").map(str::to_string));
+        if let (Some(name), Some(css)) = (named, &report.stylesheet)
+            && !files.iter().any(|f| f.path.ends_with(&format!("/{name}")))
+        {
+            files.push(OutFile { path: format!("{folder}/{}/{name}", clarity_spec::reports::REPORTS_DIR), text: css.clone(), bytes: None });
+        }
+    }
+    files
 }
 
 /// The windows, the frame and the data dictionary, for the renderer. File

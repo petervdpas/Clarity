@@ -646,6 +646,15 @@ pub enum ExprKind {
     /// the catalog (docs/ledger/formats.md), as every stack writes it;
     /// `text of orders using OrderFeed` writes it as a mapping says.
     FormatOf { value: Box<Expr>, mapping: MappingUse },
+    /// `pdf of text stylesheet css theme true`: a Markdown text laid out
+    /// into a PDF's bytes by Clarity.Pdf (docs/ledger/reports-pdf.md), in a
+    /// stylesheet's look over Clarity's own, reading the app's theme when
+    /// `theme` is true.
+    Pdf { text: Box<Expr>, options: Vec<FormatOption> },
+    /// `pdf of Invoice with order = current`: a report of the reports folder
+    /// laid out with its data, each named as the report's Data says, into a
+    /// PDF's bytes (docs/ledger/reports-pdf.md).
+    PdfReport { report: Ident, data: Vec<FormatOption> },
     /// `read list<Order> from json text at "data.orders"`: what a format
     /// holds, read and fitted to the record first; `read list<Order> from
     /// text using OrderFeed` reads it as a mapping says.
@@ -1334,6 +1343,17 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(&option.value, found);
             }
         }
+        ExprKind::Pdf { text, options } => {
+            each_expr(text, found);
+            for option in options {
+                each_expr(&option.value, found);
+            }
+        }
+        ExprKind::PdfReport { data, .. } => {
+            for given in data {
+                each_expr(&given.value, found);
+            }
+        }
         ExprKind::ReadFormat { input: text, mapping, .. } => {
             for option in mapping.options() {
                 each_expr(&option.value, found);
@@ -1462,6 +1482,17 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
             each_expr_mut(value, found);
             for option in mapping.options_mut() {
                 each_expr_mut(&mut option.value, found);
+            }
+        }
+        ExprKind::Pdf { text, options } => {
+            each_expr_mut(text, found);
+            for option in options {
+                each_expr_mut(&mut option.value, found);
+            }
+        }
+        ExprKind::PdfReport { data, .. } => {
+            for given in data {
+                each_expr_mut(&mut given.value, found);
             }
         }
         ExprKind::Ask { question, form } => {

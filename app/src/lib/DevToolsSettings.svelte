@@ -53,6 +53,15 @@
     void call("devtools_view");
   });
 
+  // An agent swapped a piece (swap_piece): the tabs read how it stands again.
+  let swapsSeen = 0;
+  $effect(() => {
+    const { key, times } = devtools.swapped;
+    if (times === swapsSeen) return;
+    swapsSeen = times;
+    void call("devtools_view");
+  });
+
   // A build of a piece ended: its tab reads how the piece stands again.
   let ended = new Set<string>();
   $effect(() => {
@@ -62,7 +71,6 @@
       if (done && !ended.has(done)) {
         ended.add(done);
         void call("devtools_view");
-        if (t.key === "clarityUiBrowser" && t.mine && j?.state === "passed") browserFiles.reload();
       }
     }
   });
@@ -182,7 +190,7 @@
           <dt>In use</dt>
           <dd>
             {#if tab.mine}
-              your own build: <code>{tab.own}</code>{#if tab.built !== null} <span class="muted">(built {builtText(tab.built)})</span>{/if}
+              your own build: <code>{tab.own}</code>{#if tab.built !== null}{" "}<span class="muted">(built {builtText(tab.built)})</span>{/if}
             {:else}
               the release {tab.release}
             {/if}

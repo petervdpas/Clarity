@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 clarity-spec.workspace = true
+# A report's pages for the report tab's preview (docs/ledger/reports-pdf.md).
+clarity-pdf = { path = "../../runtimes/rust-pdf" }
 clarity-project.workspace = true
 # Backups of the project's databases (backups.rs, docs/ledger/backups.md).
 clarity-db.workspace = true

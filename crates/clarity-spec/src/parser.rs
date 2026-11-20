@@ -1989,10 +1989,10 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 94] = [
+pub const LINE_WORDS: [&str; 98] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "fold", "reading", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
-    "children", "page", "typed", "cards", "colored", "band", "chip", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
+    "children", "page", "typed", "cards", "colored", "band", "chip", "frame", "search", "zoom", "report", "save", "print", "pages", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color", "input", "strategy", "shows", "closing", "cycling", "available", "permanent",
 ];
 
@@ -2068,6 +2068,10 @@ fn parse_widget_props(
         digits: None,
         units: None,
         zoom: false,
+        report: None,
+        save: false,
+        print: false,
+        pages: false,
         grid: None,
         snap: false,
         background: None,
@@ -2794,6 +2798,22 @@ fn parse_widget_props(
             "zoom" => {
                 applies(WidgetProperty::Zoom)?;
                 props.zoom = true;
+            }
+            "report" => {
+                applies(WidgetProperty::Report)?;
+                props.report = Some(cursor.expect_ident("the report it shows, as in 'report Invoice'")?.name);
+            }
+            "save" => {
+                applies(WidgetProperty::Save)?;
+                props.save = true;
+            }
+            "print" => {
+                applies(WidgetProperty::Print)?;
+                props.print = true;
+            }
+            "pages" => {
+                applies(WidgetProperty::Pages)?;
+                props.pages = true;
             }
             "grid" => {
                 applies(WidgetProperty::Grid)?;

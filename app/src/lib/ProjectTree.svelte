@@ -42,6 +42,7 @@
     onnewlanguage = null,
     onnewresource = null,
     onnewdiagram = null,
+    onnewreport = null,
     apis = [],
     onnewapi = null,
     onmenu = null,
@@ -84,6 +85,8 @@
     onnewresource?: (() => void) | null;
     /** Asks for a new diagram: its name and kind; null where the tree only shows. */
     onnewdiagram?: (() => void) | null;
+    /** Asks for a new report: its name; null where the tree only shows. */
+    onnewreport?: (() => void) | null;
     /** The web APIs of the project file (manual/code.web-apis.md): its rest data sources. */
     apis?: DataSource[];
     /** Asks for a new web API; null where the tree only shows. */
@@ -369,6 +372,19 @@
       {/each}
       {#if onnewdiagram}
         <button class="row add" onclick={onnewdiagram}>+ New diagram</button>
+      {/if}
+    </details>
+
+    <!-- Reports of the reports folder, designed on paper in the Reports tab (docs/ledger/reports-pdf.md). -->
+    <details open>
+      <summary>Reports <span class="count">{preview.project.reports.length}</span></summary>
+      {#each preview.project.reports as r (r.name)}
+        <button class="row" class:current={is("report", r.name)} title="reports/{r.name}.report" onclick={() => onselect({ kind: "report", name: r.name })}>
+          {r.name}
+        </button>
+      {/each}
+      {#if onnewreport}
+        <button class="row add" onclick={onnewreport}>+ New report</button>
       {/if}
     </details>
 

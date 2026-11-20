@@ -1053,10 +1053,6 @@ impl<'a> Emitter<'a> {
                 let prop = if id { "Id".to_string() } else { property(&entity, &field.name) };
                 match self.field_type(&entity, &field.name) {
                     Some(FieldType::Ref { entity: target }) => super::readable(self.project, &target.name, db, format!("{db}.Load<{}>({object}.{prop})", target.name)),
-                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
-                        self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
-                        String::new()
-                    }
                     _ => format!("{object}.{prop}"),
                 }
             }
@@ -1195,6 +1191,18 @@ impl<'a> Emitter<'a> {
                 };
                 let (format, options) = self.format_options(mapping);
                 format!("Clarity.Formats.FormatFunctions.Write({}, {}, {options}, {})", string(&format), self.value(value), string(&kind))
+            }
+            // `pdf of text stylesheet css theme true`: Clarity.Pdf, refusing a stylesheet with errors.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "\"\"".to_string(), |v| self.value(v));
+                let theme = option("theme").map_or_else(|| "\"\"".to_string(), |v| format!("({} ? {} : \"\")", self.value(v), string(&crate::pdf_theme(self.project))));
+                format!("Clarity.Pdf.PdfFunctions.Of({}, {sheet}, {theme})", self.value(text))
+            }
+            // `pdf of Invoice with order = current`: Clarity.UI lays the report out with its data as JSON.
+            ExprKind::PdfReport { report, data } => {
+                let given: Vec<String> = data.iter().map(|d| format!("{} + \":\" + Clarity.Runtime.PartValues.Write({})", string(&format!("\"{}\"", d.name.name)), self.value(&d.value))).collect();
+                format!("Clarity.Ui.Reports.Pdf({}, \"{{\" + {} + \"}}\")", string(&report.name), given.join(" + \",\" + "))
             }
             ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {

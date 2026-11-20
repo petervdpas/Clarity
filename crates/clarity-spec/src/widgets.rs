@@ -131,6 +131,9 @@ pub enum WidgetKind {
     /// tells to play, pause and seek; it shows the pictures in its place in
     /// the grid (docs/ledger/video-camera.md).
     Video,
+    /// Shows a report (`reports/<Name>.report`) laid out with the data its
+    /// `gather` handler sets, page under page (docs/ledger/reports-pdf.md).
+    PdfReport,
     /// Runs its `tick` handler every so many seconds while its window is
     /// open; it shows nothing and has no place in the grid (manual/parts.time.md).
     Timer,
@@ -220,11 +223,13 @@ pub enum Event {
     /// A link into the application (`clarity:fragment/412`) of a markdown
     /// part or memo was clicked; its `link` says where.
     Link,
+    /// A pdfReport shows: its handler gathers the report's data (docs/ledger/reports-pdf.md).
+    Gather,
 }
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 28] = [
+pub const ALL_EVENTS: [Event; 29] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -253,6 +258,7 @@ pub const ALL_EVENTS: [Event; 28] = [
     Event::Fail,
     Event::Unconnected,
     Event::Link,
+    Event::Gather,
 ];
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
@@ -291,6 +297,7 @@ impl Event {
             Event::Fail => "fail",
             Event::Unconnected => "unconnected",
             Event::Link => "link",
+            Event::Gather => "gather",
         }
     }
 
@@ -324,6 +331,7 @@ impl Event {
             "fail" => Some(Event::Fail),
             "unconnected" => Some(Event::Unconnected),
             "link" => Some(Event::Link),
+            "gather" => Some(Event::Gather),
             _ => None,
         }
     }
@@ -391,8 +399,16 @@ pub enum WidgetProperty {
     /// `repeat`: a sound plays its source until it is stopped.
     Repeat,
     Units,
-    /// `zoom`: a canvas the person zooms and scrolls.
+    /// `zoom`: a canvas the person zooms and scrolls; a pdfReport zooms its pages.
     Zoom,
+    /// `report Invoice`: the report a pdfReport shows.
+    Report,
+    /// `save`: a pdfReport offers saving its PDF.
+    Save,
+    /// `print`: a pdfReport offers printing it.
+    Print,
+    /// `pages`: a pdfReport offers page arrows and which page of how many.
+    Pages,
     /// `grid 20`: a canvas shows a grid.
     Grid,
     /// `snap`: the pointer snaps to a canvas's grid.
@@ -1385,6 +1401,21 @@ const ENTRIES: &[Entry] = &[
         properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
     },
     Entry {
+        kind: WidgetKind::PdfReport,
+        keyword: "pdfReport",
+        name: "PDF report",
+        category: Category::Media,
+        size: (8, 10),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Gather],
+        properties: &[WidgetProperty::Report, WidgetProperty::Save, WidgetProperty::Print, WidgetProperty::Zoom, WidgetProperty::Pages],
+    },
+    Entry {
         kind: WidgetKind::Timer,
         keyword: "timer",
         name: "Timer",
@@ -1764,6 +1795,10 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         digits: None,
         units: None,
         zoom: false,
+        report: None,
+        save: false,
+        print: false,
+        pages: false,
         grid: None,
         snap: false,
         background: None,
@@ -2012,8 +2047,20 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(units) = props.units {
         parts.push(format!("units {} x {}", units.width, units.height));
     }
+    if let Some(report) = &props.report {
+        parts.push(format!("report {report}"));
+    }
+    if props.save {
+        parts.push("save".to_string());
+    }
+    if props.print {
+        parts.push("print".to_string());
+    }
     if props.zoom {
         parts.push("zoom".to_string());
+    }
+    if props.pages {
+        parts.push("pages".to_string());
     }
     if let Some(grid) = props.grid {
         parts.push(format!("grid {grid}"));
@@ -2394,6 +2441,10 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Digits, props.digits.is_some(), "digits"),
         (WidgetProperty::Units, props.units.is_some(), "units"),
         (WidgetProperty::Zoom, props.zoom, "zoom"),
+        (WidgetProperty::Report, props.report.is_some(), "report"),
+        (WidgetProperty::Save, props.save, "save"),
+        (WidgetProperty::Print, props.print, "print"),
+        (WidgetProperty::Pages, props.pages, "pages"),
         (WidgetProperty::Grid, props.grid.is_some(), "grid"),
         (WidgetProperty::Snap, props.snap, "snap"),
         (WidgetProperty::Background, props.background.is_some(), "background"),

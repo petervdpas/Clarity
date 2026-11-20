@@ -52,5 +52,6 @@
   <Canvas name="drawing" at="9,18" span="4" rows="3" bind="album.notes" mode="vector" grid="10" snap="true" none="surface" onchange="sketched" />
   <Sound name="ding" at="1,1" span="1" source="ding.wav" volume="80" />
   <Video name="clipView" at="1,21" span="6" rows="4" source="clip.mp4" volume="60" onend="sampled" />
+  <PdfReport name="albumPdf" at="7,21" span="6" rows="4" zoom="true" report="AlbumCard" save="true" print="true" pages="true" ongather="albumGathered" />
   <Timer name="clock" at="1,1" span="1" every="1" ontick="sampled" />
 </Window>

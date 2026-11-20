@@ -61,6 +61,7 @@ function firstOfThree() -> integer
 - `find c in Customer where ... order by ...` gives the records that meet a condition; see [Queries](code.queries.md).
 - `files f in photos where ... order by ...` gives the files of a file store; `read text of f` the text a file holds, `read bytes of f` its contents as they are; see [Queries](code.queries.md#files-in-a-file-store).
 - `json of order` and `read list<Order> from json text` write and read a format; see [Data formats](code.formats.md).
+- `pdf of text` makes a PDF of a Markdown text; see [PDFs](#pdfs).
 - `http get url` calls a web API and gives its reply; see [Calling web APIs](code.web-apis.md).
 - `Pricing.total(lines)` calls a function of an engine; see [Engines](code.engines.md). `Words.spell(42)` calls a function of a library; see [Libraries](code.libraries.md).
 - `ask @question ...`, in a command, is the answer typed on the terminal; see [Commands](code.commands.md#ask-in-a-command).
@@ -202,6 +203,40 @@ Each gives a new picture, as PNG, and leaves its values as they were. A picture 
 | `pictureWidth(p)`, `pictureHeight(p)` | its size in pixels |
 
 No picture, bytes that are no PNG, JPEG or WebP picture, or a side of 0 or above 30000 pixels is refused with a message when the code runs. Every stack gives the same pixels, through Clarity.Image (`conformance/picture-functions.json`); a program carries it only when its code calls one. On Go, C and C++ they run only in a desktop program (`stack go desktop`, which can also serve a browser): a project whose stack is Go, C or C++ with a `web` target and no `desktop`, or with a `cli` target, cannot be generated while its code calls one, and Generate says why. Rust and C# run them in every program. An engine has none: "'resize' is a picture function, which runs in the program, not in an engine".
+
+### PDFs
+
+`pdf of text` lays a Markdown text out into pages and gives the PDF's bytes, to keep in a `blob` field or write to a file store.
+
+```clarity
+handler printClicked
+    let file = pdf of invoice.notes stylesheet invoiceSheet theme true
+    write file to exports "invoice-{invoice.number}.pdf"
+```
+
+```text
+pdf of text [stylesheet css] [theme bool]
+```
+
+- The text is Clarity's Markdown, as a markdown part shows it: headings, paragraphs, emphasis, lists, quotes, code, links, rules, tables (a long one runs over pages with its header on each) and TeX math (`$\pi r^2$`, `$$...$$`). A formula that cannot be set shows its TeX.
+- `stylesheet` gives the PDF's look as CSS text, laid over Clarity's own stylesheet: `body`, `h1` to `h6`, `p`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`, `a`, `hr`, `strong`, `em`, `table`, `th`, `td`, and `@page` with its size, margins and margin boxes (`@bottom-center { content: counter(page) " / " counter(pages) }`). The properties are fonts, sizes, colors, backgrounds, line height, alignment, margins, padding, borders and widths.
+- `theme true` lets the stylesheet read the app's theme as `var(--accent)`, `var(--textFont)`, `var(--codeBackground)`: the theme the app starts with, in its light colors. Clarity's own stylesheet reads them, so a PDF made with `theme true` looks like its app.
+- The fonts are carried: Inter, Libertinus Serif, New Computer Modern and DejaVu Sans Mono (`sans-serif`, `serif` and `monospace` name them). The same text gives the same file every time, with no internet.
+- A stylesheet with errors is refused when the code runs, with each line and what is wrong there ("line 2: 'colr' is not taken there"), as a picture function refuses.
+- Making a PDF has no effect, so a function may do it; an engine does not: "'pdf of' runs in the program, not in an engine". "'pdf of' takes a Markdown text, not Note"; "the option 'stylesheet' of pdf is text, not integer"; "the option 'theme' of pdf is bool, not text"; "the option 'theme' is given twice".
+- Every stack makes the same file through Clarity.Pdf; a program carries it only when its code makes a PDF. On Go, C and C++ only a desktop program does, as with the picture functions, and Generate says why otherwise.
+
+A PDF of a report of the project's `reports` folder ([Reports](design.reports.md)) is made the same way, with the data the report takes, each by the name its `Data` gives:
+
+```clarity
+handler printClicked
+    let file = pdf of Invoice with order = current
+    write file to exports "invoice-{current.number}.pdf"
+```
+
+- `pdf of Invoice with order = current` (and `customer = buyer` after a comma for a second Data) gives the PDF's bytes, laid out as the report's file says, its texts in the language shown and its values in the person's format.
+- The checker says "there is no report 'Invoce' in the reports folder; it has Invoice", "report Invoice takes no data 'ordr'; it takes order", "report Invoice takes order, a Order: give it, as in pdf of Invoice with order = ...", "a report's data is a record, as its Data says; 'order' is integer" and "the data 'order' is given twice".
+- Clarity.UI's library lays the report out, so a program makes a report's PDF in its desktop program, on every stack (a desktop program can also serve a browser); Generate says why otherwise.
 
 A project function of the same name as a text or picture function, `join`, `length`, `snapped`, `newToken` or `newRecoveryCodes` is called instead of the built-in one.
 

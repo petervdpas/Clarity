@@ -1,0 +1,35 @@
+[package]
+name = "clarity-pdf"
+description = "Clarity.Pdf: Markdown and Clarity content laid out by Typst into PDF files, for the programs Clarity generates"
+# Released on its own (tag runtimes/rust-pdf/vX.Y.Z).
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "pdf", "typst", "markdown", "report"]
+categories = ["text-processing"]
+include = ["src/**", "fonts/**", "mitex/**", "README.md", "LICENSE"]
+
+[dependencies]
+# Markdown read into blocks the same way every Clarity renderer reads it.
+clarity-runtime = { path = "../rust", version = "0.63.0", default-features = false }
+# Typst lays out the pages and writes the PDF (docs/ledger/reports-pdf.md);
+# its fonts are carried, so making a PDF needs no internet.
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-layout = "0.15.1"
+# A page as SVG, for the IDE's preview of a report.
+typst-svg = "0.15.1"
+typst-assets = { version = "0.15.1", features = ["fonts"] }
+# A theme file is JSON.
+serde_json = "1"
+# A report (`.report`) is XML.
+roxmltree = "0.21"
+# A record's picture comes as base64 in its JSON.
+base64 = "0.22"
+# Barcodes, as pictures made from a value (an Image's `barcode`): QR codes, Code 128 and EAN-13, as SVG.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+barcoders = { version = "2", default-features = false, features = ["svg", "std"] }
+# LaTeX math written as Typst math.
+mitex = "0.2.4"

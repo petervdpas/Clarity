@@ -596,8 +596,11 @@ public sealed partial class Db : IDisposable
             throw SavedSince<R>(record.Id);
     }
 
-    /// <summary>The records a query finds, in its order.</summary>
-    public List<R> Find<R>(Query query) where R : IRecord<R>
+    /// <summary>The records a query finds, in its order, each with its stored lists.</summary>
+    public List<R> Find<R>(Query query) where R : IRecord<R> => WithLists(FindAlone<R>(query));
+
+    /// <summary>Find without the records' stored lists: what a list loads with, so a list loads one level deep.</summary>
+    public List<R> FindAlone<R>(Query query) where R : IRecord<R>
     {
         var conn = Conn(R.SourceName);
         var (sql, parameters) = query.Sql(conn.Dialect, R.TableName, R.KeyColumn, SelectColumns<R>(conn.Dialect));
@@ -612,7 +615,17 @@ public sealed partial class Db : IDisposable
         var conn = Conn(R.SourceName);
         var d = conn.Dialect;
         var sql = $"SELECT {SelectColumns<R>(d)} FROM {d.Quote(R.TableName)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(1)}";
-        return Records<R>(conn, sql, [id]).LastOrDefault() ?? throw new NotFoundException(R.TableName, id);
+        var record = Records<R>(conn, sql, [id]).LastOrDefault() ?? throw new NotFoundException(R.TableName, id);
+        record.LoadLists(this);
+        return record;
+    }
+
+    /// <summary>Loads the stored lists of each record found.</summary>
+    List<R> WithLists<R>(List<R> found) where R : IRecord<R>
+    {
+        foreach (var record in found)
+            record.LoadLists(this);
+        return found;
     }
 
     /// <summary>The record a reference field points at.</summary>

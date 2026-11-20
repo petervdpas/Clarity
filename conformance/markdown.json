@@ -1,5 +1,5 @@
 {
-  "about": "The markdown part's Markdown, as every renderer reads it, into blocks and their spans. Blocks: a line `#` to `######` and a space is a `heading` of that `level`; a line `-`, `*` or `+` and a space, or a number with `.` or `)` and a space, is an `item` (`ordered` with its `number` for a number), whose `depth` is its leading spaces halved, at most 3; a fence of three backticks starts a `code` block, its lines as written up to the closing fence; a line `>` is a `quote` of that `depth` (`>>` or `> >` is 2, at most 3), its text after the marks and one space, a line `>` alone ending it; three or more `*`, `-` or `_` alone on a line (spaces between allowed) is a `rule`, a scene break (no underlined headings: `---` under a line is a rule); other lines are a `paragraph`. Lines that follow a paragraph, an item or a quote without a blank line join it, with one space (a quote's following lines with the same depth, or with no `>` at all); a line that ends in two spaces or a backslash joins the next with a line break instead (`\\n` in the span's text). A blank line ends a paragraph or an item. Spans: the text of a block split where its look changes, merged where it does not; a span lists only what holds for it (`bold`, `italic`, `code`, `link`). Inline: a backslash takes the next punctuation as written; `code` between backticks is as written; `***` or `___` around text is bold and italic, `**` or `__` around text is bold, `*` or `_` around text is italic (a `_` inside a word is a letter); a delimiter followed by a space, or never closed, is a letter. `[text](address)` is a link when the address starts with `http://`, `https://`, `mailto:` or `clarity:` (a place in the application, such as `clarity:fragment/412`, which the part's `on link` handler follows); with another address only its text shows. HTML is text.",
+  "about": "The markdown part's Markdown, as every renderer reads it, into blocks and their spans. Blocks: a line `#` to `######` and a space is a `heading` of that `level`; a line `-`, `*` or `+` and a space, or a number with `.` or `)` and a space, is an `item` (`ordered` with its `number` for a number), whose `depth` is its leading spaces halved, at most 3; a fence of three backticks starts a `code` block, its lines as written up to the closing fence; a line `>` is a `quote` of that `depth` (`>>` or `> >` is 2, at most 3), its text after the marks and one space, a line `>` alone ending it; three or more `*`, `-` or `_` alone on a line (spaces between allowed) is a `rule`, a scene break (no underlined headings: `---` under a line is a rule); other lines are a `paragraph`. Lines that follow a paragraph, an item or a quote without a blank line join it, with one space (a quote's following lines with the same depth, or with no `>` at all); a line that ends in two spaces or a backslash joins the next with a line break instead (`\\n` in the span's text). A blank line ends a paragraph or an item. Spans: the text of a block split where its look changes, merged where it does not; a span lists only what holds for it (`bold`, `italic`, `code`, `link`). Inline: a backslash takes the next punctuation as written; `code` between backticks is as written; `***` or `___` around text is bold and italic, `**` or `__` around text is bold, `*` or `_` around text is italic (a `_` inside a word is a letter); a delimiter followed by a space, or never closed, is a letter. `[text](address)` is a link when the address starts with `http://`, `https://`, `mailto:` or `clarity:` (a place in the application, such as `clarity:fragment/412`, which the part's `on link` handler follows); with another address only its text shows. HTML is text. Tables: a line holding `|` followed by a line of as many cells of `-` (at least one, with a `:` at either end or both) is a `table`; the first line is its `header`, the lines after it holding `|` its `rows`, up to a blank line or a line without `|` (a table ends an open paragraph). The `|` at a line's start and end may be left out; `\\|` is a `|` in a cell; a cell is trimmed and read as spans (an empty cell has none); a row with fewer cells gets empty ones, one with more loses them. Each column's `align` is `left` for `:---`, `right` for `---:`, `center` for `:---:` and `none` for `---`. Math: a line starting `$$` starts a `math` block, its `text` the TeX up to the closing `$$` (the same line, or a later line ending in `$$`; never closed, to the end), trimmed. Inline, `$` followed by a letter that is not a space or `$` opens math, closed by the next `$` after a letter that is not a space and not followed by a digit; the TeX between, as written, is a span with `math` (so `$3 and $5` stays text); never closed, the `$` is a letter; `\\$` is a `$` and closes nothing.",
   "cases": [
     {
       "name": "a paragraph",
@@ -206,6 +206,54 @@
       "markdown": "As [the stable said](clarity:fragment/412), it rained.",
       "blocks": [
         { "kind": "paragraph", "spans": [{ "text": "As " }, { "text": "the stable said", "link": "clarity:fragment/412" }, { "text": ", it rained." }] }
+      ]
+    },
+    {
+      "name": "a table with a header, rows and the columns' alignment",
+      "markdown": "| Item | Count | Price | Note |\n|:-----|:-----:|------:|------|\n| Paper | 2 | 4.50 | **bulk** |\n| Ink | 1 | 12.00 |  |",
+      "blocks": [
+        { "kind": "table", "align": ["left", "center", "right", "none"], "header": [[{ "text": "Item" }], [{ "text": "Count" }], [{ "text": "Price" }], [{ "text": "Note" }]], "rows": [[[{ "text": "Paper" }], [{ "text": "2" }], [{ "text": "4.50" }], [{ "text": "bulk", "bold": true }]], [[{ "text": "Ink" }], [{ "text": "1" }], [{ "text": "12.00" }], []]] }
+      ]
+    },
+    {
+      "name": "a table without outer pipes, short and long rows, an escaped pipe",
+      "markdown": "a | b\n--- | ---\n1 \\| 2\n3 | 4 | 5\n\nAfter.",
+      "blocks": [
+        { "kind": "table", "align": ["none", "none"], "header": [[{ "text": "a" }], [{ "text": "b" }]], "rows": [[[{ "text": "1 | 2" }], []], [[{ "text": "3" }], [{ "text": "4" }]]] },
+        { "kind": "paragraph", "spans": [{ "text": "After." }] }
+      ]
+    },
+    {
+      "name": "a table ends a paragraph and a line without a pipe ends the table",
+      "markdown": "Totals:\n| x | y |\n|---|---|\n| 1 | 2 |\nThe end.",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "Totals:" }] },
+        { "kind": "table", "align": ["none", "none"], "header": [[{ "text": "x" }], [{ "text": "y" }]], "rows": [[[{ "text": "1" }], [{ "text": "2" }]]] },
+        { "kind": "paragraph", "spans": [{ "text": "The end." }] }
+      ]
+    },
+    {
+      "name": "a pipe with no delimiter line under it is text",
+      "markdown": "Either a | b\nor c.\n\n| x | y |\n|---|\n",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "Either a | b or c." }] },
+        { "kind": "paragraph", "spans": [{ "text": "| x | y | |---|" }] }
+      ]
+    },
+    {
+      "name": "math blocks on one line and over lines",
+      "markdown": "$$E = mc^2$$\n\n$$\n\\frac{a}{b}\n  + c\n$$\nAfter.",
+      "blocks": [
+        { "kind": "math", "text": "E = mc^2" },
+        { "kind": "math", "text": "\\frac{a}{b}\n  + c" },
+        { "kind": "paragraph", "spans": [{ "text": "After." }] }
+      ]
+    },
+    {
+      "name": "inline math, and dollars that are not",
+      "markdown": "Area $\\pi r^2$ of *a $x_1$ circle*; costs $3 and $5, \\$4, $ 2 and $x $.",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "Area " }, { "text": "\\pi r^2", "math": true }, { "text": " of " }, { "text": "a ", "italic": true }, { "text": "x_1", "italic": true, "math": true }, { "text": " circle", "italic": true }, { "text": "; costs $3 and $5, $4, $ 2 and $x $." }] }
       ]
     }
   ]

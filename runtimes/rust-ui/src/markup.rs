@@ -37,8 +37,8 @@ const NOT_DRAWN: [&str; 4] = ["Data", "Tells", "Level", "Select"];
 const REGIONS: [&str; 5] = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
 
 /// The events a part's `on...` attribute may name.
-const EVENTS: [&str; 28] = [
-    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "add", "remove", "tick", "end", "fail", "unconnected", "link",
+const EVENTS: [&str; 29] = [
+    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "add", "remove", "tick", "end", "fail", "unconnected", "link", "gather",
 ];
 
 fn catalog(cell: &'static OnceLock<Map<String, Value>>, text: &str) -> &'static Map<String, Value> {

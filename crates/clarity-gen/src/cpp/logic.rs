@@ -1140,10 +1140,6 @@ impl<'a> Emitter<'a> {
                     // Every record has an id.
                     None if member.name == clarity_spec::code::check::RECORD_ID => format!("{object}.id"),
                     Some(FieldType::Ref { entity: target }) => readable_one(self.project, &target.name, &format!("db.load<{}>({object}.{})", target.name, ident(&member.name))),
-                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
-                        self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
-                        String::new()
-                    }
                     _ => format!("{object}.{}", ident(&member.name)),
                 }
             }
@@ -1323,6 +1319,18 @@ impl<'a> Emitter<'a> {
                 };
                 let (format, options) = self.format_options(mapping);
                 format!("clarity::formats_write({}, {}, {options}, {})", string(&format), self.value(value), string(&kind))
+            }
+            // `pdf of text stylesheet css theme true`: pdf/pdf.cpp's call of Clarity.Pdf, throwing when it cannot.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "std::string()".to_string(), |v| format!("std::string({})", self.value(v)));
+                let theme = option("theme").map_or_else(|| "std::string()".to_string(), |v| format!("(({}) ? std::string({}) : std::string())", self.value(v), string(&crate::pdf_theme(self.project))));
+                format!("clarity::pdf_of({}, {sheet}, {theme})", self.value(text))
+            }
+            // `pdf of Invoice with order = current`: Clarity.UI's library lays the report out with its data as JSON.
+            ExprKind::PdfReport { report, data } => {
+                let given: Vec<String> = data.iter().map(|d| format!("{{{}, nlohmann::json({})}}", string(&d.name.name), self.value(&d.value))).collect();
+                format!("clarity::ui::report_pdf({}, nlohmann::json{{{}}}.dump())", string(&report.name), given.join(", "))
             }
             ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {

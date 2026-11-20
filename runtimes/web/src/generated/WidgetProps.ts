@@ -425,9 +425,25 @@ digits: number | null,
  */
 units: CanvasUnits | null, 
 /**
- * `zoom`: the person zooms and scrolls the canvas's drawing.
+ * `zoom`: the person zooms and scrolls the canvas's drawing, or a pdfReport's pages.
  */
 zoom: boolean, 
+/**
+ * `report Invoice`: the report (`reports/Invoice.report`) a pdfReport shows.
+ */
+report: string | null, 
+/**
+ * `save`: a pdfReport offers saving its PDF where the person picks.
+ */
+save: boolean, 
+/**
+ * `print`: a pdfReport offers printing its PDF through the system.
+ */
+print: boolean, 
+/**
+ * `pages`: a pdfReport offers page arrows and which page of how many.
+ */
+pages: boolean, 
 /**
  * `grid 20`: a canvas shows a grid, every so many of its units.
  */

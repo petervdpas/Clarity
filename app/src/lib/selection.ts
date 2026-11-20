@@ -6,6 +6,6 @@
 // or a toast the project declares.
 
 export type Selected = {
-  kind: "window" | "app" | "entity" | "enum" | "engine" | "part" | "library" | "toast" | "command" | "function" | "theme" | "language" | "resource" | "diagram" | "module" | "settings" | "api" | "readme" | "mapping" | "signin" | "agents" | "settingsBlock";
+  kind: "window" | "app" | "entity" | "enum" | "engine" | "part" | "library" | "toast" | "command" | "function" | "theme" | "language" | "resource" | "diagram" | "report" | "module" | "settings" | "api" | "readme" | "mapping" | "signin" | "agents" | "settingsBlock";
   name: string;
 };

@@ -11,7 +11,7 @@ use std::rc::Rc;
 use clarity_runtime::ui::PartState;
 use clarity_ui::input::{Modifiers, PointerButton};
 use clarity_ui::markup::HandlerCall;
-use clarity_ui::parts::containers::markdown::blocks::{self, Block, BlockKind, Span};
+use clarity_ui::parts::containers::markdown::blocks::{self, Block, BlockKind, ColumnAlign, Span};
 use clarity_ui::parts::containers::markdown::{MarkdownPart, MarkdownRun, BAR_ROOM};
 use clarity_ui::parts::markdown_memo::{MarkdownMemoPart, SWITCH_HEIGHT};
 use clarity_ui::parts::PartHost;
@@ -93,6 +93,22 @@ fn written(block: &Block) -> Value {
         BlockKind::Quote => json!({ "kind": "quote", "depth": block.depth, "spans": spans }),
         BlockKind::Rule => json!({ "kind": "rule" }),
         BlockKind::Code => json!({ "kind": "code", "text": block.text }),
+        BlockKind::Math => json!({ "kind": "math", "text": block.text }),
+        BlockKind::Table => {
+            let cells = |row: &Vec<Vec<Span>>| -> Vec<Value> { row.iter().map(|cell| Value::Array(cell.iter().map(written_span).collect())).collect() };
+            let align: Vec<&str> = block
+                .align
+                .iter()
+                .map(|a| match a {
+                    ColumnAlign::None => "none",
+                    ColumnAlign::Left => "left",
+                    ColumnAlign::Center => "center",
+                    ColumnAlign::Right => "right",
+                })
+                .collect();
+            let rows: Vec<Vec<Value>> = block.rows.iter().map(cells).collect();
+            json!({ "kind": "table", "align": align, "header": cells(&block.header), "rows": rows })
+        }
     }
 }
 
@@ -110,6 +126,9 @@ fn written_span(span: &Span) -> Value {
     }
     if let Some(link) = &span.link {
         out.insert("link".into(), json!(link));
+    }
+    if span.math {
+        out.insert("math".into(), json!(true));
     }
     Value::Object(out)
 }
@@ -168,6 +187,35 @@ fn it_shows_headings_paragraphs_items_and_code() {
     assert!(find("one").place.x > plain.place.x);
     let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
     keep(&mut shot, "markdown.png");
+}
+
+/// A table lies in columns as wide as their texts, its header bold, each
+/// column aligned as its delimiter says, a line under each row; math shows
+/// its TeX as code does, until Clarity draws formulas.
+#[test]
+fn it_shows_tables_in_columns_and_math_as_its_source() {
+    let text = "| Item | Price |\n|:--|--:|\n| Paper | 4.50 |\n| Ink | 12.00 |\n\nArea $\\pi r^2$ here.\n\n$$E = mc^2$$";
+    let (mut screen, _) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!(text)), 800, 400);
+    let runs = part(&screen).runs();
+    let find = |start: &str| -> MarkdownRun { runs.iter().find(|r| r.text.starts_with(start)).cloned().unwrap_or_else(|| panic!("no run {start} in {runs:#?}")) };
+    let (item, price, paper, cheap, dear, ink) = (find("Item"), find("Price"), find("Paper"), find("4.50"), find("12.00"), find("Ink"));
+    assert!(item.bold && price.bold && !paper.bold, "the header is bold");
+    assert!(price.place.x > item.place.x + item.place.width, "columns side by side");
+    assert!((paper.place.x - item.place.x).abs() < 0.5 && (ink.place.x - item.place.x).abs() < 0.5, "a left column starts its cells alike");
+    assert!(paper.place.y > item.place.y && ink.place.y > paper.place.y, "rows below each other");
+    let right = |r: &MarkdownRun| r.place.x + r.place.width;
+    assert!((right(&cheap) - right(&dear)).abs() < 0.5 && (right(&price) - right(&dear)).abs() < 0.5, "a right column ends its cells alike: {cheap:?} {dear:?} {price:?}");
+    assert!(right(&dear) < 400.0, "a table is as wide as its texts, not the part");
+    let lines = part(&screen).table_lines();
+    assert_eq!(3, lines.len(), "a line under the header and each row: {lines:?}");
+    assert!(lines[0].1 && !lines[1].1, "the header's line is the strong one");
+    assert!(lines[0].0.y > item.place.y && lines[0].0.y < paper.place.y);
+    let pi = find("\\pi");
+    assert!(pi.code && pi.font == "mono", "inline math shows its TeX as code: {pi:?}");
+    let formula = find("E ");
+    assert!(formula.code && part(&screen).code_boxes().iter().any(|b| b.contains(formula.place.x + 1.0, formula.place.y + 1.0)), "a math block shows as a code block");
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    keep(&mut shot, "markdown-table.png");
 }
 
 /// A book's text reads like a page: room around it, headings by their

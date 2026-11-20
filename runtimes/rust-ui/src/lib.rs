@@ -32,6 +32,8 @@ pub mod markup;
 pub mod melodies;
 pub mod overlay;
 pub mod painter;
+#[cfg(feature = "pdf")]
+pub mod pdf_painter;
 pub mod parts;
 pub mod picture;
 pub mod screen;

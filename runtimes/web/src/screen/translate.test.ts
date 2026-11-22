@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keyValue, languageName, languagesOf, pickLanguage, rememberedChoice, translate, translateText, type Texts } from "./translate.ts";
+import { keyValue, languageName, pickLanguage, translate, type Texts } from "./translate.ts";
 
 type Pick = { what: string; locale: string; available: string[]; base: string | null; picks: string | null };
 type KeyCase = { what: string; language: string | null; key: string; gives: string };
@@ -32,38 +32,13 @@ test("a text of the project is a key's value, or written as it is", () => {
   assert.equal(translate("@unknown", texts), "unknown");
 });
 
-test("a keyed text from the backend takes its value, keeping its values", () => {
-  const texts: Texts = { values: { en: { savedName: "Saved {name}" }, nl: { savedName: "{name} opgeslagen" } }, picked: "nl", fallback: "en" };
-  const values = { name: { kind: "text" as const, value: "Ada" } };
-  assert.deepEqual(translateText({ key: "savedName", values }, texts), { text: "{name} opgeslagen", values });
-  assert.deepEqual(translateText({ key: "save" }, texts), { text: "save", values: {} });
-  assert.equal(translateText("As it is", texts), "As it is");
-});
-
-test("the language switch offers the base language first, each by its own name", () => {
-  assert.deepEqual(languagesOf("en", ["nl", "de"]), ["en", "de", "nl"]);
-  assert.deepEqual(languagesOf(null, ["en", "nl"]), ["en", "nl"]);
-  assert.equal(languageName("nl"), "Nederlands");
-  assert.equal(languageName("de"), "Deutsch");
-});
-
-test("a remembered choice applies while its language is there", () => {
-  assert.equal(rememberedChoice("nl", "en", ["nl"]), "nl");
-  // The base language shows the texts as written.
-  assert.equal(rememberedChoice("en", "en", ["nl"]), null);
-  // A language the project no longer has falls back to the locale.
-  assert.equal(rememberedChoice("fr", "en", ["nl"]), undefined);
-  assert.equal(rememberedChoice(null, "en", ["nl"]), undefined);
-});
-
-test("Clarity's own words sent by key read as their English until the project gives them a value", () => {
-  const unconnected: { words: Record<string, string> } = JSON.parse(readFileSync(new URL("../../../../conformance/unconnected.json", import.meta.url), "utf8"));
-  const none: Texts = { values: { en: {} }, picked: null, fallback: "en" };
-  for (const [key, english] of Object.entries(unconnected.words)) {
-    assert.deepEqual(translateText({ key }, none), { text: english, values: {} });
-  }
-  const given: Texts = { values: { en: { unconnectedNotKept: "Vul eerst de verbinding in" } }, picked: null, fallback: "en" };
-  assert.deepEqual(translateText({ key: "unconnectedNotKept" }, given), { text: "Vul eerst de verbinding in", values: {} });
-  // A key of the project's own that has no value shows as its key.
-  assert.deepEqual(translateText({ key: "saveCaption" }, none), { text: "saveCaption", values: {} });
+test("a language is named as the running app names it (Clarity.UI's choices.rs language_name)", () => {
+  const rust = readFileSync(new URL("../../../rust-ui/src/choices.rs", import.meta.url), "utf8");
+  const listed = rust.slice(rust.indexOf("const NAMES:"), rust.indexOf("];", rust.indexOf("const NAMES:")));
+  const unescape = (text: string) => text.replace(/\\u\{([0-9a-f]+)\}/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
+  const pairs = [...listed.matchAll(/\("([a-z]+)", "([^"]*)"\)/g)];
+  assert.ok(pairs.length > 20);
+  for (const [, tag, name] of pairs) assert.equal(languageName(tag), unescape(name), tag);
+  assert.equal(languageName("nl-BE"), "Nederlands", "a region keeps its language's name");
+  assert.equal(languageName("xx"), "xx", "one not known is its tag");
 });

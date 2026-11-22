@@ -105,6 +105,8 @@ translation de
     pasteText "Einfügen"
     recordNotThere "Es gibt kein {table} mit der ID {id}"
     recordStillUsed "Dieses {table} wird noch von anderen Datensätzen verwendet"
+    divisionByZero "Division durch null"
+    numberTooLarge "Die Zahl ist zu groß"
     removeRow "Entfernen"
     removeRowAsk "{row} entfernen?"
     selectAllText "Alles auswählen"

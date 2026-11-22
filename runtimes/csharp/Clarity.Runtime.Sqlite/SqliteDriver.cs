@@ -108,40 +108,5 @@ internal sealed class SqliteDriver(SqliteConnection conn) : IDriver, ITransactio
         return command.ExecuteNonQuery();
     });
 
-    /// <summary>
-    /// References are not enforced while a step runs, since a step may build a
-    /// table again that others refer to; they are checked before the step is kept.
-    /// </summary>
-    public void Apply(int version, IReadOnlyList<string> statements)
-    {
-        Batch("PRAGMA foreign_keys = OFF");
-        try
-        {
-            Run(() =>
-            {
-                using var tx = conn.BeginTransaction();
-                foreach (var statement in statements)
-                {
-                    using var command = Command(statement, [], tx);
-                    command.ExecuteNonQuery();
-                }
-                using (var check = Command("SELECT COUNT(*) FROM pragma_foreign_key_check", [], tx))
-                {
-                    var broken = (long)check.ExecuteScalar()!;
-                    if (broken > 0)
-                        throw new StorageException($"migration step {version} leaves {broken} reference(s) to records that do not exist");
-                }
-                using (var applied = Command(Store.Applied(version), [], tx))
-                    applied.ExecuteNonQuery();
-                tx.Commit();
-                return 0;
-            });
-        }
-        finally
-        {
-            Batch("PRAGMA foreign_keys = ON");
-        }
-    }
-
     public void Dispose() => conn.Dispose();
 }

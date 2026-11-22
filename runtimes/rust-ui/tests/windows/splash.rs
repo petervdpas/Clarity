@@ -27,6 +27,7 @@ const SPLASHED: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Welcome", WEL
 
 #[test]
 fn the_files_say_which_page_is_the_splash_and_how_long_it_shows() {
+    let _turn = crate::choices_turn();
     assert_eq!(SPLASHED.splash(), Some(Splash { page: "Welcome".into(), at_least: Duration::from_millis(1500) }));
     let quick = AppFiles { apps: &[("Shop", r#"<App name="Shop" splash="Welcome"></App>"#)], ..SPLASHED };
     assert_eq!(quick.splash().map(|s| s.at_least), Some(Duration::ZERO), "without a time it closes once the main window shows");
@@ -37,6 +38,7 @@ fn the_files_say_which_page_is_the_splash_and_how_long_it_shows() {
 
 #[test]
 fn the_splash_shows_alone_and_says_what_loads() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake::default());
     let program: Arc<dyn Program> = fake.clone();
     let running = WindowStack::prepare(program, SPLASHED);
@@ -50,6 +52,7 @@ fn the_splash_shows_alone_and_says_what_loads() {
 
 #[test]
 fn the_main_window_follows_with_what_on_start_said() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake::default());
     let program: Arc<dyn Program> = fake.clone();
     let running = WindowStack::prepare(program.clone(), SPLASHED);
@@ -67,6 +70,7 @@ fn the_main_window_follows_with_what_on_start_said() {
 /// shows it until `on start` answered, then the main window takes its place.
 #[test]
 fn in_place_the_main_window_takes_the_splash_s_place() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake::default());
     let program: Arc<dyn Program> = fake.clone();
     let quick = AppFiles { apps: &[("Shop", r#"<App name="Shop" splash="Welcome"></App>"#)], ..SPLASHED };
@@ -91,6 +95,7 @@ fn in_place_the_main_window_takes_the_splash_s_place() {
 /// XAML, and opens at the size it gives, not the app's running size.
 #[test]
 fn the_splash_window_says_how_it_shows() {
+    let _turn = crate::choices_turn();
     let look = SPLASHED.window_look("Welcome");
     assert_eq!(look, clarity_ui::markup::WindowLook { size: Some((480.0, 280.0)), decorations: false, centre: true, resizable: false, topmost: true, taskbar: false, app_frame: false });
     assert_eq!(SPLASHED.window_look("Main"), clarity_ui::markup::WindowLook::default(), "a window that says nothing is the system's own");
@@ -102,6 +107,7 @@ fn the_splash_window_says_how_it_shows() {
 /// A splash shows its own parts only, never the app's frame (its menu, ribbon or footer), as a dialog does.
 #[test]
 fn the_splash_shows_no_frame_of_the_app() {
+    let _turn = crate::choices_turn();
     assert!(clarity_ui::frame::app_frame_of(&SPLASHED, "Main").is_some(), "the main window shows the app's frame");
     assert!(clarity_ui::frame::app_frame_of(&SPLASHED, "Welcome").is_none(), "the splash does not: its own markup says frame=none");
     let unnamed = AppFiles { apps: &[("Shop", r#"<App name="Shop"><Menu name="appMenu"><Item caption="App" onclick="fromApp" /></Menu></App>"#)], ..SPLASHED };
@@ -111,6 +117,7 @@ fn the_splash_shows_no_frame_of_the_app() {
 /// What code says loads (`splash.status`) shows on the splash while it does.
 #[test]
 fn the_splash_shows_what_code_says_loads() {
+    let _turn = crate::choices_turn();
     let program: Arc<dyn Program> = Arc::new(Fake::default());
     clarity_runtime::splash::set_status(Text::plain("Loading the lists"));
     let mut driven = clarity_ui::headless::Driven::start_splashed(program, SPLASHED, None);
@@ -126,6 +133,7 @@ fn the_splash_shows_what_code_says_loads() {
 /// height even beside a picture, so one step left is as long as one step down.
 #[test]
 fn an_exact_grid_lays_parts_on_square_cells() {
+    let _turn = crate::choices_turn();
     const FINE: &str = r#"<Window name="Welcome" cell="10" columns="56" frame="none">
   <Image name="logo" at="4,3" span="16" rows="16" source="logo.png" />
   <Heading name="titleHeading" at="24,5" span="30" rows="4" caption="Todo" />
@@ -151,6 +159,7 @@ fn an_exact_grid_lays_parts_on_square_cells() {
 /// language; a window with its own shows that; without either, the project's name.
 #[test]
 fn a_window_without_its_own_title_shows_the_app_s() {
+    let _turn = crate::choices_turn();
     let program: Arc<dyn Program> = Arc::new(Fake::default());
     let titled = AppFiles { apps: &[("Shop", r#"<App name="Shop" title="Shop for all"></App>"#)], model: r#"{"project":{"files":[{"pages":[{"name":{"name":"Main"},"kind":"window"},{"name":{"name":"Own"},"kind":"window","title":"Its own"}]}]}}"#, ..FILES };
     let running = WindowStack::prepare(program.clone(), titled);

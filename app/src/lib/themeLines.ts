@@ -8,14 +8,16 @@ import type { ThemeDecl } from "@clarity/ui/generated/ThemeDecl.ts";
 /** One line of a theme set by its key; a null line takes it away. */
 export type ThemeLine = { key: string; line: string | null };
 
-/** Whether `text` is a color written out: `#rgb` or `#rrggbb`. */
+/** Whether `text` is a color written out: `#rgb` or `#rrggbb` (clarity_spec::themes::is_hex, conformance/colors.json). */
 export function isHex(text: string): boolean {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text);
 }
 
-/** `#abc` as `#aabbcc`, which a color input takes; other text as it is. */
+/** `#abc` as `#aabbcc`, lowercase, which a color input takes (clarity_spec::themes::full_hex); other text as it is. */
 export function longHex(text: string): string {
-  return /^#[0-9a-fA-F]{3}$/.test(text) ? "#" + [...text.slice(1)].map((c) => c + c).join("") : text;
+  if (!isHex(text)) return text;
+  const digits = text.slice(1).toLowerCase();
+  return "#" + (digits.length === 3 ? [...digits].map((c) => c + c).join("") : digits);
 }
 
 /** A color in a look: a name of the theme as it is, a color written out in quotes. */

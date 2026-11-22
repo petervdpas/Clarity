@@ -128,7 +128,7 @@ func albums(t *testing.T, store string) *Db {
 	db, err := Memory()
 	must(t, err)
 	t.Cleanup(func() { db.Close() })
-	_, err = db.Migrate([][]string{{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}})
+	_, err = applySteps(db, "", [][]string{{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}})
 	must(t, err)
 	must(t, db.AddStore("photos", store))
 	return db
@@ -261,7 +261,7 @@ func TestAStoreKeepsItsFilesInAFolderSetting(t *testing.T) {
 	db, err := Memory()
 	must(t, err)
 	t.Cleanup(func() { db.Close() })
-	_, err = db.Migrate([][]string{{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}})
+	_, err = applySteps(db, "", [][]string{{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}})
 	must(t, err)
 	must(t, db.AddStoreSetting("photos", program, "photosFolder", "photos"))
 

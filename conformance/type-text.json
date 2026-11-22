@@ -1,0 +1,24 @@
+{
+  "about": "A field's type as text and back, the same in the spec (its parser and clarity_spec::dictionary::type_text) and in the IDE's type field (app/src/lib/fieldType.ts typeParts and typeText). `written` is what is typed, `text` how it reads back. An enum is written by its name (`enums` names the project's), a reference with `ref`, a list of plain values with `list<...>`.",
+  "enums": ["Size"],
+  "entities": ["Customer"],
+  "cases": [
+    { "written": "text", "text": "text" },
+    { "written": "text(80)", "text": "text(80)" },
+    { "written": "integer", "text": "integer" },
+    { "written": "decimal(10, 2)", "text": "decimal(10, 2)" },
+    { "written": "decimal(10,2)", "text": "decimal(10, 2)" },
+    { "written": "money", "text": "money" },
+    { "written": "bool", "text": "bool" },
+    { "written": "date", "text": "date" },
+    { "written": "datetime", "text": "datetime" },
+    { "written": "duration", "text": "duration" },
+    { "written": "email", "text": "email" },
+    { "written": "url", "text": "url" },
+    { "written": "color", "text": "color" },
+    { "written": "image", "text": "image" },
+    { "written": "Size", "text": "Size" },
+    { "written": "ref Customer", "text": "ref Customer" },
+    { "written": "list<text>", "text": "list<text>" }
+  ]
+}

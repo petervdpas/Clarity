@@ -43,6 +43,7 @@
   import ToastView from "./lib/ToastView.svelte";
   import DeclCodeView from "./lib/DeclCodeView.svelte";
   import { commandLine } from "./lib/commandLine";
+  import { isCamelCase } from "./lib/names";
   import { startProject } from "./lib/startProject";
   import { isToastName, newToastText, textKeyOf } from "./lib/toastLines";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
@@ -625,7 +626,7 @@
       action: "Add",
     }))?.trim();
     if (!name) return;
-    if (!/^[a-z][A-Za-z0-9]*$/.test(name)) {
+    if (!isCamelCase(name)) {
       actionError = `'${name}' is not a name code can use; start with a small letter, letters and digits only, like ${kind === "function" ? "totalOf" : "archiveOld"}`;
       return;
     }

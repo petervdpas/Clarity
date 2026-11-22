@@ -1,0 +1,173 @@
+{
+  "about": "A report's file as the Reports tab's designer and Clarity's report tools read and write it (docs/ledger/reports-pdf.md, Agent tools for reports): `reports`, a file's text and the text written back (bands in the order they print, lengths in millimetres, words kept in their order); `parts`, what a new part of each kind starts with; `declarations`, a stylesheet with one declaration of a class set or taken out. crates/clarity-spec/src/report_design.rs reads these cases; the designer and Clarity's report tools both read and write reports through it.",
+  "reports": [
+    {
+      "name": "bands written in the order they print, words kept, entities read and written",
+      "text": "<?xml version=\"1.0\"?>\n<!-- an invoice -->\n<Report name=\"Invoice\" paper=\"A4 landscape\" margin=\"15mm\" stylesheet=\"Invoice.css\" headerFirst=\"false\">\n  <PageFooter height=\"8mm\"><PageNumber at=\"80,0\" size=\"10,5\" align=\"center\"/></PageFooter>\n  <Data name=\"order\" type=\"Order\" />\n  <Detail height=\"6\" list=\"order.lines\">\n    <Field at=\"0,0\" size=\"60,6\" bind=\"line.product\" class=\"cell\"/>\n    <Sum at=\"150.04,0\" size=\"30,6\" of=\"line.total\" align=\"right\"/>\n  </Detail>\n  <ReportHeader height=\"2cm\">\n    <Text at=\"0,0\" size=\"120,10\" key=\"invoiceTitle\" class=\"title\"/>\n    <Text at=\"0,12\" size=\"80,6\" key=\"tom &amp; &quot;jerry&quot;\"/>\n  </ReportHeader>\n  <GroupHeader height=\"7mm\" by=\"line.category\"/>\n</Report>",
+      "written": "<Report name=\"Invoice\" paper=\"A4 landscape\" margin=\"15mm\" stylesheet=\"Invoice.css\" headerFirst=\"false\">\n  <Data name=\"order\" type=\"Order\" />\n  <ReportHeader height=\"20mm\">\n    <Text at=\"0,0\" size=\"120,10\" key=\"invoiceTitle\" class=\"title\" />\n    <Text at=\"0,12\" size=\"80,6\" key=\"tom &amp; &quot;jerry&quot;\" />\n  </ReportHeader>\n  <GroupHeader height=\"7mm\" by=\"line.category\" />\n  <Detail height=\"6mm\" list=\"order.lines\">\n    <Field at=\"0,0\" size=\"60,6\" bind=\"line.product\" class=\"cell\" />\n    <Sum at=\"150,0\" size=\"30,6\" of=\"line.total\" align=\"right\" />\n  </Detail>\n  <PageFooter height=\"8mm\">\n    <PageNumber at=\"80,0\" size=\"10,5\" align=\"center\" />\n  </PageFooter>\n</Report>\n"
+    },
+    {
+      "name": "a new report as the designer starts it",
+      "text": "<Report name=\"Sales\" paper=\"A4\" margin=\"20mm\">\n  <ReportHeader height=\"20mm\" />\n  <PageFooter height=\"8mm\">\n    <PageNumber at=\"80,0\" size=\"10,5\" align=\"center\" />\n  </PageFooter>\n</Report>\n",
+      "written": "<Report name=\"Sales\" paper=\"A4\" margin=\"20mm\">\n  <ReportHeader height=\"20mm\" />\n  <PageFooter height=\"8mm\">\n    <PageNumber at=\"80,0\" size=\"10,5\" align=\"center\" />\n  </PageFooter>\n</Report>\n"
+    },
+    {
+      "name": "lengths in other units, as millimetres",
+      "text": "<Report name=\"L\"><PageHeader height=\"1in\"/><ReportFooter height=\"36pt\"><Line at=\"0,0\" size=\"60,0\"/><Box at=\"1,2\" size=\"3,4\" class=\"frame\"/></ReportFooter></Report>",
+      "written": "<Report name=\"L\">\n  <PageHeader height=\"25.4mm\" />\n  <ReportFooter height=\"12.7mm\">\n    <Line at=\"0,0\" size=\"60,0\" />\n    <Box at=\"1,2\" size=\"3,4\" class=\"frame\" />\n  </ReportFooter>\n</Report>\n"
+    }
+  ],
+  "parts": [
+    {
+      "kind": "Text",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        40,
+        6
+      ],
+      "attrs": {
+        "key": ""
+      }
+    },
+    {
+      "kind": "Field",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        40,
+        6
+      ],
+      "attrs": {
+        "bind": ""
+      }
+    },
+    {
+      "kind": "Sum",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        40,
+        6
+      ],
+      "attrs": {
+        "of": "",
+        "align": "right"
+      }
+    },
+    {
+      "kind": "Markdown",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        120,
+        20
+      ],
+      "attrs": {
+        "bind": ""
+      }
+    },
+    {
+      "kind": "PageNumber",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        10,
+        5
+      ],
+      "attrs": {
+        "align": "center"
+      }
+    },
+    {
+      "kind": "Image",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        40,
+        20
+      ],
+      "attrs": {
+        "source": ""
+      }
+    },
+    {
+      "kind": "Line",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        60,
+        0
+      ],
+      "attrs": {}
+    },
+    {
+      "kind": "Box",
+      "at": [
+        5,
+        2
+      ],
+      "size": [
+        60,
+        20
+      ],
+      "attrs": {}
+    }
+  ],
+  "declarations": [
+    {
+      "name": "a new rule in an empty sheet",
+      "css": "",
+      "selector": ".title",
+      "property": "font-size",
+      "value": "18pt",
+      "result": ".title { font-size: 18pt; }\n"
+    },
+    {
+      "name": "a declaration changed, the others kept",
+      "css": ".title { font-size: 12pt; color: #333; }\n",
+      "selector": ".title",
+      "property": "font-size",
+      "value": "18pt",
+      "result": ".title { color: #333; font-size: 18pt; }\n"
+    },
+    {
+      "name": "a declaration taken out",
+      "css": ".title { font-size: 12pt; color: #333; }\n",
+      "selector": ".title",
+      "property": "color",
+      "value": "",
+      "result": ".title { font-size: 12pt; }\n"
+    },
+    {
+      "name": "a new rule after one without a newline",
+      "css": "body { font-size: 10pt; }",
+      "selector": ".cell",
+      "property": "font-weight",
+      "value": "bold",
+      "result": "body { font-size: 10pt; }\n.cell { font-weight: bold; }\n"
+    },
+    {
+      "name": "nothing to take out",
+      "css": "",
+      "selector": ".cell",
+      "property": "color",
+      "value": "",
+      "result": ""
+    }
+  ]
+}

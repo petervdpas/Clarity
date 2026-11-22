@@ -121,25 +121,6 @@ public:
         if (sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, nullptr) != SQLITE_OK) failed(db_);
     }
 
-    // A step runs with references unchecked, since it may build a table again
-    // that others refer to; they are checked before the step is kept.
-    void apply(int version, const std::vector<std::string>& statements) override {
-        batch("PRAGMA foreign_keys = OFF");
-        try {
-            batch("BEGIN");
-            for (const auto& statement : statements) batch(statement);
-            if (!rows("SELECT 1 FROM pragma_foreign_key_check", {}).empty())
-                throw StorageError("migration step leaves references to records that do not exist");
-            batch(applied(version));
-            batch("COMMIT");
-        } catch (...) {
-            sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
-            sqlite3_exec(db_, "PRAGMA foreign_keys = ON", nullptr, nullptr, nullptr);
-            throw;
-        }
-        batch("PRAGMA foreign_keys = ON");
-    }
-
 private:
     sqlite3* db_;
 };
@@ -159,6 +140,8 @@ std::unique_ptr<Driver> open_sqlite(const std::string& path) {
         throw StorageError("cannot open " + path + ": " + what);
     }
     sqlite3_extended_result_codes(db, 1);
+    // A write waits up to five seconds while another program holds the database, as on every stack.
+    sqlite3_busy_timeout(db, 5000);
     auto driver = std::make_unique<Sqlite>(db);
     driver->batch("PRAGMA foreign_keys = ON");
     return driver;

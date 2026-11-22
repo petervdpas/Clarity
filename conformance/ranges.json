@@ -1,5 +1,5 @@
 {
-  "about": "The slider and the spin box of U1c, which move a number within a range: its lowest value (`min`), its highest (`max`), either of which may be null for no end, and its `step`. Numbers are written as text so decimals stay exact; `whole` says the field holds whole numbers. `keys` gives the value after a key: up and down move one step, pageUp and pageDown ten, home and end go to the lowest and highest value (and do nothing without one); the value never leaves the range, and no value counts as the lowest value, or 0 without one. `drag` gives the value a slider takes where it is dragged to (`at`): the nearest step counted from the lowest value, never past the highest step within the range. `typed` gives the value a spin box takes for a number typed into it: kept, but within the range.",
+  "about": "The slider and the spin box of U1c, which move a number within a range: its lowest value (`min`), its highest (`max`), either of which may be null for no end, and its `step`. Numbers are written as text so decimals stay exact; `whole` says the field holds whole numbers. `keys` gives the value after a key: up and down move one step, pageUp and pageDown ten, home and end go to the lowest and highest value (and do nothing without one); the value never leaves the range, and no value counts as the lowest value, or 0 without one. `drag` gives the value a slider takes where it is dragged to (`at`): the nearest step counted from the lowest value, never past the highest step within the range. `typed` gives the value a spin box takes for a number typed into it: kept, but within the range. `defaults` gives the range a part moves in (clarity_spec::widgets::number_range, the designer's numberRange): `min`, `max` and `step` as its line writes them (`written`), else the bound field's own `min` and `max` (`field`), and a step of 1; a slider without either end runs from 0 to 100.",
   "keys": [
     { "value": "5", "min": "0", "max": "10", "step": "1", "whole": true, "key": "up", "after": "6" },
     { "value": "5", "min": "0", "max": "10", "step": "1", "whole": true, "key": "down", "after": "4" },
@@ -33,5 +33,12 @@
     { "value": "0", "min": "1", "max": "99", "whole": true, "after": "1" },
     { "value": "-250.5", "min": null, "max": null, "whole": false, "after": "-250.5" },
     { "value": "3.333", "min": "-10", "max": "3", "whole": false, "after": "3" }
+  ],
+  "defaults": [
+    { "kind": "slider", "written": { "min": null, "max": null, "step": null }, "field": null, "range": { "min": "0", "max": "100", "step": "1" } },
+    { "kind": "slider", "written": { "min": null, "max": null, "step": null }, "field": { "min": "1", "max": "99" }, "range": { "min": "1", "max": "99", "step": "1" } },
+    { "kind": "slider", "written": { "min": "0", "max": "50", "step": "0.5" }, "field": { "min": "1", "max": "99" }, "range": { "min": "0", "max": "50", "step": "0.5" } },
+    { "kind": "spinbox", "written": { "min": "-10", "max": null, "step": "0.5" }, "field": { "min": "1", "max": null }, "range": { "min": "-10", "max": null, "step": "0.5" } },
+    { "kind": "spinbox", "written": { "min": null, "max": null, "step": null }, "field": null, "range": { "min": null, "max": null, "step": "1" } }
   ]
 }

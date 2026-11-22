@@ -66,7 +66,7 @@ func drawn(t *testing.T) *Db {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Migrate([][]string{{
+	if _, err := applySteps(db, "", [][]string{{
 		"CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL)",
 		"CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER REFERENCES shape(id), text TEXT NOT NULL)",
 	}}); err != nil {

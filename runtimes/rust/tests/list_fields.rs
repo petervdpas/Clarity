@@ -7,6 +7,10 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 const CASES: &str = include_str!("../../../conformance/list-fields.json");
 
 fn cases(part: &str) -> Vec<Value> {
@@ -84,8 +88,8 @@ impl clarity_runtime::Record for Album {
 #[test]
 fn a_query_finds_the_records_whose_list_holds_an_item() {
     use clarity_runtime::{Cond, Db, Query};
-    let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE album (id INTEGER PRIMARY KEY, tags TEXT NOT NULL DEFAULT '[]', tracks TEXT NOT NULL DEFAULT '[]')"]]).unwrap();
+    let db = Db::memory().unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE album (id INTEGER PRIMARY KEY, tags TEXT NOT NULL DEFAULT '[]', tracks TEXT NOT NULL DEFAULT '[]')"]]).unwrap();
     for (tags, tracks) in [(vec!["jazz", "live"], vec![1, 5]), (vec!["live music"], vec![15]), (vec![], vec![])] {
         let mut album = Album { tags: tags.into_iter().map(String::from).collect(), tracks, ..Album::default() };
         db.save(&mut album).unwrap();
@@ -120,28 +124,4 @@ fn a_typed_date_or_enum_value_must_be_one() {
     assert!(matches!(list_fields::added(ItemKind::Date, &[], &[], "2026-02-30"), Added::Refused));
     assert!(matches!(list_fields::added(ItemKind::Date, &[], &[], "2026-10-31"), Added::Items(i) if i == vec![Value::from("2026-10-31")]));
     assert!(matches!(list_fields::added(ItemKind::Decimal, &[], &[Value::from("1.50")], "1.5"), Added::Items(i) if i.len() == 1), "1.50 and 1.5 are one item");
-}
-
-fn drawn(state: clarity_runtime::ui::WindowState) -> clarity_runtime::Result<clarity_runtime::ui::Reply> {
-    let data = state.data.clone();
-    Ok(clarity_runtime::ui::Ui::from_state(&state).reply(&state.window, data))
-}
-
-#[test]
-fn item_event_sets_the_list_or_says_refused() {
-    use clarity_runtime::list_fields::{self, ItemKind};
-    use clarity_runtime::ui::WindowState;
-    let db = clarity_runtime::Db::memory().unwrap();
-    let mut data = serde_json::Map::new();
-    data.insert("album".into(), serde_json::json!({ "id": 1, "tracks": [1] }));
-    let state = WindowState::new("Album", data);
-    let reply = list_fields::event(&db, state.clone(), "tracks", "album.tracks", ItemKind::Integer, &[], " 12 ", None, drawn, drawn).unwrap();
-    assert_eq!(reply.state.data["album"]["tracks"], serde_json::json!([1, 12]));
-    assert!(!reply.refused);
-    let reply = list_fields::event(&db, state.clone(), "tracks", "album.tracks", ItemKind::Integer, &[], "twelve", None, |_| panic!("refused"), drawn).unwrap();
-    assert!(reply.refused);
-    assert_eq!(reply.state.data, state.data, "the list stays");
-    assert_eq!(serde_json::to_value(&reply).unwrap()["refused"], Value::Bool(true));
-    let kept = list_fields::event(&db, state.clone(), "tracks", "album.tracks", ItemKind::Integer, &[], "1", None, drawn, drawn).unwrap();
-    assert!(serde_json::to_value(&kept).unwrap().get("refused").is_none(), "refused travels only when true");
 }

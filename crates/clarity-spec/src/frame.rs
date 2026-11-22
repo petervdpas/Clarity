@@ -396,7 +396,7 @@ pub struct ShownFrame<'a> {
 }
 
 /// The frame `page` shows in `app`. The web renderer has the same rule
-/// (`shownFrame` in app/src/lib/frame.ts).
+/// (`frameForPage` in runtimes/web/src/screen/frame.ts, conformance/frame-shown.json).
 pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Page) -> ShownFrame<'a> {
     if page.kind == crate::model::PageKind::Dialog {
         return ShownFrame::default();

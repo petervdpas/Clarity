@@ -1,0 +1,9 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Search artists and albums"
+    add search Artist.name
+    add search Artist.country
+    add search Album.title
+    add search Album.record_label
+    add search Album.notes
+    add search Album.tags

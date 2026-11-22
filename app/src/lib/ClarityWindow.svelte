@@ -5,7 +5,7 @@
   // parts and grids are (`onlayout`) for the designer's layer over it. A
   // change of the project (`project`, a new value for each) or of what is
   // shown draws again on the same canvas, without loading the library again.
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { browserFilesNotice, type BrowserFilesNotice } from "./browserFiles";
   import { browserFiles } from "./browserFilesStore.svelte";
@@ -31,6 +31,8 @@
   } = $props();
 
   let canvas: HTMLCanvasElement | undefined = $state();
+  /** Grows with each load of new browser files: a new canvas element for them, as the stopped library's drawing context stays on the old one. */
+  let canvasGeneration = $state(0);
   let ui: ClarityUi | null = null;
   let base = "";
   let revision = 0;
@@ -112,11 +114,13 @@
     const now = browserFiles.generation;
     if (now === generation) return;
     generation = now;
-    untrack(() => {
+    untrack(async () => {
       end();
       problem = null;
       notice = null;
-      if (canvas) delete canvas.dataset.drawn;
+      // On the same element the new library would take over the stopped one's drawing context and abort ("cannot unwind").
+      canvasGeneration += 1;
+      await tick();
       void begin();
     });
   });
@@ -146,7 +150,9 @@
 </script>
 
 <div class="drawn">
-  <canvas bind:this={canvas} class:design></canvas>
+  {#key canvasGeneration}
+    <canvas bind:this={canvas} class:design></canvas>
+  {/key}
   {#if notice}
     <div class="notice" role="alert">
       <p>{notice.text}</p>

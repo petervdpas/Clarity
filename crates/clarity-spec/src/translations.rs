@@ -276,14 +276,15 @@ pub const MARKDOWN_MEMO_KEYS: [(&str, &str); 2] = [("markdownWrite", "Write"), (
 /// What a window says when code fails at a value or a record: an item
 /// outside its list, a record that is not there or still used. The
 /// runtimes fill the slots; every application with windows has them.
-pub const RUNTIME_ERROR_KEYS: [(&str, &str); 3] = [
+pub const RUNTIME_ERROR_KEYS: [(&str, &str); 5] = [
     ("itemOutsideList", "There is no item {position} in a list of {count}"),
     ("recordNotThere", "There is no {table} with id {id}"),
     ("recordStillUsed", "This {table} is still used by other records"),
+    // `a / 0`, `a div 0`, `a mod 0` (conformance/decimal-division.json).
+    ("divisionByZero", "Division by zero"),
+    // A whole number or decimal that does not fit (conformance/overflow.json).
+    ("numberTooLarge", "The number is too large"),
 ];
-
-/// Why `a div b` or `a mod b` failed: Clarity's own words, in projects whose code divides whole numbers.
-pub const DIVISION_KEYS: [(&str, &str); 1] = [("divisionByZero", "Division by zero")];
 
 /// Why a call of an engine failed (manual/code.engines.md), in place of the
 /// host's own message: it ran too long, the person stopped it, or it broke.
@@ -417,7 +418,6 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&MARKDOWN_MEMO_KEYS)
         .chain(&GRAPH_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
-        .chain(&DIVISION_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
         .chain(&PREVIEW_KEYS)
@@ -895,25 +895,6 @@ fn shown(project: &Project) -> Shown {
     }));
     let markdown_memos = part_lists(project).any(|p| any_widget(p, &|w| w.props.markdown));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
-    // Code that divides whole numbers (`a div b`, `a mod b`) can say a division by zero failed.
-    let divides = {
-        let mut found = false;
-        let mut look = |body: &[crate::code::Stmt]| crate::code::each_expr_in(body, &mut |e| found |= matches!(&e.kind, crate::code::ExprKind::Binary { op: crate::code::BinaryOp::WholeDiv | crate::code::BinaryOp::Mod, .. }));
-        for file in &project.files {
-            for block in &file.code {
-                for handler in &block.handlers {
-                    look(&handler.body);
-                }
-            }
-            for function in &file.functions {
-                look(&function.body);
-            }
-            for command in &file.commands {
-                look(&command.body);
-            }
-        }
-        found
-    };
     // A date input, or a table cell of a date field, opens the calendar.
     let dates = part_lists(project).any(|p| any_widget(p, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
         || project.entities().any(|e| e.fields.iter().any(|f| matches!(f.ty, FieldType::Date | FieldType::DateTime)));
@@ -957,7 +938,6 @@ fn shown(project: &Project) -> Shown {
         .chain(if graphs { GRAPH_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
-        .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] })
         .chain(if project.signin.is_some() { SIGNIN_KEYS.as_slice() } else { &[] })
         .chain(if signin_part { SIGNIN_PART_KEYS.as_slice() } else { &[] })
         .chain(SIGNIN_PROVIDER_KEYS.iter().filter(|(key, _)| signin_part && project.signin.as_ref().is_some_and(|s| s.strategies.iter().any(|line| provider_key(&line.name) == Some(*key)))))

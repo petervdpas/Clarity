@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Users shows: its parts, data and code. -->
+<View class="todo.UsersView">
+  <Data name="people" type="list&lt;Person&gt;" />
+  <Table name="peopleGrid" at="1,1" span="12" rows="9" bind="people" columns="name, color" resizable="true" sortable="true" add="true" remove="true" onadd="newClicked" onremove="deletePersonClicked" onselect="personSelected" />
+  <Button name="closeButton" at="11,11" span="2" caption="@closeButtonCaption" cancel="true" onclick="closeClicked" />
+</View>

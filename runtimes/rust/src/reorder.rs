@@ -5,8 +5,6 @@
 //! `reorder by`. A move that changes no parent or number is refused. Every
 //! runtime moves alike (conformance/reorder.json).
 
-use crate::ui::{Reply, WindowState};
-use crate::{Db, Error, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -189,53 +187,4 @@ pub fn reorder(given: &[Row], mv: &Move, tree: bool) -> Option<Reordered> {
         return None;
     }
     Some(Reordered { parents: order.iter().map(|i| moved[*i].parent.clone()).collect(), order, numbers })
-}
-
-/// `reorder_event` (manual/start.how-it-works.md): the rows of `list` in the window's data,
-/// moved by `mv`. The list takes its new order, each row its number in `by`
-/// and, when `parent` names a field, its parent; the moved row is selected
-/// in `part`. Then `run` runs the handler as an edit ends (`edits::ended`).
-/// A refused move answers the window as it is (`draw`).
-#[allow(clippy::too_many_arguments)]
-pub fn event(
-    db: &Db,
-    mut state: WindowState,
-    part: &str,
-    list: &str,
-    by: &str,
-    parent: Option<&str>,
-    mv: &Move,
-    scope: Option<&str>,
-    run: impl FnOnce(WindowState) -> Result<Reply>,
-    draw: impl FnOnce(WindowState) -> Result<Reply>,
-) -> Result<Reply> {
-    let parent = parent.filter(|p| !p.is_empty());
-    let given = match crate::ui::data_at(&state.data, list) {
-        Some(Value::Array(rows)) => rows.clone(),
-        Some(Value::Null) | None => vec![],
-        Some(_) => return Err(Error::Invalid(format!("{list} is no list"))),
-    };
-    let rows: Vec<Row> = given
-        .iter()
-        .map(|g| Row { id: g.get("id").cloned().unwrap_or(Value::Null), parent: parent.and_then(|p| g.get(p).cloned()).unwrap_or(Value::Null) })
-        .collect();
-    let Some(moved) = reorder(&rows, mv, parent.is_some()) else { return draw(state) };
-    let mut after = Vec::with_capacity(given.len());
-    for (i, place) in moved.order.iter().enumerate() {
-        let mut row = given[*place].clone();
-        if let Some(fields) = row.as_object_mut() {
-            if !by.is_empty() {
-                fields.insert(by.to_string(), Value::from(moved.numbers[i]));
-            }
-            if let Some(p) = parent {
-                fields.insert(p.to_string(), moved.parents[i].clone());
-            }
-        }
-        after.push(row);
-    }
-    crate::ui::set_data_at(&mut state.data, list, Value::Array(after))?;
-    if let Some(at) = moved.order.iter().position(|place| *place == mv.row()) {
-        state.selected.insert(part.to_string(), at);
-    }
-    crate::edits::ended(db, state, part, scope, run)
 }

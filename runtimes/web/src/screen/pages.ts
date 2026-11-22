@@ -5,7 +5,6 @@
 
 import type { App } from "../generated/App.ts";
 import type { Entity } from "../generated/Entity.ts";
-import type { Field } from "../generated/Field.ts";
 import type { Page } from "../generated/Page.ts";
 import type { Preview } from "../generated/Preview.ts";
 import type { Widget } from "../generated/Widget.ts";
@@ -13,7 +12,6 @@ import type { WidgetInfo } from "../generated/WidgetInfo.ts";
 import type { WidgetKind } from "../generated/WidgetKind.ts";
 import type { WidgetProps } from "../generated/WidgetProps.ts";
 import type { Command } from "../generated/Command.ts";
-import type { Edit } from "../generated/Edit.ts";
 import type { SpecFile } from "../generated/SpecFile.ts";
 import { frameGrids } from "./frame";
 import { findEntity, findEnum, tr, type Row } from "./model.ts";
@@ -58,12 +56,6 @@ export function widgetInfo(preview: Preview, kind: WidgetKind): WidgetInfo {
   const info = preview.catalog.find((w) => w.kind === kind);
   if (!info) throw new Error(`widget ${kind} is missing from the catalog`);
   return info;
-}
-
-/** The input widget that shows a field type by default (first match in the catalog). */
-export function widgetForField(preview: Preview, field: Field): WidgetKind {
-  const match = preview.catalog.find((w) => w.input && w.fieldTypes.includes(field.type.kind));
-  return match?.kind ?? "label";
 }
 
 // ---------------------------------------------------------------------------
@@ -265,10 +257,6 @@ export function containers(preview: Preview, page: Page): Container[] {
   return out;
 }
 
-export function findContainer(preview: Preview, page: Page, offset: number): Container | undefined {
-  return containers(preview, page).find((c) => c.offset === offset);
-}
-
 export function locateWidget(preview: Preview, page: Page, offset: number): WidgetLocation | null {
   for (const container of containers(preview, page)) {
     const widget = container.widgets.find((w) => w.span.start === offset);
@@ -291,24 +279,12 @@ export function locateInnerPage(page: Page, offset: number): { widget: Widget; i
   return visit([...page.widgets, ...frameGrids(page.frame).flatMap((g) => g.widgets)]);
 }
 
-/** Rows a grid shows: enough for its widgets, plus room to drop below them. */
-export function gridRows(widgets: Widget[], extra: number, minimum: number): number {
-  const bottom = widgets.reduce((max, w) => Math.max(max, w.props.row + w.props.height - 1), 0);
-  return Math.max(bottom + extra, minimum);
-}
-
-export type Rect = { col: number; row: number; width: number; height: number };
-
 /**
  * What tells the parts of a grid apart: where they start in the file. A label
  * a form's label column made stands at its input's place, so it is told apart.
  */
 export function partKey(widget: Widget): string {
   return widget.props.made ? `label ${widget.span.start}` : `${widget.span.start}`;
-}
-
-export function overlaps(a: Rect, b: Rect): boolean {
-  return a.col < b.col + b.width && b.col < a.col + a.width && a.row < b.row + b.height && b.row < a.row + a.height;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,17 +327,6 @@ export function pageData(preview: Preview, page: Page): PageData {
     data[decl.name.name] = { entity, list: isList(decl), rows: isList(decl) ? rows : rows.slice(0, 1) };
   }
   return data;
-}
-
-/** The field a binding points at, if it resolves: `data.field`, or a plain value by its name. */
-export function boundField(data: PageData, bind: string | null): { record: Row; field: Field } | null {
-  if (!bind) return null;
-  const [name, fieldName] = bind.split(".");
-  const entry = data[name];
-  const wanted = fieldName ?? (entry?.value ? name : undefined);
-  const field = wanted ? entry?.entity.fields.find((f) => f.name.name === wanted) : undefined;
-  const record = entry?.rows[0];
-  return field && record ? { record, field } : null;
 }
 
 /** Copies props with changes; the designer always sends complete props. */
@@ -408,24 +373,3 @@ export function allParts(page: Page): Widget[] {
   return out;
 }
 
-/** A part by its name. */
-export function findPart(page: Page, name: string | null): Widget | undefined {
-  return name === null ? undefined : allParts(page).find((w) => w.props.name === name);
-}
-
-/** The field a `data.field` binding points at, without needing a record. */
-export function fieldOf(data: PageData, bind: string | null): Field | undefined {
-  if (!bind) return undefined;
-  const [name, fieldName] = bind.split(".");
-  return fieldName ? data[name]?.entity.fields.find((f) => f.name.name === fieldName) : undefined;
-}
-
-/** The DOM id of a named part, for labels and help texts that point at it. */
-export function partId(name: string): string {
-  return `part-${name}`;
-}
-
-/** The DOM id of the help text for a named input. */
-export function helpId(name: string): string {
-  return `help-for-${name}`;
-}

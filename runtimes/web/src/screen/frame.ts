@@ -6,7 +6,6 @@ import type { Command } from "../generated/Command.ts";
 import type { Footer } from "../generated/Footer.ts";
 import type { Frame } from "../generated/Frame.ts";
 import type { Menu } from "../generated/Menu.ts";
-import type { Page } from "../generated/Page.ts";
 import type { Preview } from "../generated/Preview.ts";
 import type { Ribbon } from "../generated/Ribbon.ts";
 import type { RibbonGroup } from "../generated/RibbonGroup.ts";
@@ -53,10 +52,10 @@ export function shownFrame(app: App | null, own: Frame | null): ShownFrame {
   };
 }
 
-/** The frame a page shows in the preview: windows and views sit in the app frame, dialogs do not. */
-export function frameForPage(preview: Preview, page: Page): ShownFrame {
+/** The frame a page shows in the designer (clarity_spec::frame::shown, conformance/frame-shown.json): a window its own regions over the app's, a view the app's, a dialog none. */
+export function frameForPage(app: App | null, page: { kind: string; frame: Frame }): ShownFrame {
   if (page.kind === "dialog") return NO_FRAME;
-  return shownFrame(findApp(preview), page.kind === "window" ? page.frame : null);
+  return shownFrame(app, page.kind === "window" ? page.frame : null);
 }
 
 /** A picked frame element, with what the properties panel needs. */

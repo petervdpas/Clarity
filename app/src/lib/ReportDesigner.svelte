@@ -8,9 +8,11 @@
   // the .report file (one undo step); Preview lays it out with sample data
   // as Clarity.Pdf does in the program.
 
+  import { untrack } from "svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import { dialogs } from "./dialogStore.svelte";
-  import { withDeclaration, BANDS, REPEATED, PARTS, newPart, paperSize, partLabel, partLook, readReport, snapped, stylesheetRules, writeReport, mm, type BandKind, type PartKind, type ReportModel, type ReportPart } from "./reportDesign";
+  import { BANDS, REPEATED, PARTS, paperSize, partLabel, partLook, snapped, mm, type BandKind, type PartKind, type ReportModel, type ReportPart } from "./reportDesign";
+  import { newPart, readReport, stylesheetRules, withDeclaration, writeReport } from "./reportBackend";
   import PartTile from "./PartTile.svelte";
   import Splitter from "@clarity/ui/parts/Splitter.svelte";
   import { layout } from "./layout.svelte";
@@ -43,19 +45,38 @@
   let problem = $state<string | null>(null);
   /** The text last read or saved, to know whether there are changes. */
   let saved = $state("");
+  /** The report's text as the backend writes the model (clarity_spec::report_design). */
+  let text = $state("");
   $effect.pre(() => {
-    const text = file?.text ?? "";
-    if (text === saved && model) return;
-    try {
-      model = readReport(text);
-      problem = null;
-    } catch (e) {
-      model = null;
-      problem = String(e instanceof Error ? e.message : e);
-    }
-    saved = text;
+    const onDisk = file?.text ?? "";
+    if (onDisk === saved && model) return;
+    saved = onDisk;
+    // Read and written once, so the model and its text come together and a report just read has no changes.
+    readReport(onDisk)
+      .then(async (read) => {
+        const written = await writeReport(read);
+        if ((file?.text ?? "") !== onDisk) return;
+        model = read;
+        text = written;
+        problem = null;
+      })
+      .catch((e) => {
+        if ((file?.text ?? "") !== onDisk) return;
+        model = null;
+        text = onDisk;
+        problem = String(e instanceof Error ? e.message : e);
+      });
   });
-  const text = $derived(model ? writeReport(model) : saved);
+  // Every change of the model is written again; the last one asked for wins.
+  /** The write asked for last, which a step that ends (a drag let go) waits for before it is kept. */
+  let writing: Promise<void> = Promise.resolve();
+  $effect(() => {
+    if (!model) return;
+    const design = JSON.stringify(model);
+    writing = writeReport(model).then((written) => {
+      if (model && JSON.stringify(model) === design) text = written;
+    });
+  });
   const changed = $derived(model !== null && text !== saved);
 
   /** Pixels per millimetre on the canvas. */
@@ -111,7 +132,13 @@
       cssRead = onDisk;
     }
   });
-  const rules = $derived(stylesheetRules(css));
+  let rules = $state<Record<string, Record<string, string>>>({});
+  $effect(() => {
+    const asked = css;
+    void stylesheetRules(asked).then((read) => {
+      if (css === asked) rules = read;
+    });
+  });
   /** The stylesheet's file: the one the report names, else one named after the report, which it then names. */
   function stylesheetFile(): string {
     if (!model) return "";
@@ -120,8 +147,8 @@
   }
   let cssSaving: ReturnType<typeof setTimeout> | null = null;
   /** Sets one declaration of a rule of the stylesheet, and writes the stylesheet a moment later. */
-  function setLook(selector: string, property: string, value: string) {
-    css = withDeclaration(css, selector, property, value);
+  async function setLook(selector: string, property: string, value: string) {
+    css = await withDeclaration(css, selector, property, value);
     const target = stylesheetFile();
     if (cssSaving) clearTimeout(cssSaving);
     cssSaving = setTimeout(async () => {
@@ -170,9 +197,9 @@
   /** Read and change the report's XML itself. */
   /** The slide-out shows the report's XML (the ribbon's XML), else the properties. */
   const source = $derived(reportDesigner.xml);
-  function problemsOf(t: string): Diagnostic[] {
+  async function problemsOf(t: string): Promise<Diagnostic[]> {
     try {
-      readReport(t);
+      await readReport(t);
       return [];
     } catch (e) {
       return [{ severity: "error", message: String(e instanceof Error ? e.message : e), path: `reports/${name}.report`, span: { start: 0, end: 0, line: 1, col: 1 } } as Diagnostic];
@@ -328,7 +355,8 @@
   function endDrag() {
     if (drag) {
       drag = null;
-      record();
+      // One drag is one step: the text it ends with, once its last write is back.
+      void writing.then(() => record());
     }
   }
 
@@ -347,14 +375,18 @@
     recorded = text;
     queueSave();
   }
+  // A step is kept when the text changes, and only then: the model comes before its text.
   $effect(() => {
-    if (text) record();
+    const now = text;
+    untrack(() => {
+      if (now) record();
+    });
   });
   function stepBack(from: string[], to: string[]): [string[], string[]] {
     const last = from.at(-1);
     if (last === undefined || !model) return [from, to];
     to = [...to, text];
-    model = readReport(last);
+    void readReport(last).then((read) => (model = read));
     recorded = last;
     queueSave();
     return [from.slice(0, -1), to];
@@ -376,10 +408,12 @@
     }, 400);
   }
 
-  function addPart(kind: PartKind, band = picked?.band, at: [number, number] = [0, 0]) {
+  async function addPart(kind: PartKind, band = picked?.band, at: [number, number] = [0, 0]) {
     if (!model || band === undefined) return;
+    const part = await newPart(kind, at);
+    if (!model) return;
     const into = model.bands[band];
-    into.parts.push(newPart(kind, at));
+    into.parts.push(part);
     picked = { band, part: into.parts.length - 1 };
   }
 
@@ -417,7 +451,7 @@
     }
     if (!was.moved) {
       if (was.band) addBand(was.kind as BandKind);
-      else if (!was.bind) addPart(was.kind as PartKind);
+      else if (!was.bind) void addPart(was.kind as PartKind);
       return;
     }
     const under = document.elementFromPoint(e.clientX, e.clientY);
@@ -429,7 +463,7 @@
     if (!bandEl) return;
     const box = bandEl.getBoundingClientRect();
     const at: [number, number] = [onGrid((e.clientX - box.left) / zoom), onGrid((e.clientY - box.top) / zoom)];
-    addPart(was.kind as PartKind, Number(bandEl.dataset.band), at);
+    void addPart(was.kind as PartKind, Number(bandEl.dataset.band), at);
     // A field of the field list: a Field bound to it.
     if (was.bind && picked && picked.part !== null) model.bands[picked.band].parts[picked.part].attrs.bind = was.bind;
   }
@@ -834,10 +868,10 @@
         {#if source}
           <div class="source">
             <SourceEditor
-              load={async () => ({ text, problems: problemsOf(text) })}
+              load={async () => ({ text, problems: await problemsOf(text) })}
               check={async (t) => problemsOf(t)}
               save={async (t) => {
-                readReport(t);
+                await readReport(t);
                 const next = await invoke<Preview>("save_report", { name, text: t });
                 saved = "";
                 onapplied(next);

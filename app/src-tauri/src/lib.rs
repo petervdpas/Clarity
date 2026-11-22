@@ -634,7 +634,7 @@ fn repository() -> Option<PathBuf> {
 /// this Clarity runs from its repository (and so can build them again).
 #[derive(Serialize)]
 struct BrowserFilesState {
-    state: clarity_gen::clarity_ui::BrowserFiles,
+    state: clarity_devtools::browser::BrowserFiles,
     repository: bool,
 }
 
@@ -645,7 +645,7 @@ struct BrowserFilesState {
 fn browser_files() -> BrowserFilesState {
     let repo = repository();
     // Never behind its source here: a cDdev's own build signals in DevTools.
-    BrowserFilesState { state: clarity_gen::clarity_ui::browser_files(None), repository: repo.is_some() }
+    BrowserFilesState { state: clarity_devtools::browser::browser_files(None), repository: repo.is_some() }
 }
 
 
@@ -883,7 +883,7 @@ pub fn run() {
             if let Some(repo) = repository() {
                 clarity_gen::tools::environment::use_libraries(&clarity_gen::tools::environment::Environment::current());
                 // The release it fetches is the newest one tagged: a version bumped for the next release is not out yet.
-                if let Some(version) = clarity_gen::tools::devtools::release::released_library(&repo) {
+                if let Some(version) = clarity_devtools::release::released_library(&repo) {
                     clarity_gen::clarity_ui::set_release_version(version);
                 }
             }
@@ -952,8 +952,6 @@ pub fn run() {
             devtools::disk::disk_remove,
             devtools::disk::disk_mark,
             splash::main_drawn,
-            splash::splash_done,
-            splash::splash_status,
             manual::manual_topics,
             manual::manual_page,
             manual::open_manual,
@@ -996,7 +994,6 @@ pub fn run() {
             environment::install_engine_target,
             folders::folders_view,
             folders::set_folder,
-            folders::new_project_file,
             folders::new_project_path,
             system::machine_facts,
             system::watch_system,
@@ -1021,7 +1018,6 @@ pub fn run() {
             apis::add_api_file,
             external::import_tables,
             external::take_ownership,
-            mappings::list_mappings,
             mappings::read_mapping,
             mappings::save_mapping,
             mappings::preview_mapping,
@@ -1074,6 +1070,11 @@ pub fn run() {
             resources::guidance_sections,
             resources::save_guidance_section,
             reports::add_report,
+            reports::report_read,
+            reports::report_write,
+            reports::report_new_part,
+            reports::report_with_declaration,
+            reports::report_rules,
             reports::save_report,
             reports::delete_report,
             reports::report_preview,
@@ -1216,7 +1217,7 @@ mod tests {
     /// translation added after a window once went unseen until the project opened again).
     #[test]
     fn reacts_to_changes_in_every_folder_of_the_project() {
-        for path in ["/p/shop/translations/en.clarity", "/p/shop/design/Main.cxaml", "/p/shop/design/orders/Card.cxaml", "/p/shop/agent/guidance.md", "/p/shop/migrations/main/0002.clarity", "/p/shop/diagrams/model.mermaid", "/p/shop/apis/stock.json"] {
+        for path in ["/p/shop/translations/en.clarity", "/p/shop/design/Main.cxaml", "/p/shop/design/orders/Card.cxaml", "/p/shop/agent/guidance.md", "/p/shop/migrations/main/0002.clarity", "/p/shop/diagrams/model.mermaid", "/p/shop/apis/stock.json", "/p/shop/reports/Invoice.report", "/p/shop/reports/invoice.css"] {
             assert!(changes(EventKind::Modify(ModifyKind::Any), path), "{path}");
         }
         for folder in clarity_spec::PROJECT_FOLDERS {

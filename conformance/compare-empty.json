@@ -1,0 +1,12 @@
+{
+  "about": "Comparing a date or a date and time with an empty one, on every stack (the user, 2026-11-22: \"Empty is smallest\"): an empty value comes before every value, and two empty ones are equal, so `due < today` is true when due is empty, and `due >= today` false. Each case gives the `kind` (date or datetime), `a` and `b` (null for empty) and what `<`, `<=`, `>` and `>=` give.",
+  "cases": [
+    { "kind": "date", "a": null, "b": "2026-01-01", "<": true, "<=": true, ">": false, ">=": false },
+    { "kind": "date", "a": "2026-01-01", "b": null, "<": false, "<=": false, ">": true, ">=": true },
+    { "kind": "date", "a": null, "b": null, "<": false, "<=": true, ">": false, ">=": true },
+    { "kind": "date", "a": "2026-01-01", "b": "2026-02-01", "<": true, "<=": true, ">": false, ">=": false },
+    { "kind": "datetime", "a": null, "b": "2026-01-01T09:00:00", "<": true, "<=": true, ">": false, ">=": false },
+    { "kind": "datetime", "a": "2026-01-01T09:00:00", "b": null, "<": false, "<=": false, ">": true, ">=": true },
+    { "kind": "datetime", "a": null, "b": null, "<": false, "<=": true, ">": false, ">=": true }
+  ]
+}

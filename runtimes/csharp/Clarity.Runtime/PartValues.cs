@@ -15,16 +15,7 @@ public static class PartValues
     public static T Read<T>(JsonElement[] values, int at) =>
         at < values.Length ? values[at].Deserialize<T>(Json)! : default!;
 
-    /// <summary>A value as a tell gives it: a whole number or a bool as JSON's own, a decimal,
-    /// a date or a moment as text in its plain form.</summary>
-    public static string Write(object? value) => value switch
-    {
-        null => "null",
-        decimal d => JsonSerializer.Serialize(d.ToString(CultureInfo.InvariantCulture)),
-        DateOnly d => JsonSerializer.Serialize(d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-        DateTime t => JsonSerializer.Serialize(t.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)),
-        object?[] list => "[" + string.Join(",", list.Select(Write)) + "]",
-        Enum e => JsonSerializer.Serialize(e.ToString()),
-        _ => JsonSerializer.Serialize(value),
-    };
+    /// <summary>A value as a tell, a part or a report's data gives it: as Clarity writes
+    /// values everywhere (conformance/values-json.json), the same as a part's value on the wire.</summary>
+    public static string Write(object? value) => WireJson.Value(value)?.ToJsonString(JsonValues.Options) ?? "null";
 }

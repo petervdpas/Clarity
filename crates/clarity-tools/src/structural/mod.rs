@@ -10,11 +10,13 @@
 //! - `frame`: the app, its main window and splash, menus, toolbars,
 //!   ribbons, sidebars, events and handlers.
 //! - `guidance`: the app's guidance for AI agents, a section at a time.
+//! - `reports`: reports, their bands and parts, and their classes, as the Reports tab designs them.
 
 pub mod frame;
 pub mod guidance;
 pub mod model;
 pub mod places;
+pub mod reports;
 pub mod windows;
 
 use clarity_agent::ToolDef;
@@ -24,12 +26,12 @@ use crate::ProjectTools;
 
 /// Every structural tool.
 pub fn definitions() -> Vec<ToolDef> {
-    [model::definitions(), windows::definitions(), frame::definitions(), guidance::definitions()].concat()
+    [model::definitions(), windows::definitions(), frame::definitions(), guidance::definitions(), reports::definitions()].concat()
 }
 
 /// The tool `name`, when it is a structural one: its answer.
 pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Result<String, String>> {
-    model::call(tools, name, input).or_else(|| windows::call(tools, name, input)).or_else(|| frame::call(tools, name, input)).or_else(|| guidance::call(tools, name, input))
+    model::call(tools, name, input).or_else(|| windows::call(tools, name, input)).or_else(|| frame::call(tools, name, input)).or_else(|| guidance::call(tools, name, input)).or_else(|| reports::call(tools, name, input))
 }
 
 /// A tool's definition.

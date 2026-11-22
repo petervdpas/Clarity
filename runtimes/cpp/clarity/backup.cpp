@@ -88,23 +88,4 @@ void prune(const std::string& database) {
     for (size_t i = kept_automatic; i < all.size(); ++i) fs::remove(all[i].path, error);
 }
 
-void before_migration(Driver& driver, int step) {
-    if (driver.dialect() != Dialect::Sqlite) return;
-    auto rows = driver.rows("SELECT file FROM pragma_database_list WHERE name = 'main'", {});
-    if (rows.empty() || !std::holds_alternative<std::string>(rows[0][0]) || std::get<std::string>(rows[0][0]).empty()) return;
-    fs::path file(std::get<std::string>(rows[0][0]));
-    try {
-        fs::path folder = file.parent_path() / "backups";
-        fs::create_directories(folder);
-        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        fs::path first = folder / file_name(file.stem().string(), now, step);
-        fs::path path = first;
-        for (int n = 2; fs::exists(path); ++n) path = folder / (first.stem().string() + "_" + std::to_string(n) + ".db");
-        driver.execute("VACUUM INTO ?1", {path.string()});
-    } catch (const std::exception& e) {
-        throw StorageError(std::string("the database was not migrated, since it could not be backed up first: ") + e.what());
-    }
-    prune(file.string());
-}
-
 }  // namespace clarity::backup

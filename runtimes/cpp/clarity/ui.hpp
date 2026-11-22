@@ -94,9 +94,6 @@ struct WindowState {
     /// The number of this open window, its own while it is open: what belongs
     /// to it, such as an engine's state per window, goes by it.
     uint64_t instance = 0;
-    /// What the window's tables, trees and charts show of their lists, by
-    /// part (manual/start.how-it-works.md): the screen says how, the runtime fills in what.
-    nlohmann::json views = nlohmann::json::object();
 };
 
 /// Has `listen` hear of every window that closes, by its number, for as long
@@ -199,7 +196,7 @@ struct RefOption {
 /// What a handler can do to the screen.
 class Ui {
 public:
-    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected), instance_(state.instance), views_(state.views) {}
+    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected), instance_(state.instance) {}
 
     /// The number of the open window the handler runs in.
     uint64_t instance() const { return instance_; }
@@ -377,7 +374,6 @@ private:
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;
-    nlohmann::json views_;
     std::vector<Message> messages_;
     std::map<std::string, Text> shown_;
     std::vector<OpenRequest> open_;

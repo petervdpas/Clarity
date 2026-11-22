@@ -315,6 +315,9 @@
             />
           </div>
           <p class="form-help">Folders in the app folder that are the project's own (<code>output keeps</code>): Clarity leaves them where they are and does not read them as somebody else's files. Type a folder's name and press Enter.</p>
+          <span class="form-label">Migration</span>
+          <label><input type="checkbox" checked={settings.include_migrate} onchange={(e) => save({ include_migrate: e.currentTarget.checked })} /> Include data migration tools</label>
+          <p class="form-help">On (<code>include migrate</code>), Generate puts <code>clarity-migrate</code> and its <code>clarity-migrate.json</code> in the app folder, so whoever installs the app brings its databases up to date without Clarity.</p>
           <span class="form-label">Codecs</span>
           <div class="codecs">
             {#each settings.codecs as codec, i (i)}

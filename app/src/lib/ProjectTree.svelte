@@ -7,6 +7,7 @@
   import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
   import { projectEngines, engineNote } from "./engines";
   import { commandLine } from "./commandLine";
+  import { TOAST_LIFESPAN } from "./toastLines";
   import { offersAgents } from "./agentsPart";
   import { findApp } from "@clarity/ui/screen/frame.ts";
   import { languageName } from "@clarity/ui/screen/translate.ts";
@@ -509,7 +510,7 @@
       {#each toasts as { toast, module } (toast.name.name)}
         <button class="row" class:current={is("toast", toast.name.name)} title="in module {module}" onclick={() => onselect({ kind: "toast", name: toast.name.name })}>
           {toast.name.name}
-          <span class="note">{toast.level}, {(toast.lifespan ?? 5000) / 1000} s</span>
+          <span class="note">{toast.level}, {(toast.lifespan ?? TOAST_LIFESPAN.default) / 1000} s</span>
         </button>
       {:else}
         <p class="empty">No toasts yet: short messages in a corner of the window that go by themselves, each with its own lifespan, level, icon and corner; code shows one with <code>toast name</code>.</p>

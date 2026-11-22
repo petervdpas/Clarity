@@ -50,7 +50,7 @@ public class CascadeTests
     static (Db, Plan) Planned()
     {
         var db = Sqlite.Memory();
-        db.Migrate([[
+        db.ApplySteps([[
             "CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
             "CREATE TABLE plan_task (id INTEGER PRIMARY KEY, plan INTEGER REFERENCES plan(id), title TEXT NOT NULL);",
         ]]);

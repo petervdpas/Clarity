@@ -100,29 +100,3 @@ void clarity_prune_backups(const char* database) {
     for (size_t i = CLARITY_KEPT_BACKUPS; i < count; ++i) remove(clarity_format("%s/%s", folder, all[i].file));
 }
 
-/// The error of a backup that failed, as the refusal to migrate; the cause's message is copied before the error is written over.
-static bool refused(void) {
-    const char* why = clarity_copy(clarity_error()->message);
-    return clarity_fail(CLARITY_STORAGE, "the database was not migrated, since it could not be backed up first: %s", why);
-}
-
-bool clarity_backup_before_migration(ClarityDriver* driver, int step) {
-    if (driver->dialect != CLARITY_SQLITE) return true;
-    ClarityRows rows = {0};
-    if (!driver->rows(driver, "SELECT file FROM pragma_database_list WHERE name = 'main'", NULL, &rows)) return false;
-    if (!rows.count || rows.items[0].values[0].kind != CLARITY_TEXT || !*rows.items[0].values[0].text) return true;
-    const char* file = rows.items[0].values[0].text;
-    const char* parent = clarity_parent(file);
-    const char* folder = clarity_format("%s%sbackups", parent, *parent ? "/" : "");
-    if (!clarity_make_folders(folder))
-        return refused();
-    const char* first = clarity_format("%s/%s", folder, clarity_backup_file_name(stem_of(file), (int64_t)time(NULL), step));
-    const char* path = first;
-    for (int n = 2; clarity_exists(path); ++n) path = clarity_format("%.*s_%d.db", (int)(strlen(first) - 3), first, n);
-    ClarityValues params = {0};
-    clarity_values_add(&params, clarity_text_value(path));
-    if (!driver->execute(driver, "VACUUM INTO ?1", &params, NULL))
-        return refused();
-    clarity_prune_backups(file);
-    return true;
-}

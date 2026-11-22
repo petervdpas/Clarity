@@ -1,0 +1,453 @@
+//! The C# backend (G2a): the data dictionary, functions, actions and data
+//! events as C#, over the C# runtime's NuGet packages.
+
+use clarity_gen_core::OutFile;
+use clarity_gen_csharp::program as generate;
+use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
+use clarity_spec::load_converted;
+
+const SALES: &str = "module sales
+
+enum OrderStatus
+    Pending
+    Approved label \"Approved by sales\"
+
+entity Customer
+    name: text(80), required
+    creditLimit: money, default 100
+    active: bool, default true
+    since: date, format long
+
+entity Order
+    number: text(12), unique
+    status: OrderStatus
+    customer: ref Customer
+    total: money
+    event: text(20)
+
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
+
+function doubled(n: integer) -> money
+    ensure result >= 0
+    let x: money = n * 2
+    if x < 0
+        return 0
+    return x + 0.5
+
+function bigOrders(limit: money) -> list<Order>
+    return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
+
+function joinedFirst(a: Customer, b: Customer) -> bool
+    return a.since < b.since or a.since <= b.since and a.since >= b.since or b.since > a.since
+
+function described(order: Order) -> text
+    let all = find o in Order where o.customer == order.customer
+    let shown = \"Order \" + order.number + \" is \" + order.status
+    for other in all
+        if other.number contains \"X\" or count(all) > 3
+            shown = shown + \"!\"
+    return shown
+
+action approve(order: Order)
+    require order.status == Pending
+    require withinCredit(order)
+    effects db.write
+    order.status = Approved
+    save order
+
+code Order
+    before save
+        if order.status == Approved and not withinCredit(order)
+            refuse \"Order {order.number} is over its customer's credit limit\"
+
+    after delete
+        return
+
+page OrderForm: window
+    title \"Order\"
+    data order: Order
+";
+
+fn settings() -> Settings {
+    let mut settings = starter("Shop", "shop");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Clarity;
+    settings
+}
+
+fn files() -> Vec<OutFile> {
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    generate(&project, &settings()).unwrap()
+}
+
+/// Dates order through Values.Compare, where an empty one comes first, as on every stack
+/// (conformance/compare-empty.json): C#'s own operators give false when one side is empty.
+#[test]
+fn dates_are_ordered_with_an_empty_one_first() {
+    let all: String = files().into_iter().map(|f| f.text).collect();
+    for op in ["<", "<=", ">=", ">"] {
+        assert!(all.contains(&format!(") {op} 0)")) && all.contains("Clarity.Runtime.Values.Compare("), "{op} through Values.Compare");
+    }
+    assert!(!all.contains(".Since < ") && !all.contains(".Since <= ") && !all.contains(".Since > ") && !all.contains(".Since >= "), "no date ordered by C#'s own operators");
+}
+
+fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
+    &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
+}
+
+/// Asserts `text` holds every line of `expected`, in order and together.
+fn has(text: &str, expected: &str) {
+    assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
+}
+
+/// The version of the runtime's packages, as runtimes/csharp/Directory.Build.props sets it.
+fn runtime_version() -> &'static str {
+    clarity_gen_csharp::runtime_version()
+}
+
+#[test]
+fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
+    let files = files();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "AppThemes.cs",
+            "Fields.cs",
+            "Labels.cs",
+            "Modules/Sales.cs",
+            "Program.cs",
+            "README.md",
+            "Schema.cs",
+            "Shop.csproj",
+            "Texts.cs",
+            "Texts.resx",
+            "Windows/OrderForm.cxaml",
+            "Windows/OrderFormViewModel.cs",
+            "model.json",
+        ]
+    );
+    let project = file(&files, "Shop.csproj");
+    has(project, "<TargetFramework>net10.0</TargetFramework>");
+    has(project, "<RootNamespace>Shop</RootNamespace>");
+    // Clarity.Ui brings the native Clarity.UI library, Clarity.Runtime and the packages they stand on.
+    has(project, &format!("<PackageReference Include=\"Clarity.Ui\" Version=\"{}\" />", runtime_version()));
+    assert!(!project.contains("Include=\"Clarity.Runtime\"") && !project.contains("Microsoft.Data.Sqlite"), "{project}");
+}
+
+/// While working on the runtime, a project builds on the runtime's own
+/// projects instead of the packages: `-p:ClarityRuntime=<runtimes/csharp>`,
+/// or the environment variable CLARITY_RUNTIME.
+#[test]
+fn the_local_runtime_projects_can_stand_in_for_the_packages() {
+    let project = file(&files(), "Shop.csproj").to_string();
+    has(&project, "<ClarityRuntime Condition=\"'$(ClarityRuntime)' == ''\">$(CLARITY_RUNTIME)</ClarityRuntime>");
+    has(
+        &project,
+        &format!(
+            "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
+    <PackageReference Include=\"Clarity.Ui\" Version=\"{v}\" />
+    <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{v}\" />
+  </ItemGroup>
+  <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui/Clarity.Ui.csproj\" />
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />
+  </ItemGroup>",
+            v = runtime_version()
+        ),
+    );
+    // Each project it names is there.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
+    for line in project.lines().filter(|l| l.contains("<ProjectReference ")) {
+        let path = line.split("$(ClarityRuntime)/").nth(1).unwrap().split('"').next().unwrap();
+        assert!(root.join(path).exists(), "{path}");
+    }
+}
+
+/// The program builds on the runtime's packages and carries no copy of them.
+#[test]
+fn no_runtime_source_is_copied() {
+    let files = files();
+    assert!(!files.iter().any(|f| f.path.starts_with("Clarity.")), "{:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+}
+
+#[test]
+fn is_deterministic() {
+    assert_eq!(files(), files());
+}
+
+#[test]
+fn enums_and_entities_become_csharp_types() {
+    let files = files();
+    let sales = file(&files, "Modules/Sales.cs");
+    has(sales, "namespace Shop;");
+    has(sales, "public enum OrderStatus\n{\n    Pending,\n    Approved,\n}");
+    has(sales, "        OrderStatus.Approved => Texts.OrderStatusApproved,");
+    has(sales, "public sealed partial class Customer : ObservableObject, IRecord<Customer>\n{");
+    has(sales, "    public static string TableName => \"customer\";");
+    has(sales, "    public static IReadOnlyList<string> ColumnNames { get; } = [\"name\", \"credit_limit\", \"active\", \"since\"];");
+    has(sales, "    public decimal CreditLimit { get => _creditLimit; set => SetProperty(ref _creditLimit, value); }\n    decimal _creditLimit = 100m;");
+    has(sales, "    bool _active = true;");
+    has(sales, "    public DateOnly? Since { get => _since; set => SetProperty(ref _since, value); }\n    DateOnly? _since;");
+    has(sales, "    public long? Customer { get => _customer; set => SetProperty(ref _customer, value); }");
+    has(sales, "    public OrderStatus Status { get => _status; set => SetProperty(ref _status, value); }");
+    has(sales, "    public object?[] ToValues() => [Number, Sql.Name(Status), Customer, Total, Event];");
+    has(sales, "        CreditLimit = Sql.GetDecimal(\"creditLimit\", values[1]),");
+    has(sales, "        Status = Sql.GetName<OrderStatus>(\"status\", values[1]),");
+    has(sales, "    public static string TableName => \"order\";");
+}
+
+#[test]
+fn the_program_knows_how_many_steps_its_databases_have() {
+    let files = files();
+    let schema = file(&files, "Schema.cs");
+    // How many steps each database was made with; the SQL is clarity-migrate's (docs/ledger/migrations.md).
+    has(schema, "public static readonly (string Source, int Steps)[] Sources =\n    [\n        (\"main\", 1),\n    ];");
+    assert!(!schema.contains("CREATE TABLE"), "{schema}");
+}
+
+#[test]
+fn functions_and_actions_become_methods_of_logic() {
+    let files = files();
+    let sales = file(&files, "Modules/Sales.cs");
+    has(sales, "public static partial class Logic\n{");
+    has(sales, "    public static bool WithinCredit(Db db, Order order)\n    {\n        return (order.Total <= db.Load<Customer>(order.Customer).CreditLimit);\n    }");
+    has(
+        sales,
+        "    public static void Approve(Db db, Order order)
+    {
+        Contracts.Require((order.Status == OrderStatus.Pending), \"order.status == Pending\");
+        Contracts.Require(WithinCredit(db, order), \"withinCredit(order)\");
+        order.Status = OrderStatus.Approved;
+        db.Save(order);
+    }",
+    );
+    // Integers widen to decimals by themselves; ensure wraps the body.
+    has(
+        sales,
+        "    public static decimal Doubled(Db db, long n)
+    {
+        decimal Body()
+        {
+            decimal x = Clarity.Runtime.Values.Multiply(n, 2L);
+            if ((x < 0L))
+            {
+                return 0L;
+            }
+            return Clarity.Runtime.Values.Add(x, 0.5m);
+        }
+        var result = Body();
+        Contracts.Ensure((result >= 0L), \"result >= 0\");
+        return result;
+    }",
+    );
+}
+
+#[test]
+fn queries_text_and_loops() {
+    let files = files();
+    let sales = file(&files, "Modules/Sales.cs");
+    has(
+        sales,
+        "return db.Find<Order>(new Query().Filter(Cond.Number(\"total\", Op.GtEq, limit).And(Cond.OneOf(\"status\", [Sql.Name(OrderStatus.Pending), Sql.Name(OrderStatus.Approved)]))).OrderNumber(\"total\", true).Order(\"number\", false));",
+    );
+    has(sales, "var all = db.Find<Order>(new Query().Filter(Cond.Compare(\"customer\", Op.Eq, order.Customer)));");
+    // Enums show their label in text.
+    has(sales, "var shown = (((\"Order \" + order.Number) + \" is \") + Labels.Of(order.Status));");
+    has(sales, "foreach (var other in all)");
+    has(sales, "if ((Clarity.Runtime.Texts.Contains(other.Number, \"X\") || ((long)all.Count > 3L)))");
+    has(sales, "shown = (shown + \"!\");");
+    // A field named like a C# keyword is still a property.
+    has(sales, "    public string Event { get => _event; set => SetProperty(ref _event, value); }\n    string _event = \"\";");
+}
+
+#[test]
+fn data_events_run_from_the_record() {
+    let files = files();
+    let sales = file(&files, "Modules/Sales.cs");
+    has(sales, "    public static bool HasEvents => true;");
+    has(sales, "    public void BeforeSave(Db db) => Logic.BeforeSaveOrder(db, this);");
+    has(sales, "    public void AfterDelete(Db db) => Logic.AfterDeleteOrder(db, this);");
+    has(
+        sales,
+        "            throw new RefusedException(Clarity.Runtime.Text.Of(\"orderNumberIsOverIts\").With(\"number\", Slot.OfText(order.Number)));",
+    );
+}
+
+#[test]
+fn the_program_opens_every_database_and_checks_its_steps() {
+    let files = files();
+    let program = file(&files, "Program.cs");
+    has(program, "[(\"main\", Dialect.Sqlite, \"data/shop.db\")]");
+    has(program, "db.CheckSteps(source, steps);");
+    has(program, "catch (Clarity.Runtime.StepsException e)\n            {\n                // The program does not migrate (docs/ledger/migrations.md): behind or ahead, it stops with this line, in English.\n                Console.Error.WriteLine(e.Message);\n                Environment.Exit(1);");
+    assert!(!program.contains("MigrateSource"), "the program does not migrate");
+}
+
+#[test]
+fn csharp_draws_with_clarity_ui_only() {
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
+    let mut settings = settings();
+    settings.stack.ui = Ui::Webview;
+    assert_eq!(generate(&project, &settings).unwrap_err(), ["C# draws with Clarity.UI only"]);
+}
+
+/// A project references the package of each kind of database its data
+/// sources are, and no others (Clarity.Runtime.Sqlite, .PostgreSql and the
+/// others, which bring their own clients); the program turns each on before
+/// it opens its databases.
+#[test]
+fn a_project_gets_the_drivers_of_its_databases_only() {
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
+    let plain = generate(&project, &settings()).unwrap();
+    let csproj = file(&plain, "Shop.csproj");
+    has(csproj, &format!("    <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{}\" />\n", runtime_version()));
+    has(csproj, "    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />\n");
+    assert!(!csproj.contains("Microsoft.Data.Sqlite"), "{csproj}");
+    has(file(&plain, "Program.cs"), "        Sqlite.Use();\n        var db = Db.Connect(Sources);");
+
+    let packages = ["Clarity.Runtime.PostgreSql", "Clarity.Runtime.MySql", "Clarity.Runtime.SqlServer"];
+    for (kind, package, turned_on) in [
+        (SourceKind::Postgres, packages[0], "PostgreSql.Use();"),
+        (SourceKind::Mysql, packages[1], "MySql.Use();"),
+        (SourceKind::Mssql, packages[2], "SqlServer.Use();"),
+    ] {
+        let mut settings = settings();
+        settings.datasources[0].kind = kind;
+        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        let files = generate(&project, &settings).unwrap();
+        let csproj = file(&files, "Shop.csproj");
+        has(csproj, &format!("    <PackageReference Include=\"{package}\" Version=\"{}\" />\n", runtime_version()));
+        has(csproj, &format!("    <ProjectReference Include=\"$(ClarityRuntime)/{package}/{package}.csproj\" />\n"));
+        assert_eq!(packages.iter().filter(|p| csproj.contains(&format!("Include=\"{p}\""))).count(), 1, "{csproj}");
+        assert!(!csproj.contains("Clarity.Runtime.Sqlite"), "no SQLite without a SQLite source: {csproj}");
+        // The clients come with the driver's package.
+        assert!(!csproj.contains("Npgsql") && !csproj.contains("MySqlConnector") && !csproj.contains("SqlClient"), "{csproj}");
+        let program = file(&files, "Program.cs");
+        has(program, "\"env:SHOP_DATABASE\")];");
+        // The driver is turned on before the databases open.
+        has(program, &format!("        {turned_on}\n        var db = Db.Connect(Sources);"));
+    }
+}
+
+/// An external source (D1e) on C#: opened with its own driver but never
+/// migrated, its records read and written by its own table, key and column
+/// names, with a read-only one on a server database.
+#[test]
+fn an_external_source_keeps_its_names_and_is_never_migrated() {
+    use clarity_project::DataSource;
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
+    let mut project = load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    project.sources = vec![SourceRef::sql("main"), SourceRef { readonly: true, ..SourceRef::sql("erp").external() }];
+    let mut settings = settings();
+    settings.datasources.push(DataSource {
+        name: "erp".into(),
+        kind: SourceKind::Mssql,
+        url: "env:ERP_DATABASE".into(),
+        auth: None,
+        external: true,
+        readonly: true,
+        beside: false,
+        openapi: None,
+        picks: Vec::new(),
+        pick_schemas: Vec::new(),
+        paging: None,
+        file: None,
+    });
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Program.cs"), "(\"erp\", Dialect.Mssql, \"env:ERP_DATABASE\")");
+    let schema = file(&files, "Schema.cs");
+    assert!(!schema.contains("(\"erp\"") && !schema.contains("tblInvoice"), "{schema}");
+    let erp_cs = file(&files, "Modules/Erp.cs");
+    has(erp_cs, "    public static string SourceName => \"erp\";");
+    has(erp_cs, "    public static string TableName => \"tblInvoice\";");
+    has(erp_cs, "    public static string KeyColumn => \"InvoiceID\";");
+    has(erp_cs, "[\"InvNo\", \"total\"]");
+    has(erp_cs, "Cond.Contains(\"InvNo\", \"INV\")");
+    has(erp_cs, ".Order(\"InvNo\", false)");
+    // Its database's driver comes along, though Clarity owns no table there.
+    has(file(&files, "Program.cs"), "        SqlServer.Use();\n");
+}
+
+/// A record's id, which code can read, is the record's `Id`.
+#[test]
+fn a_record_s_id_reads_as_its_id() {
+    let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Modules/Sales.cs"), "return (order.Id == other.Id);");
+}
+
+/// A record given to a reference field is stored as its id.
+#[test]
+fn a_reference_field_takes_a_record() {
+    let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Modules/Sales.cs"), "order.Customer = customer.Id;");
+}
+
+/// `none`, the empty value of a date or reference (X2).
+#[test]
+fn none_is_null() {
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Modules/Sales.cs");
+    for line in ["(order.Customer == null)", "!(db.Load<Customer>(order.Customer).Since == null)", "customer.Since = null;", "order.Customer = null;", "Cond.IsNone(\"customer\")"] {
+        has(sales, line);
+    }
+}
+
+/// `today()` and `now()` read the runtime's clock (X2).
+#[test]
+fn today_reads_the_clock() {
+    let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Modules/Sales.cs");
+    has(sales, "customer.Since = Clock.Today();");
+    has(sales, "(Clarity.Runtime.Values.Compare(customer.Since, Clock.Today()) > 0)");
+}
+
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction albumLength(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
+
+/// A duration is whole seconds; its slot and its parts show it as 3:45 (X2).
+#[test]
+fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", MUSIC)], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let music = file(&files, "Modules/Music.cs");
+    has(music, "public long Length");
+    has(music, "long _length = 180L;");
+    has(music, ".With(\"length\", Slot.OfDuration(track.Length))");
+}
+
+/// X2: a query through a reference: the condition and the order read the
+/// referred record in a subquery.
+#[test]
+fn a_query_goes_through_a_reference() {
+    let source = format!(
+        "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
+    );
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Modules/Sales.cs");
+    has(sales, ".Filter(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Contains(\"name\", name)).And(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Number(\"credit_limit\", Op.Gt, ");
+    has(sales, ".OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"name\", true, false).OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true)");
+}
+
+/// A function whose C# name a type already has (an enum, a record, a
+/// window's classes, a class the program or the runtime has) takes a
+/// trailing `_`, so the method never hides the type inside `Logic`.
+#[test]
+fn a_function_never_takes_the_name_of_a_type() {
+    let project = load_converted([("shop.clarity", include_str!("../../../clarity-gen/tests/fixtures/name_clash.clarity"))]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "Modules/Shop.cs");
+    for declared in ["Size Size_(", "long Sources(", "Size SizeSmall("] {
+        has(code, declared);
+    }
+    has(code, "Size_(db, 1L)");
+    has(code, "return Size.Small;");
+}

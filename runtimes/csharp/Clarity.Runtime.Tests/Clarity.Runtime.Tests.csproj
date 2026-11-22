@@ -18,6 +18,7 @@
     <ProjectReference Include="../Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
     <ProjectReference Include="../Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />
     <ProjectReference Include="../Clarity.Runtime.Engines/Clarity.Runtime.Engines.csproj" />
+    <ProjectReference Include="../Clarity.Auth/Clarity.Auth.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The cases every stack's runtime shares. -->

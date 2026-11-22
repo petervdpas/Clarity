@@ -2,7 +2,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { guided, signinChoices, signinTiles, signinViews } from "./signinView.ts";
+import { BUTTON_NAMES, guided, INPUT_NAMES, signinChoices, signinTiles, signinViews } from "./signinView.ts";
+import { readFileSync } from "node:fs";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Signin } from "@clarity/ui/generated/Signin.ts";
 
@@ -48,7 +49,7 @@ test("a sign-in view's palette is made from the setup", () => {
       ["signinField", "Recovery code"],
       ["signinRemember", "Keep me signed in"],
       ["signinButton", "Sign in with a password"],
-      ["signinButton", "Sign in with a recovery code"],
+      ["signinButton", "Use a recovery code"],
       ["signinButton", "Use this computer's account"],
       ["signinOther", "Other way: CodeView"],
       ["signinRefusal", "Refusal"],
@@ -67,4 +68,17 @@ test("a sign-in part's setting offers what the setup and the views have", () => 
   assert.deepEqual(signinChoices("signinField", SIGNIN, "PasswordView", ["PasswordView", "CodeView"]), ["name", "password", "code"]);
   assert.deepEqual(signinChoices("signinButton", SIGNIN, "PasswordView", []), ["password", "recovery", "account"]);
   assert.deepEqual(signinChoices("signinOther", SIGNIN, "CodeView", ["PasswordView", "CodeView"]), ["PasswordView"]);
+});
+
+// The palette names each piece as the app shows it: Clarity's own words for sign-in
+// (clarity_spec::translations SIGNIN_PART_KEYS, SIGNIN_PROVIDER_KEYS), by the key each piece shows.
+test("the palette's words are the app's words for each sign-in piece", () => {
+  const spec = readFileSync(new URL("../../../crates/clarity-spec/src/translations.rs", import.meta.url), "utf8");
+  const english = (key: string) => spec.match(new RegExp(`\\("${key}", "([^"]*)"\\)`))?.[1];
+  const inputs: Record<string, string> = { name: "signinName", password: "signinPassword", code: "signinCode", token: "signinToken" };
+  const buttons: Record<string, string> = { password: "signinUsePassword", recovery: "signinUseCode", token: "signinUseToken", account: "signinAccountButton", github: "signinGithub", microsoft: "signinMicrosoft", openid: "signinOpenid" };
+  assert.deepEqual(Object.keys(INPUT_NAMES).sort(), Object.keys(inputs).sort());
+  assert.deepEqual(Object.keys(BUTTON_NAMES).sort(), Object.keys(buttons).sort());
+  for (const [piece, key] of Object.entries(inputs)) assert.equal(INPUT_NAMES[piece], english(key), `input ${piece} (${key})`);
+  for (const [piece, key] of Object.entries(buttons)) assert.equal(BUTTON_NAMES[piece], english(key), `button ${piece} (${key})`);
 });

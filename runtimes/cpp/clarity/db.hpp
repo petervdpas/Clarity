@@ -10,12 +10,14 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "clarity/errors.hpp"
@@ -42,6 +44,21 @@ bool folder_takes(const std::vector<std::string>& patterns, bool hidden, const s
 void check_file_type(const std::string& field, const std::vector<std::string>& patterns, bool hidden, const std::string& name);
 
 class Db;
+
+/// How many owners one read of a stored list asks for (Db::find_by_owners),
+/// well below the fewest parameters a database takes in one statement
+/// (SQL Server's 2100).
+inline constexpr size_t owners_per_read = 500;
+
+/// The records of a stored list grouped by the record each refers back to
+/// (`owner`), each group in the order given.
+template <typename L, typename Owner>
+std::unordered_map<int64_t, std::vector<L>> by_owner(std::vector<L> found, Owner owner) {
+    std::unordered_map<int64_t, std::vector<L>> groups;
+    for (auto& item : found)
+        if (std::optional<int64_t> id = owner(item)) groups[*id].push_back(std::move(item));
+    return groups;
+}
 /// A data source that is a file in a format (formats/file_source.hpp).
 struct FileSource;
 
@@ -61,9 +78,6 @@ struct Source {
     Dialect dialect;
     std::string at;
 };
-
-/// The statements of one migration step.
-using Step = std::vector<std::string>;
 
 /// A file of a file store.
 struct FileEntry {
@@ -138,6 +152,10 @@ int64_t* held_version(R& record) {
 template <typename R>
 constexpr bool holds_lists = requires(R r, Db& db) { r.load_lists(db); };
 
+/// Whether a record loads the stored lists of many records at once, each list with one read (Db::find_by_owners).
+template <typename R>
+constexpr bool holds_lists_of = requires(std::vector<R>& records, Db& db) { R::load_lists_of(db, records); };
+
 template <typename R>
 constexpr bool has_events = requires(R r, Db& db) { r.before_save(db); } || requires(R r, Db& db) { r.after_save(db); } ||
                             requires(R r, Db& db) { r.before_delete(db); } || requires(R r, Db& db) { r.after_delete(db); } ||
@@ -182,9 +200,11 @@ public:
     Dialect dialect(const std::string& source);
     /// The number of migration steps applied so far to the default database.
     int schema_version();
-    int migrate(const std::vector<Step>& steps) { return migrate_source("", steps); }
-    /// Applies the steps of `source` its database has not had yet, each on its own.
-    int migrate_source(const std::string& source, const std::vector<Step>& steps);
+    /// Whether the database of `source` has the `steps` migration steps the program was
+    /// made with: behind or ahead it throws StepsError, whose message is the English line
+    /// the program stops with (docs/ledger/migrations.md, conformance/migrate-check.json).
+    /// The program does not migrate; clarity-migrate does.
+    void check_steps(const std::string& source, int steps);
 
     /// Inserts a new record (and gives it its id) or updates a stored one,
     /// with the entity's data events around it. A record someone saved
@@ -306,11 +326,29 @@ public:
         return record;
     }
 
-    /// Loads the stored lists of each record found.
+    /// Loads the stored lists of the records found, each list once for all of them.
     template <Record R>
     std::vector<R> with_lists(std::vector<R> found) {
-        if constexpr (detail::holds_lists<R>)
+        if constexpr (detail::holds_lists_of<R>) {
+            if (!found.empty()) R::load_lists_of(*this, found);
+        } else if constexpr (detail::holds_lists<R>) {
             for (auto& record : found) record.load_lists(*this);
+        }
+        return found;
+    }
+
+    /// The records whose reference `column` points at one of `owners`, in
+    /// the order they were stored, without their own lists: a stored list of
+    /// many records at once, read owners_per_read owners at a time.
+    template <Record L>
+    std::vector<L> find_by_owners(const std::string& column, const std::vector<int64_t>& owners) {
+        std::vector<L> found;
+        for (size_t start = 0; start < owners.size(); start += owners_per_read) {
+            std::vector<SqlValue> ids;
+            for (size_t i = start; i < std::min(owners.size(), start + owners_per_read); ++i) ids.push_back(owners[i]);
+            auto some = find_alone<L>(Query().filter(Cond::one_of(column, std::move(ids))).order(detail::key_of<L>(), false));
+            found.insert(found.end(), std::make_move_iterator(some.begin()), std::make_move_iterator(some.end()));
+        }
         return found;
     }
 
@@ -524,7 +562,7 @@ private:
         return state(source, table, key, columns, "", id).first;
     }
     /// Makes a row so: gone, or with these values and its own id; a
-    /// versioned one with a version past its current one and `version`.
+    /// versioned one with `version` exactly.
     void put(const Change& change, const std::optional<Row>& values, std::optional<int64_t> version);
     /// Runs `run` in a transaction of each of `sources`.
     void within(const std::vector<std::string>& sources, size_t from, const std::function<void()>& run);

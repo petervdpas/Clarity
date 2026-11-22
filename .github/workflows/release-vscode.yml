@@ -55,7 +55,7 @@ jobs:
       # The grammar is the designer's highlighter's, and every snippet is Clarity.
       - name: Test the grammar and the snippets
         working-directory: .
-        run: cargo test -p clarity-spec --test highlight --test editor_snippets
+        run: cargo test -p clarity-spec --test spec -- highlight:: editor_snippets::
 
       - name: Package
         run: npx --yes @vscode/vsce@3.6.0 package --out clarity-designer.vsix

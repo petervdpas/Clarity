@@ -45,4 +45,12 @@ build: string,
 /**
  * Its build's key among the builds (`piece:clarityUi`).
  */
-job: string, };
+job: string, 
+/**
+ * What its Build debug runs, for a native library; none for the others.
+ */
+debugBuild: string | null, 
+/**
+ * Its debug build's key among the builds (`piece:clarityUi:debug`).
+ */
+debugJob: string, };

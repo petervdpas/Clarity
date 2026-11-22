@@ -1,0 +1,11 @@
+{
+  "about": "Clarity's defaults, owned by the spec (crates/clarity-spec/src/defaults.rs) and written here once; a runtime that must carry a copy checks it against this file in its own tests. signin: how long a session lasts, how many wrong tries before the sign-in waits and how long it waits (a project's signin may say otherwise; the generators always pass what it says). undoSteps: the steps a window's undo keeps. keptBackups: the automatic backups kept of a database. httpSeconds: how long an http call may take. ownersPerRead: how many records' held lists one read gathers (conformance/held-lists.json). editBusKeeps: the edits a window's edit bus keeps (conformance/edit-bus.json). quietMinutes: how long a browser page may be quiet before a web program lets it go. toastLifespan: how long a toast shows, in milliseconds, when it says no lifespan, and the least and most it may say.",
+  "signin": { "sessionMinutes": 480, "tries": 5, "triesMinutes": 15 },
+  "undoSteps": 100,
+  "keptBackups": 10,
+  "httpSeconds": 30,
+  "ownersPerRead": 500,
+  "editBusKeeps": 500,
+  "quietMinutes": 30,
+  "toastLifespan": { "default": 5000, "least": 500, "most": 120000 }
+}

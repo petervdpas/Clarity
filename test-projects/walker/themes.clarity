@@ -1,0 +1,10 @@
+module themes
+
+// The two looks the walker offers; the toolbar's Theme button switches them.
+theme Light
+    title @lightTheme
+    mode light
+
+theme Dark
+    title @darkTheme
+    mode dark

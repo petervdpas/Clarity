@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="calculator.Main" title="@mainTitle" width="320" height="370" columns="4">
+  <Content name="main" at="1,1" span="4" rows="7">
+    <View name="Keypad" />
+  </Content>
+</Window>

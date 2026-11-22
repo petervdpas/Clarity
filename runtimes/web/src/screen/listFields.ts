@@ -10,9 +10,6 @@ export type ItemKind = "text" | "integer" | "decimal" | "date" | "enum";
 /** One item as it travels: text, a whole number, a decimal as text, a date as `2026-10-23`, an enum value by name. */
 export type Item = string | number;
 
-const WHOLE = /^-?\d+$/;
-const DECIMAL = /^-?\d+(\.\d+)?$/;
-
 /** A decimal written alike for the same value: `1.50` and `1.5` are one item. */
 function plain(decimal: string): string {
   const negative = decimal.startsWith("-");
@@ -27,26 +24,6 @@ function plain(decimal: string): string {
 export function sameItem(kind: ItemKind, a: Item, b: Item): boolean {
   if (kind === "decimal") return plain(String(a)) === plain(String(b));
   return a === b;
-}
-
-/**
- * What a typed item does to a list: the list it gives (the same list when
- * nothing is added), or `refused` when the text is no value of its kind.
- */
-export function addTyped(kind: ItemKind, items: Item[], typed: string): { items: Item[] } | { refused: true } {
-  const text = typed.trim();
-  if (text === "") return { items };
-  let item: Item;
-  if (kind === "integer") {
-    if (!WHOLE.test(text)) return { refused: true };
-    item = Number(text);
-  } else if (kind === "decimal") {
-    if (!DECIMAL.test(text)) return { refused: true };
-    item = text;
-  } else {
-    item = text;
-  }
-  return { items: added(kind, items, item) };
 }
 
 /** The list with an item added at its end, unless it has it. */

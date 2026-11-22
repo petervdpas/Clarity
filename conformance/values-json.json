@@ -1,0 +1,19 @@
+{
+  "about": "A value as every stack writes it into JSON when a program gives it to a part (`invoicePdf.order = current`), to a report (`pdf of Invoice with order = current`), over the web wire, or to `json of`: one text on every stack, compared as written. A decimal or money keeps its places as written (\"1250.50\", never 1250.5), as text; a whole number is a JSON number, exact to 19 digits (never in exponent form); a date is yyyy-MM-dd and a date and time yyyy-MM-ddTHH:mm:ss, as text; no date, no date and time and no reference are null; a reference is its record's number; an empty list is [] (never null). Each case gives the value's `kind`, the `value` (decimals and whole numbers as text, so no reader rounds them) and the `json` every stack writes.",
+  "cases": [
+    { "name": "a decimal keeps its places", "kind": "decimal", "value": "1250.50", "json": "\"1250.50\"" },
+    { "name": "a whole decimal keeps its places", "kind": "decimal", "value": "100.00", "json": "\"100.00\"" },
+    { "name": "a negative decimal", "kind": "decimal", "value": "-0.05", "json": "\"-0.05\"" },
+    { "name": "money keeps its cents", "kind": "money", "value": "12.30", "json": "\"12.30\"" },
+    { "name": "a whole number of 19 digits", "kind": "integer", "value": "1234567890123456789", "json": "1234567890123456789" },
+    { "name": "a negative whole number", "kind": "integer", "value": "-42", "json": "-42" },
+    { "name": "a date", "kind": "date", "value": "2026-11-21", "json": "\"2026-11-21\"" },
+    { "name": "no date", "kind": "date", "value": null, "json": "null" },
+    { "name": "a date and time", "kind": "datetime", "value": "2026-11-21T09:05:00", "json": "\"2026-11-21T09:05:00\"" },
+    { "name": "a reference", "kind": "ref", "value": "1234567890123456789", "json": "1234567890123456789" },
+    { "name": "no reference", "kind": "ref", "value": null, "json": "null" },
+    { "name": "a bool", "kind": "bool", "value": true, "json": "true" },
+    { "name": "text with quotes", "kind": "text", "value": "say \"hi\"", "json": "\"say \\\"hi\\\"\"" },
+    { "name": "an empty list", "kind": "list", "value": [], "json": "[]" }
+  ]
+}

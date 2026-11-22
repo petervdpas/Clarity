@@ -1,6 +1,7 @@
 // The connection to one database, behind the same few calls for every
-// kind: run a statement, insert and get the new key, read rows, and apply a
-// migration step. SQLite comes first; the server databases follow.
+// kind: run a statement, insert and get the new key, read rows, run SQL
+// without parameters. SQLite comes first; the server databases follow. The
+// program does not migrate (clarity-migrate does, docs/ledger/migrations.md).
 
 #pragma once
 
@@ -20,12 +21,6 @@ typedef struct {
     size_t capacity;
 } ClarityRows;
 
-/// The statements of one migration step.
-typedef struct {
-    const char* const* statements;
-    size_t count;
-} ClarityStep;
-
 typedef struct ClarityDriver ClarityDriver;
 
 /// A database connection; `params` may be NULL for none.
@@ -38,13 +33,9 @@ struct ClarityDriver {
     bool (*rows)(ClarityDriver* driver, const char* sql, const ClarityValues* params, ClarityRows* out);
     /// Runs SQL without parameters, such as a statement that creates a table.
     bool (*batch)(ClarityDriver* driver, const char* sql);
-    /// Runs the statements of migration step `version` and records it, all or nothing.
-    bool (*apply)(ClarityDriver* driver, int version, const ClarityStep* step);
     void (*close)(ClarityDriver* driver);
 };
 
-/// The statement that records migration step `version`.
-const char* clarity_applied_sql(int version);
 /// Where a database or store is: as written, or from the environment
 /// variable `env:NAME` names, so passwords stay out of the program.
 bool clarity_location(const char* text, const char** out);

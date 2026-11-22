@@ -118,9 +118,11 @@ bool clarity_db_rows(ClarityDb* db, const char* source, const char* sql, const C
 bool clarity_db_dialect(ClarityDb* db, const char* source, ClarityDialect* out);
 /// The number of migration steps applied so far to the default database.
 bool clarity_schema_version(ClarityDb* db, int* out);
-/// Applies the steps of `source` its database has not had yet, each on its
-/// own; `applied` (may be NULL) gets how many ran.
-bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps, size_t count, int* applied);
+/// Whether the database of `source` has the `steps` migration steps the program was made
+/// with: behind or ahead it fails with CLARITY_STEPS, whose message is the English line the
+/// program stops with (docs/ledger/migrations.md, conformance/migrate-check.json). The program
+/// does not migrate; clarity-migrate does.
+bool clarity_check_steps(ClarityDb* db, const char* source, int steps);
 
 /// How many undo steps are kept: the oldest goes when a newer one comes, so
 /// a long session does not keep every row it ever changed.
@@ -168,6 +170,22 @@ bool clarity_redo(ClarityDb* db, int64_t id, bool* done);
 bool clarity_replay_steps(ClarityDb* db, const int64_t* ids, size_t count, bool back, bool* done);
 /// The records a query finds, in its order, as an array in the scratch arena.
 bool clarity_find(ClarityDb* db, const ClarityEntity* entity, const ClarityQuery* query, void** items, size_t* count);
+
+/// How many owners one read of a stored list asks for (clarity_find_by_owners),
+/// well below the fewest parameters a database takes in one statement (SQL Server's 2100).
+#define CLARITY_OWNERS_PER_READ 500
+
+/// The records of `entity` whose reference `column` points at one of the
+/// `owner_count` ids of `owners`, in the order they were stored, without
+/// their own lists: a stored list of many records at once (order.lines),
+/// read CLARITY_OWNERS_PER_READ owners at a time. The items are in the scratch arena.
+bool clarity_find_by_owners(ClarityDb* db, const ClarityEntity* entity, const char* column, size_t owner_count, const int64_t* owners, void** items,
+                            size_t* count);
+
+/// The items among `count` items of `size` bytes whose reference at
+/// `reference_at` is `owner`, in their order, copied into the scratch arena
+/// (`*out`): one record's share of a list read for many (clarity_find_by_owners).
+size_t clarity_owned(const void* items, size_t count, size_t size, size_t reference_at, int64_t owner, void** out);
 bool clarity_get(ClarityDb* db, const ClarityEntity* entity, int64_t id, void* record);
 /// The record a reference field points at; 0 is a reference that is empty.
 bool clarity_load(ClarityDb* db, const ClarityEntity* entity, int64_t reference, void* record);

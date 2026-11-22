@@ -1,0 +1,19 @@
+{
+  "about": "An application's version as the project file takes it (`version \"1.2.0\"`), the same in the project file's reader (clarity_project::is_version) and the IDE's version field (app/src/lib/version.ts): major.minor.patch of digits, with an optional pre-release after a hyphen, of parts of ASCII letters and digits separated by dots.",
+  "cases": [
+    { "text": "1.2.0", "is": true },
+    { "text": "0.0.1", "is": true },
+    { "text": "10.20.30", "is": true },
+    { "text": "2.0.0-beta.1", "is": true },
+    { "text": "1.0.0-rc1", "is": true },
+    { "text": "1.2", "is": false },
+    { "text": "1.2.3.4", "is": false },
+    { "text": "v1.2.3", "is": false },
+    { "text": "1.2.x", "is": false },
+    { "text": "1.2.3-", "is": false },
+    { "text": "1.2.3-beta..1", "is": false },
+    { "text": "1.2.3-beta_1", "is": false },
+    { "text": "1..3", "is": false },
+    { "text": "", "is": false }
+  ]
+}

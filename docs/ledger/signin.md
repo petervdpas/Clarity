@@ -16,7 +16,7 @@ Progress: 70%
 - Docs: manual `project.signin.md`, `parts.signin.md`
 
 ## Tests
-- `conformance/signin.json`: run by R, Go, C, C++, C# (`SigninTests.cs`), spec (`crates/clarity-spec/tests/signin.rs`)
+- `conformance/signin.json`: run by R, Go, C, C++, C# (`SigninTests.cs`), spec (`crates/clarity-spec/tests/spec/signin.rs`)
 - `runtimes/rust-auth/tests/auth.rs`, `attempt.rs`, `providers.rs`, `openid.rs`; spec `signin.rs`, `signin_views.rs`; `crates/clarity-project/tests/signin.rs`; gen `signin_{rust,go,c,cpp,csharp}.rs`; `runtimes/rust-ui/tests/windows/signin.rs`, `signin_part.rs`, `signin_view.rs`; `crates/clarity-cli/tests/users.rs`; `app/src/lib/signinView.test.ts`
 - Examples: todo (`signin Person on desktop`, password, account, remember), shop (Clerk, guided window)
 

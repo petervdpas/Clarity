@@ -1,6 +1,6 @@
 # Migrations
 
-How a database follows your entities through migration steps, written as Clarity files that Clarity proposes and the program runs when it starts.
+How a database follows your entities through migration steps, written as Clarity files that Clarity proposes and its migration tool, `clarity-migrate`, applies.
 
 ## Steps are Clarity files
 
@@ -63,12 +63,23 @@ clarity migrate shop.clarity
 
 This writes the pending changes of every SQL data source as its next step, titled "Step N" unless you give `--title`. `--check` only lists the changes. `--no-renames` takes proposed renames as a removal and an addition. When a change can lose data, the command stops until you run it again with `--allow-data-loss`.
 
-## What the program does at start
+## Applying the steps
 
-The generated application, and Run in Clarity, apply the steps its database does not have yet, in order. The database keeps the number of steps it has in a table called `clarity_schema`. Each step runs in a transaction where the database allows it: SQLite, PostgreSQL and SQL Server undo a failed step as a whole, while MySQL keeps what ran before the failure. On SQLite, the references between records are checked before a step is kept.
+Clarity's migration tool, `clarity-migrate`, applies the steps a database does not have yet, in order: Run in Clarity does it before the program starts, `clarity data migrate` from the command line (below), and the tool beside an app where it is installed. The database keeps the number of steps it has in a table called `clarity_schema`. Each step runs in a transaction where the database allows it: SQLite, PostgreSQL and SQL Server undo a failed step as a whole, while MySQL keeps what ran before the failure. On SQLite, the references between records are checked before a step is kept. A SQLite database that already has a schema is backed up first; see [Data sources](data.sources.md#running-the-steps).
 
 A step that ran never changes. To undo it, write a new step. Clarity never writes steps for an external source; see [Data sources](data.sources.md).
 
+## What the program does at start
+
+The generated application does not migrate. When it starts, before any window, it checks that each database it owns has exactly the steps it was made with. A database that is behind or ahead stops it with one line in English on the console, and it exits with 1:
+
+```text
+The database main needs migrating: run clarity-migrate
+The database main belongs to a newer version of this app
+```
+
+Whoever installs the app migrates its database with `clarity-migrate`, or with Clarity. With `include migrate` in the project file (**Include data migration tools** in the Project settings view), Generate puts `clarity-migrate` and its `clarity-migrate.json` in the output folder, so the tool travels with the app; see [The project file](project.file.md#include-migrate).
+
 ## Creating the database from the command line
 
-`clarity data migrate shop.clarity` creates the project's SQLite database, or brings it up to date, with the same steps the program applies when it starts, without opening a window; a database that changes is backed up first. `--source` names another data source than the first SQLite one the project owns. Handy before seeding data, or on a machine with no display.
+`clarity data migrate shop.clarity` creates every database the project owns, or brings it up to date, with Clarity's migration tool, `clarity-migrate`: SQLite, PostgreSQL, MySQL and SQL Server alike, each SQLite database the one in the project's folder where Clarity runs it, each server database as the app connects to it (a connection kept as a secret setting is read from the system's store). A database that changes is backed up first. A database that has more steps than the project is refused: it belongs to a newer version of the app. `--source` takes only that data source. Handy before seeding data, or on a machine with no display.

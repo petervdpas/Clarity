@@ -41,16 +41,6 @@ pub(crate) trait Driver: Send {
     fn rows(&mut self, sql: &str, params: &[SqlValue]) -> Outcome<Vec<Vec<SqlValue>>>;
     /// Runs SQL without parameters, such as a statement that creates a table.
     fn batch(&mut self, sql: &str) -> Outcome<()>;
-    /// Runs the statements of migration step `version` and records that
-    /// the database has it, all or nothing where the database can undo
-    /// changes to tables.
-    fn apply(&mut self, version: usize, statements: &[&str]) -> Outcome<()>;
-}
-
-/// The statement that records migration step `version`.
-#[cfg_attr(not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "mssql")), allow(dead_code))]
-pub(crate) fn applied(version: usize) -> String {
-    format!("INSERT INTO clarity_schema (version) VALUES ({version})")
 }
 
 /// The location of a database: as written, from the environment variable

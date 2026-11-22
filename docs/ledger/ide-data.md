@@ -20,7 +20,7 @@ Progress: 75%
 - Docs: manual/data.entities.md, data.sources.md, data.migrations.md, languages.md, project.file.md
 
 ## Tests
-- `crates/clarity-spec/tests/dictionary_edit.rs`, rename_field.rs, rename.rs
+- `crates/clarity-spec/tests/spec/dictionary_edit.rs`, rename_field.rs, rename.rs
 - `crates/clarity-project/tests/mappings.rs`, openapi.rs, external.rs, backups.rs, settings.rs
 - `app/src/lib/paging.test.ts`, stackTools.test.ts, fieldType.test.ts
 

@@ -185,6 +185,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut language = None;
     let mut currency = None;
     let mut keys_editable = None;
+    let mut include_migrate = None;
     let mut signin: Option<clarity_spec::signin::Signin> = None;
     // Whether the indented lines that follow belong to the signin block.
     let mut in_signin = false;
@@ -356,6 +357,13 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: write 'keys editable' to let the people using the application set the keys"));
                 }
                 keys_editable = Some(true);
+            }
+            "include" => {
+                once(include_migrate.is_some())?;
+                if a.len() != 1 || a.first().and_then(|t| word(t)) != Some("migrate") {
+                    return Err(format!("line {line}: write 'include migrate' to put Clarity's data migration tools in the output folder"));
+                }
+                include_migrate = Some(true);
             }
             "agents" if a.first().and_then(|t| word(t)) == Some("at") => {
                 once(agents_at_most.is_some())?;
@@ -593,7 +601,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec"
+                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, include, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec"
                 ));
             }
         }
@@ -619,6 +627,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
+        include_migrate: include_migrate.unwrap_or(false),
         signin,
         engines_interpreted: engines_interpreted.unwrap_or(false),
         agents_read_closed: agents_closed.is_some_and(|c| c.0),
@@ -736,6 +745,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     if !settings.keeps.is_empty() {
         let folders: Vec<String> = settings.keeps.iter().map(|f| quote(f)).collect();
         lines.push(("output keeps".into(), 1, format!("output keeps {}", folders.join(", "))));
+    }
+    if settings.include_migrate {
+        lines.push(("include".into(), 1, "include migrate".to_string()));
     }
     if let Some(language) = &settings.language {
         lines.push(("language".into(), 1, format!("language {}", quote(language))));

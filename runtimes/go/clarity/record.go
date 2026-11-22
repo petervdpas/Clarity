@@ -131,7 +131,7 @@ func (r *Reader) Text(i int, column string) string {
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case decimal.Decimal:
-		return v.String()
+		return DecimalText(v)
 	default:
 		r.fail(column, v)
 		return ""
@@ -294,7 +294,7 @@ func Show(value any) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case decimal.Decimal:
-		return v.String()
+		return DecimalText(v)
 	case bool:
 		if v {
 			return "yes"

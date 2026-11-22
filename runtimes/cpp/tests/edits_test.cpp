@@ -153,3 +153,20 @@ TEST(the_edit_bus_puts_back_what_code_set_on_parts) {
         }
     }
 }
+
+// A window's bus keeps its last edits as every runtime does (conformance/edit-bus.json, `keeps`): one past
+// them drops the oldest, so that many undos take back the last ones and the next finds nothing.
+TEST(the_bus_keeps_as_many_edits_as_every_runtime_keeps) {
+    int keeps = conformance("edit-bus.json")["keeps"].get<int>();
+    EditBus bus;
+    bus.reset({{"count", 0}});
+    for (int n = 1; n <= keeps + 1; ++n) bus.edit("countBox", "form", {{"count", n}}, {});
+    nlohmann::json now = {{"count", keeps + 1}};
+    auto take = [](const std::vector<int64_t>&, bool) {};
+    for (int i = 0; i < keeps; ++i) {
+        auto after = bus.undo("form", now, true, take);
+        REQUIRE(after.has_value());
+        now = *after;
+    }
+    CHECK(!bus.undo("form", now, true, take).has_value());
+}

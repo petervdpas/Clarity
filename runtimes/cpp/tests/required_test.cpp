@@ -1,6 +1,7 @@
 // Required fields: a save refuses a record whose required field is empty,
 // as every runtime does (conformance/required.json).
 
+#include "apply_steps.hpp"
 #include "check.hpp"
 #include "clarity/db.hpp"
 #include "clarity/sql.hpp"
@@ -70,7 +71,7 @@ TEST(required_fields_are_checked_as_every_runtime_does) {
 
 TEST(a_save_refuses_a_record_with_an_empty_required_field) {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE member (id INTEGER PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER)"}});
+    apply_steps(db, {{"CREATE TABLE member (id INTEGER PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER)"}});
     load_translations(R"({"project":{"translations":{"en":{"groupLabel":"Group"}}}})");
     Member empty{0, "", 1};
     CHECK_EQ(refused_field([&] { db.save(empty); }), std::string("Name"));

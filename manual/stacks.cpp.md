@@ -23,13 +23,13 @@ Clarity writes a CMake project into the output folder (`out` by default). All ge
 - `CMakeLists.txt` and `CMakePresets.json`: the build, with a debug and a release preset.
 - `src/records.hpp` and `src/records.cpp`: the enums and records of every module.
 - `src/modules/<module>.cpp`: one file per Clarity module, with its functions, actions, data events, windows and handlers, all declared in `src/app.hpp`.
-- `src/schema.hpp` and `src/schema.cpp`: the migration steps of every database Clarity owns.
+- `src/schema.hpp` and `src/schema.cpp`: how many migration steps each database Clarity owns has, which the program checks at start.
 - `src/page.cpp`: the model (the data dictionary, the translations, what each window is besides its look) and the facts the parts read beside the values (each field's label, format and range), built into the program.
 - `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again. CMake builds them into the program, so a changed window file takes effect on the next build.
 - `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources, built into the program the same way (the desktop target).
 - `browser/`: for the web target, what the browser takes: `index.html` (the page Clarity.UI draws on), Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`), `clarity/files.json` (the windows and app frames as markup, the themes, the model, the title and size) and `clarity/resources/`. CMake builds every file of `browser/` into the program (`clarity_browser_files`), so it serves them without a folder beside it.
 - `src/parts.cpp` and `parts/`: the [custom parts](design.custom-parts.md), each a library of its own folder.
-- `src/main.cpp`: opens and migrates the databases and runs the windows on Clarity.UI (or serves them, for the web target).
+- `src/main.cpp`: opens and checks the databases and runs the windows on Clarity.UI (or serves them, for the web target).
 - `clarity-runtime/`: the C++ runtime, copied in. For code that reads or writes a [data format](code.formats.md) it holds `formats/` too, and `CMakeLists.txt` links Clarity.Formats' library from Clarity.UI's folder (`clarity_use_formats`), for a program of any target.
 - `README.md`: what to install to build the project without Clarity.
 

@@ -762,7 +762,7 @@ impl<'a> Env<'a> {
 
     fn field_type(&self, ty: &FieldType) -> Ty<'a> {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
+            crate::kept_as_text!() => Ty::Text,
             FieldType::Integer | FieldType::Id => Ty::Integer,
             FieldType::Decimal { .. } => Ty::Decimal,
             FieldType::Money => Ty::Money,
@@ -2392,6 +2392,16 @@ pub const FILE_MEMBERS: [&str; 5] = ["name", "path", "extension", "size", "modif
 /// whether it is ok (a status from 200 to 299), and its text.
 pub const REPLY_MEMBERS: [&str; 3] = ["status", "ok", "text"];
 
+/// The properties of Clarity's own parts that code reads or sets
+/// (`part.visible`, `sheet.fromX`), besides a custom part's own, what a video
+/// or a sound plays, where the person types and a pdfReport's data, which have
+/// lists of their own. The checker types only these, and every generator
+/// writes each of them in its stack (`crates/clarity-gen/tests/part_properties.rs`).
+pub const PART_PROPERTIES: [&str; 34] = [
+    "visible", "enabled", "caption", "text", "checked", "error", "readonly", "folded", "collapsed", "maximized", "pinned", "tab", "step", "open", "selected", "x", "y", "fromX", "fromY", "grid", "snap", "foldButtons",
+    "connecting", "resizable", "bent", "via", "background", "dotSize", "dotColor", "min", "max", "tool", "brush", "ink",
+];
+
 /// Whether a header carries a key, which belongs in a setting, not the code.
 fn secret_header(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
@@ -3890,7 +3900,11 @@ impl<'a> BodyChecker<'_, 'a> {
         {
             return value(self.env.type_ref(&own.ty).unwrap_or(Ty::Unknown));
         }
-        match property {
+        // Clarity's own parts have only the properties of the list; one the checker types is on it.
+        if !PART_PROPERTIES.contains(&property) {
+            return self.special_property(part, name, property);
+        }
+        let own = match property {
             "visible" | "enabled" => value(Ty::Bool),
             "caption" if part.has_caption() => value(Ty::Text),
             // An input's message; on a status item, the warning it shows.
@@ -3899,33 +3913,6 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
-            // What a video plays, read as it plays (docs/ledger/video-camera.md).
-            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Video) && crate::video::read(property).is_some() => {
-                let ty = match crate::video::read(property) {
-                    Some(TypeInfo::Bool) => Ty::Bool,
-                    Some(TypeInfo::Integer) => Ty::Integer,
-                    _ => Ty::Text,
-                };
-                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the video plays")) })
-            }
-            // What a sound plays, read as it plays (docs/ledger/audio.md).
-            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Sound) && crate::sound::read(property).is_some() => {
-                let ty = match crate::sound::read(property) {
-                    Some(TypeInfo::Bool) => Ty::Bool,
-                    Some(TypeInfo::Integer) => Ty::Integer,
-                    _ => Ty::Text,
-                };
-                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the sound plays")) })
-            }
-            // Where the person types (Writer gap 21): the caret, set too, and the selected text, read.
-            _ if matches!(part, Part::Widget(p) if matches!(p.kind, WidgetKind::Textbox | WidgetKind::Memo) || (p.kind == WidgetKind::Markdown && property == "link")) && crate::typing::read(property).is_some() => {
-                let ty = if crate::typing::read(property) == Some(TypeInfo::Integer) { Ty::Integer } else { Ty::Text };
-                let writable = if crate::typing::settable(property) { Ok(()) } else { Err(format!("{name}.{property} is read, not set: it is what the person chose")) };
-                Some(Place::Value { ty, writable })
-            }
-            // The data a pdfReport's report takes (`invoicePdf.order`): the report's own file says
-            // which (reports::check, once the reports are read), and what it holds.
-            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::PdfReport) => value(Ty::Unknown),
             // A spin box's range, whole numbers: as its line writes it, until code sets it.
             "min" | "max" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Spinbox) => value(Ty::Integer),
             // A pinnable slide-out pinned open beside the window's parts.
@@ -3975,7 +3962,7 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             // What the person changed last on a canvas with a mode (manual/parts.graphics.md):
             // the record of an object, or the place of a shape in the drawing, from 1.
-            "selected" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.mode.is_some()) => {
+            "selected" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Objects | crate::model::CanvasMode::Vector))) => {
                 let Part::Widget(props) = part else { return None };
                 let ty = match (props.mode, &props.objects) {
                     (Some(crate::model::CanvasMode::Objects), Some(objects)) => match self.data(&objects.list).map(|d| self.env.data_type(d)) {
@@ -4005,6 +3992,44 @@ impl<'a> BodyChecker<'_, 'a> {
                 // (a stored one by its id, a record by its fields), or none.
                 Some(Place::Value { ty, writable: Ok(()) })
             }
+            _ => None,
+        };
+        own.or_else(|| self.special_property(part, name, property))
+    }
+
+    /// What a video or a sound plays, where the person types, and a pdfReport's
+    /// data: properties with lists of their own (video::READS, sound::READS,
+    /// typing::READS, the report's Data).
+    fn special_property(&self, part: Part<'a>, name: &str, property: &str) -> Option<Place<'a>> {
+        let value = |ty| Some(Place::Value { ty, writable: Ok(()) });
+        match property {
+            // What a video plays, read as it plays (docs/ledger/video-camera.md).
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Video) && crate::video::read(property).is_some() => {
+                let ty = match crate::video::read(property) {
+                    Some(TypeInfo::Bool) => Ty::Bool,
+                    Some(TypeInfo::Integer) => Ty::Integer,
+                    _ => Ty::Text,
+                };
+                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the video plays")) })
+            }
+            // What a sound plays, read as it plays (docs/ledger/audio.md).
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Sound) && crate::sound::read(property).is_some() => {
+                let ty = match crate::sound::read(property) {
+                    Some(TypeInfo::Bool) => Ty::Bool,
+                    Some(TypeInfo::Integer) => Ty::Integer,
+                    _ => Ty::Text,
+                };
+                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the sound plays")) })
+            }
+            // Where the person types (Writer gap 21): the caret, set too, and the selected text, read.
+            _ if matches!(part, Part::Widget(p) if matches!(p.kind, WidgetKind::Textbox | WidgetKind::Memo) || (p.kind == WidgetKind::Markdown && property == "link")) && crate::typing::read(property).is_some() => {
+                let ty = if crate::typing::read(property) == Some(TypeInfo::Integer) { Ty::Integer } else { Ty::Text };
+                let writable = if crate::typing::settable(property) { Ok(()) } else { Err(format!("{name}.{property} is read, not set: it is what the person chose")) };
+                Some(Place::Value { ty, writable })
+            }
+            // The data a pdfReport's report takes (`invoicePdf.order`): the report's own file says
+            // which (reports::check, once the reports are read), and what it holds.
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::PdfReport) => value(Ty::Unknown),
             _ => None,
         }
     }

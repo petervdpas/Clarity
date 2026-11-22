@@ -1,0 +1,25 @@
+<Report name="Invoice" paper="A4" margin="20mm" stylesheet="invoice.css">
+  <Data name="order" type="Order" />
+  <PageHeader height="8mm">
+    <Text at="0,0" size="100,6" key="productHeading" class="heading" />
+    <Text at="120,0" size="50,6" key="priceHeading" align="right" class="heading" />
+  </PageHeader>
+  <ReportHeader height="30mm">
+    <Text at="0,0" size="100,10" key="invoiceTitle" class="title" />
+    <Field at="120,0" size="50,8" bind="order.number" align="right" class="number" />
+    <Line at="0,24" size="170,0" class="rule" />
+  </ReportHeader>
+  <Detail height="7mm" list="order.lines">
+    <Field at="0,0" size="110,6" bind="line.product" />
+    <Field at="120,0" size="50,6" bind="line.price" align="right" />
+  </Detail>
+  <ReportFooter height="30mm">
+    <Line at="0,1" size="170,0" class="rule" />
+    <Text at="0,3" size="100,6" key="totalHeading" class="total" />
+    <Sum at="120,3" size="50,6" of="line.price" align="right" class="total" />
+    <Markdown at="0,12" size="170,16" bind="order.notes" />
+  </ReportFooter>
+  <PageFooter height="8mm">
+    <PageNumber at="75,0" size="20,5" align="center" />
+  </PageFooter>
+</Report>

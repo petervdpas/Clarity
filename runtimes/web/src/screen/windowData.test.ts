@@ -2,8 +2,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { DataDecl } from "../generated/DataDecl.ts";
-import { dataEntity, dataType, isList, startValue, translatedDefaults, valueField } from "./windowData.ts";
+import { PLAIN_TYPES, dataEntity, dataType, isList, startValue, translatedDefaults, valueField } from "./windowData.ts";
 
 const span = { start: 0, end: 0, line: 1, col: 1 };
 const ident = (name: string) => ({ name, span });
@@ -57,4 +58,10 @@ test("a text value starts at its default in the person's language", () => {
   assert.deepEqual(translatedDefaults([word, fresh], { word: 'say "hi"', fresh: true }, tr), { word: "zeg hoi", fresh: true });
   // Changed by a handler: kept as it is.
   assert.deepEqual(translatedDefaults([word], { word: "bye" }, tr), { word: "bye" });
+});
+
+test("the plain types are the spec's (clarity_spec::code::PLAIN_TYPES)", () => {
+  const spec = readFileSync(new URL("../../../../crates/clarity-spec/src/code/mod.rs", import.meta.url), "utf8");
+  const listed = spec.match(/pub const PLAIN_TYPES: \[&str; \d+\] = \[([^\]]*)\];/)?.[1] ?? "";
+  assert.deepEqual([...PLAIN_TYPES], [...listed.matchAll(/"([a-z]+)"/g)].map((m) => m[1]));
 });

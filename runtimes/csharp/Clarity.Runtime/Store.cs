@@ -25,13 +25,6 @@ internal interface IDriver : IDisposable
 
     /// <summary>Runs SQL without parameters, such as a statement that creates a table.</summary>
     void Batch(string sql);
-
-    /// <summary>
-    /// Runs the statements of migration step <paramref name="version"/> and records
-    /// that the database has it, all or nothing where the database can undo
-    /// changes to tables.
-    /// </summary>
-    void Apply(int version, IReadOnlyList<string> statements);
 }
 
 /// <summary>A driver that can say whether a transaction is open, as a file source asks of its SQLite database.</summary>
@@ -42,9 +35,6 @@ internal interface ITransactional
 
 internal static class Store
 {
-    /// <summary>The statement that records migration step <paramref name="version"/>.</summary>
-    internal static string Applied(int version) => $"INSERT INTO clarity_schema (version) VALUES ({version})";
-
     /// <summary>
     /// The location of a database: as written, or from the environment variable
     /// that <c>env:NAME</c> names, so passwords stay out of the program.

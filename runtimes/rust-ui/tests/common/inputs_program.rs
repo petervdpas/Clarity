@@ -76,22 +76,10 @@ impl Program for Typed {
         }
         Ok(reply(state))
     }
-    fn reorder_event(&self, state: WindowState, _reorder: program::Reorder) -> Answer<Reply> {
-        self.answer(state)
-    }
-    fn item_event(&self, state: WindowState, _item: program::ItemEdit) -> Answer<Reply> {
-        self.answer(state)
-    }
-    fn range_event(&self, state: WindowState, _range: program::RangeEdit) -> Answer<Reply> {
-        self.answer(state)
-    }
     fn canvas_event(&self, state: WindowState, _canvas: program::CanvasEdit) -> Answer<Reply> {
         self.answer(state)
     }
     fn step_event(&self, state: WindowState, _step: program::StepPress) -> Answer<Reply> {
-        self.answer(state)
-    }
-    fn view_event(&self, state: WindowState, _part: &str, _action: Map<String, Value>) -> Answer<Reply> {
         self.answer(state)
     }
     fn answer_event(&self, state: WindowState, _handler: &str, _values: Vec<Value>) -> Answer<Reply> {
@@ -104,7 +92,7 @@ impl Program for Typed {
     fn field_values(&self, _entity: &str, _field: &str) -> Answer<Vec<String>> {
         Ok(vec!["Lima".into(), "Oslo".into(), "Rome".into()])
     }
-    fn find_options(&self, _kind: &str, _entity: &str, _field: Option<&str>, _show: &[String], _typed: &str) -> Answer<Value> {
+    fn find_options(&self, _entity: &str, _show: &[String]) -> Answer<Value> {
         Ok(Value::Null)
     }
     fn field_bytes(&self, _entity: &str, _id: i64, _field: &str) -> Answer<Option<Vec<u8>>> {

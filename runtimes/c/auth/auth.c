@@ -256,9 +256,9 @@ bool clarity_db_add_signin(ClarityDb* db, const ClaritySigninSource* source) {
             ok = false;
         }
     }
-    people->session_seconds = source->session_seconds ? source->session_seconds : 8 * 3600;
-    people->tries = source->tries ? source->tries : 5;
-    people->tries_seconds = source->tries_seconds ? source->tries_seconds : 15 * 60;
+    people->session_seconds = source->session_seconds ? source->session_seconds : CLARITY_SIGNIN_SESSION_SECONDS;
+    people->tries = source->tries ? source->tries : CLARITY_SIGNIN_TRIES;
+    people->tries_seconds = source->tries_seconds ? source->tries_seconds : CLARITY_SIGNIN_TRIES_SECONDS;
     if (!ok) {
         forget(people);
         return clarity_fail(CLARITY_STORAGE, "out of memory");

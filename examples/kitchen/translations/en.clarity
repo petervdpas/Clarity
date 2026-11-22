@@ -40,6 +40,8 @@ translation en
     pasteText "Paste"
     recordNotThere "There is no {table} with id {id}"
     recordStillUsed "This {table} is still used by other records"
+    divisionByZero "Division by zero"
+    numberTooLarge "The number is too large"
     removeRow "Remove"
     removeRowAsk "Remove {row}?"
     selectAllText "Select all"

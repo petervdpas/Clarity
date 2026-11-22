@@ -446,11 +446,11 @@ impl ProgramHost {
         }
     }
 
-    /// The part `part` has the focus: its undo scope is what `-> undo` and `-> redo` act on.
+    /// The part `part` has the focus: its undo scope is what `-> undo` and
+    /// `-> redo` act on; none for a part with no scope (`no undo`), so they
+    /// take back nothing there, not another part's edit.
     pub fn set_focused(&self, part: &str) {
-        if let Some(scope) = self.scope(part) {
-            *self.focused_scope.borrow_mut() = Some(scope);
-        }
+        *self.focused_scope.borrow_mut() = self.scope(part);
     }
 
     /// Ctrl+Z (`back`) or Ctrl+Y on a scope: its last edit taken back or done again.
@@ -759,7 +759,7 @@ impl PartHost for ProgramHost {
         let show = part.names("show");
         if part.flag("search") && !show.is_empty() {
             if let Some((_, Some(target))) = &at {
-                return match self.program.find_options("search", target, None, &show, "") {
+                return match self.program.find_options(target, &show) {
                     Ok(Value::Array(found)) => found
                         .into_iter()
                         .map(|o| {

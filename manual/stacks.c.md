@@ -23,12 +23,12 @@ Clarity writes a CMake project into the output folder (`out` by default):
 - `CMakeLists.txt` and `CMakePresets.json`: the build, with a debug and a release preset.
 - `src/records.h` and `src/records.c`: the enums and records of every module.
 - `src/modules/<module>.c`: one file per Clarity module, with its functions, actions, data events, windows and handlers, all declared in `src/app.h`.
-- `src/schema.c`: the migration steps of every database Clarity owns.
+- `src/schema.c`: how many migration steps each database Clarity owns has, which the program checks at start.
 - `src/model.c`: the model (the data dictionary, the translations, what each window is besides its look), and `src/facts.c`: what the parts read beside the values (labels, formats, required fields), both built into the program.
 - `windows/` and `apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). `themes/` holds the project's themes as Clarity resolves them, `resources/` its resources. CMake puts these files into the program when it builds it (`clarity_carry` in `CMakeLists.txt`, in the order the project gives them), so a changed window file takes effect on the next build.
 - `src/parts.c`: for a project with [custom parts](design.custom-parts.md), each part registered with Clarity.UI.
 - `browser/`: for the web target, what the browser takes: `index.html` (the page Clarity.UI draws on), Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`), `clarity/files.json` (the windows and app frames as markup, the themes, the model, the title and size) and `clarity/resources/`. CMake puts every file of `browser/` into the program (`clarity_carry(<name> BROWSER browser)`), so the program serves them without a folder beside it. A web program alone has no `windows/`, `apps/`, `themes/` or `resources/`: they are in `files.json`.
-- `src/main.c`: opens and migrates the databases and shows the first window, or serves.
+- `src/main.c`: opens and checks the databases and shows the first window, or serves.
 - `clarity-runtime/`: the C runtime, copied in. For code that reads or writes a [data format](code.formats.md) it holds `formats/` too, and `CMakeLists.txt` links Clarity.Formats' library from Clarity.UI's folder (`clarity_use_formats`), for a program of any target.
 - `README.md`: what to install to build the project without Clarity.
 

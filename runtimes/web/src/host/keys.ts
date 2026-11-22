@@ -116,19 +116,6 @@ export function commandFor(key: string, active: string[], commands: Command[], c
   return null;
 }
 
-/** Keys given twice within one layer: the layer, the key and the commands. */
-export function clashes(commands: Command[], choices: KeyChoices): [string, string, string[]][] {
-  const found: [string, string, string[]][] = [];
-  for (const layer of new Set(commands.flatMap((c) => c.layers))) {
-    const seen = new Map<string, string[]>();
-    for (const c of commands.filter((c) => c.layers.includes(layer))) {
-      for (const key of keysOf(c, choices)) seen.set(key, [...(seen.get(key) ?? []), c.id]);
-    }
-    for (const [key, ids] of seen) if (ids.length > 1) found.push([layer, key, ids]);
-  }
-  return found;
-}
-
 /** Gives `id` the key `key`. A command that has it in a layer they share gets
  *  the keys `id` had instead (`swapped`); what is kept is only what differs from the design. */
 export function assign(commands: Command[], choices: KeyChoices, id: string, key: string): { choices: KeyChoices; swapped: string | null } {

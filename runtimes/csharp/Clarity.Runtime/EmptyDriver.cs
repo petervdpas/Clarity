@@ -17,7 +17,5 @@ sealed class EmptyDriver : IDriver
 
     public void Batch(string sql) { }
 
-    public void Apply(int version, IReadOnlyList<string> statements) { }
-
     public void Dispose() { }
 }

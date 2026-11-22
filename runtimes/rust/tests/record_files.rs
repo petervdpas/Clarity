@@ -6,6 +6,10 @@ use clarity_runtime::record_file::{self, RecordFile};
 use clarity_runtime::{Db, Id, Record, SqlValue, sql};
 use serde_json::{Value, json};
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 fn cases() -> Value {
     serde_json::from_str(include_str!("../../../conformance/record-files.json")).unwrap()
 }
@@ -79,7 +83,7 @@ fn a_file_is_kept_with_its_name_in_the_database_or_its_store() {
     let _ = std::fs::remove_dir_all(&store);
     std::fs::create_dir_all(&store).unwrap();
     let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT, sheet TEXT, sheet_name TEXT)"]]).unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT, sheet TEXT, sheet_name TEXT)"]]).unwrap();
     db.add_store("documents", &store.display().to_string()).unwrap();
 
     let pdf = b"%PDF-1.7 not a picture".to_vec();

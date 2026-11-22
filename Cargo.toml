@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "crates/clarity-tools", "crates/clarity-mcp", "crates/clarity-acp", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-graph", "runtimes/rust-data", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi", "runtimes/rust-pdf", "runtimes/rust-pdf-ffi", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "crates/clarity-tools", "crates/clarity-mcp", "crates/clarity-acp", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "runtimes/rust-graph", "runtimes/rust-data", "runtimes/rust-formats", "runtimes/rust-formats-ffi", "runtimes/rust-auth", "runtimes/rust-auth-ffi", "runtimes/rust-app-mcp", "runtimes/rust-app-mcp-ffi", "runtimes/rust-pdf", "runtimes/rust-pdf-ffi", "crates/clarity-gen-core", "crates/clarity-gen-testing", "crates/clarity-devtools", "crates/clarity-gen", "crates/clarity-gen-cpp", "crates/clarity-gen-c", "crates/clarity-gen-csharp", "crates/clarity-gen-rust", "crates/clarity-gen-go", "crates/clarity-cli", "crates/clarity-migrate", "crates/clarity-wasm", "app/src-tauri"]
 # The examples' crates (custom parts, libraries, generated programs) are projects of their own.
-exclude = ["examples"]
+exclude = ["examples", "test-projects"]
 
 [workspace.package]
 edition = "2024"

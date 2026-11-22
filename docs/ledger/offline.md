@@ -26,8 +26,8 @@ Where the network is needed today:
 Rust links the ready-made Clarity.UI library (`runtimes/rust/Cargo.toml:41-45`, feature `native-ui`); nothing downloads or builds Skia.
 
 ## Tests
-- `crates/clarity-gen/tests/carried.rs`: the manifests are current and name every runtime; each registry; offline Go and Rust (the lock rule), C and C# as always; an archive unpacked once
-- `crates/clarity-gen/tests/installed.rs`: the installer keeps `clarity-ui/include` and `lib`, and carries each stack's archive
+- `crates/clarity-gen/tests/gen/carried.rs`: the manifests are current and name every runtime; each registry; offline Go and Rust (the lock rule), C and C# as always; an archive unpacked once
+- `crates/clarity-gen/tests/gen/installed.rs`: the installer keeps `clarity-ui/include` and `lib`, and carries each stack's archive
 
 ## Open
 - The offline test per stack (Design, "Testing"; step 1): NOT BUILT.

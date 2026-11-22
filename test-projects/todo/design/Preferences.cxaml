@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="todo.Preferences" title="@preferencesTitle">
+  <Form name="settingsForm" at="1,1" span="12" rows="3" bind="settings" labels="3">
+    <Dropdown name="languageBox" at="4,1" span="6" bind="settings.language" />
+    <Dropdown name="themeBox" at="4,2" span="6" bind="settings.theme" />
+    <Checkbox name="showDoneBox" at="4,3" span="6" caption="@settingsShowDoneLabel" bind="settings.showDone" />
+  </Form>
+  <Button name="closeButton" at="11,5" span="2" caption="@closeButtonCaption" opens="close" cancel="true" />
+</Dialog>

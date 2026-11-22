@@ -79,7 +79,7 @@ public class PictureTests
     static Db Albums(string store)
     {
         var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]);
+        db.ApplySteps([["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]);
         db.AddStore("photos", store);
         return db;
     }

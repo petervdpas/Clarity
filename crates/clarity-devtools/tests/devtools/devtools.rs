@@ -1,0 +1,746 @@
+//! DevTools (Clarity settings, a Clarity run from its repository): the
+//! builds a tab's Build button runs, one at a time; the release planning,
+//! read from the repository as it is; and the agent's ask to press Build.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use clarity_devtools::jobs::{JobState, Jobs, Runnable};
+use clarity_devtools::release::{self, Check, CheckRecord, UNITS};
+use clarity_devtools::swap;
+
+fn temp(name: &str) -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("devtools-tests").join(format!("{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn shell(script: &str) -> Runnable {
+    if cfg!(windows) {
+        Runnable::new("cmd", &["/C", script], Path::new("."))
+    } else {
+        Runnable::new("sh", &["-c", script], Path::new("."))
+    }
+}
+
+/// The repository as cargo and git name it: on Windows without canonicalize's `\\?\`.
+fn repo() -> PathBuf {
+    clarity_project::plain(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap())
+}
+
+#[test]
+fn a_build_keeps_its_lines_and_how_it_ended() {
+    let jobs = Jobs::default();
+    jobs.start("a", "A", shell("echo one && echo two"), None).unwrap();
+    let job = jobs.wait("a", Duration::from_secs(20)).unwrap();
+    assert_eq!(job.state, JobState::Passed);
+    // Trimmed: cmd's `echo one && echo two` keeps the space before `&&`.
+    assert!(job.lines.iter().any(|l| l.trim() == "one") && job.lines.iter().any(|l| l.trim() == "two"), "{:?}", job.lines);
+    jobs.start("b", "B", shell("exit 3"), None).unwrap();
+    assert!(matches!(jobs.wait("b", Duration::from_secs(20)).unwrap().state, JobState::Failed(_)));
+}
+
+#[test]
+fn builds_run_one_at_a_time_in_the_order_pressed() {
+    let jobs = Jobs::default();
+    let slow = if cfg!(windows) { "ping -n 2 127.0.0.1 > NUL" } else { "sleep 1" };
+    jobs.start("first", "First", shell(slow), None).unwrap();
+    jobs.start("second", "Second", shell("echo second"), None).unwrap();
+    assert_eq!(jobs.job("second").unwrap().state, JobState::Waiting, "the second waits while the first builds");
+    assert!(jobs.start("second", "Second", shell("echo again"), None).is_err(), "a build waiting or building is not pressed twice");
+    let first = jobs.wait("first", Duration::from_secs(20)).unwrap();
+    let second = jobs.wait("second", Duration::from_secs(20)).unwrap();
+    assert_eq!((first.state, second.state.clone()), (JobState::Passed, JobState::Passed));
+    assert!(second.started.unwrap() >= first.ended.unwrap());
+}
+
+#[test]
+fn a_stopped_build_ends_at_once_and_the_ones_waiting_never_start() {
+    let jobs = Jobs::default();
+    let long = if cfg!(windows) { "ping -n 60 127.0.0.1 > NUL" } else { "sleep 60" };
+    jobs.start("long", "Long", shell(long), None).unwrap();
+    jobs.start("next", "Next", shell("echo next"), None).unwrap();
+    jobs.start("other", "Other", shell("echo other"), None).unwrap();
+    while jobs.job("long").unwrap().state != JobState::Running {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let stopped = jobs.stop(&["long".to_string(), "next".to_string()]);
+    assert_eq!(stopped, 2, "the one building and the one waiting");
+    let long = jobs.wait("long", Duration::from_secs(10)).unwrap();
+    assert_eq!(long.state, JobState::Failed("stopped".into()));
+    let next = jobs.job("next").unwrap();
+    assert_eq!(next.state, JobState::Failed("stopped".into()));
+    assert!(next.started.is_none(), "it never started");
+    assert_eq!(jobs.wait("other", Duration::from_secs(10)).unwrap().state, JobState::Passed, "a build not stopped goes on");
+}
+
+#[test]
+fn every_piece_has_a_build_with_at_most_two_jobs_of_cargo() {
+    let repo = repo();
+    for piece in &swap::PIECES {
+        let run = swap::build(&repo, piece);
+        assert!(!run.shown().is_empty(), "{}", piece.key);
+        if run.program == "cargo" || run.shown().contains("build.sh") {
+            assert!(run.env.iter().any(|(k, v)| k == "CARGO_BUILD_JOBS" && v == "2"), "{}: the machine has 7.5 GB", piece.key);
+        }
+    }
+    assert_eq!(swap::build(&repo, swap::piece("clarityUi").unwrap()).shown(), "cargo build --release -p clarity-ui-ffi");
+    assert_eq!(swap::build(&repo, swap::piece("goModule").unwrap()).shown(), "go build ./...");
+}
+
+#[test]
+fn the_signal_says_to_press_build() {
+    let repo = temp("signal");
+    let said = swap::behind(&repo, swap::piece("clarityUi").unwrap(), "linux").unwrap();
+    assert!(said.contains("press Build") && said.contains("cargo build --release -p clarity-ui-ffi"), "{said}");
+}
+
+#[test]
+fn releases_go_after_the_crates_they_name() {
+    // The order of the plan is the table's; each crate's versioned clarity-* dependencies (its Cargo.toml) come first.
+    let repo = repo();
+    for (i, unit) in UNITS.iter().enumerate() {
+        for needed in release::needs(&repo, unit) {
+            let at = UNITS.iter().position(|u| u.crate_name == Some(needed.as_str()));
+            assert!(at.is_some_and(|at| at < i), "{} needs {needed}, which must be released before it", unit.name);
+        }
+    }
+}
+
+#[test]
+fn every_release_reads_its_version_from_the_repository() {
+    let repo = repo();
+    for unit in &UNITS {
+        if unit.version.is_some() {
+            let v = release::source_version(&repo, unit).unwrap_or_else(|e| panic!("{}: {e}", unit.name));
+            assert!(release::parse(&v).is_some(), "{}: {v}", unit.name);
+        }
+    }
+}
+
+#[test]
+fn versions_compare_as_numbers() {
+    assert!(release::parse("0.10.0") > release::parse("0.9.3"));
+    assert_eq!(release::next_minor("1.1.0").unwrap(), "1.2.0");
+    assert_eq!(release::newest(&["runtimes/rust/v0.9.0".into(), "runtimes/rust/v0.10.0".into(), "runtimes/rust-ui/v0.99.0".into()], "runtimes/rust/v"), Some("runtimes/rust/v0.10.0".into()));
+}
+
+/// The package a file of the repository belongs to: the `name` of the nearest Cargo.toml above it.
+fn package_of(path: &Path) -> Option<String> {
+    let mut dir = path.parent();
+    while let Some(d) = dir {
+        if let Ok(manifest) = std::fs::read_to_string(d.join("Cargo.toml")) {
+            if manifest.contains("[package]") {
+                return manifest.lines().find_map(|l| l.trim().strip_prefix("name").and_then(|r| r.trim().strip_prefix('=')).map(|v| v.trim().trim_matches('"').to_string()));
+            }
+        }
+        dir = d.parent();
+    }
+    None
+}
+
+/// Every generated file's guard, exactly: each CLARITY_WRITE_* with the package and
+/// test target it is in, and each crate writing TypeScript types (ts-rs) by its lib
+/// tests, is a guard the release planning runs (release::GUARDS).
+#[test]
+fn every_generated_file_guard_is_a_check() {
+    let repo = repo();
+    let mut found = std::collections::BTreeSet::new();
+    for dir in ["crates", "runtimes", "app/src-tauri"] {
+        walk(&repo.join(dir), &mut |path| {
+            if path.extension().is_none_or(|e| e != "rs") {
+                return;
+            }
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            let Some(package) = package_of(path) else { return };
+            // A file of tests/ is that test target, a file of a test program's folder (tests/<target>/<module>.rs) that module of it; one of src/ the lib's tests.
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string());
+            let parent = path.parent();
+            let (test, module) = match parent {
+                Some(p) if p.ends_with("tests") => (stem, None),
+                Some(p) if p.parent().is_some_and(|g| g.ends_with("tests")) && p.join("main.rs").exists() => (p.file_name().map(|n| n.to_string_lossy().to_string()), stem.filter(|s| s != "main")),
+                _ => (None, None),
+            };
+            // Where a test reads the variable through std::env (var or var_os), not where one is only named.
+            for (i, _) in text.match_indices("CLARITY_WRITE_") {
+                let read = text[..i].ends_with("var(\"") || text[..i].ends_with("var_os(\"");
+                let name: String = text[i..].chars().take_while(|c| c.is_ascii_uppercase() || *c == '_').collect();
+                if read && name.len() > "CLARITY_WRITE_".len() {
+                    found.insert((name, package.clone(), test.clone(), module.clone()));
+                }
+            }
+            if text.contains("#[ts(export)]") && path.components().any(|c| c.as_os_str() == "src") {
+                found.insert((String::new(), package, None, None));
+            }
+        });
+    }
+    let guarded: std::collections::BTreeSet<(String, String, Option<String>, Option<String>)> = release::GUARDS.iter().map(|g| (g.variable.to_string(), g.package.to_string(), g.test.map(str::to_string), g.module.map(str::to_string))).collect();
+    let missing: Vec<_> = found.difference(&guarded).collect();
+    assert!(missing.is_empty(), "generated files whose guard the release planning does not run (variable, package, test, module): {missing:#?}");
+    let stale: Vec<_> = guarded.difference(&found).collect();
+    assert!(stale.is_empty(), "guards in release::GUARDS that no test has: {stale:#?}");
+}
+
+/// CLAUDE.md's table of generated-file guards names every guard the release planning runs.
+#[test]
+fn claude_md_lists_every_generated_file_guard() {
+    let claude = std::fs::read_to_string(repo().join("CLAUDE.md")).unwrap();
+    let table: Vec<&str> = claude.lines().skip_while(|l| !l.starts_with("## Generated-file guards")).take_while(|l| !l.starts_with("## Releasing")).filter(|l| l.starts_with("| ")).collect();
+    for g in &release::GUARDS {
+        // An ignored guard is run by its full name in its test program.
+        let target = match g.ignored_name() {
+            Some(name) => format!("--test {} -- --ignored --exact {name}", g.test.unwrap_or_default()),
+            None => g.target(),
+        };
+        let listed = table.iter().any(|row| row.contains(&format!("-p {} {target}", g.package)) && (g.variable.is_empty() || row.contains(g.variable)));
+        assert!(listed, "CLAUDE.md's guard table lacks {} ({} -p {} {target})", g.writes, g.variable, g.package);
+    }
+}
+
+fn walk(dir: &Path, f: &mut dyn FnMut(&Path)) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|n| n == "target" || n == "node_modules") {
+                continue;
+            }
+            walk(&path, f);
+        } else {
+            f(&path);
+        }
+    }
+}
+
+#[test]
+fn the_checks_cover_guards_tests_of_changed_crates_and_examples() {
+    let repo = repo();
+    let changed = vec!["crates/clarity-spec/src/check.rs".to_string(), "examples/todo/todo.clarity".to_string(), "app/src/App.svelte".to_string()];
+    let checks: Vec<Check> = release::checks(&repo, &changed);
+    // With `/` between folders: on Windows a path joined from `examples/<name>` mixes the two.
+    let shown: Vec<String> = checks.iter().map(|c| c.run.shown().replace('\\', "/")).collect();
+    assert!(shown.iter().any(|s| s.contains("cargo test -p clarity-spec --test spec highlight::")), "a guard: {shown:?}");
+    assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:--lib")), "the changed crate's lib tests");
+    assert!(shown.iter().any(|s| s.ends_with("release run-test clarity-spec:spec")), "each of its test targets");
+    assert!(!shown.iter().any(|s| s.contains("clarity-db")), "an unchanged crate is not tested");
+    assert!(shown.iter().any(|s| s.contains("spec check ") && s.ends_with("fresh-checkout/examples/todo")), "every example is spec checked");
+    assert!(shown.iter().any(|s| s.contains("the_todo_example_builds_without_warnings")), "a changed example builds");
+    assert!(!shown.iter().any(|s| s.contains("the_shop_example_builds")), "an unchanged one does not");
+    assert!(shown.iter().any(|s| s.contains("svelte-check")), "app/ changed: svelte-check and the app's tests");
+    let mut keys: Vec<&str> = checks.iter().map(|c| c.key.as_str()).collect();
+    keys.sort();
+    keys.dedup();
+    assert_eq!(keys.len(), checks.len(), "each check has its own key");
+}
+
+/// The release checks run the tests of each stack's runtime that changed, as the
+/// checks on GitHub do: every Go package both ways, the C and C++ runtimes
+/// through CMake and ctest, the C# solution; an unchanged runtime is not run.
+#[test]
+fn the_checks_run_the_tests_of_each_changed_runtime() {
+    let repo = repo();
+    let changed: Vec<String> = ["runtimes/go/clarity/db.go", "runtimes/c/clarity/db.c", "runtimes/cpp/clarity/db.hpp", "runtimes/csharp/Clarity.Runtime/Db.cs"].map(String::from).to_vec();
+    let shown: Vec<String> = release::checks(&repo, &changed).iter().map(|c| c.run.shown().replace('\\', "/")).collect();
+    // Go, both ways; or, with a library it links not built on this machine, a check saying which to build.
+    let go = shown.iter().find(|s| s.contains("go test ./...") || s.contains("The Go runtime links libraries not built here")).unwrap_or_else(|| panic!("a Go check: {shown:#?}"));
+    assert!(go.contains("go test -tags \"clarityformats clarityagents clarityauth\" ./...") || go.contains("DevTools"), "{go}");
+    assert!(shown.iter().any(|s| s.contains("runtimes/c ") && s.contains("ctest")), "the C runtime: {shown:#?}");
+    assert!(shown.iter().any(|s| s.contains("runtimes/cpp ") && s.contains("ctest")), "the C++ runtime: {shown:#?}");
+    assert!(shown.iter().any(|s| s.contains("dotnet test") && s.contains("Clarity.slnx")), "the C# solution: {shown:#?}");
+    let none: Vec<String> = release::checks(&repo, &["crates/clarity-spec/src/check.rs".to_string()]).iter().map(|c| c.run.shown()).collect();
+    assert!(!none.iter().any(|s| s.contains("go test ./...") || s.contains("ctest --test-dir") || s.contains("dotnet test")), "no runtime changed, none runs: {none:#?}");
+}
+
+/// A release bumps Clarity.UI's library before its release exists: an
+/// example's build then takes the library DevTools built from the
+/// repository, never an empty CLARITY_UI.
+#[test]
+fn an_example_build_takes_the_repository_library() {
+    let repo = repo();
+    let Some(built) = clarity_gen_core::clarity_ui::repository_library(&repo, std::env::consts::OS) else {
+        eprintln!("Clarity.UI's library is not built in this repository");
+        return;
+    };
+    let checks = release::checks(&repo, &["examples/todo/todo.clarity".to_string()]);
+    let build = checks.iter().find(|c| c.key == "build:todo").expect("the changed example builds");
+    // The last one given is the one the command gets (the IDE's own are emptied first).
+    let library = build.run.env.iter().rev().find(|(name, _)| name == "CLARITY_UI").map(|(_, v)| v.clone()).unwrap_or_default();
+    assert_eq!(std::path::PathBuf::from(&library), built, "the repository's build, whatever the IDE builds apps with");
+}
+
+#[test]
+fn an_agents_ask_to_build_is_answered_through_the_file() {
+    use clarity_project::dev_asks;
+    let dir = temp("asks");
+    let id = dev_asks::ask(&dir, "clarityUi", "Claude Code").unwrap();
+    let pending = dev_asks::pending(&dir);
+    assert_eq!(pending.len(), 1);
+    assert_eq!((pending[0].key.as_str(), pending[0].by.as_str()), ("clarityUi", "Claude Code"));
+    assert_eq!(pending[0].action, dev_asks::Action::Build, "an ask of before had no action: a build");
+    assert!(dev_asks::take(&dir, &id), "the IDE takes it once");
+    assert!(dev_asks::pending(&dir).is_empty() && dev_asks::taken(&dir, &id));
+    assert!(dev_asks::answer_of(&dir, &id).is_none());
+    dev_asks::answer(&dir, &id, &dev_asks::Answer { ok: true, text: "built".into() }).unwrap();
+    assert_eq!(dev_asks::answer_of(&dir, &id).unwrap().text, "built");
+}
+
+#[test]
+fn the_repository_says_how_every_release_stands() {
+    let repo = repo();
+    // A checkout without tags (the checks' shallow one) has no release: each row's tag is the newest of its own the checkout has.
+    let tags = release::tags(&repo).unwrap();
+    let rows = release::standing(&repo).unwrap();
+    assert_eq!(rows.len(), UNITS.len());
+    for (row, unit) in rows.iter().zip(UNITS.iter()) {
+        assert!(release::parse(&row.next).is_some(), "{}: {}", row.name, row.next);
+        assert_eq!(row.tag, release::newest(&tags, unit.tag), "{}", row.name);
+    }
+    let ide = rows.iter().find(|r| r.key == "ide").unwrap();
+    assert!(!ide.bumpable && ide.source.is_none(), "the IDE's version is its tag alone");
+}
+
+/// A crate never released (no tag, as clarity-data and clarity-pdf when they
+/// were new) is released with the others, in the table's order, before what
+/// names it: its chain has it, as a release whose code changed.
+#[test]
+fn a_release_never_made_joins_the_chain_before_what_needs_it() {
+    let never = release::Standing { key: "clarityData".into(), name: "clarity-data".into(), tag: None, released: None, source: Some("0.1.0".into()), changed: vec![], changes: Default::default(), next: "0.1.0".into(), bumped: true, bumpable: true };
+    let changed = release::Standing { key: "clarityFormats".into(), name: "clarity-formats".into(), tag: Some("runtimes/rust-formats/v0.3.0".into()), released: Some("0.3.0".into()), source: Some("0.3.0".into()), changed: vec!["runtimes/rust-formats/src/lib.rs".into()], changes: release::changes(&["runtimes/rust-formats/src/lib.rs".to_string()]), next: "0.4.0".into(), bumped: false, bumpable: true };
+    let titles: Vec<String> = release::chain(&repo(), &[never.with_never_released(), changed]).into_iter().map(|e| e.title).collect();
+    let (data, formats) = (titles.iter().position(|t| t == "clarity-data 0.1.0"), titles.iter().position(|t| t == "clarity-formats 0.4.0"));
+    assert!(data.is_some() && data < formats, "{titles:?}");
+    // As the repository reads it: every release without a tag counts as changed.
+    for row in release::standing(&repo()).unwrap().iter().filter(|r| r.tag.is_none() && r.bumpable) {
+        assert!(!row.changes.code.is_empty(), "{} was never released, so it is released", row.name);
+    }
+}
+
+/// What a Clarity run from its repository fetches as the release is the
+/// newest tagged library, not a version bumped for the next release.
+#[test]
+fn the_release_fetched_is_the_newest_tagged_library() {
+    let repo = repo();
+    let tags = release::tags(&repo).unwrap();
+    match release::released_library(&repo) {
+        Some(version) => assert!(tags.contains(&format!("runtimes/rust-ui-ffi/v{version}")), "{version} is a tag"),
+        None => assert!(!tags.iter().any(|t| t.starts_with("runtimes/rust-ui-ffi/v")), "a checkout without the library's tags has none"),
+    }
+    // Until a run sets it, the release is the version this Clarity was built with.
+    assert_eq!(clarity_gen_core::clarity_ui::release_version(), clarity_gen_core::clarity_ui::version());
+}
+
+#[test]
+fn a_line_drawn_over_with_a_carriage_return_is_one_line_as_in_a_terminal() {
+    // cargo draws its progress bar over itself with \r: the build shows the last drawing, not every one after the other.
+    let jobs = Jobs::default();
+    let script = if cfg!(windows) { "echo one" } else { "printf 'first\\n[=>  ] 1/3\\r[==> ] 2/3\\r[===>] 3/3\\r   Compiling x\\nlast\\r\\n'" };
+    jobs.start("bar", "Bar", shell(script), None).unwrap();
+    let job = jobs.wait("bar", Duration::from_secs(20)).unwrap();
+    if !cfg!(windows) {
+        assert_eq!(job.lines[1..], ["first".to_string(), "   Compiling x".to_string(), "last".to_string()], "{:?}", job.lines);
+    }
+}
+
+#[test]
+fn a_build_names_its_folder_plainly() {
+    let jobs = Jobs::default();
+    let dir = repo().join("app").join("..");
+    jobs.start("dir", "Dir", Runnable::new("git", &["--version"], &dir), None).unwrap();
+    let job = jobs.wait("dir", Duration::from_secs(20)).unwrap();
+    assert!(!job.lines[0].contains(".."), "{}", job.lines[0]);
+}
+
+/// A test target is a file `tests/<name>.rs` or a folder `tests/<name>/main.rs`
+/// (Clarity.UI keeps its tests in folders): the checks run both, and a
+/// helper folder without main.rs (tests/common) is no target.
+#[test]
+fn the_checks_run_folder_test_targets_too() {
+    let repo = repo();
+    let checks = release::checks(&repo, &["runtimes/rust-ui/src/lib.rs".to_string()]);
+    let keys: Vec<&str> = checks.iter().map(|c| c.key.as_str()).collect();
+    for folder in ["data", "hosts", "inputs", "language", "parts", "screen", "windows"] {
+        assert!(keys.contains(&format!("test:clarity-ui:{folder}").as_str()), "tests/{folder}/main.rs: {keys:?}");
+    }
+    assert!(!keys.iter().any(|k| *k == "test:clarity-ui:common" || *k == "test:clarity-ui:fonts"), "a folder without main.rs is no test target");
+}
+
+#[test]
+fn the_checks_run_in_a_fresh_checkout_between_the_guards_and_a_clean_tree() {
+    // As on GitHub: the tests, spec checks and example builds run on a fresh checkout (no tags, no history, nothing git ignores),
+    // built once; the guards write in the tree first, and the tree is checked clean last.
+    let repo = repo();
+    let fresh = release::fresh_checkout_dir(&repo);
+    let checks = release::checks(&repo, &["crates/clarity-spec/src/check.rs".to_string(), "examples/todo/todo.clarity".to_string()]);
+    let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
+    assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| c.run.dir == repo), "the guards write in the tree");
+    assert!(checks.iter().filter(|c| c.key.starts_with("guard:")).all(|c| at(&c.key) < at("freshCheckout")));
+    assert!(at("freshCheckout") < at("buildTests"), "the tests are built once, after the checkout");
+    for key in ["test:clarity-spec:--lib", "spec:todo", "build:todo"] {
+        let check = &checks[at(key)];
+        assert!(check.fresh, "{key} counts on the checkout");
+        assert!(check.run.shown().contains(&fresh.to_string_lossy().to_string()) || check.run.shown().contains("release run-test"), "{key} runs on the fresh checkout: {}", check.run.shown());
+        assert!(at("buildTests") < at(key));
+    }
+    assert_ne!(release::fresh_target_dir(&repo), repo.join("target"), "never the tree's: cargo would take one's builds for the other's");
+    assert_eq!(checks.last().unwrap().key, "cleanTree", "the tree is checked last");
+}
+
+#[test]
+fn the_checks_in_the_checkout_run_as_on_github() {
+    // The IDE's own settings (dev.sh's CLARITY_RUNTIME, a chosen library) stay out; each test runs the program the one
+    // build made, without cargo; the build has no debug info, no incremental cache and stripped symbols.
+    let repo = repo();
+    let changed = vec!["runtimes/rust-auth/src/lib.rs".to_string(), "runtimes/rust-ui-ffi/src/lib.rs".to_string(), "examples/orbs/orbs.clarity".to_string()];
+    let checks = release::checks(&repo.join("app").join(".."), &changed);
+    let at = |key: &str| checks.iter().position(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
+    let env = |c: &Check, name: &str| c.run.env.iter().rev().find(|(n, _)| n == name).map(|(_, v)| v.clone());
+    for c in checks.iter().filter(|c| c.fresh) {
+        assert_eq!(c.run.dir, repo, "{}: started from the tree, the folder itself", c.key);
+        assert_eq!(env(c, "CLARITY_RUNTIME").as_deref(), Some(""), "{}: the published runtimes, as on GitHub", c.key);
+        // An example builds with the repository's own browser files, as checks.yml hands them to it; the rest with none.
+        let browser = if c.key.starts_with("build:") { repo.join("target").join("clarity-ui-browser").to_string_lossy().to_string() } else { String::new() };
+        assert_eq!(env(c, "CLARITY_UI_BROWSER"), Some(browser), "{}", c.key);
+        assert!(c.run.program != "cargo", "{}: no cargo per check, which built crates again for each package's features", c.key);
+    }
+    assert!(checks[at("test:clarity-auth:openid")].run.shown().ends_with("release run-test clarity-auth:openid"), "{}", checks[at("test:clarity-auth:openid")].run.shown());
+    assert!(checks[at("build:orbs")].run.shown().ends_with("release run-test clarity-gen:gen -- --ignored --exact examples_build::the_orbs_example_builds_without_warnings"), "{}", checks[at("build:orbs")].run.shown());
+    // Every check that names a test program names one its crate has: a test target moved into another
+    // (the merged test programs) never leaves a check calling one that is gone.
+    let folders: std::collections::BTreeMap<String, PathBuf> = release::members(&repo)
+        .into_iter()
+        .filter_map(|m| {
+            let manifest = std::fs::read_to_string(repo.join(&m).join("Cargo.toml")).ok()?;
+            let name = manifest.split("name = \"").nth(1)?.split('"').next()?.to_string();
+            Some((name, repo.join(&m)))
+        })
+        .collect();
+    for c in &checks {
+        let shown = c.run.shown();
+        let Some(program) = shown.split("release run-test ").nth(1).and_then(|r| r.split_whitespace().next()) else { continue };
+        let (package, target) = program.split_once(':').unwrap_or_else(|| panic!("{}: {program}", c.key));
+        if target == "--lib" {
+            continue;
+        }
+        let folder = folders.get(package).unwrap_or_else(|| panic!("{}: no crate {package}", c.key));
+        let tests = folder.join("tests");
+        assert!(tests.join(format!("{target}.rs")).is_file() || tests.join(target).join("main.rs").is_file(), "{}: {package} has no test program {target}", c.key);
+    }
+    assert!(!checks.iter().any(|c| c.key.starts_with("library:")), "the library its tests link is part of the one build");
+    assert!(!checks[at("guard:test:clarity-spec:--lib")].fresh);
+    let build: std::collections::BTreeMap<String, String> = release::build_env(&repo).into_iter().collect();
+    assert_eq!(build.get("CARGO_TARGET_DIR").map(PathBuf::from), Some(release::fresh_target_dir(&repo)));
+    assert_eq!(build.get("CARGO_PROFILE_DEV_DEBUG").map(String::as_str), Some("0"), "no debug info, which made each test target a program of 90 MB");
+    assert_eq!(build.get("CARGO_INCREMENTAL").map(String::as_str), Some("0"), "no incremental cache: the kept checkout already builds only what changed");
+    assert_eq!(build.get("CARGO_PROFILE_DEV_STRIP").map(String::as_str), Some("symbols"));
+    assert_eq!(build.get("CLARITY_RUNTIME").map(String::as_str), Some(""));
+}
+
+#[test]
+fn the_one_build_names_each_test_program_and_what_it_made() {
+    // cargo's messages (--message-format=json): each test program by package and target, every file it made (kept),
+    // and its warnings as cargo shows them.
+    let repo = repo();
+    let manifest = repo.join("crates/clarity-spec/Cargo.toml");
+    let m = manifest.to_string_lossy().replace('\\', "/");
+    let lines = format!(
+        "{{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"lib\"],\"name\":\"clarity_spec\"}},\"profile\":{{\"test\":true}},\"filenames\":[\"/t/debug/deps/clarity_spec-1\"],\"executable\":\"/t/debug/deps/clarity_spec-1\",\"fresh\":true}}\n\
+         {{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"test\"],\"name\":\"cxaml\"}},\"profile\":{{\"test\":true}},\"filenames\":[\"/t/debug/deps/cxaml-2\"],\"executable\":\"/t/debug/deps/cxaml-2\",\"fresh\":false}}\n\
+         {{\"reason\":\"compiler-artifact\",\"manifest_path\":\"{m}\",\"target\":{{\"kind\":[\"lib\"],\"name\":\"clarity_spec\"}},\"profile\":{{\"test\":false}},\"filenames\":[\"/t/debug/deps/libclarity_spec-3.rlib\",\"/t/debug/deps/libclarity_spec-3.rmeta\"],\"executable\":null,\"fresh\":true}}\n\
+         {{\"reason\":\"compiler-message\",\"message\":{{\"rendered\":\"warning: unused\\n\"}}}}\n\
+         not json\n"
+    );
+    let built = release::test_programs(&lines);
+    assert_eq!(built.programs.get("clarity-spec:--lib").map(|p| p.program.clone()), Some(PathBuf::from("/t/debug/deps/clarity_spec-1")));
+    assert_eq!(built.programs.get("clarity-spec:cxaml").map(|p| p.folder.clone()), Some(repo.join("crates/clarity-spec")), "run in its crate's folder, as cargo test does");
+    assert_eq!(built.programs.len(), 2, "a library is not a test program");
+    assert!(built.made.contains(&PathBuf::from("/t/debug/deps/libclarity_spec-3.rmeta")), "every file it made, kept when the rest is removed");
+    assert_eq!(built.messages, ["warning: unused\n"]);
+}
+
+#[test]
+fn a_kept_checkout_writes_only_what_changed_and_drops_what_tests_left() {
+    // Kept between runs: an unchanged file keeps its time, so cargo builds nothing again for it; a file a test left in
+    // the checkout is gone, as in a fresh one.
+    let repo = repo();
+    let dir = temp("kept").join("checkout");
+    release::fresh_checkout(&repo, &dir).unwrap();
+    let file = dir.join("crates/clarity-spec/src/lib.rs");
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::options().write(true).open(&file).unwrap().set_modified(old).unwrap();
+    std::fs::create_dir_all(dir.join("examples/todo/out")).unwrap();
+    std::fs::write(dir.join("examples/todo/out/left.txt"), "a test left this").unwrap();
+    std::fs::write(dir.join("crates/clarity-spec/Cargo.toml"), "changed in the checkout").unwrap();
+    release::fresh_checkout(&repo, &dir).unwrap();
+    assert_eq!(std::fs::metadata(&file).unwrap().modified().unwrap(), old, "an unchanged file is not written again");
+    assert!(!dir.join("examples/todo/out").exists(), "what a test left is gone");
+    assert_eq!(std::fs::read(dir.join("crates/clarity-spec/Cargo.toml")).unwrap(), std::fs::read(repo.join("crates/clarity-spec/Cargo.toml")).unwrap(), "a file that differs is the tree's again");
+    assert_eq!(release::checkout_state(&dir).unwrap(), release::tree_state(&repo).unwrap());
+}
+
+#[test]
+fn a_fresh_checkout_has_the_uncommitted_files_and_no_tags() {
+    let repo = repo();
+    let dir = temp("fresh").join("checkout");
+    release::fresh_checkout(&repo, &dir).unwrap();
+    assert!(release::tags(&dir).unwrap().is_empty(), "no tags, as the checks' checkout");
+    let file = "crates/clarity-devtools/tests/devtools/devtools.rs";
+    assert_eq!(std::fs::read(dir.join(file)).unwrap(), std::fs::read(repo.join(file)).unwrap(), "the tree as it is, committed or not");
+    assert!(!dir.join("target").exists(), "nothing git ignores");
+    assert!(release::clean_tree(&repo, &dir).is_ok(), "the tree is as the checkout found it");
+    assert_eq!(release::checkout_state(&dir).unwrap(), release::tree_state(&repo).unwrap(), "a check in the checkout counts on the tree it was made from");
+}
+
+#[test]
+fn a_file_the_checks_leave_in_the_tree_is_named() {
+    let before = "?? a.txt\t1\n M b.rs\t2\n";
+    assert!(release::left_behind(before, before).is_empty());
+    assert_eq!(release::left_behind(before, "?? a.txt\t1\n M b.rs\t3\n?? stray/x.json\t4\n"), vec!["b.rs", "stray/x.json"], "a new file and one changed again");
+}
+
+#[test]
+fn a_releases_changes_are_sorted_by_kind() {
+    // What the agent reads to write a plan: a manifest or a test alone is no reason to release.
+    let files: Vec<String> = [
+        "runtimes/rust-formats/Cargo.toml",
+        "runtimes/rust-formats/src/csv.rs",
+        "runtimes/rust-formats/tests/csv.rs",
+        "runtimes/rust-formats/README.md",
+        "runtimes/csharp/Clarity.Runtime.Tests/Rows.cs",
+        "runtimes/go/clarity/rows_test.go",
+        "runtimes/csharp/Clarity.Runtime/Clarity.Runtime.csproj",
+        "editors/vscode/package.json",
+        "app/src/lib/devtools.test.ts",
+        "runtimes/rust-formats/LICENSE",
+    ]
+    .map(String::from)
+    .to_vec();
+    let c = release::changes(&files);
+    assert_eq!(c.code, ["runtimes/rust-formats/src/csv.rs"]);
+    assert_eq!(c.manifest, ["runtimes/rust-formats/Cargo.toml", "runtimes/csharp/Clarity.Runtime/Clarity.Runtime.csproj", "editors/vscode/package.json"]);
+    assert_eq!(c.tests, ["runtimes/rust-formats/tests/csv.rs", "runtimes/csharp/Clarity.Runtime.Tests/Rows.cs", "runtimes/go/clarity/rows_test.go", "app/src/lib/devtools.test.ts"]);
+    assert_eq!(c.docs, ["runtimes/rust-formats/README.md", "runtimes/rust-formats/LICENSE"]);
+}
+
+#[test]
+fn a_check_that_ended_is_kept_for_the_agent() {
+    // The IDE runs the checks; the agent reads how each ended (MCP release_state), the last run of each.
+    let dir = temp("records");
+    assert!(release::check_records(&dir).is_empty(), "nothing run yet");
+    let passed = CheckRecord { key: "spec:todo".into(), title: "todo: spec check".into(), passed: true, why: None, ended: 1, head: "abc".into(), tree: "t".into(), lines: vec![] };
+    let failed = CheckRecord { key: "test:clarity-gen:devtools".into(), title: "clarity-gen: devtools".into(), passed: false, why: Some("exit 101".into()), ended: 2, head: "abc".into(), tree: "t".into(), lines: vec!["panicked".into()] };
+    release::record_check(&dir, &passed).unwrap();
+    release::record_check(&dir, &failed).unwrap();
+    release::record_check(&dir, &CheckRecord { passed: true, why: None, ended: 3, lines: vec![], ..failed.clone() }).unwrap();
+    let records = release::check_records(&dir);
+    assert_eq!(records.len(), 2);
+    assert_eq!(records["spec:todo"], passed);
+    assert!(records["test:clarity-gen:devtools"].passed && records["test:clarity-gen:devtools"].ended == 3, "run again, the last run counts");
+    assert!(release::checks_file(&dir).starts_with(dir.join("target")), "kept under the ignored target/");
+    assert!(!release::checks_file(&dir).with_extension("json.new").exists(), "written beside it and moved over it, nothing left behind");
+}
+
+#[test]
+fn the_chain_of_events_follows_the_release_helpers_order() {
+    // What a release starts, in order: the checks on main, then each tag, its workflow and where it shows, the Go sums after the Go tag.
+    let picked = [(release::unit("clarityUi").unwrap(), "0.28.0".to_string()), (release::unit("clarityRuntime").unwrap(), "0.62.0".to_string()), (release::unit("goRuntime").unwrap(), "0.65.0".to_string()), (release::unit("ide").unwrap(), "1.3.0".to_string())];
+    let needs = |u: &release::Unit| if u.key == "clarityUi" { vec!["clarity-runtime".to_string()] } else { vec![] };
+    let events = release::chain_of(&picked, needs);
+    let titles: Vec<&str> = events.iter().map(|e| e.title.as_str()).collect();
+    assert_eq!(titles, ["Checks on main", "clarity-runtime 0.62.0", "clarity-ui 0.28.0", "Go runtime 0.65.0", "Go sums", "Clarity IDE 1.3.0"], "the table's order, not the order given");
+    assert_eq!(events[0].workflow.as_deref(), Some("checks.yml"));
+    assert_eq!(events[1].tag.as_deref(), Some("runtimes/rust/v0.62.0"));
+    assert_eq!(events[1].shows.as_deref(), Some("crates.io: clarity-runtime"));
+    assert!(events[2].waits_for.contains(&"clarity-runtime 0.62.0".to_string()), "a crate waits for the crate it names: {:?}", events[2].waits_for);
+    assert!(events[4].tag.is_none() && events[4].waits_for == ["Go runtime 0.65.0"], "the sums follow the Go tag");
+    assert_eq!(events[5].tag.as_deref(), Some("v1.3.0"));
+    assert!(events.iter().skip(1).all(|e| e.waits_for.iter().any(|w| w == &events[0].title) || !e.waits_for.is_empty()), "every step waits for something before it");
+}
+
+#[test]
+fn an_agents_ask_to_remove_a_folder_says_so() {
+    use clarity_project::dev_asks::{self, Action};
+    let dir = temp("remove-asks");
+    let id = dev_asks::ask_to(&dir, Action::Remove, "debug", "Claude Code").unwrap();
+    let pending = dev_asks::pending(&dir);
+    assert_eq!((pending[0].id.as_str(), pending[0].action, pending[0].key.as_str()), (id.as_str(), Action::Remove, "debug"));
+}
+
+#[test]
+fn a_check_counts_only_on_the_tree_it_ran_on() {
+    // The tree is the commit and its uncommitted changes, each file's content too.
+    let tree = release::fingerprint("abc", " M a.rs\t1f\n");
+    assert_eq!(tree, release::fingerprint("abc", " M a.rs\t1f\n"), "the same tree, the same fingerprint");
+    assert_ne!(tree, release::fingerprint("abd", " M a.rs\t1f\n"), "another commit");
+    assert_ne!(tree, release::fingerprint("abc", " M a.rs\t2e\n"), "a file changed again");
+    let record = |key: &str, passed: bool, tree: &str| CheckRecord { key: key.into(), title: format!("check {key}"), passed, why: None, ended: 1, head: "abc".into(), tree: tree.into(), lines: vec![] };
+    let records: std::collections::BTreeMap<String, CheckRecord> =
+        [record("a", true, &tree), record("b", false, &tree), record("c", true, "older")].into_iter().map(|r| (r.key.clone(), r)).collect();
+    let checks = [("a", "check a"), ("b", "check b"), ("c", "check c"), ("d", "check d")];
+    let held = release::held_back_of(checks.iter().map(|(k, t)| (k.to_string(), t.to_string(), tree.clone())), &records);
+    assert_eq!(held, ["check b: failed", "check c: ran on another tree", "check d: not run"]);
+    assert!(release::held_back_of([("a".to_string(), "check a".to_string(), tree.clone())].into_iter(), &records).is_empty(), "all passed on this tree: none held back");
+}
+
+#[test]
+fn a_check_counts_on_the_files_it_can_read_only() {
+    // A crate's test reads every file of the tree but the Rust code of the crates it does not build: a change there,
+    // or another crate's version, leaves its pass standing; its own code, a manual page or an example does not.
+    let repo = repo();
+    let checks = release::checks(&repo, &["runtimes/rust-image/src/lib.rs".to_string(), "crates/clarity-spec/src/check.rs".to_string()]);
+    let check = |key: &str| checks.iter().find(|c| c.key == key).unwrap_or_else(|| panic!("{key}")).clone();
+    let image = check("test:clarity-image:--lib");
+    let spec = check("test:clarity-spec:--lib");
+    let state = release::tree_state(&repo).unwrap();
+    let print = |state: &release::TreeState, c: &Check| state.fingerprint(c);
+    let changed = |file: &str| {
+        let mut s = state.clone();
+        s.files.insert(file.to_string(), "changed".into());
+        s
+    };
+    assert_eq!(print(&state, &image), print(&release::tree_state(&repo).unwrap(), &image), "the same tree, the same fingerprint");
+    let spec_code = changed("crates/clarity-spec/src/check.rs");
+    assert_ne!(print(&spec_code, &spec), print(&state, &spec), "its own code");
+    assert_eq!(print(&spec_code, &image), print(&state, &image), "code of a crate it does not build");
+    let ffi_manifest = changed("runtimes/rust-ui-ffi/Cargo.toml");
+    assert_eq!(print(&ffi_manifest, &image), print(&state, &image), "another crate's manifest (a version bump)");
+    let mut lock = changed("Cargo.lock");
+    assert_eq!(print(&lock, &image), print(&state, &image), "Cargo.lock counts by what its own crates resolve to");
+    lock.packages.iter_mut().filter(|p| p.name == "clarity-image").for_each(|p| p.version = "9.9.9".into());
+    assert_ne!(print(&lock, &image), print(&state, &image), "its own crate's version");
+    assert_ne!(print(&changed("manual/start.overview.md"), &image), print(&state, &image), "a file that is not Rust code: any test may read it");
+    let mut other = image.clone();
+    other.run = other.run.with_env("SOMETHING", "1");
+    assert_ne!(print(&state, &other), print(&state, &image), "its command");
+    let whole = check("cleanTree");
+    assert_ne!(print(&changed("runtimes/rust-ui-ffi/src/lib.rs"), &whole), print(&state, &whole), "the tree's own checks read all of it");
+}
+
+#[test]
+fn a_plan_starts_with_the_checks_on_main_and_never_overwrites_one() {
+    let dir = temp("plans");
+    let step = |title: &str, tag: Option<&str>, workflow: &str| match tag {
+        Some(tag) => serde_json::json!({ "title": title, "tag": tag, "workflow": workflow }),
+        None => serde_json::json!({ "title": title, "workflow": workflow }),
+    };
+    let good = serde_json::json!({ "title": "Clarity 1.4.0", "commit_message": "Release", "steps": [step("Checks on main", None, "checks.yml"), step("Clarity IDE 1.4.0", Some("v1.4.0"), "release.yml")] });
+    let file = release::write_plan(&dir, "2026-11-17-1200", &good).unwrap();
+    assert!(file.ends_with("releases/2026-11-17-1200.json"));
+    assert!(release::write_plan(&dir, "2026-11-17-1200", &good).is_err(), "an existing plan is not overwritten");
+    assert!(release::write_plan(&dir, "17-11-2026", &good).is_err(), "the stamp is YYYY-MM-DD-HHMM");
+    let no_checks = serde_json::json!({ "title": "t", "commit_message": "m", "steps": [step("Clarity IDE 1.4.0", Some("v1.4.0"), "release.yml")] });
+    assert!(release::write_plan(&dir, "2026-11-17-1201", &no_checks).unwrap_err().contains("checks.yml"), "the checks on main come first");
+    // The fix after a failed release: only the commit message changes.
+    release::set_commit_message(&dir, "2026-11-17-1200", "Fix the failed Clarity 1.4.0 release").unwrap();
+    let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(kept["commit_message"], "Fix the failed Clarity 1.4.0 release");
+    assert_eq!(kept["steps"], good["steps"], "the steps stay");
+    assert!(release::set_commit_message(&dir, "2026-11-17-9999", "x").is_err(), "no such plan");
+}
+
+/// A plan holds only what the Release Helper reads (~/Projects/ReleaseHelper/README.md,
+/// "The plan format"): a field it does not know would be passed over without a word,
+/// as `next_after_workflow` once was, so the plan writer refuses it.
+#[test]
+fn a_plan_holds_only_the_fields_the_release_helper_reads() {
+    let dir = temp("plan-fields");
+    let checks = serde_json::json!({ "title": "Checks on main", "workflow": "checks.yml" });
+    let plan = |step: serde_json::Value| serde_json::json!({ "title": "t", "commit_message": "m", "steps": [checks.clone(), step] });
+    let all_of_them = serde_json::json!({
+        "title": "Clarity 1.9.0", "remote": "origin", "branch": "main", "check_timeout_minutes": 30,
+        "commit_message": "m", "commit_messages": { "GiGot": "m" },
+        "steps": [
+            { "title": "Checks on main", "workflow": "checks.yml", "note": "first", "repo": "Clarity" },
+            { "title": "Clarity.Runtime 0.103.0", "tag": "runtimes/csharp/v0.103.0", "workflow": "release-csharp.yml",
+              "check": { "nuget": { "packages": ["Clarity.Runtime"], "version": "0.103.0" } }, "next_after": "workflow", "note": "n", "from": "v0.102.0", "repo": "Clarity" },
+            { "title": "clarity-runtime", "tag": "runtimes/rust/v0.64.0", "check": { "crates": { "name": "clarity-runtime", "version": "0.64.0" } }, "next_after": "registry" },
+            { "title": "Go", "tag": "runtimes/go/v0.67.0", "check": { "go_proxy": { "module": "m", "version": "v0.67.0" } } },
+            { "title": "IDE", "tag": "v1.9.0", "check": { "github_release": { "assets": ["a"], "tag": "v1.9.0" } } },
+            { "title": "Quick", "tag": "x/v1", "check": "none" },
+            { "title": "Go sums", "manual": "Tell Claude", "note": "n", "commit_message": "Go sums", "repo": "Clarity" }
+        ]
+    });
+    release::write_plan(&dir, "2026-11-21-1000", &all_of_them).expect("every field the helper reads");
+    let refused = |plan: serde_json::Value, word: &str, why: &str| {
+        let said = release::write_plan(&dir, "2026-11-21-1001", &plan).expect_err(why);
+        assert!(said.contains(word), "{why}: {said}");
+    };
+    refused(plan(serde_json::json!({ "title": "C#", "tag": "v1", "next_after_workflow": true })), "next_after_workflow", "a step field the helper does not know");
+    refused(plan(serde_json::json!({ "title": "C#", "tag": "v1", "next_after": "always" })), "next_after", "next_after is workflow or registry");
+    refused(plan(serde_json::json!({ "title": "C#", "tag": "v1", "check": { "npm": {} } })), "npm", "a check the helper does not know");
+    refused(plan(serde_json::json!({ "title": "C#", "tag": "v1", "check": { "crates": { "name": "c" } } })), "version", "a check lacking a field");
+    refused(plan(serde_json::json!({ "title": "Watch", "workflow": "x.yml", "check": "none" })), "check", "a watch step has no check");
+    refused(plan(serde_json::json!({ "title": "Sums", "manual": "do", "tag": "v1" })), "tag", "a manual step has no tag");
+    refused(plan(serde_json::json!({ "tag": "v1" })), "title", "every step has a title");
+    let mut top = plan(serde_json::json!({ "title": "IDE", "tag": "v1" }));
+    top["commitMessage"] = "m".into();
+    refused(top, "commitMessage", "a top-level field the helper does not know");
+    assert!(!dir.join("releases/2026-11-21-1001.json").exists(), "a refused plan is not written");
+}
+
+/// A native library's tab has Build debug beside Build: the debug profile
+/// (target/debug), which C# programs built in Debug and the runtimes' tests
+/// take; a runtime and the browser files have none.
+#[test]
+fn a_native_piece_has_a_debug_build_beside_its_build() {
+    let repo = Path::new("/repo");
+    let ui = swap::piece("clarityUi").unwrap();
+    assert_eq!(swap::build(repo, ui).shown(), "cargo build --release -p clarity-ui-ffi");
+    assert_eq!(swap::build_debug(repo, ui).map(|b| b.shown()).as_deref(), Some("cargo build -p clarity-ui-ffi"));
+    for key in ["clarityUiBrowser", "rustCrates", "nugetPackages", "goModule"] {
+        assert!(swap::build_debug(repo, swap::piece(key).unwrap()).is_none(), "{key} has no debug build");
+    }
+    for piece in swap::PIECES.iter().filter(|p| matches!(p.kind, swap::Kind::Native { .. })) {
+        assert!(swap::build_debug(repo, piece).is_some(), "{} has a debug build", piece.key);
+    }
+}
+
+/// A build that passed leaves a native piece's library as current as its sources,
+/// even when Cargo had nothing to rebuild (a change only to a test-only dependency
+/// in a Cargo.toml): the C# packages' check (runtimes/csharp/ClarityNative.targets)
+/// compares the library's time with its sources' and would refuse it forever.
+#[test]
+fn a_passed_build_marks_its_library_current() {
+    let repo = temp("marked");
+    let ui = swap::piece("clarityUi").unwrap();
+    let os = std::env::consts::OS;
+    let release = repo.join("target/release").join(swap::library_file("clarity_ui", os));
+    let debug = repo.join("target/debug").join(swap::library_file("clarity_ui", os));
+    for file in [&release, &debug] {
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, b"lib").unwrap();
+        std::fs::File::options().write(true).open(file).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1000)).unwrap();
+    }
+    let before = std::time::SystemTime::now() - Duration::from_secs(5);
+    swap::mark_built(&repo, ui, false, os);
+    assert!(std::fs::metadata(&release).unwrap().modified().unwrap() > before, "the release library is current");
+    assert!(std::fs::metadata(&debug).unwrap().modified().unwrap() < before, "the debug one was not built");
+    swap::mark_built(&repo, ui, true, os);
+    assert!(std::fs::metadata(&debug).unwrap().modified().unwrap() > before, "the debug library is current after its build");
+    // A runtime or the browser files have no library to mark.
+    swap::mark_built(&repo, swap::piece("goModule").unwrap(), false, os);
+}
+
+/// The fresh checkout's C# projects get the repository's own native libraries
+/// in their `runtimes/<rid>/native/`, as checks.yml places them for the example
+/// builds: each library a C# project wraps, the ones not built left out.
+#[test]
+fn the_fresh_checkout_gets_the_native_libraries_as_on_github() {
+    let root = repo().join("target").join("generated").join("devtools-native-libraries");
+    let _ = std::fs::remove_dir_all(&root);
+    let (from, fresh) = (root.join("repo"), root.join("fresh"));
+    let os = std::env::consts::OS;
+    let built = from.join("target").join("release");
+    std::fs::create_dir_all(&built).unwrap();
+    for stem in ["clarity_ui", "clarity_auth", "clarity_app_mcp"] {
+        std::fs::write(built.join(swap::library_file(stem, os)), stem).unwrap();
+    }
+    release::place_native_libraries(&from, &fresh);
+    let rid = clarity_gen_core::clarity_ui::rid(os, std::env::consts::ARCH).unwrap();
+    let placed = |project: &str, stem: &str| fresh.join("runtimes/csharp").join(project).join("runtimes").join(&rid).join("native").join(swap::library_file(stem, os));
+    assert_eq!(std::fs::read_to_string(placed("Clarity.Ui", "clarity_ui")).unwrap(), "clarity_ui");
+    assert_eq!(std::fs::read_to_string(placed("Clarity.Auth", "clarity_auth")).unwrap(), "clarity_auth");
+    assert_eq!(std::fs::read_to_string(placed("Clarity.AppMcp", "clarity_app_mcp")).unwrap(), "clarity_app_mcp");
+    assert!(!placed("Clarity.Pdf", "clarity_pdf").exists(), "a library not built is left out");
+    std::fs::remove_dir_all(&root).unwrap();
+}

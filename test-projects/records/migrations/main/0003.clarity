@@ -1,0 +1,5 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Pictures of albums and artists"
+    add field Artist.photo: image, store photos
+    change field Album.cover: image

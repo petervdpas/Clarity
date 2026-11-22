@@ -268,7 +268,9 @@ impl Laid {
 
     /// The pages as a PDF file.
     pub fn pdf(&self) -> Result<Vec<u8>, PdfError> {
-        typst_pdf::pdf(&self.document, &typst_pdf::PdfOptions::default()).map_err(error)
+        let mut file = typst_pdf::pdf(&self.document, &typst_pdf::PdfOptions::default()).map_err(error)?;
+        without_default_suspects(&mut file);
+        Ok(file)
     }
 }
 
@@ -346,6 +348,17 @@ fn compile_with(source: String, pictures: Vec<Vec<u8>>) -> Result<PagedDocument,
     let mut world = OneFile::new(source);
     world.pictures = pictures.into_iter().map(Bytes::new).collect();
     typst::compile::<PagedDocument>(&world).output.map_err(error)
+}
+
+/// Typst writes the default `/Suspects false` into the tagging information
+/// (`/MarkInfo`), which poppler (pdfinfo and the readers built on it) flags as
+/// an error; its absence means the same. It becomes as many spaces, so the
+/// file keeps its length and every offset of its cross-reference table holds.
+fn without_default_suspects(file: &mut [u8]) {
+    const ENTRY: &[u8] = b"/Suspects false";
+    if let Some(at) = file.windows(ENTRY.len()).position(|w| w == ENTRY) {
+        file[at..at + ENTRY.len()].fill(b' ');
+    }
 }
 
 /// A Markdown text as a PDF file in a stylesheet's look.

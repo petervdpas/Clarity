@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inBrowser, isTauri, logLine, transport, unwrap, type BrowserPage } from "./backend.ts";
+import { inBrowser, isTauri, transport, unwrap, type BrowserPage } from "./backend.ts";
 
 test("a Tauri window has Tauri's internals; a browser page does not", () => {
   assert.equal(isTauri({ __TAURI_INTERNALS__: {} }), true);
@@ -22,24 +22,6 @@ test("only the IDE and a server reach the backend: no webview or Wails shell", (
   assert.equal(transport({ clarityInvoke: () => {} }), "tauri");
   assert.equal(transport({ _wails: {} }), "tauri");
   assert.equal(transport({}), "tauri");
-});
-
-test("an engine's line goes to the server, which writes it into the application's log", async () => {
-  const sent: [string, unknown][] = [];
-  const page = globalThis as unknown as { clarityServer?: string; fetch: typeof fetch };
-  const fetched = page.fetch;
-  page.clarityServer = "/clarity/invoke";
-  page.fetch = (async (address: string, init: { body: string }) => {
-    sent.push([address, JSON.parse(init.body)]);
-    return { json: async () => ({ value: null }) };
-  }) as unknown as typeof fetch;
-  try {
-    await logLine("engine Screen: level 2");
-  } finally {
-    delete page.clarityServer;
-    page.fetch = fetched;
-  }
-  assert.deepEqual(sent, [["/clarity/invoke", { command: "log_line", args: { line: "engine Screen: level 2" } }]]);
 });
 
 test("a page a server serves talks to it over HTTP", () => {

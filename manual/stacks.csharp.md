@@ -24,7 +24,7 @@ Clarity writes a .NET project into the output folder (`out` by default). `<Name>
 - `Windows/<Window>.cxaml` and `Apps/<App>.cxaml`: each window and each app frame as markup, which Clarity.UI draws (see [Windows](design.windows.md)).
 - `Program.cs`: the start of the program. It starts the language and theme kept from the last run, opens the databases and shows the main window.
 - `Labels.cs`: the labels of enum values, for texts with slots.
-- `Schema.cs`: the migration steps of every database Clarity owns.
+- `Schema.cs`: how many migration steps each database Clarity owns has, which the program checks at start.
 - `Texts.resx` with the texts as written, `Texts.<language>.resx` per language, and `Texts.cs`, a typed class with a property per text. See [Languages](languages.md).
 - `Themes/<theme>.light.json` and `Themes/<theme>.dark.json` per offered theme, as Clarity resolves it, and `AppThemes.cs`, which lists them. See [Themes](themes.md).
 - `resources/`: the project's resources (pictures and Markdown files), embedded in the program.
@@ -48,7 +48,7 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 The generated project carries no runtime sources. It references NuGet packages from nuget.org, all at one shared version:
 
-- `Clarity.Ui`: Clarity.UI, which draws the windows and runs them in the system's own window, on Linux, Windows and macOS. It carries Clarity.UI's native library for each system (Linux, Windows and macOS, each on x64 and arm64), and .NET loads the one for the system the program runs on. It brings `Clarity.Runtime`: the window model (view models, part state, undo), records, queries and migrations, without a database driver.
+- `Clarity.Ui`: Clarity.UI, which draws the windows and runs them in the system's own window, on Linux, Windows and macOS. It carries Clarity.UI's native library for each system (Linux, Windows and macOS, each on x64 and arm64), and .NET loads the one for the system the program runs on. It brings `Clarity.Runtime`: the window model (view models, part state, undo), records and queries, without a database driver.
 - `Clarity.Ui.Server`: the web target's server. It takes `Clarity.Runtime` alone, not Clarity.UI's native library: the browser draws.
 - `Clarity.Runtime.Sqlite`, `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per kind of database, added only when a data source uses it.
 - `Clarity.Runtime.Engines`: runs [engines](code.engines.md) with Wasmtime, added only when the project has one.

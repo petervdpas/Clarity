@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<View class="maintenance.CategoriesView">
-  <Data name="categories" type="list&lt;Category&gt;" />
-  <Data name="category" type="Category" />
-  <Table name="categoryList" at="1,1" span="12" rows="9" bind="categories" columns="name, folder, color" edit="name, color" add="true" remove="true" confirm="true" onselect="categoryPicked" onchange="categoryChanged" onadd="categoryAdded" onremove="categoryRemoved" />
-  <Label name="categoryFolderLabel" at="1,10" span="2" caption="@categoryFolderLabel" />
-  <Folder name="categoryFolder" at="3,10" span="10" bind="category.folder" onchange="folderChosen" />
-  <Button name="categoriesBackButton" at="10,12" span="3" caption="@backCaption" opens="close" icon="arrow-left" />
-</View>

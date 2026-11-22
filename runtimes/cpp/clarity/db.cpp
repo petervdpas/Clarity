@@ -40,13 +40,11 @@ static int version_of(Driver& d) {
 
 int Db::schema_version() { return version_of(*at("").driver); }
 
-int Db::migrate_source(const std::string& source, const std::vector<Step>& steps) {
-    Driver& d = *at(source).driver;
-    int done = version_of(d);
-    // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-    if (done > 0 && done < int(steps.size())) backup::before_migration(d, done + 1);
-    for (int i = done; i < int(steps.size()); ++i) d.apply(i + 1, steps[size_t(i)]);
-    return std::max(0, int(steps.size()) - done);
+void Db::check_steps(const std::string& source, int steps) {
+    SourceDb& s = at(source);
+    int had = version_of(*s.driver);
+    if (had < steps) throw StepsError("The database " + s.name + " needs migrating: run clarity-migrate");
+    if (had > steps) throw StepsError("The database " + s.name + " belongs to a newer version of this app");
 }
 
 Text saved_since() { return Text::keyed("savedSince", "Someone else changed this record since you opened it. Reload it to see their change."); }
@@ -353,7 +351,8 @@ std::pair<std::optional<Row>, std::optional<int64_t>> Db::state(const std::strin
 
 void Db::put(const Change& c, const std::optional<Row>& values, std::optional<int64_t> version) {
     auto [now, current] = state(c.source, c.table, c.key, c.columns, c.version, c.id);
-    int64_t next = std::max(current.value_or(0), version.value_or(0)) + 1;
+    // A versioned row goes back to the version of the state it returns to, exactly.
+    int64_t next = version ? *version : current.value_or(0) + 1;
     Driver& d = *at(c.source).driver;
     Dialect dialect = d.dialect();
     std::string table = quote(dialect, c.table), key = quote(dialect, c.key);

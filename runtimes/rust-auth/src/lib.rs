@@ -16,6 +16,14 @@ mod tries;
 
 pub use catalog::{Field, Strategy, catalog, catalog_json};
 
+/// Failed tries per key before the sign-in waits, when a program gives none
+/// (conformance/defaults.json; the generators always pass what the project says).
+pub const TRIES: u32 = 5;
+/// How long the sign-in waits after too many failed tries, in seconds, when a program gives none.
+pub const TRIES_SECONDS: u64 = 15 * 60;
+/// How long a call to a provider may take, in seconds (conformance/defaults.json).
+pub const HTTP_SECONDS: u64 = 30;
+
 use serde_json::{Map, Value, json};
 
 /// Why an operation gave no result.

@@ -24,16 +24,16 @@ The program is a web server. Its page runs Clarity.UI in the browser (the same l
 
 With `stack rust desktop` Clarity writes a Cargo project into the output folder (`out` by default):
 
-- `Cargo.toml`: the package, on the crate `clarity-runtime` (the window model, records, queries and migrations, and with its `native-ui` feature the desktop through Clarity.UI's ready-made library).
+- `Cargo.toml`: the package, on the crate `clarity-runtime` (the window model, records and queries, and with its `native-ui` feature the desktop through Clarity.UI's ready-made library).
 - `build.rs`: links Clarity.UI's ready-made library from the folder the environment variable `CLARITY_UI` names, as Go, C and C++ programs do, and copies it next to the program. Clarity's build names the folder.
 - `src/modules/<module>.rs`: one Rust module per Clarity module, with its records, enums, functions, actions, windows and handlers. `src/modules.rs` declares them.
-- `src/schema.rs`: the migration steps of every database Clarity owns.
+- `src/schema.rs`: how many migration steps each database Clarity owns has, which the program checks at start.
 - For code that reads or writes a [data format](code.formats.md), `Cargo.toml` turns on the runtime's `formats` feature, which brings the crate `clarity-formats`.
 - `windows/<Window>.cxaml` and `apps/<App>.cxaml`: each window and each app frame (menu bar, toolbar, ribbon, sidebars, footer) as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`).
 - `themes/<theme>.light.json` and `.dark.json`: each theme the project offers, as Clarity resolves it. Without any, Clarity.UI shows Clarity's own.
 - `resources/`: the project's pictures and other resources, carried in the program.
 - `src/model.json` and `src/facts.rs`: the data dictionary and the translations, and the facts of the fields Clarity.UI's parts read.
-- `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and migrates the databases and runs Clarity.UI's library (`clarity_runtime::native_ui::run`) with the files above, which it carries in itself.
+- `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and checks the databases and runs Clarity.UI's library (`clarity_runtime::native_ui::run`) with the files above, which it carries in itself.
 - a `README.md` that says how to build the project without Clarity.
 
 With the `web` target the program also has `browser/`, the files its server serves, all carried in the program:
@@ -101,7 +101,7 @@ The release program is `target/release/<name>` (with `.exe` on Windows), where `
 
 Each SQLite database opens in the folder the project names for it. Set the environment variable `CLARITY_DATA` to another folder to run the program on other data, such as a copy, without changing the program: each database then opens there under its own file name.
 
-The desktop program can also run without a window, driven step by step: with the environment variable `CLARITY_HEADLESS` set, it draws its windows on Skia's raster surface in its own process, reads one step per line on its standard input as JSON (a click on a part, keys, typed text, a drag, `read`, `shot`) and answers each on its standard output. Clarity's tests drive the every-part project this way (`crates/clarity-gen/tests/everything_live.rs`); `runtimes/rust-ui/src/headless.rs` lists the steps.
+The desktop program can also run without a window, driven step by step: with the environment variable `CLARITY_HEADLESS` set, it draws its windows on Skia's raster surface in its own process, reads one step per line on its standard input as JSON (a click on a part, keys, typed text, a drag, `read`, `shot`) and answers each on its standard output. Clarity's tests drive the every-part project this way (`crates/clarity-gen/tests/gen/everything_live.rs`); `runtimes/rust-ui/src/headless.rs` lists the steps.
 
 ## Windows on screen
 

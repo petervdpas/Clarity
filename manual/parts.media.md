@@ -122,7 +122,7 @@ The checker refuses a pdfReport without `report`, a report that is not in the re
 
 ## The parts at a glance
 
-<!-- catalog: written from Clarity's part catalog (crates/clarity-spec/src/widgets.rs) by CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test manual_catalog; not edited by hand -->
+<!-- catalog: written from Clarity's part catalog (crates/clarity-spec/src/widgets.rs) by CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test spec manual_catalog::; not edited by hand -->
 
 | Part | Line | Binds | Size | Grows | Properties | Events |
 |---|---|---|---|---|---|---|

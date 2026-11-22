@@ -66,13 +66,6 @@ inline FileOrder desc(const std::string& detail) { return {detail, true}; }
 /// The files sorted by the keys, the first deciding first; text by its bytes, as on every stack.
 std::vector<FileEntry> sort_files(std::vector<FileEntry> files, std::initializer_list<FileOrder> keys);
 
-/// A value in code that does not fit where it is used: a position outside
-/// its list, a highest number below 1 (conformance/lists.json).
-class ValueError : public Error {
-public:
-    using Error::Error;
-};
-
 /// `xs[i]` in code: item i of a list, counted from 1.
 /// `from to to` in code: the whole numbers from `from` to `to`, both counted;
 /// none when `to` is below `from` (conformance/lists.json, `ranges`).
@@ -110,22 +103,45 @@ inline std::string joined(const std::vector<std::string>& texts, const std::stri
     return out;
 }
 
+/// `a + b`, `a - b`, `a * b` and `-a` of whole numbers in code (conformance/overflow.json):
+/// throws ValueError when the result does not fit in 64 bits.
+inline int64_t whole_add(int64_t a, int64_t b) {
+    int64_t out;
+    if (__builtin_add_overflow(a, b, &out)) throw too_large();
+    return out;
+}
+
+inline int64_t whole_sub(int64_t a, int64_t b) {
+    int64_t out;
+    if (__builtin_sub_overflow(a, b, &out)) throw too_large();
+    return out;
+}
+
+inline int64_t whole_mul(int64_t a, int64_t b) {
+    int64_t out;
+    if (__builtin_mul_overflow(a, b, &out)) throw too_large();
+    return out;
+}
+
+inline int64_t whole_neg(int64_t a) { return whole_sub(0, a); }
+
 /// `a div b` in code: the quotient of two whole numbers, rounded toward zero; dividing by zero throws.
 inline int64_t whole_div(int64_t a, int64_t b) {
-    if (b == 0) throw ValueError("division by zero");
-    return b == -1 ? int64_t(0 - uint64_t(a)) : a / b;
+    if (b == 0) throw division_by_zero();
+    return b == -1 ? whole_neg(a) : a / b;
 }
 
 /// `a mod b` in code: what is left of `a div b`, with the sign of a.
 inline int64_t whole_mod(int64_t a, int64_t b) {
-    if (b == 0) throw ValueError("division by zero");
+    if (b == 0) throw division_by_zero();
     return b == -1 ? 0 : a % b;
 }
 
 template <typename T>
 const T& at(const std::vector<T>& list, int64_t position) {
     if (position < 1 || position > int64_t(list.size()))
-        throw ValueError("there is no item " + std::to_string(position) + " in a list of " + std::to_string(list.size()));
+        throw ValueError("there is no item " + std::to_string(position) + " in a list of " + std::to_string(list.size()),
+                         Text::keyed("itemOutsideList", "There is no item {position} in a list of {count}").with("position", slot_integer(position)).with("count", slot_integer(int64_t(list.size()))));
     return list[size_t(position - 1)];
 }
 

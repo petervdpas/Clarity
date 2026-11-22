@@ -14,9 +14,6 @@ use std::sync::Mutex;
 use serde_json::{Map, Value};
 
 use crate::canvas::CanvasArgs;
-use crate::list_fields::ItemKind;
-use crate::ranges::{Range, RangeMove};
-use crate::reorder::Move;
 use crate::steps::StepButton;
 use crate::ui::{RefOption, Reply, Text, WindowState};
 use crate::{Db, Error, Result};
@@ -64,52 +61,6 @@ pub struct Edit {
     /// A table's list, whose changes outside `editable` are refused.
     pub path: Option<String>,
     pub editable: Option<Vec<String>>,
-}
-
-/// A row moved by a drag or a key (manual/start.how-it-works.md).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Reorder {
-    pub part: String,
-    pub scope: Option<String>,
-    /// The data path of the list.
-    pub list: String,
-    /// The field that keeps the order.
-    pub by: String,
-    /// The field that keeps a tree row's parent.
-    pub parent: Option<String>,
-    pub moved: Move,
-    pub handler: Option<String>,
-    pub readonly: bool,
-}
-
-/// An item typed for a list field (manual/start.how-it-works.md).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ItemEdit {
-    pub part: String,
-    pub scope: Option<String>,
-    /// The data path of the list field.
-    pub path: String,
-    pub item: ItemKind,
-    /// An enum's values, which an item must be one of.
-    pub values: Vec<String>,
-    pub typed: String,
-    pub handler: Option<String>,
-    pub readonly: bool,
-}
-
-/// A key, a drag or typed text on a slider or spin box (manual/start.how-it-works.md).
-#[derive(Debug, Clone, PartialEq)]
-pub struct RangeEdit {
-    pub part: String,
-    pub scope: Option<String>,
-    /// The data path of the value.
-    pub path: String,
-    pub range: Range,
-    /// Whether the value is a whole number.
-    pub whole: bool,
-    pub moved: RangeMove,
-    pub handler: Option<String>,
-    pub readonly: bool,
 }
 
 /// The person's action on a canvas (manual/parts.graphics.md).
@@ -189,23 +140,11 @@ pub trait Program: Send + Sync + 'static {
     /// Ctrl+Z (`back`) or Ctrl+Y on a scope: its last edit taken back or done again.
     fn undo_edit(&self, state: WindowState, scope: &str, back: bool) -> Answer<Reply>;
 
-    /// A row moved by a drag or a key.
-    fn reorder_event(&self, state: WindowState, reorder: Reorder) -> Answer<Reply>;
-
-    /// An item typed for a list field.
-    fn item_event(&self, state: WindowState, item: ItemEdit) -> Answer<Reply>;
-
-    /// A slider's or spin box's value moved.
-    fn range_event(&self, state: WindowState, range: RangeEdit) -> Answer<Reply>;
-
     /// The person's action on a canvas.
     fn canvas_event(&self, state: WindowState, canvas: CanvasEdit) -> Answer<Reply>;
 
     /// Next, Back or Finish on a wizard.
     fn step_event(&self, state: WindowState, step: StepPress) -> Answer<Reply>;
-
-    /// The person sorted, turned a page, or opened or closed a tree row. Never an edit.
-    fn view_event(&self, state: WindowState, part: &str, action: Map<String, Value>) -> Answer<Reply>;
 
     /// The answer to a question a handler asked: runs the handler it goes to,
     /// with the values written for it and the answer last.
@@ -217,10 +156,9 @@ pub trait Program: Send + Sync + 'static {
     /// The values a text field already has, which a typed dropdown offers.
     fn field_values(&self, entity: &str, field: &str) -> Answer<Vec<String>>;
 
-    /// What a dropdown of `kind` ("typed" or "search") offers for typed text:
-    /// a field's values, or the records of an entity with the fields it shows
-    /// (crate::dropdown_options::find).
-    fn find_options(&self, kind: &str, entity: &str, field: Option<&str>, show: &[String], typed: &str) -> Answer<Value>;
+    /// The records of `entity` a search dropdown offers, each with the fields
+    /// it shows (crate::dropdown_options::offered); the screen searches them.
+    fn find_options(&self, entity: &str, show: &[String]) -> Answer<Value>;
 
     /// The bytes of an image or file field of a record; none when it has none.
     fn field_bytes(&self, entity: &str, id: i64, field: &str) -> Answer<Option<Vec<u8>>>;
@@ -409,6 +347,7 @@ pub fn said(err: &Error) -> Text {
         }
         Error::InUse { table, .. } => Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", Slot::text(*table)),
         Error::DividedByZero => Text::keyed("divisionByZero", "Division by zero"),
+        Error::TooLarge => Text::keyed("numberTooLarge", "The number is too large"),
         other => Text::plain(other.to_string()),
     }
 }

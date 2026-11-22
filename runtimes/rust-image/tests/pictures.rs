@@ -44,7 +44,7 @@ fn the_picture_functions_give_the_pixels_every_stack_gives() {
         assert_eq!(case["result"], got, "{}", case["name"]);
     }
     if write {
-        std::fs::write(path, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
+        write_changed(path, serde_json::to_string_pretty(&doc).unwrap() + "\n");
     }
 }
 
@@ -64,4 +64,13 @@ fn a_fill_paints_the_area_of_near_colours_it_reaches() {
     let mut p = RgbaImage::from_fn(3, 2, |x, _| if x == 1 { k } else { w });
     clarity_image::ops::fill(&mut p, 0, 0, r, 0.0);
     assert_eq!((*p.get_pixel(0, 0), *p.get_pixel(0, 1), *p.get_pixel(1, 0), *p.get_pixel(2, 0)), (r, r, k, w));
+}
+
+/// Writes a guard's file only when its content differs, so writing it again
+/// changes nothing on disk (a running IDE sees no change and does not restart).
+pub(crate) fn write_changed(path: impl AsRef<std::path::Path>, bytes: impl AsRef<[u8]>) {
+    let (path, bytes) = (path.as_ref(), bytes.as_ref());
+    if std::fs::read(path).ok().as_deref() != Some(bytes) {
+        std::fs::write(path, bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    }
 }

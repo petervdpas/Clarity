@@ -101,7 +101,7 @@ func TestAFileIsKeptWithItsNameInTheDatabaseOrItsStore(t *testing.T) {
 	db, err := Memory()
 	must(t, err)
 	t.Cleanup(func() { db.Close() })
-	_, err = db.Migrate([][]string{{"CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT NOT NULL DEFAULT '', sheet TEXT, sheet_name TEXT NOT NULL DEFAULT '')"}})
+	_, err = applySteps(db, "", [][]string{{"CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT NOT NULL DEFAULT '', sheet TEXT, sheet_name TEXT NOT NULL DEFAULT '')"}})
 	must(t, err)
 	must(t, db.AddStore("documents", store))
 	pdf := []byte("%PDF-1.7 not a picture")

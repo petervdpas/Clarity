@@ -25,7 +25,7 @@ on:
         options: [all, workspace, go, c-cpp, csharp, examples]
         default: all
       tests:
-        description: "Workspace only: cargo test arguments, as -p clarity-gen --test everything (empty: every test)"
+        description: "Workspace only: cargo test arguments, as -p clarity-gen --test gen everything:: (empty: every test)"
         type: string
         default: ""
       example:
@@ -153,6 +153,18 @@ jobs:
           else
             cargo test --workspace --no-fail-fast -- --skip writes_a_go_module_on_the_runtime_module
           fi
+      # The tests write the files generated from Clarity's sources (the TypeScript types) and check the
+      # others (CLAUDE.md, Generated-file guards): a file the tests changed or added was behind its source.
+      - name: Nothing generated is behind
+        if: ${{ !inputs.tests }}
+        run: |
+          changed="$(git status --porcelain)"
+          if [ -n "$changed" ]; then
+            echo "The tests changed files that were committed behind their source: write the guards again (CLAUDE.md, Generated-file guards) and commit them."
+            echo "$changed"
+            git diff --stat
+            exit 1
+          fi
 
   # The Rust runtime with each of its features alone and with none: a
   # generated program turns on only what it uses, so every feature builds
@@ -195,30 +207,17 @@ jobs:
         with:
           name: clarity-ui-linux-x64
           path: clarity-ui
+      # Every package of the runtime, linked through cgo as a program links it: once as a program without
+      # Clarity's optional libraries builds, once with all of them (data formats through Clarity.Formats,
+      # commands for agents through Clarity.AppMcp, signing in through Clarity.Auth), so no test is left out.
       - name: Test the runtime
         working-directory: runtimes/go
-        run: go test ./clarity
-      # The data formats through Clarity.Formats, linked through cgo as a program links it.
-      - name: Test the data formats
-        working-directory: runtimes/go
         run: |
           set -euo pipefail
           folder="$GITHUB_WORKSPACE/clarity-ui"
-          CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityformats -run Formats ./clarity
-      # A program's commands for agents through Clarity.AppMcp, linked through cgo as a program links it.
-      - name: Test the commands for agents
-        working-directory: runtimes/go
-        run: |
-          set -euo pipefail
-          folder="$GITHUB_WORKSPACE/clarity-ui"
-          CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityagents -run Agents ./clarity
-      # Signing in through Clarity.Auth itself, which decides every attempt for every stack: no stand-in.
-      - name: Test signing in
-        working-directory: runtimes/go
-        run: |
-          set -euo pipefail
-          folder="$GITHUB_WORKSPACE/clarity-ui"
-          CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityauth -run Signin ./clarity ./shell
+          export CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib"
+          go test ./...
+          go test -tags "clarityformats clarityagents clarityauth" ./...
 
   c-cpp:
     name: C and C++ runtimes
@@ -282,7 +281,7 @@ jobs:
       - name: Test the solution
         run: xvfb-run -a dotnet test runtimes/csharp/Clarity.slnx -c Release --no-build
 
-  # Each example built on its own stack as the IDE builds it, without a warning (crates/clarity-gen/tests/examples_build.rs).
+  # Each example built on its own stack as the IDE builds it, without a warning (crates/clarity-gen/tests/gen/examples_build.rs).
   examples:
     name: Example ${{ matrix.example }}
     needs: [library, browser]
@@ -292,7 +291,7 @@ jobs:
       fail-fast: false
       matrix:
         # Run by hand with one example's name: that one alone.
-        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "maintenance", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
+        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "records", "todo", "videoplayer", "walker"]') }}
     env:
       # Debug builds only, as on the laptop's routine checks.
       CLARITY_EXAMPLES_QUICK: "1"
@@ -335,4 +334,4 @@ jobs:
         run: |
           set -euo pipefail
           export CLARITY_UI="$PWD/clarity-ui" CLARITY_UI_BROWSER="$PWD/clarity-ui-browser"
-          cargo test -p clarity-gen --test examples_build -- --ignored --exact the_${{ matrix.example }}_example_builds_without_warnings
+          cargo test -p clarity-gen --test gen -- --ignored --exact examples_build::the_${{ matrix.example }}_example_builds_without_warnings

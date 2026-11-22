@@ -22,13 +22,13 @@ Progress: 75%
 - cli targets exist on every stack (see [cli-target](cli-target.md)).
 
 ## Tests
-- `crates/clarity-spec/tests/agent_commands.rs`, `crates/clarity-spec/tests/guidance.rs`, `crates/clarity-gen/tests/agent_tools.rs` (with `a_rust_desktop_program_runs_the_commands_for_agents_itself` and `the_list_has_the_shape_the_mcp_core_serves`, the writer's list in the conformance file's shape); unit tests in `crates/clarity-tools/src/structural/guidance.rs`
+- `crates/clarity-spec/tests/spec/agent_commands.rs`, `crates/clarity-spec/tests/spec/guidance.rs`, `crates/clarity-gen/tests/gen/agent_tools.rs` (with `a_rust_desktop_program_runs_the_commands_for_agents_itself` and `the_list_has_the_shape_the_mcp_core_serves`, the writer's list in the conformance file's shape); unit tests in `crates/clarity-tools/src/structural/guidance.rs`
 - conformance: `conformance/app-mcp.json` (initialize, tools/list, grants open and closed, `ask` as elicitation, arguments that do not fit, protocol errors), run by `runtimes/rust-app-mcp/tests/conformance.rs` and through the C table by `runtimes/rust-app-mcp-ffi/tests/conformance.rs` (the model for each stack's runner, step 3); `runtimes/rust-app-mcp/tests/discovery.rs`
 - conformance/app-mcp.json `commandLines`, `questions` and `words`; conformance/settings.json `merge` on all five
 - Runtimes: R `runtimes/rust/tests/agents.rs` (feature `mcp`); Go `agents_test.go`, `agents_library_test.go` (tag `clarityagents`, the test runs itself as the program); C `tests/agents_test.c`; C++ `tests/agents_test.cpp`; C# `Clarity.Ui.Native.Tests/AgentServiceTests.cs`
 - `runtimes/rust-ui/tests/hosts/agents.rs`: grants and calls on the screen's thread, a question back to the agent, the grant dialog (Allow once, Escape refuses), across the wire with its questions
 - `runtimes/rust-app-mcp/tests/relay.rs`: served with the token, closed without, a second copy refused, a left file ignored
-- `crates/clarity-gen/tests/commands.rs`: each stack's program carries the service (`a_*_program_with_commands_for_agents_*`), and each stack's slow build test runs `the_agents_call` over `<program> mcp` (refused while the switches are off, then calls run, a setting changed keeps the switches)
+- `crates/clarity-gen/tests/gen/commands.rs`: each stack's program carries the service (`a_*_program_with_commands_for_agents_*`), and each stack's slow build test runs `the_agents_call` over `<program> mcp` (refused while the switches are off, then calls run, a setting changed keeps the switches)
 
 ## Open
 - Step 5, the guidance wizard in the IDE: NOT BUILT; see Design.

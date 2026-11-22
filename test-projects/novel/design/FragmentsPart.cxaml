@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- All fragments of the book: the list at the left, the chosen fragment at the
+     right and where it is used. -->
+<View class="writing.FragmentsPart">
+  <Data name="fragmentBook" type="Book" />
+  <Data name="fragments" type="list&lt;Fragment&gt;" />
+  <Data name="fragment" type="Fragment" />
+  <Data name="fragmentPlaces" type="list&lt;FragmentPlace&gt;" />
+  <Data name="pickedFragmentPlace" type="FragmentPlace" />
+  <Data name="fragmentChoice" type="list&lt;Chapter&gt;" />
+  <Data name="fragmentCurrent" type="Chapter" />
+  <Tells message="jumpTo(position: integer)" />
+  <Splitter name="fragmentSplitter" at="1,1" span="12" rows="15">
+    <Pane span="3">
+      <Textbox name="fragmentSearchBox" at="1,1" span="3" placeholder="@fragmentSearchPlaceholder" onchange="filterFragments" />
+      <List name="fragmentList" at="1,2" span="3" rows="12" bind="fragments" show="heading, kind" onselect="fragmentChosen" />
+      <Button name="newFragmentButton" at="1,14" span="3" caption="@newFragment" icon="plus" onclick="addFragment" />
+      <Button name="removeFragmentButton" at="1,15" span="3" caption="@removeFragmentCaption" icon="trash" onclick="removeFragment" />
+    </Pane>
+    <Pane>
+      <Textbox name="fragmentHeadingBox" at="1,1" span="6" bind="fragment.heading" placeholder="@fragmentHeadingPlaceholder" />
+      <Dropdown name="fragmentKindBox" at="1,2" span="3" bind="fragment.kind" />
+      <Dropdown name="fragmentFromBox" at="4,2" span="3" bind="fragment.contributor" />
+      <Textbox name="fragmentLinkBox" at="1,3" span="6" bind="fragment.link" placeholder="@linkPlaceholder" />
+      <Memo name="fragmentTextBox" at="1,4" span="6" rows="12" bind="fragment.text" markdown="true" placeholder="@fragmentPlaceholder" />
+      <Button name="saveFragmentButton" at="7,1" span="3" caption="@saveCaption" icon="save" default="true" onclick="saveFragment" />
+      <Label name="fragmentUsedInLabel" at="7,2" span="3" caption="@usedInLabel" />
+      <Table name="fragmentPlaceTable" at="7,3" span="3" rows="11" bind="fragmentPlaces" columns="chapter" links="[{&quot;column&quot;:&quot;chapter&quot;,&quot;handler&quot;:&quot;fragmentToChapter&quot;}]" add="true" remove="true" confirm="true" onadd="addFragmentPlace" onremove="removeFragmentPlace" onopen="fragmentToChapter" onselect="rememberPickedFragmentPlace" />
+      <Button name="fragmentToChapterButton" at="7,14" span="3" caption="@toChapterCaption" tooltip="@toChapterTip" icon="square-arrow-out-up-right" onclick="fragmentToChapter" />
+      <Button name="fragmentInChapterButton" at="7,15" span="3" caption="@inChapterCaption" tooltip="@inChapterTip" icon="link" onclick="fragmentInChapter" />
+    </Pane>
+  </Splitter>
+</View>

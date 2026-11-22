@@ -17,7 +17,7 @@ Progress: 90%
 - `conformance/settings.json` (cases fits, kept, file, folders, now, merge): run by R, Go, C, C++, C#
 - `conformance/secret-store.json`: run by R (`runtimes/rust/tests/secrets.rs`), C# (`SecretsTests.cs`), gen `secrets.rs`; skipped by Go, C, C++ (they write the keychains themselves)
 - `conformance/unconnected.json`: run by R, Go, C, C++, C#
-- `crates/clarity-spec/tests/settings.rs`, `secrets.rs`; `crates/clarity-project/tests/settings.rs`; gen `settings.rs`, `secrets.rs`, `app_settings.rs`, `reference_settings.rs`, `unconnected_csharp.rs`; real-store tests with `CLARITY_SECRET_STORE=1` (Linux with gnome-keyring)
+- `crates/clarity-spec/tests/spec/settings.rs`, `secrets.rs`; `crates/clarity-project/tests/settings.rs`; gen `settings.rs`, `secrets.rs`, `app_settings.rs`, `reference_settings.rs`, `unconnected_csharp.rs`; real-store tests with `CLARITY_SECRET_STORE=1` (Linux with gnome-keyring)
 
 ## Open
 - Secrets stored alike on every stack: PARTIAL. On macOS go-keyring stores `go-keyring-base64:` values no other runtime reads (`runtimes/go/secrets/secrets.go:11-40`).

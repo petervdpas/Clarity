@@ -8,7 +8,7 @@ use postgres::types::{FromSql, IsNull, Kind, ToSql, Type, to_sql_checked};
 use postgres::{Client, NoTls};
 
 use crate::dialect::Dialect;
-use crate::store::{Driver, Failure, Outcome, applied};
+use crate::store::{Driver, Failure, Outcome};
 use crate::{Decimal, Error, Id, NaiveDate, NaiveDateTime, Result, SqlValue};
 
 type Boxed = Box<dyn std::error::Error + Sync + Send>;
@@ -180,14 +180,4 @@ impl Driver for Postgres {
         Ok(self.0.batch_execute(sql)?)
     }
 
-    /// PostgreSQL undoes changes to tables too, so a step that fails
-    /// leaves the database as it was.
-    fn apply(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
-        let mut tx = self.0.transaction()?;
-        for statement in statements {
-            tx.batch_execute(statement)?;
-        }
-        tx.batch_execute(&applied(version))?;
-        Ok(tx.commit()?)
-    }
 }

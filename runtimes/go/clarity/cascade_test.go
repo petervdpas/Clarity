@@ -73,7 +73,7 @@ func planned(t *testing.T) (*Db, *project) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Migrate([][]string{{
+	if _, err := applySteps(db, "", [][]string{{
 		"CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
 		"CREATE TABLE task (id INTEGER PRIMARY KEY, project INTEGER REFERENCES project(id), title TEXT NOT NULL)",
 	}}); err != nil {

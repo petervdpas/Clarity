@@ -11,8 +11,6 @@ using nlohmann::json;
 
 namespace {
 
-/// How many edits a window keeps; the oldest go first.
-constexpr size_t max_edits = 500;
 
 /// What changed from before to after, by name.
 std::vector<Changed> between(const json& before, const json& after) {
@@ -95,7 +93,7 @@ void EditBus::edit(const std::string& part, const std::string& scope, const json
     baseline_ = data;
     if (edit.changes.empty() && edit.steps.empty()) return;
     done_.push_back(std::move(edit));
-    if (done_.size() > max_edits) done_.erase(done_.begin(), done_.end() - max_edits);
+    if (done_.size() > edit_bus_keeps) done_.erase(done_.begin(), done_.end() - edit_bus_keeps);
     std::erase_if(undone_, [&](const Edit& e) { return e.scope == scope; });
 }
 

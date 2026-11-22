@@ -9,8 +9,6 @@
 
 /// The most decimals a value keeps; more are rounded off.
 #define CLARITY_MAX_SCALE 28
-/// The decimals a division gives, before trailing zeros go.
-#define CLARITY_DIVISION_SCALE 16
 
 typedef struct {
     __int128 units;
@@ -41,10 +39,12 @@ ClarityDecimal clarity_decimal_cos(ClarityDecimal degrees);
 double clarity_units(ClarityDecimal value);
 
 ClarityDecimal clarity_decimal_neg(ClarityDecimal a);
-ClarityDecimal clarity_decimal_add(ClarityDecimal a, ClarityDecimal b);
-ClarityDecimal clarity_decimal_sub(ClarityDecimal a, ClarityDecimal b);
-ClarityDecimal clarity_decimal_mul(ClarityDecimal a, ClarityDecimal b);
-/// An invalid-value error when dividing by zero.
+/// `a + b`, `a - b` and `a * b` in code (conformance/overflow.json): rounded to the
+/// places that fit; a value error when the result does not fit with no places.
+bool clarity_decimal_add(ClarityDecimal a, ClarityDecimal b, ClarityDecimal* out);
+bool clarity_decimal_sub(ClarityDecimal a, ClarityDecimal b, ClarityDecimal* out);
+bool clarity_decimal_mul(ClarityDecimal a, ClarityDecimal b, ClarityDecimal* out);
+/// A value error when dividing by zero or when the quotient does not fit.
 bool clarity_decimal_div(ClarityDecimal a, ClarityDecimal b, ClarityDecimal* out);
 /// By value, so 1.50 equals 1.5: below zero, zero or above zero.
 int clarity_decimal_compare(ClarityDecimal a, ClarityDecimal b);

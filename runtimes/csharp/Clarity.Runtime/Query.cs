@@ -238,7 +238,7 @@ public sealed record Query
         if (filter is not null)
             sql += " WHERE " + filter.Sql(dialect, parameters);
         var keys = order
-            .Select(o => OrderSql(dialect, table, o.Through, o.Column, o.Numeric) + (o.Descending ? " DESC" : ""))
+            .Select(o => dialect.OrderKey(OrderSql(dialect, table, o.Through, o.Column, o.Numeric), o.Descending))
             .Append(dialect.Quote(key));
         sql += " ORDER BY " + string.Join(", ", keys);
         return (sql, parameters);
@@ -274,9 +274,10 @@ public sealed record Query
 
 public static class Texts
 {
-    /// <summary>Text contains a part, ignoring case: Clarity's <c>contains</c> outside a query.</summary>
+    /// <summary>Text contains a part, ignoring case: Clarity's <c>contains</c> outside a query, each letter by its
+    /// simple lower-case form whatever the person's language (conformance/contains.json).</summary>
     public static bool Contains(string text, string part) =>
-        text.Contains(part, StringComparison.CurrentCultureIgnoreCase);
+        text.ToLowerInvariant().Contains(part.ToLowerInvariant(), StringComparison.Ordinal);
 
     /// <summary>How many characters a text has: Clarity's <c>length(text)</c>, counting each character once, as every runtime does.</summary>
     public static long Length(string text)

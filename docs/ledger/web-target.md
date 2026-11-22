@@ -27,7 +27,7 @@ What each stack writes:
 - Sign-in on the server: see [signin](signin.md).
 
 ## Tests
-- `crates/clarity-gen/tests/build.rs:594`, `c_build.rs:279`, `cpp_build.rs:352` (`the_web_target_serves_in_*`, ignored); `csharp_web.rs`; `browser_fresh.rs`; `out_layout.rs` (`a_program_served_alone_is_the_web_program`); `everything_build.rs` (web for R, Go, C, C++); `everything_live.rs` (headless Chromium: go, rust, c, cpp)
+- `crates/clarity-gen-rust/tests/rust/build.rs`, `crates/clarity-gen-c/tests/c/build.rs`, `crates/clarity-gen-cpp/tests/cpp/build.rs` (`the_web_target_serves_in_*`, ignored); `csharp_web.rs`; `browser_fresh.rs`; `out_layout.rs` (`a_program_served_alone_is_the_web_program`); `everything_build.rs` (web for R, Go, C, C++); `everything_live.rs` (headless Chromium: go, rust, c, cpp)
 - `runtimes/go/shell/serve_test.go`; `runtimes/csharp/Clarity.Ui.Server.Tests`
 - Examples: `invaders` (go web), `walker` (csharp web); no example uses rust web, c web or cpp web
 

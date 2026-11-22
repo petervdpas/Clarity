@@ -725,3 +725,123 @@ fn a_desktop_project_s_preview_has_the_desktop_shape() {
     assert_eq!(files.open_folder(&clarity_ui::files::PickerOptions::titled("Choose")), None);
     assert!(said.lock().unwrap().is_empty(), "nothing asks the page for a file");
 }
+
+/// A window a handler asks for (`ask Pick then picked`) shows over the window
+/// in the browser as on the desktop: the steps read it as the dialog, reach
+/// its parts and buttons, and what it closes with goes to the handler.
+#[test]
+fn a_window_asked_for_shows_as_the_dialog_the_steps_reach() {
+    let _turn = one_host();
+    let fake = Arc::new(Fake::default());
+    let program: Arc<dyn Program> = fake.clone();
+    let (tell, _) = told();
+    let mut host = BrowserHost::start(program, FILES, 900.0, 600.0, 1.0, false, tell);
+    host.frame();
+    // Only steps, no frame between them: a page in the background draws no frames.
+    let clicked = host.step(&json!({ "do": "click", "part": "pick" }));
+    assert_eq!(clicked["ok"], json!(true), "{clicked}");
+    let read = host.step(&json!({ "do": "read" }));
+    assert_eq!(read["dialog"]["window"], json!("Pick"), "{read}");
+    assert!(read["shown"].get("choose").is_some(), "the dialog's button shows: {read}");
+    let chose = host.step(&json!({ "do": "click", "part": "choose" }));
+    assert_eq!(chose["ok"], json!(true), "{chose}");
+    let read = host.step(&json!({ "do": "read" }));
+    assert!(read["dialog"].is_null(), "the dialog closed: {read}");
+}
+
+/// As above, where the program watches its long calls: the click's handler is
+/// sent without waiting, and the window it asks for opens when its answer comes.
+#[test]
+fn a_window_asked_for_by_a_long_call_shows_when_its_answer_comes() {
+    let _turn = one_host();
+    let fake = Arc::new(Fake { watches: true, ..Fake::default() });
+    let program: Arc<dyn Program> = fake.clone();
+    let (tell, _) = told();
+    let mut host = BrowserHost::start(program, FILES, 900.0, 600.0, 1.0, false, tell);
+    type Sent = Vec<(String, serde_json::Map<String, Value>, Box<dyn FnOnce(Option<Value>)>)>;
+    let sent: std::rc::Rc<std::cell::RefCell<Sent>> = Default::default();
+    let keeps = sent.clone();
+    host.set_asker(std::rc::Rc::new(move |command: &str, args, answered| keeps.borrow_mut().push((command.to_string(), args, answered))));
+    host.frame();
+    let clicked = host.step(&json!({ "do": "click", "part": "pick" }));
+    assert_eq!(clicked["ok"], json!(true), "{clicked}");
+    let (_, args, answered) = sent.borrow_mut().remove(0);
+    let state: clarity_runtime::ui::WindowState = serde_json::from_value(args["state"].clone()).unwrap();
+    let reply = fake.dispatch_event(state, args["handler"].as_str().unwrap()).unwrap();
+    answered(Some(json!({ "value": reply })));
+    // As the page takes it: the worker asks for a frame when the answer comes, then the steps read.
+    host.frame();
+    let read = host.step(&json!({ "do": "read" }));
+    assert_eq!(read["dialog"]["window"], json!("Pick"), "{read}");
+    assert!(read["shown"].get("choose").is_some(), "the dialog's button shows: {read}");
+}
+
+/// The page's side of the wire: each command as the JSON a request carries, to the server's `wire::answer`.
+struct Served(Arc<Fake>);
+
+impl clarity_ui::program_wire::Asks for Served {
+    fn ask(&self, command: &str, args: serde_json::Map<String, Value>) -> Option<Value> {
+        let sent: Value = serde_json::from_str(&json!({ "command": command, "args": args }).to_string()).unwrap();
+        let answered = clarity_runtime::wire::answer(&*self.0, sent["command"].as_str().unwrap(), sent["args"].clone());
+        Some(serde_json::from_str(&answered.to_string()).unwrap())
+    }
+}
+
+/// As the page has it: the program behind the wire, its long calls sent
+/// without waiting and answered by the server; the window a handler asks
+/// for shows as the dialog the steps reach.
+#[test]
+fn a_window_asked_for_over_the_wire_shows_as_the_dialog_the_steps_reach() {
+    let _turn = one_host();
+    let fake = Arc::new(Fake { watches: true, ..Fake::default() });
+    let program: Arc<dyn Program> = Arc::new(clarity_ui::program_wire::WireProgram::new(Served(fake.clone())));
+    let (tell, _) = told();
+    let mut host = BrowserHost::start(program, FILES, 900.0, 600.0, 1.0, false, tell);
+    type Sent = Vec<(String, serde_json::Map<String, Value>, Box<dyn FnOnce(Option<Value>)>)>;
+    let sent: std::rc::Rc<std::cell::RefCell<Sent>> = Default::default();
+    let keeps = sent.clone();
+    host.set_asker(std::rc::Rc::new(move |command: &str, args, answered| keeps.borrow_mut().push((command.to_string(), args, answered))));
+    let clicked = host.step(&json!({ "do": "click", "part": "pick" }));
+    assert_eq!(clicked["ok"], json!(true), "{clicked}");
+    assert_eq!(sent.borrow().len(), 1, "the click's handler went out without waiting");
+    let (command, args, answered) = sent.borrow_mut().remove(0);
+    answered(Some(clarity_ui::program_wire::Asks::ask(&Served(fake.clone()), &command, args).unwrap()));
+    let _ = host.step(&json!({ "do": "settle", "ms": 400 }));
+    let read = host.step(&json!({ "do": "read" }));
+    assert_eq!(read["dialog"]["window"], json!("Pick"), "{read}");
+    assert!(read["shown"].get("choose").is_some(), "the dialog's button shows: {read}");
+}
+
+const FILE_WINDOW: &str = r#"<Window name="Main">
+  <File name="doc" at="1,1" span="12" bind="attachment" />
+</Window>
+"#;
+
+/// The page's file input answers later than a part's open may wait: the file
+/// it gives goes to the part that asked, by the press that asked again, from
+/// the page's pointer, a driven step and the keyboard alike.
+#[test]
+fn a_file_the_page_gives_goes_to_the_part_that_asked_however_it_was_pressed() {
+    let _turn = one_host();
+    for pressed in ["step", "key"] {
+        let program: Arc<dyn Program> = Arc::new(Fake::default());
+        let (tell, said) = told();
+        let mut host = BrowserHost::start(program, designed(FILE_WINDOW), 900.0, 600.0, 1.0, false, tell);
+        let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+        host.draw(surface.canvas());
+        if pressed == "step" {
+            let clicked = host.step(&json!({ "do": "click", "text": "Choose a file" }));
+            assert_eq!(clicked["ok"], json!(true), "{clicked}");
+        } else {
+            let choose = host.screen().find::<clarity_ui::parts::containers::container::ContainerButton>().map(|b| b.node().id()).expect("the part's Choose a file");
+            host.screen().focus(Some(choose));
+            let _ = host.step(&json!({ "do": "key", "key": "Enter" }));
+        }
+        assert_eq!(tells(&said, "pick").len(), 1, "{pressed}: the page is asked for a file");
+        host.file_chosen("notes.pdf", b"%PDF-1.4\n".to_vec());
+        // Off the page, the part's work runs on a thread of its own: let it end.
+        let _ = host.step(&json!({ "do": "settle", "ms": 200 }));
+        let read = host.step(&json!({ "do": "read" }));
+        assert!(read["data"]["attachment"].to_string().contains("notes.pdf"), "{pressed}: {read}");
+    }
+}

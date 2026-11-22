@@ -52,15 +52,6 @@ impl Folders {
         }
         folder.is_file().then(|| format!("{path} is a file, not a folder"))
     }
-
-    /// The project file a new project named `name` gets in the projects
-    /// folder: `shop` is `<projects>/shop.clarity`.
-    pub fn new_project_file(&self, name: &str) -> Result<PathBuf, String> {
-        let Some(projects) = &self.projects else {
-            return Err("no projects folder is set; choose one in Clarity settings, Folders".to_string());
-        };
-        project_file_named(projects, name)
-    }
 }
 
 /// The project file named `name` in `folder`: `shop` is `<folder>/shop.clarity`.

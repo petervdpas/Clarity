@@ -61,7 +61,7 @@ public class RecordFileTests
         var store = Path.Combine(Path.GetTempPath(), $"clarity-record-files-{Environment.ProcessId}");
         Directory.CreateDirectory(store);
         using var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT NOT NULL DEFAULT '', sheet TEXT, sheet_name TEXT NOT NULL DEFAULT '')"]]);
+        db.ApplySteps([["CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT NOT NULL DEFAULT '', sheet TEXT, sheet_name TEXT NOT NULL DEFAULT '')"]]);
         db.AddStore("documents", store);
         var pdf = "%PDF-1.7 not a picture"u8.ToArray();
         var product = new Product { Manual = new("manual.pdf", Picture.New(pdf)), Sheet = new("sheet.pdf", Picture.New(pdf)) };

@@ -1,0 +1,2433 @@
+//! Functions and actions as Rust functions. Types come from the checker's
+//! table, so the emitter never decides a type on its own: it only chooses
+//! how to write it in Rust (borrowing records, widening integers, loading
+//! referenced records through the database).
+
+use std::collections::{HashMap, HashSet};
+
+use clarity_spec::Project;
+use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
+use clarity_spec::code::{FilePlace, HttpMethod, 
+    AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
+    UnaryOp, path_text, template,
+};
+use clarity_spec::model::{CanvasMode, Command, DataKind, FieldType, Frame, SpecFile, Widget};
+
+use super::names::{decimal, ident, value_type};
+use clarity_gen_core::print;
+
+pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
+    let mut out = String::new();
+    let mut errors = Vec::new();
+    // Data events are actions on their record, run by the record's hooks.
+    let events: Vec<FunctionDecl> = file
+        .code
+        .iter()
+        .filter(|b| file.entities.iter().any(|e| e.name.name == b.name.name))
+        .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
+        .collect();
+    for decl in file.functions.iter().chain(&events) {
+        let mut emitter = Emitter {
+            project,
+            types,
+            decl: Some(decl),
+            window: None,
+                        command: false,
+            writing: false,
+            refs: vec![HashSet::new()],
+            locals: vec![HashMap::new()],
+            elements: Vec::new(),
+            guards: Vec::new(),
+            errors: Vec::new(),
+        };
+        let code = emitter.function();
+        if emitter.errors.is_empty() {
+            out.push_str(&code);
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
+        }
+    }
+    for entity in file.entities.iter().filter(|e| e.readable.is_some() || e.writable.is_some()) {
+        match accesses(project, types, entity) {
+            Ok(code) => out.push_str(&code),
+            Err(problems) => errors.extend(problems.into_iter().map(|e| format!("entity '{}': {e}", entity.name.name))),
+        }
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+/// An entity's `readable when` and `writable when` (docs/ledger/signin.md),
+/// refused with notYours as a check rather than a hidden filter:
+/// readable on each stored record code reads, writable before a save or a
+/// delete (the record's hooks), on the record as code holds it and as it is stored.
+fn accesses(project: &Project, types: &FileTypes, entity: &clarity_spec::model::Entity) -> Result<String, Vec<String>> {
+    let name = &entity.name.name;
+    let record = clarity_spec::code::record_name(name);
+    let var = ident(&record);
+    let mut emitter = Emitter::new(project, types, None);
+    emitter.refs[0].insert(record.clone());
+    let mut out = format!("impl {name} {{\n");
+    if let Some(condition) = &entity.readable {
+        let holds = emitter.value(condition);
+        out.push_str(&format!(
+            "    /// `readable when {}`: refused with notYours when it does not hold.\n    pub fn readable(db: &Db, {var}: {name}) -> Result<{name}> {{\n        if {var}.id != 0 {{\n            let {var} = &{var};\n            clarity_runtime::signin::yours({holds})?;\n        }}\n        Ok({var})\n    }}\n\n    /// Each record found, checked as `readable` checks it.\n    pub fn readable_all(db: &Db, found: Vec<{name}>) -> Result<Vec<{name}>> {{\n        found.into_iter().map(|r| {name}::readable(db, r)).collect()\n    }}\n",
+            print::expr(condition)
+        ));
+    }
+    if let Some(condition) = &entity.writable {
+        let holds = emitter.value(condition);
+        if entity.readable.is_some() {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "    /// `writable when {}`: refused with notYours when it does not hold, for the\n    /// record as code holds it and, once stored, as it is stored.\n    pub fn writable(db: &Db, {var}: &{name}) -> Result<()> {{\n        clarity_runtime::signin::yours({holds})?;\n        if {var}.id != 0 {{\n            let {var} = &db.get::<{name}>({var}.id)?;\n            clarity_runtime::signin::yours({holds})?;\n        }}\n        Ok(())\n    }}\n",
+            print::expr(condition)
+        ));
+    }
+    out.push_str("}\n\n");
+    if emitter.errors.is_empty() { Ok(out) } else { Err(emitter.errors) }
+}
+
+pub use clarity_gen_core::type_ref_info;
+
+/// Values of these types are copied; the others are cloned when read.
+fn is_copy(ty: &TypeInfo) -> bool {
+    !matches!(
+        ty,
+        TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::RecordFile | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes | TypeInfo::HttpReply
+    )
+}
+
+fn is_decimal(ty: &TypeInfo) -> bool {
+    matches!(ty, TypeInfo::Decimal | TypeInfo::Money)
+}
+
+/// Widens an integer where a decimal is expected.
+fn coerce(code: String, from: &TypeInfo, to: &TypeInfo) -> String {
+    if *from == TypeInfo::Integer && is_decimal(to) {
+        format!("Decimal::from({code})")
+    } else {
+        code
+    }
+}
+
+struct Emitter<'a> {
+    project: &'a Project,
+    types: &'a FileTypes,
+    /// The function or action being written; None for a handler.
+    decl: Option<&'a FunctionDecl>,
+    /// The window or app of a handler.
+    window: Option<WindowCtx>,
+    /// Whether this is a command of the command-line program (manual/code.commands.md):
+    /// it prints, asks and says through `cli`, and gives its exit code.
+    command: bool,
+    /// Whether the place being written is assigned, so a list position in
+    /// it is taken to change.
+    writing: bool,
+    /// Locals that hold a borrowed record or list (parameters and `for`
+    /// variables), per block.
+    refs: Vec<HashSet<String>>,
+    /// The locals (parameters, `for` variables and `let`s) with their
+    /// types, per block: `reload` of one reads its record again.
+    locals: Vec<HashMap<String, TypeInfo>>,
+    /// The items of loops held by their place in the list (`w.entries[at_e]`):
+    /// the depth of `locals` the item is declared at, its name and its place.
+    elements: Vec<(usize, String, String)>,
+    /// What each loop holding its item by place goes through and its index,
+    /// and whether a statement ended its pass (so the loop carries its label).
+    guards: Vec<(String, String, bool)>,
+    errors: Vec<String>,
+}
+
+impl<'a> Emitter<'a> {
+    fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>) -> Self {
+        Emitter { project, types, decl, window: None, command: false, writing: false, refs: vec![HashSet::new()], locals: vec![HashMap::new()], elements: Vec::new(), guards: Vec::new(), errors: Vec::new() }
+    }
+
+    fn is_ref(&self, name: &str) -> bool {
+        self.refs.iter().any(|scope| scope.contains(name))
+    }
+
+    /// The type of local `name` (a parameter, a `for` variable or a `let`),
+    /// which hides window data of the same name; None when it is no local.
+    fn local(&self, name: &str) -> Option<&TypeInfo> {
+        self.locals.iter().rev().find_map(|scope| scope.get(name))
+    }
+
+    fn define(&mut self, name: &str, ty: TypeInfo) {
+        if let Some(scope) = self.locals.last_mut() {
+            scope.insert(name.to_string(), ty);
+        }
+    }
+
+    fn returns(&self) -> Option<TypeInfo> {
+        self.decl.and_then(|d| d.returns.as_ref()).map(|r| type_ref_info(self.project, r))
+    }
+
+    fn function(&mut self) -> String {
+        let decl = self.decl.expect("a function or action");
+        let action = decl.kind != FunctionKind::Function;
+        let mut params = vec!["db: &Db".to_string()];
+        let mut copies = String::new();
+        let name = ident(&decl.name.name);
+        for (index, param) in decl.params.iter().enumerate() {
+            let info = type_ref_info(self.project, &param.ty);
+            let name = ident(&param.name.name);
+            let ty = match &info {
+                // An action takes its record to change only when it changes it, so a record held to read (a loop's) can be handed to it.
+                TypeInfo::Record(e) if action && changes_param(self.project, decl, index, &mut Vec::new()) => format!("&mut {e}"),
+                TypeInfo::Record(e) => format!("&{e}"),
+                TypeInfo::List(e) => format!("&[{e}]"),
+                other => value_type(other),
+            };
+            // A function reads the record it is given; one it reads again (`reload`) is its own copy.
+            if matches!(info, TypeInfo::Record(_)) && !action && changes(&decl.body, &param.name.name) {
+                copies.push_str(&format!("    let mut {name} = {name}.clone();\n"));
+            // A list it is given is its own copy too once it changes the list or its items.
+            } else if matches!(info, TypeInfo::List(_)) && (changes(&decl.body, &param.name.name) || assigns(&decl.body, &param.name.name)) {
+                copies.push_str(&format!("    let mut {name} = {name}.to_vec();\n"));
+            } else if matches!(info, TypeInfo::Record(_) | TypeInfo::List(_)) {
+                self.refs[0].insert(param.name.name.clone());
+            }
+            self.define(&param.name.name, info.clone());
+            params.push(format!("{name}: {ty}"));
+        }
+        let ret = self.returns().map(|r| value_type(&r)).unwrap_or_else(|| "()".into());
+        let mut out = format!("pub fn {name}({}) -> Result<{ret}> {{\n", params.join(", "));
+        // `allow when`: refused with notAllowed before anything runs.
+        if let Some(allow) = &decl.allow {
+            out.push_str(&format!("    clarity_runtime::signin::allow({})?;\n", self.value(allow)));
+        }
+        out.push_str(&copies);
+        for condition in &decl.requires {
+            out.push_str(&format!(
+                "    require({}, {:?})?;\n",
+                self.value(condition),
+                print::expr(condition)
+            ));
+        }
+        let mut body = String::new();
+        self.block(&decl.body, 1, &mut body);
+        if self.returns().is_none() {
+            body.push_str("    Ok(())\n");
+        }
+        if decl.ensures.is_empty() {
+            out.push_str(&body);
+        } else {
+            let indented: String = body.lines().map(|l| format!("    {l}\n")).collect();
+            out.push_str(&format!("    let result: {ret} = (|| -> Result<{ret}> {{\n{indented}    }})()?;\n"));
+            for condition in &decl.ensures {
+                out.push_str(&format!(
+                    "    ensure({}, {:?})?;\n",
+                    self.value(condition),
+                    print::expr(condition)
+                ));
+            }
+            out.push_str("    Ok(result)\n");
+        }
+        out.push_str("}\n\n");
+        out
+    }
+
+    /// The place of a loop's item held by its place in the list, unless a
+    /// local of the same name declared inside the loop hides it.
+    fn element(&self, name: &str) -> Option<String> {
+        let (depth, _, place) = self.elements.iter().rev().find(|(_, n, _)| n == name)?;
+        let hidden = self.locals.iter().skip(depth + 1).any(|scope| scope.contains_key(name));
+        (!hidden).then(|| place.clone())
+    }
+
+    fn block(&mut self, body: &[Stmt], depth: usize, out: &mut String) {
+        self.refs.push(HashSet::new());
+        self.locals.push(HashMap::new());
+        let pad = "    ".repeat(depth);
+        for stmt in body {
+            let mut code = String::new();
+            self.stmt(stmt, depth, &mut code);
+            out.push_str(&code);
+            // A statement that may leave the item a loop holds out of its list (a handler
+            // ran, the list was set) ends the loop when it did, as no item is left there.
+            // An `if` or a loop is ended inside, after its own statements.
+            if matches!(stmt.kind, StmtKind::If { .. } | StmtKind::For { .. }) {
+                continue;
+            }
+            for (source, at, used) in self.guards.iter_mut() {
+                if shortens(&code, source) {
+                    *used = true;
+                    out.push_str(&format!("{pad}if {at} >= {source}.len() {{\n{pad}    break '{at};\n{pad}}}\n"));
+                }
+            }
+        }
+        self.locals.pop();
+        self.refs.pop();
+    }
+
+    fn stmt(&mut self, stmt: &Stmt, depth: usize, out: &mut String) {
+        let pad = "    ".repeat(depth);
+        match &stmt.kind {
+            StmtKind::Let { name, ty, value } => {
+                let from = self.types.type_of(value);
+                let held = ty.as_ref().map_or_else(|| from.clone(), |declared| type_ref_info(self.project, declared));
+                let code = match ty {
+                    Some(declared) => {
+                        let to = type_ref_info(self.project, declared);
+                        format!(
+                            "let mut {}: {} = {};",
+                            ident(&name.name),
+                            value_type(&to),
+                            coerce(self.value(value), &from, &to)
+                        )
+                    }
+                    None => format!("let mut {} = {};", ident(&name.name), self.value(value)),
+                };
+                self.define(&name.name, held);
+                out.push_str(&format!("{pad}{code}\n"));
+            }
+            StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
+                let text = self.shown(value);
+                out.push_str(&format!("{pad}clarity_runtime::splash::set_status({text});\n"));
+            }
+            StmtKind::Assign { target, value } => {
+                let to = self.types.type_of(target);
+                let from = self.types.type_of(value);
+                if let Some((part, property, _, _)) = self.custom_property(target) {
+                    let value = self.value(value);
+                    out.push_str(&format!("{pad}ui.set_part_value({part:?}, {property:?}, to_value(&{value})?);\n"));
+                    return;
+                }
+                // Code selects a row: the first that is the record given, or none.
+                if let Some((part, "selected")) = self.part_property(target) {
+                    let select = self.select_row(&part, value);
+                    out.push_str(&format!("{pad}{select}\n"));
+                    return;
+                }
+                if let Some((part, property)) = self.part_property(target) {
+                    let value = if matches!(property, "caption" | "error") { self.shown(value) } else { coerce(self.value(value), &from, &to) };
+                    out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
+                    return;
+                }
+                // A blob or file field that names its extensions takes only those files.
+                if let Some((check, name)) = clarity_gen_core::file_check(self.project, |e| self.types.type_of(e), target, value) {
+                    let file = match name {
+                        clarity_gen_core::FileName::Path => format!("&{}", self.value(value)),
+                        clarity_gen_core::FileName::StoreFile => format!("&{}.name", self.object(value)),
+                        clarity_gen_core::FileName::RecordFile => format!("{}.as_ref().map_or(\"\", |f| f.name.as_str())", self.object(value)),
+                    };
+                    let patterns = check.patterns.iter().map(|p| format!("{p:?}.to_string()")).collect::<Vec<_>>().join(", ");
+                    out.push_str(&format!("{pad}clarity_runtime::files::check_file_type({:?}, &[{patterns}], {}, {file})?;\n", check.field, check.hidden));
+                }
+                // A record given to a reference field is stored as its id.
+                if let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                    && matches!(self.project.entity(&owner).and_then(|e| e.field(&member.name)).map(|f| &f.ty), Some(FieldType::Ref { .. }))
+                {
+                    let object = self.object(object);
+                    // Another reference is copied as it is, set or not.
+                    let copied = match &value.kind {
+                        ExprKind::Member { object: from, member: field } => match self.types.type_of(from) {
+                            TypeInfo::Record(source) if matches!(self.project.entity(&source).and_then(|e| e.field(&field.name)).map(|f| &f.ty), Some(FieldType::Ref { .. })) => Some(format!("{}.{}", self.object(from), ident(&field.name))),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let stored = match copied {
+                        _ if matches!(value.kind, ExprKind::Empty) => "None".to_string(),
+                        Some(reference) => reference,
+                        None => format!("Some({}.id)", self.object(value)),
+                    };
+                    out.push_str(&format!("{pad}{object}.{} = {stored};\n", ident(&member.name)));
+                    return;
+                }
+                // A file as a picture: linked in the field's own store, else copied.
+                if from == TypeInfo::File
+                    && let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                {
+                    let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone());
+                    let store = store.map_or("None".to_string(), |s| format!("Some({s:?})"));
+                    let place = self.place(target);
+                    let file = self.object(value);
+                    // A `blob` field keeps any file, under its name; an image only a picture.
+                    let made = if to == TypeInfo::RecordFile { "record_file_from" } else { "picture_from" };
+                    out.push_str(&format!("{pad}{place} = Some(db.{made}(&{file}, {store})?);\n"));
+                    return;
+                }
+                // Another record's picture or file: copied, its bytes read when it is only stored.
+                if let Some(copy) = clarity_gen_core::copied(self.project, |e| self.types.type_of(e), target, value) {
+                    let place = self.place(target);
+                    let object = self.object(copy.object);
+                    let made = if copy.file { "copied_file" } else { "copied_picture" };
+                    let store = |s: Option<String>| s.map_or("None".to_string(), |s| format!("Some({s:?})"));
+                    out.push_str(&format!(
+                        "{pad}{place} = {{\n{pad}    let other = &{object};\n{pad}    db.{made}::<{}>(&other.{}, other.id, {:?}, {}, {})?\n{pad}}};\n",
+                        copy.entity,
+                        ident(&copy.field),
+                        copy.column,
+                        store(copy.from),
+                        store(copy.to)
+                    ));
+                    return;
+                }
+                // A list position: the position and value first, so they may read the list.
+                if let ExprKind::Index { list, index } = &target.kind {
+                    let at = self.value(index);
+                    let code = coerce(self.value(value), &from, &to);
+                    let list = self.list_place(list, true);
+                    out.push_str(&format!("{pad}{{\n{pad}    let at = {at};\n{pad}    let value = {code};\n{pad}    *clarity_runtime::at_mut(&mut {list}[..], at)? = value;\n{pad}}}\n"));
+                    return;
+                }
+                self.writing = true;
+                let place = self.place(target);
+                self.writing = false;
+                // Text given to a hashed field keeps its hash, by its strategy's method and minimum.
+                if let Some(field) = self.field_of(target).filter(|f| f.modifiers.hashed) {
+                    let clarity_gen_core::signin::Hashing { method, minimum } = clarity_gen_core::signin::hashing(self.project, &field.name.name);
+                    let minimum = minimum.map_or("None".to_string(), |m| format!("Some({m})"));
+                    let text = self.value(value);
+                    out.push_str(&format!("{pad}{place} = clarity_runtime::signin::hashed({method:?}, &{text}, {minimum})?;\n"));
+                    return;
+                }
+                let code = coerce(self.value(value), &from, &to);
+                out.push_str(&format!("{pad}{place} = {code};\n"));
+                if let Some(setting) = clarity_gen_core::held_setting(self.project, |e| self.types.type_of(e), target) {
+                    out.push_str(&format!("{pad}db.hold_setting({setting:?}, &{place});\n"));
+                }
+                if let ExprKind::Name { name } = &target.kind {
+                    out.push_str(&self.deselect(name, &pad));
+                    // A text value shows its text in the person's language, as a label does.
+                    if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
+                        let shown = match value.kind {
+                            ExprKind::Str { .. } | ExprKind::Text { .. } | ExprKind::Key { .. } => self.shown(value),
+                            _ => format!("Text::plain({place}.clone())"),
+                        };
+                        out.push_str(&format!("{pad}ui.set_shown({name:?}, {shown});\n"));
+                    }
+                }
+            }
+            StmtKind::If { branches, otherwise } => {
+                for (i, branch) in branches.iter().enumerate() {
+                    let keyword = if i == 0 { format!("{pad}if") } else { " else if".to_string() };
+                    out.push_str(&format!("{keyword} {} {{\n", self.value(&branch.condition)));
+                    self.block(&branch.body, depth + 1, out);
+                    out.push_str(&format!("{pad}}}"));
+                }
+                if let Some(body) = otherwise {
+                    out.push_str(" else {\n");
+                    self.block(body, depth + 1, out);
+                    out.push_str(&format!("{pad}}}"));
+                }
+                out.push('\n');
+            }
+            StmtKind::Write { text, place, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "write_bytes" } else { "write_text" };
+                let path = self.text_ref(path);
+                let text = self.text_ref(text);
+                match place {
+                    FilePlace::Store(store) => out.push_str(&format!("{pad}db.{write}({:?}, &{path}, &{text})?;\n", store.name)),
+                    // A folder that is no store: by its path, with the files it takes.
+                    FilePlace::Folder(folder) => {
+                        let (patterns, hidden) = clarity_gen_core::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                        let at = self.value(folder);
+                        out.push_str(&format!("{pad}db.{write}_in(&format!(\"folder:{{}}\", {at}), &{}, {hidden}, &{path}, &{text})?;\n", rust_patterns(&patterns)));
+                    }
+                }
+            }
+            StmtKind::For { var, list, body } => {
+                let source = match self.held(list) {
+                    Some((place, _)) => place,
+                    None => format!("({})", self.value(list)),
+                };
+                // Plain values are taken one by one, so the body may change the list.
+                if matches!(self.types.type_of(list), TypeInfo::Values(_)) {
+                    let source = match self.held(list) {
+                        Some((place, _)) => format!("{place}.clone()"),
+                        None => self.value(list),
+                    };
+                    out.push_str(&format!("{pad}for {} in {source} {{\n", ident(&var.name)));
+                    self.block(body, depth + 1, out);
+                    out.push_str(&format!("{pad}}}\n"));
+                    return;
+                }
+                // A body that changes, saves or deletes its record works on the
+                // record in the list, as on the other stacks.
+                let changed = changes_in(self.project, body, &var.name, &mut Vec::new());
+                let name = ident(&var.name);
+                let item = match self.types.type_of(list) {
+                    TypeInfo::List(entity) => TypeInfo::Record(entity),
+                    _ => TypeInfo::Unknown,
+                };
+                let errors = self.errors.len();
+                let used: Vec<bool> = self.guards.iter().map(|g| g.2).collect();
+                let mut inner = String::new();
+                self.refs.push(HashSet::from([var.name.clone()]));
+                self.locals.push(HashMap::from([(var.name.clone(), item.clone())]));
+                self.block(body, depth + 1, &mut inner);
+                self.locals.pop();
+                self.refs.pop();
+                // A body that needs the list's owner while it holds the list (a handler of the
+                // window gets the whole window, the list itself is read or set) cannot borrow it.
+                if !borrows_beside(&inner, &source) {
+                    let each = if changed { "iter_mut" } else { "iter" };
+                    out.push_str(&format!("{pad}for {name} in {source}.{each}() {{\n{inner}{pad}}}\n"));
+                } else {
+                    // The item is held by its place in the list, as the other stacks hold the
+                    // list's own item: what the body and a handler it runs change is one item.
+                    self.errors.truncate(errors);
+                    for (guard, was) in self.guards.iter_mut().zip(used) {
+                        guard.2 = was;
+                    }
+                    let at = format!("at_{}", var.name);
+                    let mut inner = String::new();
+                    self.locals.push(HashMap::from([(var.name.clone(), item)]));
+                    self.elements.push((self.locals.len() - 1, var.name.clone(), format!("{source}[{at}]")));
+                    self.guards.push((source.clone(), at.clone(), false));
+                    self.block(body, depth + 2, &mut inner);
+                    let (_, _, ended) = self.guards.pop().unwrap_or_default();
+                    self.elements.pop();
+                    self.locals.pop();
+                    let more = format!("{pad}    ");
+                    let label = if ended { format!("'{at}: ") } else { String::new() };
+                    out.push_str(&format!("{pad}{{\n{more}let mut {at} = 0;\n{more}{label}while {at} < {source}.len() {{\n{inner}"));
+                    out.push_str(&format!("{more}    {at} += 1;\n{more}}}\n{pad}}}\n"));
+                }
+            }
+            StmtKind::Return { value: Some(value) } => {
+                let to = self.returns().unwrap_or(TypeInfo::Unknown);
+                let from = self.types.type_of(value);
+                let code = coerce(self.value(value), &from, &to);
+                out.push_str(&format!("{pad}return Ok({code});\n"));
+            }
+            StmtKind::Return { value: None } if self.command => out.push_str(&format!("{pad}return Ok(0);\n")),
+            StmtKind::Return { value: None } => out.push_str(&format!("{pad}return Ok(());\n")),
+            StmtKind::Call { call } => {
+                let code = self.value(call);
+                if matches!(self.types.type_of(call), TypeInfo::Unknown) {
+                    out.push_str(&format!("{pad}{code};\n"));
+                } else {
+                    out.push_str(&format!("{pad}let _ = {code};\n"));
+                }
+            }
+            // `anyway` writes over what someone saved since, on purpose.
+            StmtKind::Save { value, anyway } => {
+                let record = self.record_mut(value);
+                let save = if *anyway { "save_anyway" } else { "save" };
+                out.push_str(&format!("{pad}db.{save}({record})?;\n"));
+            }
+            StmtKind::Delete { value } => {
+                let record = self.record_mut(value);
+                out.push_str(&format!("{pad}db.delete({record})?;\n"));
+            }
+            StmtKind::Refuse { text } => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}return Err(Error::Refused({text}));\n"));
+            }
+            // A toast the project declares, by name; a command says its text on standard error.
+            StmtKind::Toast { name, args } => match clarity_gen_core::toasts::shown(self.project, name, args) {
+                Err(why) => self.errors.push(why),
+                Ok(_) if self.window.is_none() && !self.command => self.errors.push("toasts belong in handlers".into()),
+                Ok((look, text)) => {
+                    let text = self.shown(&text);
+                    if self.command {
+                        out.push_str(&format!("{pad}cli.message({text});\n"));
+                    } else {
+                        let icon = look.icon.as_deref().map_or("None".to_string(), |i| format!("Some({}.into())", clarity_gen_core::toasts::quoted(i)));
+                        out.push_str(&format!(
+                            "{pad}ui.toast(clarity_runtime::ui::Toast {{ name: {}.into(), level: {}.into(), lifespan: Some({}), icon: {icon}, corner: {}.into() }}, {text});\n",
+                            clarity_gen_core::toasts::quoted(&look.name),
+                            clarity_gen_core::toasts::quoted(look.level),
+                            look.lifespan,
+                            clarity_gen_core::toasts::quoted(look.corner)
+                        ));
+                    }
+                }
+            },
+            // A command says it on standard error.
+            StmtKind::Message { text, .. } if self.command => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}cli.message({text});\n"));
+            }
+            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
+                self.errors.push("messages and windows belong in handlers".into());
+            }
+            // A shape on a canvas, as conformance/drawing.json sends it.
+            // A hear of a custom part (manual/design.custom-parts.md), sent with the reply.
+            // An engine's statement; engines are compiled to WebAssembly before generating (N5b).
+            StmtKind::Tell { .. } => self.errors.push("'tell' is for an engine beside the screen".into()),
+            StmtKind::Hear { part, hear, args } => {
+                let values: Vec<String> = args.iter().map(|a| format!("to_value(&{})?", self.value(a))).collect();
+                out.push_str(&format!("{pad}ui.hear({:?}, {:?}, vec![{}]);\n", part.name, hear.name, values.join(", ")));
+            }
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                let mut fields = vec![format!("\"op\": {:?}", shape.name)];
+                for (key, kind, given) in clarity_gen_core::shape_values(&shape.name, args) {
+                    let value = match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => match self.types.type_of(arg) {
+                            TypeInfo::Decimal | TypeInfo::Money => format!("clarity_runtime::units({})", self.value(arg)),
+                            _ => format!("({}) as f64", self.value(arg)),
+                        },
+                        (ShapeValue::Number, Err(default)) => format!("{default}.0"),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => format!("{default:?}"),
+                        // An object sends its record's id (manual/parts.graphics.md).
+                        (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
+                        (ShapeValue::Record, Err(_)) => "null".to_string(),
+                        (ShapeValue::Text, Ok(arg)) => format!("serde_json::to_value({}).unwrap_or_default()", self.shown(arg)),
+                        (ShapeValue::Text, Err(default)) => format!("{default:?}"),
+                    };
+                    fields.push(format!("\"{key}\": {value}"));
+                }
+                out.push_str(&format!("{pad}ui.draw({:?}, serde_json::json!({{{}}}));\n", canvas.name, fields.join(", ")));
+            }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}ui.copy({text});\n"));
+            }
+            StmtKind::Message { level, text } => {
+                let level = match level {
+                    MessageLevel::Info => "Info",
+                    MessageLevel::Warning => "Warning",
+                    MessageLevel::Error => "Error",
+                };
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}ui.message(Level::{level}, {text});\n"));
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                // A dialog window says what it asks itself.
+                let question = match question {
+                    Some(question) => self.shown(question),
+                    None => "Text::plain(\"\")".to_string(),
+                };
+                let form = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                        let no = no.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                        format!("clarity_runtime::ui::AskForm::Confirm {{ yes: {yes}, no: {no} }}")
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = clarity_gen_core::ask_type(self.project, ty);
+                        let of = of.map_or("None".to_string(), |n| format!("Some({n:?}.to_string())"));
+                        let default = default.as_ref().map_or("None".to_string(), |d| format!("Some(to_value(&{})?)", self.value(d)));
+                        // The records `from` offers, by their ids.
+                        let only = from.as_ref().map_or("None".to_string(), |list| {
+                            format!("Some({}.iter().map(|r| serde_json::Value::from(r.id)).collect())", self.value(list))
+                        });
+                        format!("clarity_runtime::ui::AskForm::Value {{ ty: {word:?}.to_string(), of: {of}, only: {only}, default: {default} }}")
+                    }
+                    AskForm::Window { window, with } => {
+                        let with: Vec<String> = with.iter().map(|a| format!("({:?}.to_string(), to_value(&{})?)", a.name.name, self.value(&a.value))).collect();
+                        format!("clarity_runtime::ui::AskForm::Window {{ window: {:?}.to_string(), with: [{}].into_iter().collect() }}", window.name, with.join(", "))
+                    }
+                };
+                let values: Vec<String> = args.iter().map(|a| format!("to_value(&{})?", self.value(a))).collect();
+                out.push_str(&format!("{pad}ui.ask({question}, {form}, {:?}, vec![{}]);\n", then.name, values.join(", ")));
+            }
+            StmtKind::Open { window, with } => {
+                let args: Vec<String> = with
+                    .iter()
+                    .map(|arg| format!("({:?}, to_value(&{})?)", arg.name.name, self.value(&arg.value)))
+                    .collect();
+                out.push_str(&format!("{pad}ui.open({:?}, vec![{}]);\n", window.name, args.join(", ")));
+            }
+            StmtKind::Print { value, columns } if columns.is_empty() => {
+                let text = self.shown(value);
+                out.push_str(&format!("{pad}cli.print({text});\n"));
+            }
+            StmtKind::Print { value, columns } => out.push_str(&self.print_table(value, columns, &pad)),
+            StmtKind::Exit { code } => out.push_str(&format!("{pad}return Ok(({}) as i32);\n", self.value(code))),
+            StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
+            StmtKind::CloseWith { value } => out.push_str(&format!("{pad}ui.close_with(to_value(&{})?);\n", self.value(value))),
+            // A record variable is read again as it is stored now, with its version.
+            StmtKind::Reload { data } if self.local(&data.name).is_some() => {
+                let element = self.element(&data.name);
+                let place = match &element {
+                    Some(place) => format!("&mut {place}"),
+                    None if self.is_ref(&data.name) => ident(&data.name),
+                    None => format!("&mut {}", ident(&data.name)),
+                };
+                out.push_str(&format!("{pad}db.reload({place})?;\n"));
+                // Read again, it is checked as any record read is.
+                if let Some(TypeInfo::Record(entity)) = self.local(&data.name).cloned()
+                    && self.project.entity(&entity).is_some_and(|e| e.readable.is_some())
+                {
+                    let var = ident(&data.name);
+                    let held = match element {
+                        Some(place) => place,
+                        None if self.is_ref(&data.name) => format!("*{var}"),
+                        None => var,
+                    };
+                    out.push_str(&format!("{pad}{held} = {entity}::readable(db, {held}.clone())?;\n"));
+                }
+            }
+            StmtKind::Reload { data } => {
+                let found = self.window.as_ref().and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name).cloned());
+                match found {
+                    Some((name, entity, true)) => {
+                        let all = self.readable_all(&entity, format!("db.all::<{entity}>()?"));
+                        out.push_str(&format!("{pad}w.{} = {all};\n", ident(&name)));
+                        out.push_str(&self.deselect(&name, &pad));
+                    }
+                    Some((name, entity, false)) => {
+                        let field = format!("w.{}", ident(&name));
+                        let got = self.readable_one(&entity, format!("db.get::<{entity}>({field}.id)?"));
+                        out.push_str(&format!("{pad}if {field}.id != 0 {{\n{pad}    {field} = {got};\n{pad}}}\n"));
+                    }
+                    None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
+                }
+            }
+        }
+    }
+
+    /// A name that holds a record or list, as a place, and whether it is
+    /// already borrowed (a parameter or `for` variable): locals and the
+    /// window's data.
+    fn held(&self, expr: &Expr) -> Option<(String, bool)> {
+        let ExprKind::Name { name } = &expr.kind else { return None };
+        match self.types.name_of(expr) {
+            Some(NameKind::Local) if self.element(name).is_some() => self.element(name).map(|place| (place, false)),
+            Some(NameKind::Local) => Some((ident(name), self.is_ref(name))),
+            Some(NameKind::Data) => Some((format!("w.{}", ident(name)), false)),
+            _ => None,
+        }
+    }
+
+    /// The list of a position (`squares` in `squares[3]`) as a place.
+    fn list_place(&mut self, list: &Expr, writing: bool) -> String {
+        match self.held(list) {
+            Some((place, _)) => place,
+            None => {
+                let was = std::mem::replace(&mut self.writing, writing);
+                let place = self.place(list);
+                self.writing = was;
+                place
+            }
+        }
+    }
+
+    /// Text the screen shows (a message, a refusal, a caption, an error) as
+    /// a runtime `Text`: the text as written with a typed value per slot,
+    /// so the screen fills the slots in the person's format.
+    fn shown(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Str { value } => format!("Text::plain({value:?})"),
+            // A key, whose value the screen looks up, with its slots by name.
+            ExprKind::Key { key, args } => {
+                let mut code = format!("Text::key({:?})", key.name);
+                for arg in args {
+                    let slot = self.slot(&arg.value);
+                    code.push_str(&format!(".with({:?}, {slot})", arg.name.name));
+                }
+                code
+            }
+            ExprKind::Text { parts } => {
+                let mut code = format!("Text::new({:?})", template(parts));
+                for part in parts {
+                    if let TextPart::Slot { value } = part {
+                        let slot = self.slot(value);
+                        code.push_str(&format!(".with({:?}, {slot})", path_text(value)));
+                    }
+                }
+                code
+            }
+            _ if self.types.type_of(expr) == TypeInfo::Text => format!("Text::plain({})", self.value(expr)),
+            _ => format!("Text::plain({}.show())", self.value(expr)),
+        }
+    }
+
+    /// The value of a slot with what the screen needs to show it: its type,
+    /// and the format and decimals of the field it comes from.
+    fn slot(&mut self, expr: &Expr) -> String {
+        let value = self.value(expr);
+        let field = self.field_of(expr);
+        let format = match field.and_then(|f| f.modifiers.format.as_deref()) {
+            Some(name) => format!("Some({name:?})"),
+            None => "None".to_string(),
+        };
+        let scale = match field.map(|f| &f.ty) {
+            Some(FieldType::Decimal { scale, .. }) => format!("Some({scale})"),
+            _ => "None".to_string(),
+        };
+        match self.types.type_of(expr) {
+            TypeInfo::Text => format!("Slot::text({value})"),
+            TypeInfo::Integer => format!("Slot::integer({value}, {format})"),
+            TypeInfo::Duration => format!("Slot::duration({value})"),
+            TypeInfo::Decimal => format!("Slot::decimal({value}, {scale}, {format})"),
+            TypeInfo::Money => format!("Slot::money({value}, {format})"),
+            TypeInfo::Date => format!("Slot::date({value}, {format})"),
+            TypeInfo::DateTime => format!("Slot::date_time({value}, {format})"),
+            TypeInfo::Bool => format!("Slot::boolean({value})"),
+            TypeInfo::Enum(name) => format!("Slot::name(&{value}, {name:?})"),
+            other => {
+                self.errors.push(format!("a slot cannot show {other:?}"));
+                String::new()
+            }
+        }
+    }
+
+    /// The dictionary field a member path such as `order.total` reads.
+    fn field_of(&self, expr: &Expr) -> Option<&'a clarity_spec::model::Field> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let TypeInfo::Record(entity) = self.types.type_of(object) else { return None };
+        self.project.entity(&entity)?.field(&member.name)
+    }
+
+    /// A part property such as `part.visible` or `part.error`: the part and
+    /// the property, when `expr` is one.
+    fn part_property(&self, expr: &Expr) -> Option<(String, &'static str)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        let property = match member.name.as_str() {
+            "visible" => "visible",
+            "enabled" => "enabled",
+            "caption" => "caption",
+            "text" => "text",
+            "checked" => "checked",
+            "error" => "error",
+            "readonly" => "readonly",
+            "folded" => "folded",
+            "collapsed" => "collapsed",
+            "maximized" => "maximized",
+            "pinned" => "pinned",
+            "tab" => "tab",
+            "step" => "step",
+            // An accordion's open section: `ui.open_section`, as `ui.open` opens a window.
+            "open" => "open_section",
+            "selected" => "selected",
+            "x" => "x",
+            "y" => "y",
+            "fromX" => "from_x",
+            "fromY" => "from_y",
+            "grid" => "grid",
+            "snap" => "snap",
+            "foldButtons" => "fold_buttons",
+            "connecting" => "connecting",
+            "resizable" => "resizable",
+            "bent" => "bent",
+            "via" => "via",
+            "background" => "background",
+            "dotSize" => "dot_size",
+            "dotColor" => "dot_color",
+            "min" => "spin_min",
+            "max" => "spin_max",
+            "tool" => "tool",
+            "brush" => "brush",
+            "ink" => "ink",
+            _ => return None,
+        };
+        Some((name.clone(), property))
+    }
+
+    /// A custom part's own property (manual/design.custom-parts.md): the part, the property,
+    /// the part's kind and the values written on its line.
+    fn custom_property(&self, expr: &Expr) -> Option<(String, String, String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        let (kind, written) = self.window.as_ref()?.parts.get(name)?.custom.clone()?;
+        clarity_gen_core::parts::keeps(self.project, &kind, &member.name).then(|| (name.clone(), member.name.clone(), kind, written))
+    }
+
+    /// Reading a custom part's property: as a handler set it, else as written or declared.
+    fn read_custom(&mut self, expr: &Expr) -> String {
+        let (part, property, kind, written) = self.custom_property(expr).unwrap_or_default();
+        let fallback = clarity_gen_core::parts::fallback_json(self.project, &kind, &written, &property);
+        let ty = value_type(&self.types.type_of(expr));
+        format!(
+            "serde_json::from_value::<{ty}>(ui.part_value({part:?}, {property:?}).unwrap_or_else(|| serde_json::from_str({fallback:?}).unwrap_or_default())).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?"
+        )
+    }
+
+    /// Reading a part property in a handler.
+    fn read_part(&mut self, part: &str, property: &str) -> String {
+        let info = self.window.as_ref().and_then(|w| w.parts.get(part).cloned());
+        match (property, info) {
+            ("caption", Some(info)) => format!("ui.caption({part:?}, {:?})", info.caption.unwrap_or_default()),
+            ("readonly", Some(info)) => format!("ui.readonly({part:?}, {})", info.readonly),
+            ("folded", Some(info)) => format!("ui.folded({part:?}, {})", info.folded),
+            ("collapsed", Some(info)) => format!("ui.collapsed({part:?}, {})", info.collapsed),
+            ("visible", Some(info)) if info.closed => format!("ui.visible_or({part:?}, false)"),
+            ("grid", Some(info)) => format!("ui.grid({part:?}, {})", info.grid),
+            ("snap", Some(info)) => format!("ui.snap({part:?}, {})", info.snap),
+            ("fold_buttons", Some(info)) => format!("ui.fold_buttons({part:?}, {})", info.fold_buttons),
+            ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
+            ("dot_size", Some(info)) => format!("ui.dot_size({part:?}, {})", info.dot_size),
+            ("spin_min", Some(info)) => format!("ui.spin_min({part:?}, {})", info.spin.0),
+            ("spin_max", Some(info)) => format!("ui.spin_max({part:?}, {})", info.spin.1),
+            ("dot_color", Some(info)) => format!("ui.dot_color({part:?}, {:?})", info.dot_color),
+            ("tool", Some(info)) => format!("ui.tool({part:?}, {:?})", info.tool),
+            ("brush", Some(info)) => format!("ui.brush({part:?}, {})", info.brush),
+            ("ink", Some(info)) => format!("ui.ink({part:?}, {:?})", info.ink),
+            // A canvas with a mode (manual/parts.graphics.md): the object's record, as a table's selected row; a shape's place from 1.
+            ("selected", Some(PartInfo { mode: Some(CanvasMode::Objects), objects: Some(list), .. })) => {
+                format!("ui.selected({part:?}, &w.{})?", ident(&list))
+            }
+            ("selected", Some(PartInfo { mode: Some(_), .. })) => format!("ui.selected_place({part:?})"),
+            ("selected", Some(PartInfo { bind: Some(bind), .. })) => {
+                format!("ui.selected({part:?}, &w.{})?", ident(&bind))
+            }
+            ("selected", _) => {
+                self.errors.push(format!("'{part}' is not bound to a list"));
+                String::new()
+            }
+            (property, _) => format!("ui.{property}({part:?})"),
+        }
+    }
+
+    /// `grid.selected = value`: the row of the part's list that is the
+    /// record given (a stored one by its id, a record by its fields), or none.
+    fn select_row(&mut self, part: &str, value: &Expr) -> String {
+        let Some(bind) = self.window.as_ref().and_then(|w| w.parts.get(part)).and_then(|p| p.bind.clone()) else {
+            self.errors.push(format!("'{part}' is not bound to a list"));
+            return String::new();
+        };
+        if matches!(value.kind, ExprKind::Empty) {
+            return format!("ui.select({part:?}, None);");
+        }
+        let stored = matches!(self.types.type_of(value), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| !d.record));
+        let same = if stored { "r.id == wanted.id" } else { "*r == wanted" };
+        let wanted = self.value(value);
+        format!("{{ let wanted = {wanted}; let place = w.{}.iter().position(|r| {same}); ui.select({part:?}, place); }}", ident(&bind))
+    }
+
+    /// The record `save` or `delete` works on: a name holding it, or the
+    /// record a value is (a table's selected row, as the other stacks save
+    /// it), which lives until the statement ends.
+    fn record_mut(&mut self, value: &Expr) -> String {
+        match self.held(value) {
+            Some((place, true)) => place,
+            Some((place, false)) => format!("&mut {place}"),
+            None => format!("&mut {}", self.value(value)),
+        }
+    }
+
+    /// After a handler replaced the rows of `data` (`reload`, or a new
+    /// list): the tables and lists showing them lose their selected row.
+    fn deselect(&self, data: &str, pad: &str) -> String {
+        let parts = self.window.as_ref().and_then(|w| w.showing.get(data)).into_iter().flatten();
+        parts.map(|part| format!("{pad}ui.deselect({part:?});\n")).collect()
+    }
+
+    /// An expression as a place: what can be assigned or borrowed.
+    fn place(&mut self, expr: &Expr) -> String {
+        if let ExprKind::Name { name } = &expr.kind
+            && self.types.name_of(expr) == Some(&NameKind::Local)
+            && let Some(place) = self.element(name)
+        {
+            return place;
+        }
+        match &expr.kind {
+            ExprKind::Name { name } => match self.types.name_of(expr) {
+                Some(NameKind::Local) if self.is_ref(name) && matches!(self.types.type_of(expr), TypeInfo::Record(_)) => {
+                    format!("(*{})", ident(name))
+                }
+                Some(NameKind::Local) => ident(name),
+                Some(NameKind::Data) => format!("w.{}", ident(name)),
+                Some(NameKind::EnumValue(e)) => format!("{e}::{name}"),
+                // `me`: the record signed in now, refused with notAllowed when nobody is.
+                Some(NameKind::Me) => match self.types.type_of(expr) {
+                    TypeInfo::Record(people) => format!("db.me::<{people}>()?"),
+                    _ => {
+                        self.errors.push("'me' names no entity of people".into());
+                        String::new()
+                    }
+                },
+                _ => {
+                    self.errors.push(format!("'{name}' is a part; use one of its properties"));
+                    String::new()
+                }
+            },
+            // `squares[3]`: counted from 1; a position outside the list fails.
+            ExprKind::Index { list, index } => {
+                let at = self.value(index);
+                if self.writing {
+                    let list = self.list_place(list, true);
+                    format!("(*clarity_runtime::at_mut(&mut {list}[..], {at})?)")
+                } else {
+                    let list = self.list_place(list, false);
+                    format!("(*clarity_runtime::at(&{list}[..], {at})?)")
+                }
+            }
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
+            // A part property inside a path: `grid.selected` in `grid.selected.number`.
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => {
+                let (part, property) = self.part_property(expr).unwrap_or_default();
+                self.read_part(&part, property)
+            }
+            ExprKind::Member { object, member } => {
+                if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
+                    return format!("{e}::{}", member.name);
+                }
+                // A file's details have the same names in the runtime.
+                if self.types.type_of(object) == TypeInfo::File {
+                    let object = self.object(object);
+                    return format!("{object}.{}", member.name);
+                }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let object = self.object(object);
+                    return match member.name.as_str() {
+                        "extension" => format!("{object}.as_ref().map(|f| clarity_runtime::files::extension_of(&f.name)).unwrap_or_default()"),
+                        _ => format!("{object}.as_ref().map(|f| f.name.clone()).unwrap_or_default()"),
+                    };
+                }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    let object = self.object(object);
+                    return format!("({object}.len() as i64)");
+                }
+                // A reply's status, ok and text have the same names in the runtime.
+                if self.types.type_of(object) == TypeInfo::HttpReply {
+                    let object = self.object(object);
+                    let clone = if member.name == "text" { ".clone()" } else { "" };
+                    return format!("{object}.{}{clone}", member.name);
+                }
+                let TypeInfo::Record(entity) = self.types.type_of(object) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                // `me.id`: the id signed in, without reading the record.
+                if member.name == "id" && is_me(self.types, object) {
+                    return format!("({ME_ID})");
+                }
+                // The id of a referenced record is the reference itself: nothing is read (none is not found, as a read says).
+                if member.name == "id"
+                    && let ExprKind::Member { object: holder, member: reference } = &object.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(holder)
+                    && let Some(FieldType::Ref { entity: target }) = self.field_type(&owner, &reference.name)
+                {
+                    let table = self.project.entity(&target.name).map(|e| e.table_name()).unwrap_or_default();
+                    return format!("{}.{}.ok_or(Error::NotFound {{ table: {table:?}, id: None }})?", self.object(holder), ident(&reference.name));
+                }
+                let field = self.project.entity(&entity).and_then(|e| e.field(&member.name)).map(|f| f.ty.clone());
+                let object = self.object(object);
+                match field {
+                    Some(FieldType::Ref { entity: target }) => {
+                        let loaded = format!("db.load::<{}>({object}.{})?", target.name, ident(&member.name));
+                        self.readable_one(&target.name, loaded)
+                    }
+                    _ => format!("{object}.{}", ident(&member.name)),
+                }
+            }
+            _ => self.value(expr),
+        }
+    }
+
+    /// The object of a member access: a record, borrowed or loaded.
+    fn object(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Name { name } if self.element(name).is_some() => self.place(expr),
+            ExprKind::Name { name } if self.is_ref(name) => ident(name),
+            _ => self.place(expr),
+        }
+    }
+
+    /// A picture given to a picture function, borrowed: a record's picture is
+    /// read first (its bytes from the database or its file store).
+    fn picture_in_hand(&mut self, expr: &Expr) -> String {
+        let Some(read) = clarity_gen_core::read_picture(self.project, |e| self.types.type_of(e), expr) else {
+            return format!("&{}", self.object(expr));
+        };
+        let object = self.object(read.object);
+        let from = read.from.map_or("None".to_string(), |s| format!("Some({s:?})"));
+        format!("&{{ let other = &{object}; db.copied_picture::<{}>(&other.{}, other.id, {:?}, {from}, None)? }}", read.entity, ident(&read.field), read.column)
+    }
+
+    /// An expression as an owned value.
+    /// A format's options as a Rust expression of their JSON object (`String::new()` for none).
+    /// The format of a reading or writing and its options object (docs/ledger/formats.md).
+    fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse) -> (String, String) {
+        let project = self.project;
+        match clarity_gen_core::shape::mapping_pieces(project, mapping, |v| format!("clarity_runtime::formats::quoted(&{})", self.value(v))) {
+            Some((format, pieces)) => (format, rust_pieces(&pieces)),
+            None => {
+                self.errors.push("a mapping the project does not declare".into());
+                (String::new(), rust_pieces(&[]))
+            }
+        }
+    }
+
+    fn value(&mut self, expr: &Expr) -> String {
+        // `app.version`: the project's version, written as the literal text it is.
+        if clarity_spec::code::reads_app_version(expr) {
+            let literal = Expr { kind: ExprKind::Str { value: self.project.version.clone().unwrap_or_default() }, span: expr.span };
+            return self.value(&literal);
+        }
+        let ty = self.types.type_of(expr);
+        match &expr.kind {
+            ExprKind::Ask { question, form } => self.ask_value(question, form),
+            ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
+            ExprKind::Number { value } => format!("{value}i64"),
+            ExprKind::Str { value } => format!("String::from({value:?})"),
+            // A text with slots in code is filled plainly; a key takes its value
+            // in the language the screen picked, then its values.
+            ExprKind::Text { .. } | ExprKind::Key { .. } => format!("{}.show()", self.shown(expr)),
+            ExprKind::Bool { value } => value.to_string(),
+            ExprKind::Empty => "None".to_string(),
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => {
+                let (part, property) = self.part_property(expr).unwrap_or_default();
+                self.read_part(&part, property)
+            }
+            ExprKind::ListOf { items } => {
+                let item = match &ty {
+                    TypeInfo::Values(item) => item.info(),
+                    TypeInfo::List(entity) => TypeInfo::Record(entity.clone()),
+                    _ => TypeInfo::Unknown,
+                };
+                let values: Vec<String> = items
+                    .iter()
+                    .map(|i| {
+                        let from = self.types.type_of(i);
+                        coerce(self.value(i), &from, &item)
+                    })
+                    .collect();
+                if values.is_empty() { "Vec::new()".to_string() } else { format!("vec![{}]", values.join(", ")) }
+            }
+            // A list borrowed as a parameter is copied into a list of its own.
+            ExprKind::Name { name } if self.is_ref(name) && matches!(ty, TypeInfo::List(_)) => format!("{}.to_vec()", self.place(expr)),
+            ExprKind::Name { .. } | ExprKind::Member { .. } | ExprKind::Index { .. } => {
+                let place = self.place(expr);
+                let loaded = place.ends_with(")?");
+                if is_copy(&ty) || loaded { place } else { format!("{place}.clone()") }
+            }
+            ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
+            // A number written with a minus is that number; a whole number negated is worked out by the runtime.
+            ExprKind::Unary { op: UnaryOp::Neg, operand } if ty == TypeInfo::Integer && !matches!(operand.kind, ExprKind::Number { .. }) => {
+                format!("clarity_runtime::whole_neg({})?", self.value(operand))
+            }
+            ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
+            // A list of values, or of records, grows by a list of its items (manual/parts.data.md, manual/code.engines.md).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
+                format!("{{ let mut joined = {}; joined.extend({}); joined }}", self.value(left), self.value(right))
+            }
+            ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
+            // `1 to n`: the whole numbers from one to the other.
+            ExprKind::Range { from, to } => format!("({}..={}).collect::<Vec<i64>>()", self.value(from), self.value(to)),
+            ExprKind::In { value, options } => {
+                let value_ty = self.types.type_of(value);
+                let common = if is_decimal(&value_ty) || options.iter().any(|o| is_decimal(&self.types.type_of(o))) {
+                    TypeInfo::Decimal
+                } else {
+                    value_ty.clone()
+                };
+                let v = coerce(self.value(value), &value_ty, &common);
+                let opts: Vec<String> = options
+                    .iter()
+                    .map(|o| {
+                        let t = self.types.type_of(o);
+                        coerce(self.value(o), &t, &common)
+                    })
+                    .collect();
+                format!("[{}].contains(&{v})", opts.join(", "))
+            }
+            ExprKind::Call { function, args, .. } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
+                let prefix = self.window.as_ref().map(|w| w.prefix.clone()).unwrap_or_default();
+                let params = self.window.as_ref().and_then(|w| w.params.get(&function.name).cloned()).unwrap_or_default();
+                let mut code = String::new();
+                for (arg, param) in args.iter().zip(&params) {
+                    let expected = type_ref_info(self.project, param);
+                    let from = self.types.type_of(arg);
+                    code.push_str(&format!(", {}", coerce(self.value(arg), &from, &expected)));
+                }
+                format!("{prefix}__{}(db, w, ui{code})?", super::names::snake(&function.name))
+            }
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args),
+            // A function of a library, through its crate (manual/code.libraries.md).
+            ExprKind::EngineCall { engine, function, args } if clarity_gen_core::libraries::library(self.project, &engine.name).is_some() => {
+                let values: Vec<String> = args.iter().map(|a| format!("({}).clone()", self.value(a))).collect();
+                format!("{}({})", clarity_gen_core::libraries::rust_call(self.project, &engine.name, &function.name), values.join(", "))
+            }
+            // A function of an engine: values to JSON and back (manual/code.engines.md).
+            ExprKind::EngineCall { engine, function, args } => {
+                let returns = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
+                    .and_then(|f| f.returns.as_ref())
+                    .map(|r| value_type(&type_ref_info(self.project, r)))
+                    .unwrap_or_else(|| "serde_json::Value".into());
+                // Bytes cross as base64 text; other values as serde writes them.
+                let values: Vec<String> = args
+                    .iter()
+                    .map(|a| match self.types.type_of(a) {
+                        TypeInfo::Bytes => format!("clarity_runtime::engine::bytes_value(&{})", self.value(a)),
+                        _ => format!("clarity_runtime::engine::to_value(&{})?", self.value(a)),
+                    })
+                    .collect();
+                let from = if returns == "Vec<u8>" { "bytes_from".to_string() } else { format!("from_value::<{returns}>") };
+                // An engine with state per window is called in the handler's own window.
+                let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
+                let call = if per_window { "call_in(ui.instance(), " } else { "call(" };
+                let called = format!(
+                    "clarity_runtime::engine::{from}({e:?}, {f:?}, crate::engines::{}()?.{call}{f:?}, vec![{}])?)?",
+                    super::names::snake(&engine.name),
+                    values.join(", "),
+                    e = engine.name,
+                    f = function.name
+                );
+                // The text an engine gives is the value of its key, as its `says` lists it.
+                if returns == "String" { format!("clarity_runtime::i18n::text(&{called})") } else { called }
+            }
+            ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
+            ExprKind::Files { var, place, filter, order } => self.files(&var.name, place, filter.as_deref(), order),
+            ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
+            // A format of the catalog (docs/ledger/formats.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { value, mapping } => {
+                let Some(kind) = clarity_gen_core::shape::write_kind(self.project, &self.types.type_of(value)) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                let (format, options) = self.format_options(mapping);
+                format!("clarity_runtime::formats::write({:?}, &{}, &{options}, {kind:?})", format, self.value(value))
+            }
+            // `pdf of text stylesheet css theme true`: Clarity.Pdf, refusing a stylesheet with errors.
+            ExprKind::Pdf { text, options } => {
+                let option = |name: &str| options.iter().find(|o| o.name.name == name).map(|o| &o.value);
+                let sheet = option("stylesheet").map_or_else(|| "\"\"".to_string(), |v| self.value(v));
+                let theme = option("theme").map_or_else(|| "\"\"".to_string(), |v| format!("if {} {{ {:?} }} else {{ \"\" }}", self.value(v), clarity_gen_core::pdf_theme(self.project)));
+                format!("clarity_pdf::made(&({}), &({sheet}), {theme}).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?", self.value(text))
+            }
+            // `pdf of Invoice with order = current`: Clarity.UI's library lays the report out with its data as JSON.
+            ExprKind::PdfReport { report, data } => {
+                let given: Vec<String> = data.iter().map(|d| format!("({:?}.to_string(), serde_json::to_value(&{}).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?)", d.name.name, self.value(&d.value))).collect();
+                format!("clarity_runtime::native_ui::report_pdf({:?}, &serde_json::Value::Object([{}].into_iter().collect()))?", report.name, given.join(", "))
+            }
+            ExprKind::ReadFormat { ty, input, mapping } => {
+                let Some(kind) = clarity_gen_core::shape::read_kind(self.project, ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                let read = match &ty.kind {
+                    clarity_spec::code::TypeRefKind::List { item } => format!("Vec<{item}>"),
+                    clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
+                    _ => String::new(),
+                };
+                let (format, options) = self.format_options(mapping);
+                format!("clarity_runtime::formats::read::<{read}>({:?}, &{}, &{options}, &{})?", format, self.value(input), rust_pieces(&kind))
+            }
+            // A call to a web API (manual/code.web-apis.md): it never fails, its reply says how it went.
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
+                let url = self.value(url);
+                let body = match body {
+                    Some(body) => format!("Some(({}).as_str())", self.value(body)),
+                    None => "None".to_string(),
+                };
+                let headers = self.http_pairs(headers);
+                let method = match method {
+                    HttpMethod::Get => "Get",
+                    HttpMethod::Post => "Post",
+                    HttpMethod::Put => "Put",
+                    HttpMethod::Patch => "Patch",
+                    HttpMethod::Delete => "Delete",
+                };
+                if from.is_none() && query.is_empty() {
+                    return format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, {headers})");
+                }
+                // A path of a web API data source (manual/code.web-apis.md): its address and auth come from the project file.
+                let (base, auth) = from.as_ref().and_then(|f| clarity_gen_core::web_source(self.project, &f.name)).unwrap_or(("", None));
+                let auth = match auth {
+                    Some(("bearer", secret)) => format!("clarity_runtime::http::Auth::Bearer({secret:?})"),
+                    Some(("api-key", secret)) => format!("clarity_runtime::http::Auth::ApiKey({secret:?})"),
+                    Some(("basic", secret)) => format!("clarity_runtime::http::Auth::Basic({secret:?})"),
+                    _ => "clarity_runtime::http::Auth::None".to_string(),
+                };
+                let query = self.http_pairs(query);
+                // Every page, as the source's paging says (manual/code.web-apis.md).
+                if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| clarity_gen_core::web_paging(self.project, &f.name)) {
+                    let kind = match p.kind {
+                        clarity_spec::PagingKind::Page => "Page",
+                        clarity_spec::PagingKind::Offset => "Offset",
+                        clarity_spec::PagingKind::Cursor => "Cursor",
+                        clarity_spec::PagingKind::Link => "Link",
+                    };
+                    return format!(
+                        "clarity_runtime::http::pages_at({base:?}, &{url}, {query}, {headers}, {auth}, &clarity_runtime::http::Paging {{ kind: clarity_runtime::http::PagingKind::{kind}, param: {:?}, size_param: {:?}, size: {}, next: {:?}, items: {:?} }})",
+                        p.param, p.size_param, p.size, p.next, p.items
+                    );
+                }
+                format!("clarity_runtime::http::call_at(clarity_runtime::http::Method::{method}, {base:?}, &{url}, {query}, {body}, {headers}, {auth})")
+            }
+            ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
+            ExprKind::New { entity } => format!("{}::default()", entity.name),
+        }
+    }
+
+    /// The headers or query pairs of an http call, as a slice; with `when`,
+    /// a pair whose condition does not hold is left out.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair]) -> String {
+        if pairs.iter().all(|p| p.when.is_none()) {
+            let items: Vec<String> = pairs.iter().map(|p| format!("({:?}, ({}).as_str())", p.name.name, self.value(&p.value))).collect();
+            return format!("&[{}]", items.join(", "));
+        }
+        let items: Vec<String> = pairs
+            .iter()
+            .map(|p| {
+                let pair = format!("({:?}, ({}).as_str())", p.name.name, self.value(&p.value));
+                match &p.when {
+                    Some(when) => format!("({}).then_some({pair})", self.value(when)),
+                    None => format!("Some({pair})"),
+                }
+            })
+            .collect();
+        format!("&[{}].into_iter().flatten().collect::<Vec<_>>()", items.join(", "))
+    }
+
+    /// `print list columns a, b`: a heading per field (its label), then
+    /// the records' values as the command line writes them.
+    fn print_table(&mut self, list: &Expr, columns: &[clarity_spec::model::Ident], pad: &str) -> String {
+        let TypeInfo::List(entity) = self.types.type_of(list) else {
+            self.errors.push("'columns' prints a list of records".into());
+            return String::new();
+        };
+        let Some(decl) = self.project.entity(&entity) else { return String::new() };
+        let (mut headings, mut right, mut cells) = (Vec::new(), Vec::new(), Vec::new());
+        for column in columns {
+            let field = decl.field(&column.name);
+            let label = field.and_then(|f| f.modifiers.label.clone()).unwrap_or_else(|| clarity_spec::model::default_label(&column.name));
+            headings.push(match clarity_spec::translations::key_of(&label) {
+                Some(key) => format!("Text::key({key:?})"),
+                None => format!("Text::plain({label:?})"),
+            });
+            let ty = field.map(|f| &f.ty);
+            right.push(matches!(ty, Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) | None).to_string());
+            let at = format!("r.{}", ident(&column.name));
+            cells.push(match ty {
+                Some(FieldType::Bool) => format!("clarity_runtime::cli::Session::yes_no({at})"),
+                _ => format!("clarity_runtime::cli::text_of(&{at})"),
+            });
+        }
+        let rows = match self.held(list) {
+            Some((place, _)) => place,
+            None => format!("({})", self.value(list)),
+        };
+        format!(
+            "{pad}cli.print_table(vec![{}], vec![{}], {rows}.iter().map(|r| vec![{}]).collect());\n",
+            headings.join(", "),
+            right.join(", "),
+            cells.join(", ")
+        )
+    }
+
+    /// `ask` in a command: it waits on the terminal and gives the answer.
+    fn ask_value(&mut self, question: &Expr, form: &AskForm) -> String {
+        let question = self.shown(question);
+        match form {
+            AskForm::Confirm { yes, no } => {
+                let yes = yes.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                let no = no.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                format!("cli.confirm({question}, {yes}, {no})")
+            }
+            AskForm::Value { ty, from: Some(list), .. } => {
+                let entity = match type_ref_info(self.project, ty) {
+                    TypeInfo::Record(e) => e,
+                    _ => String::new(),
+                };
+                let shown = self.project.entity(&entity).and_then(|e| e.fields.iter().find(|f| matches!(f.ty, FieldType::Text { .. }))).map(|f| ident(&f.name.name));
+                let label = shown.map_or("text_of(&r.id)".to_string(), |f| format!("text_of(&r.{f})"));
+                let list = self.value(list);
+                format!("{{ let list = {list}; let at = cli.choose({question}, list.iter().map(|r| clarity_runtime::cli::{label}).collect()); list[at].clone() }}")
+            }
+            AskForm::Value { ty, default, from: None } => {
+                let info = type_ref_info(self.project, ty);
+                let (kind, values) = match &info {
+                    TypeInfo::Integer => ("Integer", String::new()),
+                    TypeInfo::Decimal => ("Decimal", String::new()),
+                    TypeInfo::Money => ("Money", String::new()),
+                    TypeInfo::Date => ("Date", String::new()),
+                    TypeInfo::DateTime => ("Datetime", String::new()),
+                    TypeInfo::Duration => ("Duration", String::new()),
+                    TypeInfo::Enum(name) => {
+                        let names: Vec<String> = self.project.enum_decl(name).map(|e| e.variants.iter().map(|v| format!("{:?}", v.name.name)).collect()).unwrap_or_default();
+                        ("Enum", names.join(", "))
+                    }
+                    _ => ("Text", String::new()),
+                };
+                let default = default.as_ref().map_or("None".to_string(), |d| format!("Some(clarity_runtime::cli::text_of(&{}))", self.value(d)));
+                format!("cli.ask::<{}>({question}, clarity_runtime::cli::Kind::{kind}, &[{values}], {default})", value_type(&info))
+            }
+            AskForm::Window { .. } => {
+                self.errors.push("a command asks no window".into());
+                String::new()
+            }
+        }
+    }
+
+    /// `files f in store where ... order by ...`: the files of a store,
+    /// filtered and sorted in memory.
+    fn files(&mut self, var: &str, place: &FilePlace, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut list = match place {
+            FilePlace::Store(store) => format!("db.files({:?})?.into_iter()", store.name),
+            FilePlace::Folder(folder) => {
+                let (patterns, hidden) = clarity_gen_core::folder_rules(self.project, |e| self.types.type_of(e), folder);
+                let at = self.value(folder);
+                format!("db.files_in(&format!(\"folder:{{}}\", {at}), &{}, {hidden})?.into_iter()", rust_patterns(&patterns))
+            }
+        };
+        if let Some(filter) = filter {
+            self.refs.push(HashSet::from([var.to_string()]));
+            let cond = self.value(filter);
+            self.refs.pop();
+            list.push_str(&format!(".filter(|{}| {cond})", ident(var)));
+        }
+        list.push_str(".collect::<Vec<FileEntry>>()");
+        if order.is_empty() {
+            return list;
+        }
+        let keys: Vec<String> = order
+            .iter()
+            .map(|k| {
+                let (a, b) = if k.descending { ("b", "a") } else { ("a", "b") };
+                format!("{a}.{m}.cmp(&{b}.{m})", m = k.field.name)
+            })
+            .collect();
+        let mut compare = keys[0].clone();
+        for key in &keys[1..] {
+            compare = format!("{compare}.then_with(|| {key})");
+        }
+        format!("{{ let mut found = {list}; found.sort_by(|a, b| {compare}); found }}")
+    }
+
+    /// `find c in Entity where ... order by ...` as a database query. The
+    /// condition becomes a `Cond` tree; the runtime writes the SQL.
+    fn find(&mut self, var: &str, entity: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut query = "Query::new()".to_string();
+        if let Some(filter) = filter {
+            let cond = self.cond(filter, var, entity);
+            query.push_str(&format!(".filter({cond})"));
+        }
+        for key in order {
+            let Some(path) = clarity_gen_core::query::order_path(self.project, entity, key) else {
+                self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
+                continue;
+            };
+            let numeric = clarity_gen_core::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = clarity_gen_core::query_column(self.project, &path.entity, &path.field);
+            if path.hops.is_empty() {
+                let method = if numeric { "order_number" } else { "order" };
+                query.push_str(&format!(".{method}({column:?}, {})", key.descending));
+            } else {
+                let hops: Vec<String> = path.hops.iter().map(|h| format!("Hop::new({:?}, {:?}, {:?})", h.column, h.table, h.key)).collect();
+                query.push_str(&format!(".order_through(&[{}], {column:?}, {}, {numeric})", hops.join(", "), key.descending));
+            }
+        }
+        self.readable_all(entity, format!("db.find::<{entity}>(&{query})?"))
+    }
+
+    /// Records of `entity` read from the database, each checked against its
+    /// `readable when` (refused with notYours); as they are without one.
+    fn readable_all(&self, entity: &str, found: String) -> String {
+        if self.project.entity(entity).is_some_and(|e| e.readable.is_some()) { format!("{entity}::readable_all(db, {found})?") } else { found }
+    }
+
+    /// One record of `entity` read from the database, checked as `readable_all` checks.
+    fn readable_one(&self, entity: &str, found: String) -> String {
+        if self.project.entity(entity).is_some_and(|e| e.readable.is_some()) { format!("{entity}::readable(db, {found})?") } else { found }
+    }
+
+    fn field_type(&self, entity: &str, field: &str) -> Option<FieldType> {
+        self.project.entity(entity).and_then(|e| e.field(field)).map(|f| f.ty.clone())
+    }
+
+    /// A query condition as a `Cond`. The checker made sure each
+    /// comparison has a field of `var` on one side and a value on the other.
+    fn cond(&mut self, expr: &Expr, var: &str, entity: &str) -> String {
+        let project = self.project;
+        let path_of = |e: &Expr| clarity_gen_core::query::field_path(project, entity, var, e);
+        match &expr.kind {
+            ExprKind::Binary { op: BinaryOp::And, left, right } => {
+                format!("{}.and({})", self.cond(left, var, entity), self.cond(right, var, entity))
+            }
+            ExprKind::Binary { op: BinaryOp::Or, left, right } => {
+                format!("{}.or({})", self.cond(left, var, entity), self.cond(right, var, entity))
+            }
+            ExprKind::Unary { op: UnaryOp::Not, operand } => format!("{}.negated()", self.cond(operand, var, entity)),
+            ExprKind::Binary { op: BinaryOp::Matches, .. } => {
+                let Some((search, text)) = clarity_gen_core::query::search(project, entity, var, expr) else {
+                    self.errors.push(format!("'{}' looks for words in no record of {var}", print::expr(expr)));
+                    return String::new();
+                };
+                let columns: Vec<String> = search.columns.iter().map(|c| format!("{c:?}")).collect();
+                format!("Cond::matches({:?}, {:?}, &[{}], &{})", search.table, search.key, columns.join(", "), self.text_ref(text))
+            }
+            ExprKind::Binary { op, left, right } => {
+                // The field on the left: `5 < c.x` is `c.x > 5`.
+                let (path, value, op) = match (path_of(left), path_of(right)) {
+                    (Some(path), _) => (path, right, *op),
+                    (None, Some(path)) => (path, left, flipped(*op)),
+                    (None, None) => {
+                        self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
+                        return String::new();
+                    }
+                };
+                let Some(ty) = clarity_gen_core::query_field_type(self.project, &path.entity, &path.field) else {
+                    self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
+                    return String::new();
+                };
+                let column = clarity_gen_core::query_column(self.project, &path.entity, &path.field);
+                let own = if matches!(value.kind, ExprKind::Empty) {
+                    let test = format!("Cond::is_none({column:?})");
+                    if op == BinaryOp::Eq { test } else { format!("{test}.negated()") }
+                } else if let FieldType::Values { item } = &ty {
+                    // A list field holds the item.
+                    format!("Cond::holds({column:?}, {})", self.sql_value(&item.field_type(), value))
+                } else if op == BinaryOp::Contains {
+                    format!("Cond::contains({column:?}, &{})", self.text_ref(value))
+                } else {
+                    let constructor = if is_stored_number(&ty) { "number" } else { "compare" };
+                    let value = self.sql_value(&ty, value);
+                    format!("Cond::{constructor}({column:?}, Op::{}, {value})", op_name(op))
+                };
+                through(&path.hops, own)
+            }
+            ExprKind::In { value, options } => {
+                let Some(path) = path_of(value) else {
+                    self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
+                    return String::new();
+                };
+                let Some(ty) = clarity_gen_core::query_field_type(self.project, &path.entity, &path.field) else {
+                    self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
+                    return String::new();
+                };
+                let constructor = if is_stored_number(&ty) { "one_of_numbers" } else { "one_of" };
+                let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
+                let own = format!("Cond::{constructor}({:?}, vec![{}])", clarity_gen_core::query_column(self.project, &path.entity, &path.field), values.join(", "));
+                through(&path.hops, own)
+            }
+            _ => match path_of(expr) {
+                Some(path) => through(&path.hops, format!("Cond::is_true({:?})", clarity_gen_core::query_column(self.project, &path.entity, &path.field))),
+                None => {
+                    self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
+                    String::new()
+                }
+            },
+        }
+    }
+
+    /// Text to borrow: a name or field is read in place, anything else is
+    /// computed.
+    fn text_ref(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Name { .. } | ExprKind::Member { .. } if self.part_property(expr).is_none() => self.place(expr),
+            _ => self.value(expr),
+        }
+    }
+
+    /// A value compared with a field of type `ty`, as the database stores it.
+    fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
+        let from = self.types.type_of(value);
+        match ty {
+            clarity_spec::kept_as_text!() => format!("sql::text(&{})", self.value(value)),
+            FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({})", self.value(value)),
+            FieldType::Decimal { .. } | FieldType::Money => {
+                format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))
+            }
+            FieldType::Bool => format!("sql::boolean({})", self.value(value)),
+            FieldType::Date => format!("sql::date({})", self.value(value)),
+            FieldType::DateTime => format!("sql::date_time({})", self.value(value)),
+            FieldType::Enum { .. } => format!("sql::name(&{})", self.value(value)),
+            // The checker allows only `== none` and `!= none`, handled before.
+            FieldType::Image | FieldType::Blob => {
+                self.errors.push("a picture or a file is compared with none only".into());
+                String::new()
+            }
+            // The checker keeps lists out of queries.
+            FieldType::Values { .. } => {
+                self.errors.push("a query cannot look inside a list".into());
+                String::new()
+            }
+            FieldType::Ref { .. } => {
+                // A reference field holds the id already; a record has its own.
+                let stored_ref = match &value.kind {
+                    ExprKind::Member { object, member } => match self.types.type_of(object) {
+                        TypeInfo::Record(owner) => {
+                            matches!(self.field_type(&owner, &member.name), Some(FieldType::Ref { .. }))
+                                .then(|| format!("{}.{}", self.object(object), ident(&member.name)))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                match stored_ref {
+                    Some(id) => format!("sql::reference({id})"),
+                    None if is_me(self.types, value) => format!("sql::reference(Some({ME_ID}))"),
+                    None => format!("sql::reference(Some({}.id))", self.object(value)),
+                }
+            }
+            FieldType::List { .. } | FieldType::Record { .. } => {
+                self.errors.push("a list field cannot be compared in a query".into());
+                String::new()
+            }
+        }
+    }
+
+    /// Whether a date or reference field is empty (`x == none`); a record
+    /// that is no field is none until it is stored.
+    fn is_none(&mut self, expr: &Expr) -> String {
+        if let ExprKind::Member { object, member } = &expr.kind
+            && let TypeInfo::Record(owner) = self.types.type_of(object)
+            && let Some(ty) = self.field_type(&owner, &member.name)
+            && matches!(ty, FieldType::Ref { .. } | FieldType::Date | FieldType::DateTime)
+        {
+            return format!("{}.{}.is_none()", self.object(object), ident(&member.name));
+        }
+        if matches!(self.types.type_of(expr), TypeInfo::Record(_)) {
+            return format!("({}.id == 0)", self.object(expr));
+        }
+        format!("{}.is_none()", self.place(expr))
+    }
+
+    fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        // Whole numbers divided, a division by zero an error (Error::DividedByZero).
+        if matches!(op, BinaryOp::WholeDiv | BinaryOp::Mod) {
+            let name = if op == BinaryOp::WholeDiv { "whole_div" } else { "whole_mod" };
+            return format!("clarity_runtime::{name}({}, {})?", self.value(left), self.value(right));
+        }
+        if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+            let other = match (&left.kind, &right.kind) {
+                (_, ExprKind::Empty) => Some(left),
+                (ExprKind::Empty, _) => Some(right),
+                _ => None,
+            };
+            if let Some(other) = other {
+                let test = self.is_none(other);
+                return if op == BinaryOp::Eq { test } else { format!("!{test}") };
+            }
+        }
+        let lt = self.types.type_of(left);
+        let rt = self.types.type_of(right);
+        let symbol = match op {
+            BinaryOp::Or => "||",
+            BinaryOp::And => "&&",
+            other => other.symbol(),
+        };
+        match op {
+            // Whether a list holds an item.
+            BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
+                let wanted = coerce(self.value(right), &rt, &item.info());
+                format!("{}.contains(&{wanted})", self.text_ref(left))
+            }
+            BinaryOp::Contains => format!("contains(&{}, &{})", self.text_ref(left), self.text_ref(right)),
+            BinaryOp::Add if *result == TypeInfo::Text => {
+                format!("[{}.show(), {}.show()].concat()", self.value(left), self.value(right))
+            }
+            // Decimals divided as every stack divides them, dividing by zero a value error (conformance/decimal-division.json).
+            BinaryOp::Div => {
+                let l = coerce(self.value(left), &lt, result);
+                let r = coerce(self.value(right), &rt, result);
+                format!("clarity_runtime::decimal_div({l}, {r})?")
+            }
+            // Numbers worked out by the runtime, one that does not fit a value error (conformance/overflow.json).
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul => {
+                let l = coerce(self.value(left), &lt, result);
+                let r = coerce(self.value(right), &rt, result);
+                let kind = match result {
+                    TypeInfo::Integer => "whole",
+                    other if is_decimal(other) => "decimal",
+                    _ => return format!("({l} {symbol} {r})"),
+                };
+                let name = match op {
+                    BinaryOp::Add => "add",
+                    BinaryOp::Sub => "sub",
+                    _ => "mul",
+                };
+                format!("clarity_runtime::{kind}_{name}({l}, {r})?")
+            }
+            BinaryOp::And | BinaryOp::Or => format!("({} {symbol} {})", self.value(left), self.value(right)),
+            _ => {
+                let common = if is_decimal(&lt) || is_decimal(&rt) { TypeInfo::Decimal } else { lt.clone() };
+                let l = coerce(self.value(left), &lt, &common);
+                let r = coerce(self.value(right), &rt, &common);
+                format!("({l} {symbol} {r})")
+            }
+        }
+    }
+
+    fn call(&mut self, name: &str, args: &[Expr]) -> String {
+        use clarity_spec::code::check::{NOW, TODAY};
+        // Dates are optional values in records and locals.
+        if name == TODAY || name == NOW {
+            return format!("Some(clarity_runtime::{name}())");
+        }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SNAPPED && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("clarity_runtime::snapped({})", values.join(", "));
+        }
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let arg = args.first();
+            let value = match arg.map(|a| self.types.type_of(a)) {
+                Some(TypeInfo::Decimal | TypeInfo::Money) => self.value(arg.unwrap()),
+                Some(_) => format!("Decimal::from({})", self.value(arg.unwrap())),
+                None => String::new(),
+            };
+            return format!("clarity_runtime::{name}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("round({})", values.join(", "));
+        }
+        // A built-in function (conformance/texts.json, conformance/zip.json,
+        // conformance/picture-functions.json), by the runtime's name for it.
+        if let Some(built) = clarity_gen_core::built_in(self.project, name)
+            && let Some((takes, _)) = clarity_spec::code::check::built_in_function(name)
+        {
+            use clarity_spec::code::check::BuiltInValue;
+            let values: Vec<String> = args.iter().zip(takes).map(|(a, t)| match t {
+                BuiltInValue::Text | BuiltInValue::Texts | BuiltInValue::Number => format!("&({})", self.value(a)),
+                BuiltInValue::Picture => self.picture_in_hand(a),
+                _ => self.value(a),
+            }).collect();
+            // A picture function can refuse: no picture, or a size it cannot make.
+            let fails = if clarity_spec::code::check::picture_function(name).is_some() { "?" } else { "" };
+            return format!("{}({}){fails}", built.rust, values.join(", "));
+        }
+        if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let text = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("(({text}).chars().count() as i64)");
+        }
+        if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let (list, separator) = (args.first().map(|a| self.value(a)).unwrap_or_default(), args.get(1).map(|a| self.value(a)).unwrap_or_default());
+            return format!("{list}.join({separator}.as_str())");
+        }
+        // Who is using the program (docs/ledger/signin.md): a token and recovery codes from Clarity.Auth.
+        let own = |n: &str| self.project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == n);
+        if name == clarity_spec::code::check::NEW_TOKEN && !own(name) {
+            return "clarity_runtime::signin::new_token()?".to_string();
+        }
+        if name == clarity_spec::code::check::NEW_RECOVERY_CODES && !own(name) {
+            let count = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity_runtime::signin::new_recovery_codes({count})?");
+        }
+        if name == "count" {
+            let list = match args.first() {
+                Some(arg) => match self.held(arg) {
+                    Some((place, _)) => place,
+                    None => format!("({})", self.value(arg)),
+                },
+                None => String::new(),
+            };
+            return format!("({list}.len() as i64)");
+        }
+        let project_function = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name);
+        let Some(callee) = project_function else {
+            self.errors.push(format!("unknown function '{name}'"));
+            return String::new();
+        };
+        let mut code = vec!["db".to_string()];
+        for (index, (arg, param)) in args.iter().zip(&callee.params).enumerate() {
+            let expected = type_ref_info(self.project, &param.ty);
+            let from = self.types.type_of(arg);
+            let held = self.held(arg);
+            // An action that only reads its record takes it as a function does.
+            let kind = if callee.kind != FunctionKind::Function && !changes_param(self.project, callee, index, &mut Vec::new()) { FunctionKind::Function } else { callee.kind };
+            code.push(match (&expected, kind, held) {
+                (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, true))) => place,
+                (TypeInfo::Record(_), FunctionKind::Action, Some((place, false))) => format!("&mut {place}"),
+                (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, false))) => format!("&{place}"),
+                (TypeInfo::Record(_), FunctionKind::Action, None) => format!("&mut {}", self.value(arg)),
+                (TypeInfo::Record(_) | TypeInfo::List(_), _, None) => format!("&{}", self.value(arg)),
+                _ => coerce(self.value(arg), &from, &expected),
+            });
+        }
+        format!("{}({})?", ident(name), code.join(", "))
+    }
+}
+
+/// What a handler may read of a part.
+#[derive(Debug, Clone, Default)]
+pub struct PartInfo {
+    pub bind: Option<String>,
+    pub caption: Option<String>,
+    /// Whether the design makes the part read-only.
+    pub readonly: bool,
+    /// Whether the design starts a foldable part folded.
+    pub folded: bool,
+    /// Whether the design starts a collapsible sidebar folded to its button.
+    pub collapsed: bool,
+    /// A popover or slide-out: closed until code or a click opens it, so `visible` reads false until then.
+    pub closed: bool,
+    /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
+    pub grid: u32,
+    pub snap: bool,
+    /// Whether a tree or tree table shows Expand all and Collapse all, as its line says (`fold buttons`).
+    pub fold_buttons: bool,
+    /// A canvas's background as its line says; empty is the theme's panel.
+    pub background: String,
+    /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
+    pub dot_size: u32,
+    pub dot_color: String,
+    /// A spin box's range as its line writes it.
+    pub spin: (i64, i64),
+    /// A canvas's mode (manual/parts.graphics.md), and in mode objects the list of its objects.
+    pub mode: Option<CanvasMode>,
+    pub objects: Option<String>,
+    /// A painting or vector canvas's tool (its first of `tools`, or none), brush (2 without it) and ink ("text" without it).
+    pub tool: String,
+    pub brush: u32,
+    pub ink: String,
+    /// A custom part (manual/design.custom-parts.md): its kind and the values written on its line.
+    pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
+}
+
+/// The parts of the window or app a handler belongs to, by name.
+#[derive(Debug, Default)]
+pub struct WindowCtx {
+    /// The start of its handlers' Rust names: `order_form` in
+    /// `order_form__save_clicked`.
+    pub prefix: String,
+    pub parts: HashMap<String, PartInfo>,
+    /// The window's data: name, entity and whether it is a list.
+    pub data: Vec<(String, String, bool)>,
+    /// The named tables and lists showing each list data (`clarity_gen_core::rows_shown`).
+    pub showing: std::collections::BTreeMap<String, Vec<String>>,
+    /// The parameter types of each handler that takes values, by name.
+    pub params: HashMap<String, Vec<TypeRef>>,
+}
+
+impl WindowCtx {
+    fn widgets(&mut self, widgets: &[Widget]) {
+        for widget in widgets {
+            if let Some(name) = &widget.props.name {
+                self.parts.insert(
+                    name.clone(),
+                    PartInfo {
+                        bind: widget.props.bind.clone(),
+                        caption: widget.props.caption.clone(),
+                        readonly: widget.props.readonly,
+                        folded: widget.props.folded,
+                        collapsed: false,
+                        closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout),
+                        grid: widget.props.grid.unwrap_or(0),
+                        snap: widget.props.snap,
+                        fold_buttons: widget.props.fold_buttons,
+                        background: widget.props.background.clone().unwrap_or_default(),
+                        dot_size: widget.props.dot_size.unwrap_or(2),
+                        dot_color: widget.props.dot_color.clone().unwrap_or_default(),
+                        spin: clarity_gen_core::spin_range(&widget.props),
+                        mode: widget.props.mode,
+                        objects: widget.props.objects.as_ref().map(|o| o.list.clone()),
+                        tool: clarity_gen_core::canvas_tool(&widget.props),
+                        brush: widget.props.brush.unwrap_or(2),
+                        ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()),
+                        custom: clarity_gen_core::parts::kept_of(&widget.props),
+                    },
+                );
+            }
+            self.widgets(&widget.children);
+            for page in &widget.pages {
+                self.widgets(&page.children);
+            }
+        }
+    }
+
+    fn commands(&mut self, commands: &[Command]) {
+        for command in commands {
+            if let Some(name) = &command.props.name {
+                self.parts.insert(
+                    name.clone(),
+                    PartInfo {
+                        bind: None,
+                        caption: command.props.caption.clone(),
+                        readonly: false,
+                        folded: false,
+                        collapsed: false,
+                        closed: false,
+                        grid: 0,
+                        snap: false,
+                        fold_buttons: false,
+                        background: String::new(),
+                        dot_size: 2,
+                        dot_color: String::new(),
+                        spin: (0, 2_147_483_647),
+                        mode: None,
+                        objects: None,
+                        tool: String::new(),
+                        brush: 2,
+                        ink: "text".to_string(),
+                        custom: None,
+                    },
+                );
+            }
+            self.commands(&command.items);
+        }
+    }
+
+    fn frame(&mut self, frame: &Frame) {
+        if let Some(menu) = &frame.menu {
+            if let Some(name) = &menu.name {
+                self.parts.insert(name.clone(), PartInfo::default());
+            }
+            self.commands(&menu.items);
+        }
+        if let Some(toolbar) = &frame.toolbar {
+            if let Some(name) = &toolbar.name {
+                self.parts.insert(name.clone(), PartInfo::default());
+            }
+            self.commands(&toolbar.items);
+        }
+        if let Some(ribbon) = &frame.ribbon {
+            if let Some(name) = &ribbon.name {
+                self.parts.insert(name.clone(), PartInfo { collapsed: ribbon.collapsed, ..PartInfo::default() });
+            }
+            for tab in &ribbon.tabs {
+                for name in tab.name.iter().chain(tab.groups.iter().filter_map(|g| g.name.as_ref())) {
+                    self.parts.insert(name.clone(), PartInfo::default());
+                }
+            }
+            for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
+                self.commands(&group.items);
+            }
+        }
+        for sidebar in &frame.sidebars {
+            if let Some(name) = &sidebar.props.name {
+                self.parts.insert(name.clone(), PartInfo { collapsed: sidebar.props.collapsed, ..PartInfo::default() });
+            }
+            self.widgets(&sidebar.widgets);
+        }
+        if let Some(footer) = &frame.footer {
+            self.widgets(&footer.widgets);
+        }
+    }
+}
+
+/// A window or the app, as `main.rs` dispatches to it.
+#[derive(Debug, Clone)]
+pub struct Owner {
+    pub name: String,
+    /// The Rust struct holding its data: `CustomerFormWindow`, `ShopApp`.
+    pub struct_name: String,
+    pub module: String,
+    /// The handlers called by name (those taking no values), with their Rust function names.
+    pub handlers: Vec<(String, String)>,
+    /// The calls with values its parts wire: as written (`digit(7)`), the
+    /// Rust function, and the values as Rust.
+    pub calls: Vec<(String, String, Vec<String>)>,
+    pub is_app: bool,
+    /// Its own events (open, close, return, start) with their handlers.
+    pub events: Vec<(&'static str, String)>,
+    /// The canvases its draw handlers draw, with their Rust functions.
+    pub draws: Vec<(String, String)>,
+    /// The handlers an answer runs (manual/code.statements.md): the Clarity name, the
+    /// Rust function, and for each value whether it is a record.
+    pub answers: Vec<(String, String, Vec<bool>)>,
+    /// Whether the window has `allow when`, checked before it opens (its struct's `allowed`).
+    pub allowed: bool,
+    /// The handlers a frame command with `allow when` runs, each with the
+    /// Rust function that checks them all when the handler runs.
+    pub guarded: Vec<(String, String)>,
+    /// The windows a frame command with `allow when` opens, each with the
+    /// Rust function that checks those commands' conditions when it opens.
+    pub opens_guarded: Vec<(String, String)>,
+}
+
+/// The struct and handlers of every window and the app in `file`.
+pub fn emit_windows(
+    project: &Project,
+    file: &SpecFile,
+    types: &FileTypes,
+    module: &str,
+) -> Result<(String, Vec<Owner>), Vec<String>> {
+    let mut out = String::new();
+    let mut owners = Vec::new();
+    let mut errors = Vec::new();
+    let pages = file.pages.iter().map(|p| (&p.name.name, &p.data, Some(p), None));
+    let apps = file.apps.iter().map(|a| (&a.name.name, &a.data, None, Some(a)));
+    for (name, data, page, app) in pages.chain(apps) {
+        let struct_name = if app.is_some() { format!("{name}App") } else { format!("{name}Window") };
+        let mut ctx = WindowCtx {
+            prefix: super::names::snake(name),
+            ..WindowCtx::default()
+        };
+        let mut events = Vec::new();
+        if let Some(page) = page {
+            ctx.widgets(&page.widgets);
+            ctx.frame(&page.frame);
+            events.extend(page.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
+        }
+        if let Some(app) = app {
+            ctx.frame(&app.frame);
+            events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
+        }
+        ctx.data = data.iter().filter_map(|d| d.entity().map(|e| (d.name.name.clone(), e.name.clone(), d.is_list()))).collect();
+        ctx.showing = clarity_gen_core::rows_shown(page);
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        ctx.params = written.iter().map(|h| (h.name.name.clone(), h.params.iter().map(|p| p.ty.clone()).collect())).collect();
+        // Each call with values the parts wire, with its values as Rust.
+        let calls: Vec<(String, String, Vec<String>)> = page
+            .map(clarity_gen_core::wired_calls)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|h| {
+                let decl = written.iter().find(|d| d.name.name == h.handler)?;
+                let values = h.args.iter().zip(&decl.params).map(|(v, p)| literal_in_main(project, &p.ty, v)).collect();
+                Some((clarity_spec::widgets::handler_call(h), format!("{}__{}", super::names::snake(name), super::names::snake(&h.handler)), values))
+            })
+            .collect();
+
+        let fields: String = data
+            .iter()
+            .map(|d| {
+                let ty = match &d.of {
+                    DataKind::Record { entity } => entity.name.clone(),
+                    DataKind::List { entity } => format!("Vec<{}>", entity.name),
+                    DataKind::Value { ty, .. } => value_type(&type_ref_info(project, ty)),
+                };
+                super::names::struct_field(&d.name.name, &ty)
+            })
+            .collect();
+        let loads: String = data
+            .iter()
+            .map(|d| {
+                let value = match &d.of {
+                    // The settings are what the person kept, each value that still fits.
+                    DataKind::Record { entity } if project.entity(&entity.name).is_some_and(|e| e.settings) => "crate::kept_settings()".to_string(),
+                    DataKind::Record { entity } => format!("{}::default()", entity.name),
+                    // A list of records starts empty: code builds it (manual/code.engines.md).
+                    DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => "Vec::new()".to_string(),
+                    DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.readable.is_some()) => format!("{e}::readable_all(db, db.all::<{e}>()?)?", e = entity.name),
+                    DataKind::List { entity } => format!("db.all::<{}>()?", entity.name),
+                    DataKind::Value { ty, default: Some(value) } => literal(project, ty, value),
+                    DataKind::Value { default: None, .. } => "Default::default()".into(),
+                };
+                format!("            {}: {value},\n", ident(&d.name.name))
+            })
+            .collect();
+        out.push_str(&format!(
+            "/// The data of {name}, as its handlers see it.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct {struct_name} {{
+{fields}}}
+
+impl {struct_name} {{
+    /// The data when it opens: every record of a list, a new record otherwise, each value at its default.
+    pub fn load(db: &Db) -> Result<Self> {{
+        Ok({struct_name} {{
+{loads}        }})
+    }}
+}}
+
+"
+        ));
+
+        // `allow when` (docs/ledger/signin.md): a window's, decided before it opens.
+        let mut access = Emitter::new(project, types, None);
+        let allowed = page.and_then(|p| p.allow_condition.as_ref()).map(|condition| {
+            let holds = access.value(condition);
+            out.push_str(&format!(
+                "impl {struct_name} {{\n    /// `allow when {}`: checked before the window opens.\n    pub fn allowed(db: &Db) -> Result<()> {{\n        clarity_runtime::signin::allow({holds})\n    }}\n}}\n\n",
+                print::expr(condition)
+            ));
+        });
+        // A frame command's, checked when the handler it runs runs: every command's that runs it.
+        let frame = page.map(|p| &p.frame).or(app.map(|a| &a.frame));
+        // One that opens a window: checked when that window opens, since the wire does not say which command opened it.
+        let mut guards: Vec<(String, Vec<&Expr>)> = Vec::new();
+        let mut opening: Vec<(String, Vec<&Expr>)> = Vec::new();
+        for command in frame.map(|f| allowed_commands(f, page.map(|p| p.widgets.as_slice()).unwrap_or_default())).unwrap_or_default() {
+            let Some(condition) = command.props.allow_condition.as_ref() else { continue };
+            let opened = command.props.on_click.as_ref().filter(|t| project.pages().any(|p| p.name.name == **t));
+            if let Some(handler) = &command.props.handler {
+                add_condition(&mut guards, handler, condition);
+            }
+            if let Some(window) = opened {
+                add_condition(&mut opening, window, condition);
+            }
+        }
+        let mut opens_guarded = Vec::new();
+        for (window, conditions) in opening {
+            let function = format!("{}__opens__{}__allowed", super::names::snake(name), super::names::snake(&window));
+            let checks: String = conditions.iter().map(|c| format!("    // `allow when {}`\n    clarity_runtime::signin::allow({})?;\n", print::expr(c), access.value(c))).collect();
+            out.push_str(&format!("/// Who may pick the commands of {name} that open {window}.\npub fn {function}(db: &Db) -> Result<()> {{\n{checks}    Ok(())\n}}\n\n"));
+            opens_guarded.push((window, function));
+        }
+        let mut guarded = Vec::new();
+        for (handler, conditions) in guards {
+            let function = format!("{}__{}__allowed", super::names::snake(name), super::names::snake(&handler));
+            let checks: String = conditions.iter().map(|c| format!("    // `allow when {}`\n    clarity_runtime::signin::allow({})?;\n", print::expr(c), access.value(c))).collect();
+            out.push_str(&format!("/// Who may pick the commands that run {handler}.\npub fn {function}(db: &Db) -> Result<()> {{\n{checks}    Ok(())\n}}\n\n"));
+            guarded.push((handler, function));
+        }
+        errors.extend(access.errors.into_iter().map(|e| format!("'allow when' of {name}: {e}")));
+
+        let mut handlers = Vec::new();
+        for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
+            let function = format!("{}__{}", super::names::snake(name), super::names::snake(&handler.name.name));
+            // The values a click gives it, typed.
+            let values: String = handler
+                .params
+                .iter()
+                // A record `mut`, as code may change and save a record it was given.
+                .map(|p| {
+                    let ty = type_ref_info(project, &p.ty);
+                    let binding = if matches!(ty, TypeInfo::Record(_)) { "mut " } else { "" };
+                    format!(", {binding}{}: {}", ident(&p.name.name), value_type(&ty))
+                })
+                .collect();
+            let mut emitter = Emitter {
+                project,
+                types,
+                decl: None,
+                window: Some(std::mem::take(&mut ctx)),
+                                command: false,
+                writing: false,
+                refs: vec![HashSet::new()],
+                locals: vec![handler.params.iter().map(|p| (p.name.name.clone(), type_ref_info(project, &p.ty))).collect()],
+                elements: Vec::new(),
+                guards: Vec::new(),
+                errors: Vec::new(),
+            };
+            let mut body = String::new();
+            emitter.block(&handler.body, 1, &mut body);
+            ctx = emitter.window.take().unwrap_or_default();
+            if emitter.errors.is_empty() {
+                out.push_str(&format!(
+                    "pub fn {function}(db: &Db, w: &mut {struct_name}, ui: &mut Ui{values}) -> Result<()> {{\n{body}    Ok(())\n}}\n\n"
+                ));
+                // One that takes values is called with them, through the calls.
+                if handler.params.is_empty() {
+                    handlers.push((handler.name.name.clone(), function));
+                }
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
+            }
+        }
+        let draws = page
+            .map(clarity_gen_core::canvas_draws)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(canvas, handler)| (canvas, format!("{}__{}", super::names::snake(name), super::names::snake(&handler))))
+            .collect();
+        let answers = clarity_gen_core::given_values_handlers(page, &written)
+            .into_iter()
+            .map(|h| {
+                let records = h.params.iter().map(|p| matches!(type_ref_info(project, &p.ty), TypeInfo::Record(_))).collect();
+                (h.name.name.clone(), format!("{}__{}", super::names::snake(name), super::names::snake(&h.name.name)), records)
+            })
+            .collect();
+        owners.push(Owner {
+            name: name.clone(),
+            struct_name,
+            module: module.to_string(),
+            handlers,
+            calls,
+            is_app: app.is_some(),
+            events,
+            draws,
+            answers,
+            allowed: allowed.is_some(),
+            guarded,
+            opens_guarded,
+        });
+    }
+    if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
+}
+
+/// `condition` among those of `target` (a handler or a window): shared, all of them hold.
+fn add_condition<'e>(into: &mut Vec<(String, Vec<&'e Expr>)>, target: &str, condition: &'e Expr) {
+    match into.iter_mut().find(|(t, _)| t == target) {
+        Some((_, conditions)) => conditions.push(condition),
+        None => into.push((target.to_string(), vec![condition])),
+    }
+}
+
+/// Every command of a frame and of the menus of `widgets`, in and under each other.
+fn allowed_commands<'f>(frame: &'f Frame, widgets: &'f [Widget]) -> Vec<&'f Command> {
+    fn add<'f>(commands: &'f [Command], out: &mut Vec<&'f Command>) {
+        for command in commands {
+            out.push(command);
+            add(&command.items, out);
+        }
+    }
+    fn in_widgets<'f>(widgets: &'f [Widget], out: &mut Vec<&'f Command>) {
+        for widget in widgets {
+            if let Some(menu) = &widget.menu {
+                add(&menu.items, out);
+            }
+            in_widgets(&widget.children, out);
+            for page in &widget.pages {
+                in_widgets(&page.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(menu) = &frame.menu {
+        add(&menu.items, &mut out);
+    }
+    if let Some(toolbar) = &frame.toolbar {
+        add(&toolbar.items, &mut out);
+    }
+    for group in frame.ribbon.iter().flat_map(|r| &r.tabs).flat_map(|t| &t.groups) {
+        add(&group.items, &mut out);
+    }
+    in_widgets(widgets, &mut out);
+    for sidebar in &frame.sidebars {
+        in_widgets(&sidebar.widgets, &mut out);
+    }
+    if let Some(footer) = &frame.footer {
+        in_widgets(&footer.widgets, &mut out);
+    }
+    out
+}
+
+/// A value written in the design as Rust, of the parameter's type.
+/// The commands of a module (manual/code.commands.md): each a function taking the
+/// database, the session it prints and asks through, the settings (as
+/// `w.settings`, as a window has them) and its arguments and options, and
+/// giving its exit code.
+pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
+    let mut out = String::new();
+    let mut errors = Vec::new();
+    for command in &file.commands {
+        let mut emitter = Emitter::new(project, types, None);
+        emitter.command = true;
+        let mut params = String::new();
+        for (name, ty) in command.params.iter().map(|p| (&p.name, &p.ty)).chain(command.options.iter().map(|o| (&o.name, &o.ty))) {
+            params.push_str(&format!(", {}: {}", ident(&name.name), value_type(&type_ref_info(project, ty))));
+        }
+        let mut body = String::new();
+        // `allow when`: refused with notAllowed before the command runs.
+        if let Some(allow) = &command.allow {
+            body.push_str(&format!("    clarity_runtime::signin::allow({})?;\n", emitter.value(allow)));
+        }
+        emitter.block(&command.body, 1, &mut body);
+        if emitter.errors.is_empty() {
+            out.push_str(&format!(
+                "/// `{line}`.\n#[allow(unused_variables, unused_mut)]\npub fn {function}(db: &Db, cli: &mut Session, w: &mut crate::CommandData{params}) -> Result<i32> {{\n{body}    Ok(0)\n}}\n\n",
+                line = command.line(),
+                function = command_function(command),
+            ));
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("command '{}': {e}", command.line())));
+        }
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+/// The Rust function of a command: `command_customer_add`.
+pub fn command_function(command: &clarity_spec::code::CommandDecl) -> String {
+    let group = command.group.as_ref().map(|g| format!("{}_", super::names::snake(&g.name))).unwrap_or_default();
+    format!("command_{group}{}", super::names::snake(&command.name.name))
+}
+
+fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
+    use clarity_spec::model::Literal;
+    match (type_ref_info(project, ty), value) {
+        (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => decimal(n),
+        (_, Literal::Number(n)) => format!("{n}i64"),
+        // A key starts in the language the screen picked.
+        (_, Literal::Str(text)) if text.starts_with('@') => format!("clarity_runtime::i18n::text({:?})", &text[1..]),
+        (_, Literal::Str(text)) => format!("String::from({text:?})"),
+        (_, Literal::Bool(b)) => b.to_string(),
+        (TypeInfo::Enum(e), Literal::Ident(v)) => format!("{e}::{v}"),
+        (_, Literal::Ident(v)) => v.clone(),
+    }
+}
+
+/// A value written in the design as main.rs writes it, which reaches the
+/// modules' types by their paths: `modules::sales::OrderStatus::Approved`.
+fn literal_in_main(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
+    use clarity_spec::model::Literal;
+    match (type_ref_info(project, ty), value) {
+        (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => format!("clarity_runtime::{}", decimal(n)),
+        (TypeInfo::Enum(e), Literal::Ident(v)) => {
+            let module = project.files.iter().find(|f| f.enums.iter().any(|d| d.name.name == e)).and_then(|f| f.module.as_ref());
+            match module {
+                Some(m) => format!("modules::{}::{e}::{v}", super::names::snake(&m.name)),
+                None => format!("{e}::{v}"),
+            }
+        }
+        _ => literal(project, ty, value),
+    }
+}
+
+/// Decimals and money: stored as text, compared and ordered as numbers.
+fn is_stored_number(ty: &FieldType) -> bool {
+    matches!(ty, FieldType::Decimal { .. } | FieldType::Money)
+}
+
+/// The same comparison with its sides swapped.
+fn flipped(op: BinaryOp) -> BinaryOp {
+    match op {
+        BinaryOp::Lt => BinaryOp::Gt,
+        BinaryOp::LtEq => BinaryOp::GtEq,
+        BinaryOp::Gt => BinaryOp::Lt,
+        BinaryOp::GtEq => BinaryOp::LtEq,
+        other => other,
+    }
+}
+
+/// The runtime's name for a comparison.
+fn op_name(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Eq => "Eq",
+        BinaryOp::NotEq => "NotEq",
+        BinaryOp::Lt => "Lt",
+        BinaryOp::LtEq => "LtEq",
+        BinaryOp::Gt => "Gt",
+        _ => "GtEq",
+    }
+}
+
+/// A condition on the record the steps lead to, as one on the query's own
+/// record: each step a `Cond::through`, the first one outermost.
+fn through(hops: &[clarity_gen_core::query::Hop], cond: String) -> String {
+    hops.iter()
+        .rev()
+        .fold(cond, |inner, h| format!("Cond::through({:?}, {:?}, {:?}, {inner})", h.column, h.table, h.key))
+}
+
+/// Whether `body` sets a field of `var`, or saves or deletes it.
+/// Whether an action changes the record it takes as its `index`th value:
+/// it sets its fields, saves or deletes it, or hands it to an action that
+/// changes it. `seen` holds the actions asked already, so actions that call
+/// each other end.
+fn changes_param(project: &Project, decl: &clarity_spec::code::FunctionDecl, index: usize, seen: &mut Vec<(String, usize)>) -> bool {
+    match decl.kind {
+        FunctionKind::Function => return false,
+        // A data event is called by the runtime, which hands it the record to change.
+        FunctionKind::Event => return true,
+        FunctionKind::Action => {}
+    }
+    let Some(param) = decl.params.get(index) else { return false };
+    let key = (decl.name.name.clone(), index);
+    if seen.contains(&key) {
+        return false;
+    }
+    seen.push(key);
+    changes_in(project, &decl.body, &param.name.name, seen)
+}
+
+/// Whether `body` changes the record `var` (`changes`), or hands it to an
+/// action of the project that changes it.
+fn changes_in(project: &Project, body: &[Stmt], var: &str, seen: &mut Vec<(String, usize)>) -> bool {
+    if changes(body, var) {
+        return true;
+    }
+    let mut handed = Vec::new();
+    clarity_spec::code::each_expr_in(body, &mut |expr| {
+        if let ExprKind::Call { function, args, .. } = &expr.kind {
+            for (i, arg) in args.iter().enumerate() {
+                if matches!(&arg.kind, ExprKind::Name { name } if name == var) {
+                    handed.push((function.name.clone(), i));
+                }
+            }
+        }
+    });
+    handed.into_iter().any(|(name, i)| {
+        project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name).is_some_and(|callee| changes_param(project, callee, i, seen))
+    })
+}
+
+/// Whether `body` gives the name `var` a new value (`rows = ...`).
+fn assigns(body: &[Stmt], var: &str) -> bool {
+    let mut found = false;
+    clarity_spec::code::check::each_stmt(body, &mut |stmt| {
+        if let StmtKind::Assign { target, .. } = &stmt.kind
+            && matches!(&target.kind, ExprKind::Name { name } if name == var)
+        {
+            found = true;
+        }
+    });
+    found
+}
+
+/// Whether the Rust of a loop's body uses the list `source` it goes
+/// through (`w.entries`, `rows`) or the whole of what holds it (`w` given
+/// to a handler), which it cannot while the loop borrows the list. A field
+/// beside the list (`w.piece`) is borrowed apart from it.
+fn borrows_beside(inner: &str, source: &str) -> bool {
+    if source.starts_with('(') {
+        return false;
+    }
+    let root = source.split('.').next().unwrap_or(source);
+    let bytes = inner.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let found = |name: &str, whole: bool| {
+        inner.match_indices(name).any(|(at, _)| {
+            let end = at + name.len();
+            let before = at == 0 || !(word(bytes[at - 1]) || bytes[at - 1] == b'.');
+            let after = end >= bytes.len() || !(word(bytes[end]) || (whole && bytes[end] == b'.'));
+            before && after
+        })
+    };
+    found(source, false) || (root != source && found(root, true))
+}
+
+/// Whether the Rust of a statement in a loop over `source` may leave items
+/// out of it: it hands on the whole of what holds the list (`w` given to a
+/// handler) or gives the list a new value (`w.entries = ...`).
+fn shortens(code: &str, source: &str) -> bool {
+    let root = source.split('.').next().unwrap_or(source);
+    let bytes = code.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let before = |at: usize| at == 0 || !(word(bytes[at - 1]) || bytes[at - 1] == b'.');
+    let set = format!("{source} = ");
+    let handed = root != source
+        && code.match_indices(root).any(|(at, _)| {
+            let end = at + root.len();
+            before(at) && (end >= bytes.len() || !(word(bytes[end]) || bytes[end] == b'.'))
+        });
+    handed || code.match_indices(&set).any(|(at, _)| before(at))
+}
+
+fn changes(body: &[Stmt], var: &str) -> bool {
+    fn root(expr: &Expr) -> Option<&str> {
+        match &expr.kind {
+            ExprKind::Name { name } => Some(name),
+            ExprKind::Member { object, .. } => root(object),
+            _ => None,
+        }
+    }
+    body.iter().any(|stmt| match &stmt.kind {
+        StmtKind::Assign { target, .. } => matches!(&target.kind, ExprKind::Member { .. }) && root(target) == Some(var),
+        StmtKind::Save { value, .. } | StmtKind::Delete { value } => root(value) == Some(var),
+        StmtKind::Reload { data } => data.name == var,
+        StmtKind::If { branches, otherwise } => {
+            branches.iter().any(|b| changes(&b.body, var)) || otherwise.as_deref().is_some_and(|o| changes(o, var))
+        }
+        // An inner loop of its own name hides this one; a loop that changes its items
+        // changes what it goes through.
+        StmtKind::For { var: inner, list, body } => (inner.name != var && changes(body, var)) || (root(list) == Some(var) && changes(body, &inner.name)),
+        _ => false,
+    })
+}
+
+/// A kind's or options' pieces (clarity_gen_core::shape) as a Rust expression of a `String`: a base
+/// is a new record as serde writes it, a piece of code is already JSON text.
+/// `me`'s id: refused with notAllowed when nobody is signed in.
+const ME_ID: &str = "db.me_id().ok_or_else(|| Error::Refused(clarity_runtime::signin::not_allowed()))?";
+
+/// Whether `expr` is `me`, the record signed in.
+fn is_me(types: &FileTypes, expr: &Expr) -> bool {
+    matches!(expr.kind, ExprKind::Name { .. }) && types.name_of(expr) == Some(&NameKind::Me)
+}
+
+fn rust_pieces(pieces: &[clarity_gen_core::shape::Piece]) -> String {
+    use clarity_gen_core::shape::Piece;
+    if pieces.is_empty() {
+        return "String::new()".to_string();
+    }
+    let parts: Vec<String> = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => format!("String::from({t:?})"),
+            Piece::Base(entity) => format!("clarity_runtime::formats::base(&{entity}::default())"),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect();
+    format!("[{}].concat()", parts.join(", "))
+}
+
+/// A folder's extensions as the runtime takes them: `vec!["*.md".to_string()]`.
+fn rust_patterns(patterns: &[String]) -> String {
+    format!("vec![{}]", patterns.iter().map(|p| format!("{p:?}.to_string()")).collect::<Vec<_>>().join(", "))
+}

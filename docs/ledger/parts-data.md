@@ -26,7 +26,7 @@ Progress: 90%
 - Splitting `parts/data/table.rs` into columns and cells, sorting, paging, editing, adding and removing, reordering and drag ([modularity](modularity.md) step 4): NOT BUILT.
 
 ## Conflicts
-- Decision needed: table order puts an empty value last (`runtimes/rust/src/tables.rs:3`); comparisons in code put none first on R, Go, C and C++. No rule says which is meant.
+- Decided 2026-11-21 (the user: "First, everywhere"): an empty value comes first in table order either way, as in comparisons and in `find ... order by` (`conformance/table-order.json`, `queries.json`).
 - C# runtime files `TablePages.cs`, `Trees.cs` have no callers outside tests (copies of rules Clarity.UI or the runtime already decides).
 
 ## Decisions

@@ -154,5 +154,5 @@ pub fn block_of(value: &Value) -> Block {
                 .collect()
         })
         .unwrap_or_default();
-    Block { strategies, tries: value["tries"].as_u64().unwrap_or(5) as u32, tries_seconds: value["triesSeconds"].as_u64().unwrap_or(900) }
+    Block { strategies, tries: value["tries"].as_u64().unwrap_or(crate::TRIES as u64) as u32, tries_seconds: value["triesSeconds"].as_u64().unwrap_or(crate::TRIES_SECONDS) }
 }

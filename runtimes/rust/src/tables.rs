@@ -1,7 +1,7 @@
 //! How a table's rows show, decided here in the runtime (manual/start.how-it-works.md,
 //! conformance/table-order.json, table-pages.json): text ignoring case,
-//! numbers as numbers, a choice by the label it shows, an empty value last
-//! either way, equal rows in the order of the data; then cut into pages.
+//! numbers as numbers, a choice by the label it shows, none first either
+//! way (empty text is text), equal rows in the order of the data; then cut into pages.
 //! Rows keep their place in the data; only the order they show in changes.
 
 use serde::{Deserialize, Serialize};
@@ -43,14 +43,14 @@ pub(crate) fn as_text(value: &Value) -> String {
     }
 }
 
-/// What a value sorts by; none when it is empty.
+/// What a value sorts by; nothing when it is none (empty text is text).
 enum Key {
     Number(f64),
     Text(String),
 }
 
 fn sort_key(column: &TableColumn, value: Option<&Value>) -> Option<Key> {
-    let value = value.filter(|v| !v.is_null() && v.as_str() != Some(""))?;
+    let value = value.filter(|v| !v.is_null())?;
     match column.kind.as_str() {
         "choice" => {
             let label = column
@@ -75,8 +75,8 @@ pub fn shown_order(rows: &[Map<String, Value>], columns: &[TableColumn], order: 
     let keys: Vec<Option<Key>> = rows.iter().map(|r| sort_key(column, r.get(&order.field))).collect();
     places.sort_by(|a, b| match (&keys[*a], &keys[*b]) {
         (None, None) => Ordering::Equal,
-        (None, _) => Ordering::Greater,
-        (_, None) => Ordering::Less,
+        (None, _) => Ordering::Less,
+        (_, None) => Ordering::Greater,
         (Some(x), Some(y)) => {
             let by = match (x, y) {
                 (Key::Number(x), Key::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),

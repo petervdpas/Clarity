@@ -24,6 +24,7 @@ const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "files": [{
 
 #[test]
 fn a_list_of_an_enum_offers_the_enums_values() {
+    let _turn = crate::choices_turn();
     let files = AppFiles { model: MODEL, ..FILES };
     let program: Arc<dyn Program> = Arc::new(Fake::default());
     let host = ProgramHost::new(program, files, WindowState::new("Main", Map::new()), &[]);

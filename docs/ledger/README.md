@@ -93,7 +93,7 @@ Plain ASCII, no em-dashes, short lines.
 | [devtools](devtools.md) | built | Release planning lists partial notes |
 | [offline](offline.md) | not built | `clarity prepare`, `clarity vendor` |
 | [release-ci](release-ci.md) | partial | a Windows job in checks.yml |
-| [examples](examples.md) | built | maintenance ReviewView |
+| [examples](examples.md) | built | invoices: editing its report in the app before it joins the checks |
 | [stack-rust](stack-rust.md) | built | list fields not loaded |
 | [stack-go](stack-go.md) | built | file-source tests skipped in CI |
 | [stack-c](stack-c.md) | built | server databases |

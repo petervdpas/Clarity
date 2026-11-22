@@ -25,9 +25,5 @@ std::string file_name(const std::string& database, int64_t seconds, int step);
 /// Removes the automatic backups of the database file `database` beyond the
 /// newest ten; manual ones, other databases' and other files stay.
 void prune(const std::string& database);
-/// Backs up the SQLite database `driver` has open before step `step` is
-/// applied to it; nothing for another kind of database or one in memory.
-/// Throws StorageError when it could not, which stops the migration.
-void before_migration(Driver& driver, int step);
 
 }  // namespace clarity::backup

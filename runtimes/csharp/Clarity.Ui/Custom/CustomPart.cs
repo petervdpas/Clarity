@@ -149,8 +149,13 @@ public abstract unsafe class CustomPart
     }
 
     /// <summary>A value as type <typeparamref name="T"/>, however the window or code gave it.</summary>
-    protected static T As<T>(object? value) =>
-        value is T typed ? typed : JsonSerializer.Deserialize<T>(value is JsonElement e ? e.GetRawText() : PartValues.Write(value), PartValues.Json)!;
+    /// The part's own JSON reads as a part gives it (numbers may come as text); a value of code reads back as Clarity wrote it.
+    protected static T As<T>(object? value) => value switch
+    {
+        T typed => typed,
+        JsonElement e => JsonSerializer.Deserialize<T>(e.GetRawText(), PartValues.Json)!,
+        _ => JsonSerializer.Deserialize<T>(PartValues.Write(value), JsonValues.Options)!,
+    };
 
     /// <summary>Does something through the library now, while a callback runs; else at the start of the next one.</summary>
     void Do(Action<nint> act)

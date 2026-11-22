@@ -1,8 +1,0 @@
-project Stock
-    title "Stock"
-    stack go desktop cli
-    output "out"
-    language "en"
-    datasource main sqlite "data/stock.db"
-    datasource deliveries xml "data/deliveries.xml" external
-        at "deliveries/delivery"

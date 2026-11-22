@@ -328,14 +328,6 @@ static bool batch(ClarityDriver* driver, const char* sql) {
     return f->db->batch(f->db, sql) && keep(f);
 }
 
-/* A file source is external: Clarity writes no steps for it. */
-static bool apply(ClarityDriver* driver, int version, const ClarityStep* step) {
-    (void)driver;
-    (void)version;
-    (void)step;
-    return true;
-}
-
 static void close_driver(ClarityDriver* driver) {
     FileDriver* f = file_of(driver);
     if (f->db) f->db->close(f->db);
@@ -473,7 +465,7 @@ static bool open_file(const ClarityFileSource* source, const char* path, Clarity
     if (!table) return clarity_fail(CLARITY_STORAGE, "data source %s: the table read is no table", source->name);
     FileDriver* f = calloc(1, sizeof *f);
     if (!f) return clarity_fail(CLARITY_STORAGE, "out of memory");
-    f->driver = (ClarityDriver){CLARITY_SQLITE, execute, insert, rows, batch, apply, close_driver};
+    f->driver = (ClarityDriver){CLARITY_SQLITE, execute, insert, rows, batch, close_driver};
     f->path = clarity_lasting(path);
     f->format = clarity_lasting(source->format);
     f->options = clarity_lasting(source->options ? source->options : "");

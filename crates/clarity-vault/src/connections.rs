@@ -59,6 +59,37 @@ impl ConnectionField {
     }
 }
 
+/// Why a connection named `name` with `fields` cannot be saved; none when it
+/// can (conformance/vault-connections.json, which the IDE's Vault tab runs
+/// too): it needs a name, every field a name used once (ignoring case), and a
+/// field from the vault its secret's category and key, which reading would
+/// otherwise drop.
+pub fn connection_problems(name: &str, fields: &[(String, ConnectionField)]) -> Vec<String> {
+    let mut problems = Vec::new();
+    if name.trim().is_empty() {
+        problems.push("The connection needs a name.".to_string());
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for (field, value) in fields {
+        let trimmed = field.trim();
+        if trimmed.is_empty() {
+            let unnamed = "Every field needs a name.".to_string();
+            if !problems.contains(&unnamed) {
+                problems.push(unnamed);
+            }
+            continue;
+        }
+        if seen.contains(&trimmed.to_lowercase()) {
+            problems.push(format!("Field {trimmed} is there twice."));
+        }
+        seen.push(trimmed.to_lowercase());
+        if value.from_vault.as_ref().is_some_and(|r| r.category.trim().is_empty() || r.key.trim().is_empty()) {
+            problems.push(format!("Field {trimmed} needs the category and key of its secret."));
+        }
+    }
+    problems
+}
+
 /// A named set of fields, in the order they are written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connection {

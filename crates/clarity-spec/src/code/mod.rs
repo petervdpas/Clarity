@@ -312,10 +312,15 @@ impl MessageLevel {
     }
 }
 
+/// The types a plain value can have besides an enum (window data, a custom
+/// part's property, a function's result), as the language writes them; the
+/// designer and the agent tools offer these.
+pub const PLAIN_TYPES: [&str; 8] = ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration"];
+
 /// How long a toast shows when neither it nor the app says, in milliseconds.
-pub const DEFAULT_TOAST_LIFESPAN: u32 = 5000;
+pub const DEFAULT_TOAST_LIFESPAN: u32 = crate::defaults::TOAST_LIFESPAN;
 /// The shortest and the longest lifespan a toast may have, in milliseconds.
-pub const TOAST_LIFESPANS: std::ops::RangeInclusive<u32> = 500..=120_000;
+pub const TOAST_LIFESPANS: std::ops::RangeInclusive<u32> = crate::defaults::TOAST_LIFESPANS;
 
 /// A toast (`toast saved` in a module): a short message in a corner of the
 /// window that goes by itself. Each has its own text, lifespan, level, icon

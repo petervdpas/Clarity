@@ -1,0 +1,11 @@
+// The invoices example: orders with their lines, each printed as an invoice
+// by a report designed in the Reports tab (reports/Invoice.report). Its
+// modules are in the invoices folder next to this file.
+project Invoices
+    title "Invoices"
+    stack go desktop
+    output "out"
+    language "en"
+    currency EUR
+    datasource main sqlite "data/invoices.db"
+    filestore exports "data/exports"

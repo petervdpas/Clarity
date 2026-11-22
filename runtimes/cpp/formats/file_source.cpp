@@ -237,9 +237,6 @@ public:
         keep();
     }
 
-    /// A file source is external: Clarity writes no steps for it.
-    void apply(int, const std::vector<std::string>&) override {}
-
 private:
     /// A file's size and modification time; none when it is not there.
     using Stamp = std::optional<std::pair<std::uintmax_t, fs::file_time_type>>;

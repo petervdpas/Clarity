@@ -138,7 +138,7 @@ impl Provider {
 
     fn token(&self, fields: &[(&str, &str)]) -> Result<Tokens, String> {
         let name = &self.name;
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(30))).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(crate::HTTP_SECONDS))).http_status_as_error(false).build().into();
         let mut response = agent
             .post(&self.token_endpoint)
             .header("Content-Type", "application/x-www-form-urlencoded")

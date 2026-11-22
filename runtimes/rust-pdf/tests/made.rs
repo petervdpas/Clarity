@@ -38,3 +38,19 @@ fn the_theme_gives_its_colors_to_the_stylesheet() {
 fn a_theme_that_is_no_json_is_refused() {
     assert!(matches!(clarity_pdf::made("text", "", "{ not json"), Err(Problem::Theme(_))));
 }
+
+/// Typst writes the default `/Suspects false` into the tagging information,
+/// which poppler (pdfinfo and the readers on it) flags as an error in every
+/// file; it is left out, its absence meaning the same, and the file keeps its
+/// length so every byte offset of its cross-reference table holds.
+#[test]
+fn a_pdf_leaves_out_the_default_suspects_entry() {
+    let file = clarity_pdf::made("# Invoice\n\nThank you.", "", "").unwrap();
+    let text = String::from_utf8_lossy(&file);
+    assert!(!text.contains("/Suspects false"), "the default Suspects entry is still there");
+    assert!(text.contains("/Marked true"), "the tagging information keeps Marked");
+    // The cross-reference section is still where the file says it is.
+    let at: usize = text.rsplit("startxref").next().unwrap().trim().lines().next().unwrap().trim().parse().unwrap();
+    let there = String::from_utf8_lossy(&file[at..(at + 20).min(file.len())]).into_owned();
+    assert!(there.starts_with("xref") || there.split_whitespace().nth(2) == Some("obj"), "startxref points at {:?}", &there[..20.min(there.len())]);
+}

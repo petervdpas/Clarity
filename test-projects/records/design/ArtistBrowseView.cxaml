@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window ArtistBrowse shows: its parts, data and code. -->
+<View class="music.ArtistBrowseView">
+  <Data name="artists" type="list&lt;Artist&gt;" />
+  <Label name="artistSearchLabel" at="1,1" span="2" caption="@artistSearchLabel" for="artistSearch" />
+  <Textbox name="artistSearch" at="3,1" span="10" placeholder="@artistSearchPlaceholder" onchange="filterChanged" />
+  <List name="artistList" at="1,2" span="12" rows="8" bind="artists" show="name, country, formed" cards="true" onopen="openClicked" />
+  <Button name="findPhotos" at="1,10" span="2" caption="@findPhotosCaption" onclick="photosClicked" />
+  <Button name="backUpPhotos" at="3,10" span="2" caption="@backUpPhotosCaption" onclick="backupClicked" />
+  <Button name="newArtist" at="11,10" span="2" caption="@newArtistCaption" icon="plus" onclick="newClicked" />
+</View>

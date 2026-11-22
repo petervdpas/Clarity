@@ -142,9 +142,9 @@ impl From<SigninStrategy> for SigninStrategyModel {
     }
 }
 
-pub const DEFAULT_SESSION_MINUTES: u32 = 8 * 60;
-pub const DEFAULT_TRIES: u32 = 5;
-pub const DEFAULT_TRIES_MINUTES: u32 = 15;
+pub const DEFAULT_SESSION_MINUTES: u32 = crate::defaults::SESSION_MINUTES;
+pub const DEFAULT_TRIES: u32 = crate::defaults::TRIES;
+pub const DEFAULT_TRIES_MINUTES: u32 = crate::defaults::TRIES_MINUTES;
 
 impl Signin {
     pub fn new(entity: impl Into<String>, targets: Vec<String>) -> Self {

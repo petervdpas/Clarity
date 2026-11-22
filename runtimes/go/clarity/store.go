@@ -6,7 +6,6 @@
 package clarity
 
 import (
-	"fmt"
 	"os"
 	"strings"
 )
@@ -20,16 +19,7 @@ type driver interface {
 	rows(sql string, params []any) ([][]any, error)
 	// batch runs SQL without parameters, such as a statement that creates a table.
 	batch(sql string) error
-	// apply runs the statements of migration step version and records that
-	// the database has it, all or nothing where the database can undo
-	// changes to tables.
-	apply(version int, statements []string) error
 	close() error
-}
-
-// applied is the statement that records migration step version.
-func applied(version int) string {
-	return fmt.Sprintf("INSERT INTO clarity_schema (version) VALUES (%d)", version)
 }
 
 // location is where a database is: as written, or from the environment

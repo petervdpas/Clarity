@@ -1,0 +1,5 @@
+project Calculator
+    stack go desktop
+    output "out"
+    datasource main sqlite "data/calculator.db"
+    theme Calculator

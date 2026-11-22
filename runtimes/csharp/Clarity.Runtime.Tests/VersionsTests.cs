@@ -58,7 +58,7 @@ public class VersionsTests
         {
             var name = c.GetProperty("name").GetString()!;
             using var db = Sqlite.Memory();
-            db.Migrate([[file.GetProperty("table").GetString()!]]);
+            db.ApplySteps([[file.GetProperty("table").GetString()!]]);
             var copies = new Dictionary<string, Item>();
             long last = 0;
             foreach (var step in c.GetProperty("steps").EnumerateArray())
@@ -127,7 +127,7 @@ public class VersionsTests
     public void A_handler_is_one_transaction_kept_at_its_end()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([[UndoTable]]);
+        db.ApplySteps([[UndoTable]]);
         var a = new Item { Name = "A" };
         db.Save(a);
         // A failure after two saves rolls both back, with the database's own rollback.
@@ -148,7 +148,7 @@ public class VersionsTests
     public void The_steps_of_one_edit_are_undone_all_or_none()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([[UndoTable]]);
+        db.ApplySteps([[UndoTable]]);
         Item a = new() { Name = "A" }, b = new() { Name = "B" };
         db.Save(a);
         db.Save(b);
@@ -167,7 +167,7 @@ public class VersionsTests
     public void Only_the_last_steps_are_kept()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([[UndoTable]]);
+        db.ApplySteps([[UndoTable]]);
         var a = new Item { Name = "A" };
         db.Save(a);
         for (var i = 0; i <= Db.UndoSteps; i++)
@@ -198,7 +198,7 @@ public class OwnWordsTests
     public void An_entity_words_the_refusal_with_the_database_at_hand()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE item (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, row_version INTEGER NOT NULL DEFAULT 1)"]]);
+        db.ApplySteps([["CREATE TABLE item (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, row_version INTEGER NOT NULL DEFAULT 1)"]]);
         var first = new Worded { Name = "first" };
         db.Save(first);
         var second = db.Get<Worded>(first.Id);

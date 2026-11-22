@@ -34,19 +34,6 @@ public static class PersonKeys
         Changed?.Invoke();
     }
 
-    /// <summary>The person set their keys: the commands take them, and the settings file keeps them.</summary>
-    public static void Set(IReadOnlyDictionary<string, IReadOnlyList<string>> choices)
-    {
-        Choices = new Dictionary<string, IReadOnlyList<string>>(choices);
-        if (program is { } name)
-        {
-            var kept = KeptSettings.Read(name);
-            kept["keys"] = Json();
-            KeptSettings.Keep(name, kept);
-        }
-        Changed?.Invoke();
-    }
-
     /// <summary>The keys a command answers: the person's, or the one its design gives.</summary>
     public static IReadOnlyList<string> Of(string id, string? designed) =>
         Choices.TryGetValue(id, out var keys) ? keys : designed is null ? [] : [designed];

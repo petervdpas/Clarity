@@ -7,7 +7,7 @@ use rusqlite::types::{ToSqlOutput, Value, ValueRef};
 
 use crate::dialect::Dialect;
 use crate::sql::{DATE, DATE_TIME};
-use crate::store::{Driver, Failure, Outcome, applied};
+use crate::store::{Driver, Failure, Outcome};
 use crate::{Error, Id, Result, SqlValue};
 
 impl rusqlite::ToSql for SqlValue {
@@ -68,21 +68,6 @@ impl Sqlite {
         Ok(Sqlite(conn))
     }
 
-    fn step(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
-        let tx = self.0.transaction()?;
-        for statement in statements {
-            tx.execute_batch(statement)?;
-        }
-        let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
-        if broken > 0 {
-            return Err(Failure::Other(format!(
-                "migration step {version} leaves {broken} reference(s) to records that do not exist"
-            )));
-        }
-        tx.execute_batch(&applied(version))?;
-        tx.commit()?;
-        Ok(())
-    }
 }
 
 impl Driver for Sqlite {
@@ -114,13 +99,4 @@ impl Driver for Sqlite {
         Ok(self.0.execute_batch(sql)?)
     }
 
-    /// References are not enforced while a step runs, since a step may
-    /// build a table again that others refer to; they are checked before
-    /// the step is kept.
-    fn apply(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
-        self.0.execute_batch("PRAGMA foreign_keys = OFF")?;
-        let done = self.step(version, statements);
-        self.0.execute_batch("PRAGMA foreign_keys = ON")?;
-        done
-    }
 }

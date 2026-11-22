@@ -25,7 +25,7 @@ Progress: 70%
 - Codex and Copilot checked by hand against the real programs: UNTRIED; see Design.
 - Claude Code as an outside agent: NOT BUILT; see Design.
 - A missing program links to Clarity's manual page: PARTIAL. It links the vendor's install page (`vendors.rs:42-51`).
-- Panel, picker and dialog texts from translations: NOT BUILT (see [ide-shell](ide-shell.md)).
+- Panel, picker and dialog texts from translations: NOT WANTED (the IDE stays English; see [ide-shell](ide-shell.md)).
 
 ## Design
 The hand check. Codex and Copilot, each with its start command, its ask-first mode and its sign-in, tried against the real programs (the tests use a fake agent program). The open notes are in `crates/clarity-acp/src/vendors.rs:84`.

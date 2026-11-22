@@ -93,18 +93,14 @@ app/                     Clarity IDE: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build; the Agent panel
 manual/                  the manual, one topic per page; the IDE opens it with F1
 examples/                example projects, each a project file with a folder of its modules and a README, on the stack it names:
-  shop                   Rust    customers and orders, priced by an engine
   dashboard              Rust    sales and stock at a glance: charts, totals and the products running low
   modelling              Rust    a data model kept in one place, from which the app writes what developers would write by hand
-  maintenance            Rust    reviews a project's development ledger: entries in a tree, each shown as Markdown, with a review beside it
   network                Rust    graphs of records: people, organisations and projects from the data model, and free ideas with their links
   records                Go      a record collection, with albums, tracks and loans; an engine reads photo sizes
   calculator             Go      a calculator: values in clicks, plain window data, a seven-segment display
   dial                   Go      a speed dial drawn on a canvas by code, its needle placed by an engine
-  stock                  Go      a stock list with a window and a command line over the same items
-  waves                  Go      water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
-  pills                  Go      a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter
   videoplayer            Go      plays videos with the video part
+  invoices               Go      orders and their invoice as a report: designed in the Reports tab, shown by the pdfReport part, saved as a PDF
   invaders               Go web  a fleet that marches down and you shoot it: a game served to a browser
   todo                   C#      tasks with a done flag, edited in their table
   noughts                C#      noughts and crosses against an engine written in Clarity that keeps each window's game
@@ -115,6 +111,7 @@ examples/                example projects, each a project file with a folder of 
   orbs                   C++     a game whose field of orbs a custom part draws
   novel                  C++     books and their chapters, fragments and progress, for writing a novel, a screenplay or a play
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
+test-projects/           projects that only the tests use, so no test depends on an example (crates/clarity-gen/tests/gen/checks_cover.rs keeps it so): shop, and frozen copies of calculator, invoices, ledger, noughts, novel, records, todo and walker
 ```
 
 Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). A custom part is a library of the project in its own language (a Rust crate, a Go package, C or C++ with CMake, C# with NuGet): the program builds it in and Clarity.UI draws it; see [Custom parts](manual/design.custom-parts.md).

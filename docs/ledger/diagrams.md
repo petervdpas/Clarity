@@ -13,7 +13,7 @@ Progress: 50%
 - Docs: manual/data.diagrams.md
 
 ## Tests
-- `crates/clarity-spec/tests/diagrams.rs`, diagram_views.rs (examples' diagrams; `CLARITY_WRITE_DIAGRAMS=1 cargo test -p clarity-spec --test diagram_views`), diagram_files.rs, diagram_proposals.rs, class_diagrams.rs, class_model.rs, erd_model.rs
+- `crates/clarity-spec/tests/spec/diagrams.rs`, diagram_views.rs (examples' diagrams; `CLARITY_WRITE_DIAGRAMS=1 cargo test -p clarity-spec --test spec diagram_views::`), diagram_files.rs, diagram_proposals.rs, class_diagrams.rs, class_model.rs, erd_model.rs
 - `app/src/lib/diagramCanvas.test.ts`, erdDesign.test.ts, classDesign.test.ts
 
 ## Open

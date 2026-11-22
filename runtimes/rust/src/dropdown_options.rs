@@ -1,10 +1,11 @@
-//! The dropdown's options of U1c, decided here, not in the screen
-//! (manual/start.how-it-works.md). A `typed` dropdown offers the values its field already
-//! has: each once, without empty text, those containing the typed text
-//! (ignoring case), sorted ignoring case and then as written. A `search`
-//! dropdown offers the records whose text or shown fields hold every typed
-//! word, ignoring case, in the order they came. Every runtime offers alike
-//! (conformance/dropdown-options.json).
+//! The dropdown's options of U1c (conformance/dropdown-options.json), which
+//! Clarity.UI offers with these, once for every stack: a `typed` dropdown
+//! offers the values its field already has, each once, without empty text,
+//! those containing the typed text (ignoring case), sorted ignoring case and
+//! then as written; a `search` dropdown offers the records whose text or
+//! shown fields hold every typed word, ignoring case, in the order they came.
+//! A program only gives the values (`field_values`) and the records with the
+//! fields shown (`offered`).
 
 use crate::ui::RefOption;
 use crate::{Error, Result};
@@ -49,14 +50,9 @@ pub fn searched(options: Vec<RefOption>, show: &[String], typed: &str) -> Vec<Re
         .collect()
 }
 
-/// `find_options` (manual/start.how-it-works.md): what a dropdown of `kind` offers for
-/// `typed`: for `typed`, the field's `values`; for `search`, the entity's
-/// `options` with the fields of `show`. Answers the list.
-pub fn find(kind: &str, show: &[String], typed: &str, values: impl FnOnce() -> Result<Vec<String>>, options: impl FnOnce() -> Result<Vec<RefOption>>) -> Result<Value> {
-    let answer = match kind {
-        "typed" => serde_json::to_value(suggestions(&values()?, typed)),
-        "search" => serde_json::to_value(searched(options()?, show, typed)),
-        other => return Err(Error::Invalid(format!("a dropdown offers typed or search options, not {other}"))),
-    };
-    answer.map_err(|err| Error::Invalid(err.to_string()))
+/// What a program answers `find_options` with (manual/start.how-it-works.md):
+/// the entity's records, each with the fields of `show` only, which the
+/// screen searches as the person types.
+pub fn offered(options: Vec<RefOption>, show: &[String]) -> Result<Value> {
+    serde_json::to_value(searched(options, show, "")).map_err(|err| Error::Invalid(err.to_string()))
 }

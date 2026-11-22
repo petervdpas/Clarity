@@ -44,7 +44,7 @@ They are checkboxes labeled with Clarity's words ("AI agents may read while the 
 
 ## How an agent reaches the app
 
-The app needs no command-line program for this: its own program answers the word `mcp`. In the agent's setup of MCP servers, add the program with `mcp` as its argument, such as `maintenance mcp` (for Claude Code: `claude mcp add maintenance -- /path/to/maintenance mcp`).
+The app needs no command-line program for this: its own program answers the word `mcp`. In the agent's setup of MCP servers, add the program with `mcp` as its argument, such as `shop mcp` (for Claude Code: `claude mcp add maintenance -- /path/to/maintenance mcp`).
 
 - **The app is open:** each call goes to it. The first read of a connection and every change ask the person: **Allow once**, **Allow for this session** or **Refuse**.
 - **The app is closed:** nobody is asked. The person's settings allow reads and changes, else the call is refused with "open it to allow this".

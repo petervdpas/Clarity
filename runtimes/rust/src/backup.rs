@@ -1,17 +1,11 @@
-//! A backup of an SQLite database before migration steps change it
-//! (docs/ledger/backups.md): a copy beside it in `backups/`, made with
-//! `VACUUM INTO`, named `<database>-<when>-before-migration-NNNN.db` with
-//! the time in UTC, as Clarity and every runtime name it
+//! The names and pruning of SQLite backups (docs/ledger/backups.md): a copy
+//! beside the database in `backups/`, named `<database>-<when>-<why>.db`
+//! with the time in UTC, as Clarity and every runtime name it
 //! (conformance/backups.json). The newest ten automatic backups are kept;
-//! a manual one is the person's and stays.
+//! a manual one is the person's and stays. clarity-migrate takes the one
+//! before migration steps; the program does not migrate.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::dialect::Dialect;
-use crate::sql::SqlValue;
-use crate::store::Driver;
-use crate::{Error, Result};
 
 /// How many automatic backups each database keeps.
 pub const KEPT_AUTOMATIC: usize = 10;
@@ -69,32 +63,3 @@ pub fn prune(database: &Path) {
     }
 }
 
-/// Backs up the SQLite database `conn` has open before step `step` is applied to it; nothing for another kind of database or one in memory. A backup that fails stops the migration.
-pub(crate) fn before_migration(conn: &mut dyn Driver, step: usize) -> Result<Option<PathBuf>> {
-    if conn.dialect() != Dialect::Sqlite {
-        return Ok(None);
-    }
-    let rows = conn.rows("SELECT file FROM pragma_database_list WHERE name = 'main'", &[])?;
-    let file = match rows.first().and_then(|r| r.first()) {
-        Some(SqlValue::Text(file)) if !file.is_empty() => PathBuf::from(file),
-        _ => return Ok(None),
-    };
-    let refused = |what: String| Error::Storage(format!("the database was not migrated, since it could not be backed up first: {what}"));
-    let dir = file.parent().unwrap_or(Path::new(".")).join("backups");
-    std::fs::create_dir_all(&dir).map_err(|e| refused(format!("{}: {e}", dir.display())))?;
-    let name = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "database".into());
-    let seconds = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-    let first = dir.join(file_name(&name, seconds, step));
-    let mut path = first.clone();
-    let mut n = 2;
-    while path.exists() {
-        path = PathBuf::from(format!("{}_{n}.db", first.with_extension("").display()));
-        n += 1;
-    }
-    conn.execute("VACUUM INTO ?1", &[SqlValue::Text(path.to_string_lossy().to_string())]).map_err(|e| match Error::from(e) {
-        Error::Storage(what) => refused(what),
-        other => other,
-    })?;
-    prune(&file);
-    Ok(Some(path))
-}

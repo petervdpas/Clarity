@@ -557,8 +557,8 @@ fn remove_tab(tools: &mut ProjectTools, input: &Value) -> Result<String, String>
 // ---------------------------------------------------------------------------
 // Data and custom parts
 
-/// The plain types window data can hold, as the designer offers them (`PLAIN_TYPES` in runtimes/web/src/screen/windowData.ts).
-const PLAIN_DATA_TYPES: [&str; 8] = ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration"];
+/// The plain types window data can hold, as the designer offers them.
+const PLAIN_DATA_TYPES: [&str; 8] = clarity_spec::code::PLAIN_TYPES;
 
 fn add_data(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
     let (dir, at) = page_of(tools, input)?;
@@ -638,6 +638,25 @@ mod tests {
     fn with_task(tools: &mut ProjectTools) {
         let wrote = tools.call("write_file", &json!({"path": "todo.clarity", "text": "module todo\n\nentity Task\n    title: text(80)\n    done: bool\n"}));
         assert!(!wrote.is_error, "{}", wrote.text);
+    }
+
+    /// A custom part grows with its window or keeps its rows, as its declaration's
+    /// grows line says, set and taken away by name; a name no part declares is refused.
+    #[test]
+    fn a_custom_part_grows_with_its_window_by_name() {
+        let (root, dir, mut tools) = project("grows");
+        let wrote = tools.call("write_file", &json!({"path": "todo.clarity", "text": "module todo\n\npart Arena\n    crate \"parts/Arena\"\n    size 8 x 6\n"}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+        let grown = tools.call("set_part_grows", &json!({"part": "Arena", "grows": true}));
+        assert!(!grown.is_error && grown.text.contains("Arena grows with its window"), "{}", grown.text);
+        let text = std::fs::read_to_string(dir.join("todo.clarity")).unwrap();
+        assert!(text.contains("    grows\n") || text.trim_end().ends_with("    grows"), "{text}");
+        let kept = tools.call("set_part_grows", &json!({"part": "Arena", "grows": false}));
+        assert!(!kept.is_error && kept.text.contains("Arena keeps its rows"), "{}", kept.text);
+        assert!(!std::fs::read_to_string(dir.join("todo.clarity")).unwrap().contains("grows"));
+        let unknown = tools.call("set_part_grows", &json!({"part": "Board", "grows": true}));
+        assert!(unknown.is_error, "{}", unknown.text);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// No edit leaves parts reaching past what holds them: a memo too tall for

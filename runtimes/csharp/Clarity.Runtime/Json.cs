@@ -28,7 +28,7 @@ public static class JsonValues
     public static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = ClarityNaming.Instance,
-        Converters = { new DecimalAsText(), new JsonStringEnumConverter() },
+        Converters = { new DecimalAsText(), new DateTimeAsText(), new JsonStringEnumConverter() },
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
@@ -49,6 +49,16 @@ public static class JsonValues
     }
 
     /// <summary>A decimal as exact text, as Clarity's values travel; read from text or a number.</summary>
+    /// <summary>A date and time as every stack writes it, yyyy-MM-ddTHH:mm:ss (conformance/values-json.json); read as written.</summary>
+    sealed class DateTimeAsText : JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options) =>
+            DateTime.Parse(reader.GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
+            writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
+    }
+
     sealed class DecimalAsText : JsonConverter<decimal>
     {
         public override decimal Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options) =>

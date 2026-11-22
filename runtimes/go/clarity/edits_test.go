@@ -225,3 +225,33 @@ func TestTheEditBusPutsBackWhatCodeSetOnParts(t *testing.T) {
 		}
 	}
 }
+
+// A window's bus keeps its last edits as every runtime does (conformance/edit-bus.json, `keeps`): one past
+// them drops the oldest, so that many undos take back the last ones and the next finds nothing.
+func TestTheBusKeepsAsManyEditsAsEveryRuntimeKeeps(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/edit-bus.json")
+	must(t, err)
+	var file struct {
+		Keeps int `json:"keeps"`
+	}
+	must(t, json.Unmarshal(text, &file))
+	data := func(n int) map[string]any { return map[string]any{"count": float64(n)} }
+	bus := &EditBus{}
+	bus.Reset(data(0))
+	for n := 1; n <= file.Keeps+1; n++ {
+		bus.Edit("countBox", "form", data(n), nil)
+	}
+	now := data(file.Keeps + 1)
+	take := func([]int64, bool) error { return nil }
+	for i := 0; i < file.Keeps; i++ {
+		after, found, err := bus.Undo("form", now, true, take)
+		must(t, err)
+		if !found {
+			t.Fatalf("undo %d found nothing", i+1)
+		}
+		now = after
+	}
+	if _, found, _ := bus.Undo("form", now, true, take); found {
+		t.Fatal("the oldest edit is still there past the bus's keeping")
+	}
+}

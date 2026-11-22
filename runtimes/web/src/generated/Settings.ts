@@ -71,6 +71,12 @@ keeps: Array<string>,
  */
 keys_editable: boolean, 
 /**
+ * Whether the output folder holds Clarity's data migration tools, `clarity-migrate`
+ * and its `clarity-migrate.json`, so whoever installs the app migrates its databases
+ * without Clarity (docs/ledger/migrations.md): `include migrate`.
+ */
+include_migrate: boolean, 
+/**
  * Who is using the program (docs/ledger/signin.md):
  * `signin Member on desktop web` with its strategies; none without it.
  */

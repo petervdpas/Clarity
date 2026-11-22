@@ -41,31 +41,4 @@ public class BackupTests
         Directory.Delete(dir, true);
     }
 
-    [Fact]
-    public void ADatabaseWithASchemaIsBackedUpBeforeNewStepsAndANewOneIsNot()
-    {
-        var dir = Folder("migrate");
-        var path = Path.Combine(dir, "shop.db");
-        string[] first = ["CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')"];
-        string[] second = ["ALTER TABLE item ADD COLUMN price INTEGER NOT NULL DEFAULT 0"];
-        using (var db = Db.Connect(("main", Dialect.Sqlite, path)))
-        {
-            db.Migrate([first]);
-            db.Batch("", "INSERT INTO item (name) VALUES ('kept')");
-        }
-        Assert.False(Directory.Exists(Path.Combine(dir, "backups")), "a new database needs no backup");
-        using (var db = Db.Connect(("main", Dialect.Sqlite, path)))
-            Assert.Equal(1, db.Migrate([first, second]));
-        var backups = Directory.GetFiles(Path.Combine(dir, "backups"));
-        var name = Path.GetFileName(Assert.Single(backups));
-        Assert.StartsWith("shop-", name);
-        Assert.EndsWith("-before-migration-0002.db", name);
-        using (var copy = Db.Connect(("main", Dialect.Sqlite, backups[0])))
-        {
-            Assert.Equal(1, copy.SchemaVersion());
-            Assert.ThrowsAny<ClarityException>(() => copy.Batch("", "SELECT price FROM item"));
-        }
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Directory.Delete(dir, true);
-    }
 }

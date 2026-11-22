@@ -14,6 +14,8 @@ void secrets_use() {
     secret_store = SecretStore{secret_get, secret_set};
 }
 
+std::string secret_windows_target(const std::string& program, const std::string& name) { return program + ":" + name; }
+
 }  // namespace clarity
 
 #if defined(_WIN32)
@@ -25,14 +27,14 @@ namespace clarity {
 
 std::optional<std::string> secret_get(const std::string& program, const std::string& name) {
     PCREDENTIALA found = nullptr;
-    if (!CredReadA((program + ":" + name).c_str(), CRED_TYPE_GENERIC, 0, &found)) return std::nullopt;
+    if (!CredReadA(secret_windows_target(program, name).c_str(), CRED_TYPE_GENERIC, 0, &found)) return std::nullopt;
     std::string secret(reinterpret_cast<const char*>(found->CredentialBlob), found->CredentialBlobSize);
     CredFree(found);
     return secret;
 }
 
 void secret_set(const std::string& program, const std::string& name, const std::string& value) {
-    std::string target = program + ":" + name;
+    std::string target = secret_windows_target(program, name);
     if (value.empty()) {
         if (!CredDeleteA(target.c_str(), CRED_TYPE_GENERIC, 0) && GetLastError() != ERROR_NOT_FOUND) throw StorageError("the Credential Manager refused to forget the secret '" + name + "'");
         return;

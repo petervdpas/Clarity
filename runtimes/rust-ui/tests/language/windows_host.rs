@@ -289,7 +289,7 @@ fn a_typed_dropdown_offers_its_fields_values_and_a_search_one_its_records_with_t
     // A search without fields to show picks from the reference's own choices.
     let plain = part(r#"<Dropdown at="1,1" bind="order.finished_by" search="true" />"#);
     assert_eq!(vec!["Cy"], host.offered(&plain, "order.finished_by").into_iter().map(|c| c.label).collect::<Vec<_>>());
-    assert_eq!(vec!["values Order.note", "find search Helper name,role", "refs Helper"], fake.calls());
+    assert_eq!(vec!["values Order.note", "find Helper name,role", "refs Helper"], fake.calls());
 }
 
 #[test]

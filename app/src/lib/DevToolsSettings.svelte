@@ -32,6 +32,7 @@
   const pieces = $derived(order.map((key) => view?.tabs.find((t) => t.key === key)).filter((t) => t !== undefined));
   const tab = $derived(view?.tabs.find((t) => t.key === shown) ?? null);
   const job = $derived(tab ? devtools.jobs[tab.job] : undefined);
+  const debugJob = $derived(tab ? devtools.jobs[tab.debugJob] : undefined);
 
   async function call(command: string, args: Record<string, unknown> = {}) {
     error = null;
@@ -75,10 +76,10 @@
     }
   });
 
-  async function build(key: string) {
+  async function build(key: string, debug = false) {
     error = null;
     try {
-      await invoke("devtools_build", { key });
+      await invoke("devtools_build", { key, debug });
     } catch (err) {
       error = String(err);
     }
@@ -209,6 +210,13 @@
             <span><button class="primary" onclick={() => build(tab.key)} disabled={busy(job)}>{busy(job) ? "Building..." : "Build"}</button> <code class="muted">{tab.build}</code></span>
             {#if job}<BuildLines {job} />{/if}
           </dd>
+          {#if tab.debugBuild}
+            <dt>Build debug</dt>
+            <dd class="choices">
+              <span><button onclick={() => build(tab.key, true)} disabled={busy(debugJob)}>{busy(debugJob) ? "Building..." : "Build debug"}</button> <code class="muted">{tab.debugBuild}</code> <span class="muted">for C# programs built in Debug and the runtimes' tests</span></span>
+              {#if debugJob}<BuildLines job={debugJob} />{/if}
+            </dd>
+          {/if}
         </dl>
       </div>
     {/if}

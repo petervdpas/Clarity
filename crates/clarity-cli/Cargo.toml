@@ -18,7 +18,9 @@ clarity-auth = { path = "../../runtimes/rust-auth" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 clarity-project.workspace = true
 clarity-db.workspace = true
+clarity-migrate = { path = "../clarity-migrate" }
 clarity-gen = { path = "../clarity-gen" }
+clarity-devtools = { path = "../clarity-devtools" }
 # `clarity gen` generates as the agents' generate tool does.
 clarity-tools.workspace = true
 # `clarity mcp` serves those tools to an AI agent over MCP.

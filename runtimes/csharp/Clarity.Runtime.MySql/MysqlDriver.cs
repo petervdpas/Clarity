@@ -28,21 +28,4 @@ internal sealed class MysqlDriver(MySqlConnection conn) : ServerDriver(conn)
         command.ExecuteNonQuery();
         return command.LastInsertedId;
     });
-
-    public override void Apply(int version, IReadOnlyList<string> statements)
-    {
-        for (var i = 0; i < statements.Count; i++)
-        {
-            try
-            {
-                Batch(statements[i]);
-            }
-            catch (Exception e) when (e is StorageException or ReferenceFailure)
-            {
-                var what = e.InnerException?.Message ?? e.Message;
-                throw new StorageException(i == 0 ? what : $"{what}; MySQL cannot undo the {i} statement(s) of step {version} that ran before it");
-            }
-        }
-        Batch(Store.Applied(version));
-    }
 }

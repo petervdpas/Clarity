@@ -9,7 +9,7 @@ import type { Literal } from "../generated/Literal";
 import type { TypeRefKind } from "../generated/TypeRefKind";
 import type { JsonValue } from "../generated/serde_json/JsonValue";
 
-/** The types a plain value can have besides an enum, as the language writes them. */
+/** The types a plain value can have besides an enum, as the language writes them (clarity_spec::code::PLAIN_TYPES). */
 export const PLAIN_TYPES = ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration"] as const;
 
 /** The entity of a record or a list; null for a plain value. */

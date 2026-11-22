@@ -73,7 +73,8 @@ pub struct SigninSource {
 
 impl SigninSource {
     /// The people in `table` (key `id`, the first data source), signing in
-    /// on `page`, on the desktop; 8 hours a session, 5 tries per 15 minutes.
+    /// on `page`, on the desktop; Clarity's defaults (conformance/defaults.json):
+    /// 8 hours a session, 5 tries per 15 minutes.
     pub fn new(table: &str, page: &str) -> SigninSource {
         SigninSource { source: String::new(), table: table.into(), key: "id".into(), page: page.into(), targets: vec!["desktop".into()], strategies: Vec::new(), session_seconds: 8 * 3600, tries: 5, tries_seconds: 15 * 60, program: String::new(), remember_seconds: None, remember_asks: false }
     }

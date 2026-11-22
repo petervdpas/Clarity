@@ -2,7 +2,7 @@
 # Starts the Clarity app in development mode, from any directory.
 #
 #   ./dev.sh                         opens the project used last time
-#   ./dev.sh examples/shop.clarity   opens a project file
+#   ./dev.sh examples/todo.clarity   opens a project file
 #   CLARITY_RUNTIME= ./dev.sh         builds apps on the published runtimes
 #
 # The designer writes its changes into the project's files, so point it at
@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ $# -gt 0 ]; then
     if [ ! -f "$1" ]; then
-        echo "dev.sh: '$1' is not a project file; give one like examples/shop.clarity" >&2
+        echo "dev.sh: '$1' is not a project file; give one like examples/todo.clarity" >&2
         exit 1
     fi
     # Absolute, because the app runs from app/.

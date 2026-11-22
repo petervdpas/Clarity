@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="noughts.Noughts" title="@noughtsTitle" main="Game">
+  <Menu name="mainMenu">
+    <Item caption="@gameItem" name="gameItem">
+      <Item caption="@anotherWindowItem" name="anotherWindowItem" opens="Game" newWindow="true" />
+      <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
+      <Item kind="separator" />
+      <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+  </Menu>
+</App>

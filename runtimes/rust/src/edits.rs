@@ -33,8 +33,8 @@ pub struct Edit {
     pub steps: Vec<u64>,
 }
 
-/// How many edits a window keeps; the oldest go first.
-const MAX_EDITS: usize = 500;
+/// How many edits a window keeps; the oldest go first (conformance/defaults.json).
+pub const EDIT_BUS_KEEPS: usize = 500;
 
 /// The record of one window's edits.
 #[derive(Debug, Default)]
@@ -79,7 +79,7 @@ impl EditBus {
             return;
         }
         self.done.push(Edit { part: part.into(), scope: scope.into(), changes, steps: all });
-        if self.done.len() > MAX_EDITS {
+        if self.done.len() > EDIT_BUS_KEEPS {
             self.done.remove(0);
         }
         self.undone.retain(|e| e.scope != scope);

@@ -15,7 +15,7 @@ Progress: 65%
 ## Tests
 - `conformance/drawing.json`: run by R (`runtimes/rust/tests/values.rs`), Go (`drawing_test.go`), C (`values_test.c`), C++ (`values_test.cpp`, `ui_test.cpp`), C# (`FrameLoopTests.cs`, `RoundingTests.cs`), Clarity.UI (`tests/data/data_canvas.rs`)
 - `conformance/canvas-modes.json`: run by R (`runtimes/rust/tests/canvas.rs`), Go (`canvas_test.go`), C (`canvas_test.c`), C++ (`canvas_test.cpp`), C# (`CanvasModeTests.cs`), Clarity.UI (`data_canvas.rs`)
-- Spec: `crates/clarity-spec/tests/drawing.rs`, `canvas_modes.rs`, `toolbox.rs`; gen: `crates/clarity-gen/tests/canvas_drag.rs`, `csharp_canvas_modes.rs`
+- Spec: `crates/clarity-spec/tests/spec/drawing.rs`, `canvas_modes.rs`, `toolbox.rs`; gen: `crates/clarity-gen/tests/gen/canvas_drag.rs`, `csharp_canvas_modes.rs`
 - Engine canvases: see [engines](engines.md)
 
 ## Open

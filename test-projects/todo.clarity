@@ -1,0 +1,15 @@
+project Todo
+    title "Todo"
+    icon "todo.svg"
+    version "1.0.0"
+    stack csharp desktop
+    output "out"
+    language "en"
+    theme Light Dark
+    signin Person on desktop
+        password name passwordHash
+            minimum 8
+        account name
+        remember 30 days
+    datasource main sqlite "data/todo.db"
+    datasource ideas file "data/ideas.yaml" external using IdeaList

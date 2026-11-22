@@ -103,10 +103,6 @@ type WindowState struct {
 	Data     map[string]any       `json:"data"`
 	Parts    map[string]PartState `json:"parts"`
 	Selected map[string]int       `json:"selected"`
-	// Views are what the screen shows of the list of each table, tree and
-	// chart, by the part's name (manual/start.how-it-works.md): how it is shown, as the screen
-	// sends it, and what shows, as the runtime fills it after every reply.
-	Views map[string]map[string]any `json:"views,omitempty"`
 }
 
 // nextInstance is the number the next window that opens gets.
@@ -235,7 +231,6 @@ type Ui struct {
 	instance uint64
 	parts    map[string]PartState
 	selected map[string]int
-	views    map[string]map[string]any
 	messages []Message
 	shown    map[string]Text
 	open     []OpenRequest
@@ -250,7 +245,7 @@ type Ui struct {
 }
 
 func NewUi(state WindowState) *Ui {
-	ui := &Ui{instance: state.Instance, parts: map[string]PartState{}, selected: map[string]int{}, views: state.Views, messages: []Message{}, open: []OpenRequest{}}
+	ui := &Ui{instance: state.Instance, parts: map[string]PartState{}, selected: map[string]int{}, messages: []Message{}, open: []OpenRequest{}}
 	for k, v := range state.Parts {
 		ui.parts[k] = v
 	}
@@ -805,7 +800,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		}
 	}
 	return Reply{
-		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected, Views: u.views},
+		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected},
 		Messages: u.messages,
 		Shown:    u.shown,
 		Open:     u.open,

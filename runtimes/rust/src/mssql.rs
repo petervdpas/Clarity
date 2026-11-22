@@ -10,7 +10,7 @@ use tokio::runtime::Runtime;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
 use crate::dialect::Dialect;
-use crate::store::{Driver, Failure, Outcome, applied};
+use crate::store::{Driver, Failure, Outcome};
 use crate::{Decimal, Error, Id, NaiveDate, NaiveDateTime, Result, SqlValue};
 
 /// A value as a parameter of a statement.
@@ -118,13 +118,6 @@ impl Mssql {
         Ok(())
     }
 
-    fn step(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
-        for statement in statements {
-            self.simple(statement)?;
-        }
-        self.simple(&applied(version))?;
-        self.simple("COMMIT TRANSACTION")
-    }
 }
 
 impl Driver for Mssql {
@@ -155,15 +148,4 @@ impl Driver for Mssql {
         self.simple(sql)
     }
 
-    /// Each statement is a batch of its own, so a statement can use a
-    /// column the one before it added. SQL Server undoes changes to tables
-    /// too, so a step that fails leaves the database as it was.
-    fn apply(&mut self, version: usize, statements: &[&str]) -> Outcome<()> {
-        self.simple("BEGIN TRANSACTION")?;
-        let done = self.step(version, statements);
-        if done.is_err() {
-            let _ = self.simple("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
-        }
-        done
-    }
 }

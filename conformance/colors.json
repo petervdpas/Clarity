@@ -1,5 +1,5 @@
 {
-  "about": "The color field type of U1c, kept as text '#rrggbb'. `read` gives the color a typed text is: with or without '#', in three or six hexadecimal digits, in any case, around spaces; written back as '#' and six lowercase digits. Empty text is no color (\"\"); anything else is no color at all (null), and the input keeps its value. `palette` is the colors the color input offers, in rows, the same on every renderer.",
+  "about": "The color field type of U1c, kept as text '#rrggbb'. `read` gives the color a typed text is: with or without '#', in three or six hexadecimal digits, in any case, around spaces; written back as '#' and six lowercase digits. Empty text is no color (\"\"); anything else is no color at all (null), and the input keeps its value. `palette` is the colors the color input offers, in rows, the same on every renderer. `written` is a color written out in a theme or a look (clarity_spec::themes::is_hex and full_hex, the IDE's themeLines.ts isHex and longHex): `#rgb` or `#rrggbb` is one, and its long form is `#` and six lowercase digits; anything else is none.",
   "read": [
     { "typed": "#3b82f6", "color": "#3b82f6" },
     { "typed": "#3B82F6", "color": "#3b82f6" },
@@ -21,5 +21,16 @@
     ["#64748b", "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6", "#3b82f6", "#6366f1", "#a855f7", "#ec4899"],
     ["#475569", "#dc2626", "#ea580c", "#d97706", "#16a34a", "#0d9488", "#2563eb", "#4f46e5", "#9333ea", "#db2777"],
     ["#1e293b", "#991b1b", "#9a3412", "#92400e", "#166534", "#115e59", "#1e40af", "#3730a3", "#6b21a8", "#9d174d"]
+  ],
+  "written": [
+    { "text": "#abc", "isHex": true, "long": "#aabbcc" },
+    { "text": "#ABC", "isHex": true, "long": "#aabbcc" },
+    { "text": "#3b82f6", "isHex": true, "long": "#3b82f6" },
+    { "text": "#3B82F6", "isHex": true, "long": "#3b82f6" },
+    { "text": "abc", "isHex": false },
+    { "text": "#abcd", "isHex": false },
+    { "text": "#ggg", "isHex": false },
+    { "text": "accent", "isHex": false },
+    { "text": "", "isHex": false }
   ]
 }

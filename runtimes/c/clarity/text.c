@@ -72,6 +72,29 @@ ClarityText* clarity_key_text(const char* key) {
     return t;
 }
 
+ClarityText* clarity_keyed_text(const char* key, const char* english) {
+    ClarityText* t = clarity_key_text(key);
+    t->text = clarity_copy(english);
+    return t;
+}
+
+const ClarityText* clarity_said(const ClarityError* error) {
+    switch (error->kind) {
+    case CLARITY_REFUSED:
+    case CLARITY_VALUE: return error->text;
+    case CLARITY_NOT_FOUND:
+        if (!error->id) return NULL;
+        return clarity_text_with(clarity_text_with(clarity_keyed_text("recordNotThere", "There is no {table} with id {id}"), "table", clarity_slot_text(clarity_copy(error->table))), "id",
+                                 clarity_slot_integer(error->id, NULL));
+    case CLARITY_IN_USE: return clarity_text_with(clarity_keyed_text("recordStillUsed", "This {table} is still used by other records"), "table", clarity_slot_text(clarity_copy(error->table)));
+    default: return NULL;
+    }
+}
+
+bool clarity_too_large(void) { return clarity_value_error(clarity_keyed_text("numberTooLarge", "The number is too large"), "a number too large"); }
+
+bool clarity_division_by_zero(void) { return clarity_value_error(clarity_keyed_text("divisionByZero", "Division by zero"), "division by zero"); }
+
 ClarityText* clarity_plain_text(const char* text) {
     ClarityBuffer escaped = {0};
     for (const char* c = text ? text : ""; *c; ++c) {

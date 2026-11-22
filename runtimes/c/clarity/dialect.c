@@ -42,6 +42,13 @@ const char* clarity_number_sql(ClarityDialect d, const char* expr) {
     return d == CLARITY_SQLITE ? clarity_format("CAST(%s AS REAL)", expr) : expr;
 }
 
+const char* clarity_order_key_sql(ClarityDialect d, const char* expr, bool descending) {
+    if (d == CLARITY_SQLITE || d == CLARITY_POSTGRES) return clarity_format("%s%s NULLS FIRST", expr, descending ? " DESC" : "");
+    if (!descending) return expr;
+    if (d == CLARITY_MYSQL) return clarity_format("%s IS NULL DESC, %s DESC", expr, expr);
+    return clarity_format("CASE WHEN %s IS NULL THEN 0 ELSE 1 END, %s DESC", expr, expr);
+}
+
 const char* clarity_contains_sql(ClarityDialect d, const char* column, const char* mark) {
     // SQLite's LIKE ignores case already.
     if (d == CLARITY_SQLITE) return clarity_format("%s LIKE %s ESCAPE '!'", clarity_quote(d, column), mark);

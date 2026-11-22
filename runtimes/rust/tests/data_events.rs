@@ -3,6 +3,10 @@
 
 use clarity_runtime::{Db, Error, Id, Record, Result, SqlValue, sql};
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 /// What the events of an account wrote, in order.
 #[derive(Debug, Clone, Default, PartialEq)]
 struct Log {
@@ -88,8 +92,8 @@ impl Record for Account {
 }
 
 fn db() -> Db {
-    let mut db = Db::memory().unwrap();
-    db.migrate(&[&[
+    let db = Db::memory().unwrap();
+    apply_steps(&db, "", &[&[
         "CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL);",
         "CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL);",
     ]])

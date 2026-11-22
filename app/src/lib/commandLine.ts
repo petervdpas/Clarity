@@ -18,8 +18,8 @@ export function stackLabel(backend: string | undefined, ui: string | undefined, 
   return `${parts.join(", ")}, ${targets.join(" and ")}`;
 }
 
-/** `addAll` as the command line writes it: `add-all`, as the checker names commands. */
-function hyphenated(name: string): string {
+/** `addAll` as the command line writes it: `add-all`, as the checker names commands (clarity_spec::code::hyphenated). */
+export function hyphenated(name: string): string {
   return name.replace(/_/g, "-").replace(/(?!^)[A-Z]/g, (c) => "-" + c).toLowerCase();
 }
 

@@ -1,7 +1,7 @@
 //! DevTools (Clarity settings, a Clarity run from its repository only): the
 //! cDdev's tools for working on Clarity itself. A tab per piece of Clarity
 //! an app uses: the release or the cDdev's own build, swapped
-//! (clarity_gen::tools::devtools::swap, kept in environment.json), and a
+//! (clarity_devtools::swap, kept in environment.json), and a
 //! Build button that makes the cDdev's own build, shown in the tab while it
 //! builds (jobs.rs, one build at a time). An agent presses Build through
 //! Clarity's MCP (build_piece): its ask comes through a file
@@ -15,8 +15,8 @@ pub mod release;
 use std::path::{Path, PathBuf};
 
 use clarity_gen::clarity_ui;
-use clarity_gen::tools::devtools::jobs::{Job, JobState, Jobs, OnChange};
-use clarity_gen::tools::devtools::swap::{self, Kind, Piece, Swaps};
+use clarity_devtools::jobs::{Job, JobState, Jobs, OnChange};
+use clarity_devtools::swap::{self, Kind, Piece, Swaps};
 use clarity_gen::tools::environment::{self, Environment};
 use clarity_project::dev_asks;
 use serde::Serialize;
@@ -66,6 +66,7 @@ impl From<&Job> for JobView {
 
 /// A piece's tab, as the page shows it.
 #[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct PieceTab {
     pub key: String,
@@ -93,6 +94,10 @@ pub struct PieceTab {
     pub build: String,
     /// Its build's key among the builds (`piece:clarityUi`).
     pub job: String,
+    /// What its Build debug runs, for a native library; none for the others.
+    pub debug_build: Option<String>,
+    /// Its debug build's key among the builds (`piece:clarityUi:debug`).
+    pub debug_job: String,
 }
 
 /// A piece the cDdev can add a tab for.
@@ -153,6 +158,11 @@ fn job_key(piece: &str) -> String {
     format!("piece:{piece}")
 }
 
+/// The key of a piece's debug build among the builds (`piece:clarityUi:debug`).
+fn debug_job_key(piece: &str) -> String {
+    format!("piece:{piece}:debug")
+}
+
 fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
     let os = std::env::consts::OS;
     let env = Environment::current();
@@ -174,6 +184,8 @@ fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
             signal: swap::behind(repo, piece, os),
             build: swap::build(repo, piece).shown(),
             job: job_key(piece.key),
+            debug_build: swap::build_debug(repo, piece).map(|b| b.shown()),
+            debug_job: debug_job_key(piece.key),
         })
         .collect::<Vec<_>>();
     let addable = swap::PIECES.iter().filter(|p| !tabs.iter().any(|t| t.key == p.key)).map(|p| PieceChoice { key: p.key.to_string(), name: p.name.to_string() }).collect();
@@ -291,12 +303,20 @@ fn told(job: &Job) -> String {
     format!("{ended}\n\n{}", tail.join("\n"))
 }
 
-/// Presses a piece's Build: its build starts, or waits for the one before
-/// it. `ask` is the agent's ask it answers, `by` the agent.
+/// Presses a piece's Build, or with `debug` its Build debug: its build
+/// starts, or waits for the one before it. `ask` is the agent's ask it
+/// answers, `by` the agent.
 #[tauri::command]
-pub fn devtools_build(key: String, by: Option<String>, ask: Option<String>, app: AppHandle, jobs: State<DevJobs>) -> Result<(), String> {
+pub fn devtools_build(key: String, debug: Option<bool>, by: Option<String>, ask: Option<String>, app: AppHandle, jobs: State<DevJobs>) -> Result<(), String> {
     let repo = repo()?;
     let piece = swap::piece(&key).ok_or_else(|| format!("there is no piece {key}"))?;
+    let debug = debug.unwrap_or(false);
+    let (job, name, run) = if debug {
+        let run = swap::build_debug(&repo, piece).ok_or_else(|| format!("{} has no debug build", piece.name))?;
+        (debug_job_key(piece.key), format!("{} (debug)", piece.name), run)
+    } else {
+        (job_key(piece.key), piece.name.to_string(), swap::build(&repo, piece))
+    };
     let notify = on_change(&app);
     let after_repo = repo.clone();
     let answers = ask.clone();
@@ -305,9 +325,13 @@ pub fn devtools_build(key: String, by: Option<String>, ask: Option<String>, app:
         if !matches!(job.state, JobState::Passed | JobState::Failed(_)) {
             return;
         }
-        // A swapped piece built again: the folder builds use is put together again from it.
+        // The library it built is as current as its sources, though Cargo left it untouched (swap::mark_built).
+        if job.state == JobState::Passed {
+            swap::mark_built(&after_repo, piece, debug, std::env::consts::OS);
+        }
+        // A swapped piece built again: the folder builds use is put together again from it (the release build only).
         let swaps = Environment::current().swaps().clone();
-        if job.state == JobState::Passed && swaps.mine(piece.key) {
+        if !debug && job.state == JobState::Passed && swaps.mine(piece.key) {
             if let Err(why) = apply(&after_repo, swaps, &format!("build of {} ended", piece.key)) {
                 eprintln!("clarity: {why}");
             }
@@ -316,7 +340,7 @@ pub fn devtools_build(key: String, by: Option<String>, ask: Option<String>, app:
             let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: job.state == JobState::Passed, text: told(job) });
         }
     });
-    let started = jobs.0.start_by(&job_key(piece.key), piece.name, swap::build(&repo, piece), by, Some(ended));
+    let started = jobs.0.start_by(&job, &name, run, by, Some(ended));
     // Refused (it builds already): the agent hears why.
     if let (Err(why), Some(id)) = (&started, &answers) {
         let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: false, text: why.clone() });
@@ -347,14 +371,15 @@ pub fn watch_asks(app: AppHandle) {
                 }
                 let named = match ask.action {
                     dev_asks::Action::Build => swap::piece(&ask.key).map(|p| ("build", p.name.to_string())).ok_or_else(|| format!("there is no piece {}", ask.key)),
+                    dev_asks::Action::BuildDebug => swap::piece(&ask.key).map(|p| ("buildDebug", format!("{} (debug)", p.name))).ok_or_else(|| format!("there is no piece {}", ask.key)),
                     dev_asks::Action::Swap => swap::piece(&ask.key)
                         .map(|p| (if ask.mine { "useOwn" } else { "useRelease" }, p.name.to_string()))
                         .ok_or_else(|| format!("there is no piece {}", ask.key)),
                     dev_asks::Action::Remove => match repo() {
-                        Ok(repo) => clarity_gen::tools::devtools::disk::places(&repo)
+                        Ok(repo) => clarity_devtools::disk::places(&repo)
                             .into_iter()
                             .find(|p| p.key == ask.key)
-                            .map(|p| ("remove", format!("{}, {}. {}", p.name, clarity_gen::tools::devtools::disk::bytes_text(clarity_gen::tools::devtools::disk::size(&p)), p.cost)))
+                            .map(|p| ("remove", format!("{}, {}. {}", p.name, clarity_devtools::disk::bytes_text(clarity_devtools::disk::size(&p)), p.cost)))
                             .ok_or_else(|| format!("there is no build folder {}", ask.key)),
                         Err(why) => Err(why),
                     },

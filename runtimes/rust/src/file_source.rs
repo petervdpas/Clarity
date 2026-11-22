@@ -345,8 +345,4 @@ impl Driver for FileDriver {
         self.keep()
     }
 
-    /// A file source is external: Clarity writes no steps for it.
-    fn apply(&mut self, _version: usize, _statements: &[&str]) -> Outcome<()> {
-        Ok(())
-    }
 }

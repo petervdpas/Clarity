@@ -18,13 +18,13 @@ Progress: 90%
 ## Tests
 - `runtimes/csharp/Clarity.Runtime.Tests` (UndoTests.cs, VersionsTests.cs, ServerTests.cs, ...), `Clarity.Ui.Native.Tests` (ProgramWireTests.cs, CustomPartTests.cs, ...), `Clarity.Ui.Server.Tests` (WebServerTests.cs, ...)
 - Conformance skipped by C#: accordions, charts, dropdown-options, folding, ribbons, sidebars, steps, table-pages, trees, ranges, table-order, custom-parts; `migrations` runs only on server databases, which CI does not have; `calls` parsed in `Program/Members.cs:116` with no test (CONFLICTING 3)
-- Generator: `crates/clarity-gen/tests/csharp.rs`, csharp_windows.rs, csharp_web.rs, csharp_canvas_modes.rs, unconnected_csharp.rs, versions_csharp.rs, signin_csharp.rs; build: csharp_build.rs (ignored)
+- Generator: the crate `crates/clarity-gen-csharp`, its tests one program `cargo test -p clarity-gen-csharp --test csharp` (`tests/csharp/`: generate, windows, canvas_modes, unconnected, signin, versions); `crates/clarity-gen/tests/gen/csharp_web.rs` (the web program, through clarity-gen); build: `tests/csharp/build.rs` of the same program (ignored)
 - Examples on this stack: mp3player, noughts, todo (`csharp desktop`), walker (`csharp web`), ledger (`csharp cli`)
 
 ## Open
-- The C# program driven live in tests: NOT BUILT (`crates/clarity-gen/tests/everything_live.rs` has go, rust, c, cpp)
+- The C# program driven live in tests: NOT BUILT (`crates/clarity-gen/tests/gen/everything_live.rs` has go, rust, c, cpp)
 - `list<Entity>` fields: NOT BUILT (`csharp/logic.rs:1017`)
-- Dead code: `Melodies.cs`, `KeyRules.cs`, `TablePages.cs`, `Charts.cs`, `Ranges.cs`, `Palette.cs`, `PersonKeys.Set` have no callers outside tests; each copies a rule Clarity.UI or clarity-runtime decides (CONFLICTING 4)
+- Dead code removed 2026-11-21: `Melodies.cs`, `KeyRules.cs`, `TablePages.cs`, `Charts.cs`, `Ranges.cs`, `Palette.cs` and their tests (MelodyTests, ShortcutKeyCaseTests). Left: `PersonKeys.Set` has no callers outside tests
 
 ## Conflicts
 - Ordered comparisons: plain `(l < r)` (`csharp/logic.rs:1277`); `none < d` is false on dates (first on the others); text `<` does not compile

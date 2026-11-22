@@ -9,6 +9,7 @@
 #include "check.h"
 #include "clarity/db.h"
 #include "clarity/sql.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 typedef struct {
@@ -68,7 +69,7 @@ static bool drawn(ClarityDb** db) {
     static const char* const create[] = {"CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL)",
                                          "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER REFERENCES shape(id), text TEXT NOT NULL)"};
     ClarityStep step = {create, 2};
-    return clarity_db_memory(db) && clarity_migrate(*db, "", &step, 1, NULL);
+    return clarity_db_memory(db) && apply_steps(*db, "", &step, 1, NULL);
 }
 
 /// The shapes as "id name x", one after another.

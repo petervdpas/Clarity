@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window FriendBrowse shows: its parts, data and code. -->
+<View class="loans.FriendBrowseView">
+  <Data name="friends" type="list&lt;Friend&gt;" />
+  <Table name="friendGrid" at="1,1" span="12" rows="9" bind="friends" columns="name, phone, email" add="true" remove="true" confirm="true" onadd="newClicked" onremove="removeClicked" onopen="openClicked" />
+</View>

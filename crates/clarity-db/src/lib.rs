@@ -198,7 +198,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         return true;
     }
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret | FieldType::Enum { .. } | FieldType::Values { .. } => k == Kind::Text,
+        clarity_spec::kept_as_text!() | FieldType::Enum { .. } | FieldType::Values { .. } => k == Kind::Text,
         FieldType::Integer | FieldType::Id | FieldType::Duration => matches!(k, Kind::Integer | Kind::Number),
         FieldType::Decimal { .. } | FieldType::Money => matches!(k, Kind::Number | Kind::Integer),
         FieldType::Bool => matches!(k, Kind::Bool | Kind::Integer),

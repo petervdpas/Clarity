@@ -53,6 +53,12 @@ public sealed class InUseException(string table, long id)
 /// <summary>A stored value does not fit its field.</summary>
 public sealed class InvalidValueException(string what) : ClarityException($"invalid value: {what}");
 
+/// <summary>
+/// A database whose migration steps are not the ones the program was made with
+/// (docs/ledger/migrations.md): its message is the English line the program stops with.
+/// </summary>
+public sealed class StepsException(string line) : ClarityException(line);
+
 public sealed class StorageException(string what, Exception? inner = null) : ClarityException($"storage: {what}")
 {
     public string What { get; } = what;

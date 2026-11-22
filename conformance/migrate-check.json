@@ -1,0 +1,9 @@
+{
+  "about": "What an app does at start with a database whose migration steps are not the ones it was made with (docs/ledger/migrations.md, Design): it does not migrate, it checks. With `had` steps of the `steps` it was made with, it is behind or ahead, and stops with `line` on the console, in English (not from the translations), exiting with 1; with as many it opens (`line` null). `source` names the database's data source. Every runtime's check gives the same line.",
+  "cases": [
+    { "source": "main", "had": 1, "steps": 2, "line": "The database main needs migrating: run clarity-migrate" },
+    { "source": "main", "had": 0, "steps": 1, "line": "The database main needs migrating: run clarity-migrate" },
+    { "source": "erp", "had": 3, "steps": 2, "line": "The database erp belongs to a newer version of this app" },
+    { "source": "main", "had": 2, "steps": 2, "line": null }
+  ]
+}

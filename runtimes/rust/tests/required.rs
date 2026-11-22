@@ -4,6 +4,10 @@
 use clarity_runtime::{Db, Error, Id, Record, Result, SqlValue, sql};
 use serde_json::Value;
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 fn case_value(value: &Value) -> SqlValue {
     match value {
         Value::Null => SqlValue::Null,
@@ -63,8 +67,8 @@ impl Record for Order {
 }
 
 fn db() -> Db {
-    let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]).unwrap();
+    let db = Db::memory().unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]).unwrap();
     db
 }
 

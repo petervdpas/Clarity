@@ -5,6 +5,7 @@
 
 import type { ToastCorner } from "@clarity/ui/generated/ToastCorner.ts";
 import type { ToastLevel } from "@clarity/ui/generated/ToastLevel.ts";
+import { isCamelCase } from "./names.ts";
 
 /** One line to set (its key) or take away (`line` null). */
 export type ToastLine = { key: "text" | "lifespan" | "level" | "icon" | "corner"; line: string | null };
@@ -28,7 +29,7 @@ export const TOAST_LIFESPAN = { least: 500, most: 120000, default: 5000 } as con
 
 /** A toast's name: camelCase, as every lower-case name in Clarity. */
 export function isToastName(name: string): boolean {
-  return /^[a-z][A-Za-z0-9]*$/.test(name);
+  return isCamelCase(name);
 }
 
 /** The text's key line: `text @savedToast`. */

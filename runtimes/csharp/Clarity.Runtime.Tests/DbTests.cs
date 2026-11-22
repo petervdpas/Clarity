@@ -94,7 +94,7 @@ public class DbTests
     static Db NewDb()
     {
         var db = Sqlite.Memory();
-        Assert.Equal(1, db.Migrate(Steps));
+        Assert.Equal(1, db.ApplySteps(Steps));
         return db;
     }
 
@@ -164,24 +164,6 @@ public class DbTests
     }
 
     [Fact]
-    public void AppliesEachMigrationStepOnce()
-    {
-        using var db = NewDb();
-        Assert.Equal(1, db.SchemaVersion());
-        Assert.Equal(0, db.Migrate(Steps));
-        Assert.Equal(1, db.Migrate([Steps[0], ["ALTER TABLE customer ADD COLUMN notes TEXT;"]]));
-        Assert.Equal(2, db.SchemaVersion());
-    }
-
-    [Fact]
-    public void AFailedStepChangesNothing()
-    {
-        using var db = NewDb();
-        Assert.Throws<StorageException>(() => db.Migrate([Steps[0], ["ALTER TABLE customer ADD COLUMN a TEXT; THIS IS NOT SQL;"]]));
-        Assert.Equal(1, db.SchemaVersion());
-    }
-
-    [Fact]
     public void ContractsAndText()
     {
         Contracts.Require(true, "x > 0");
@@ -248,50 +230,6 @@ public class DbTests
         Assert.False(Texts.Contains("Ada", "Grace"));
     }
 
-    /// The table built again, as a step that changes a column does it.
-    const string Rebuild = """
-        CREATE TABLE customer__new (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            credit_limit TEXT NOT NULL,
-            active INTEGER NOT NULL,
-            since TEXT,
-            referred_by INTEGER REFERENCES customer (id)
-        );
-        INSERT INTO customer__new (id, name, kind, credit_limit, active, since, referred_by)
-            SELECT id, name, kind, credit_limit, active, since, referred_by FROM customer;
-        DROP TABLE customer;
-        ALTER TABLE customer__new RENAME TO customer;
-        """;
-
-    [Fact]
-    public void AStepCanBuildAReferencedTableAgain()
-    {
-        using var db = NewDb();
-        var ada = Ada();
-        db.Save(ada);
-        var grace = NewCustomer("Grace Hopper", CustomerKind.Private, "0", true);
-        grace.ReferredBy = ada.Id;
-        db.Save(grace);
-
-        Assert.Equal(1, db.Migrate([Steps[0], [Rebuild]]));
-        Assert.Equal(ada.Id, db.Get<Customer>(grace.Id).ReferredBy);
-        // References are checked again after the step.
-        Assert.Throws<InUseException>(() => db.Delete(ada));
-    }
-
-    [Fact]
-    public void AStepThatBreaksReferencesChangesNothing()
-    {
-        using var db = NewDb();
-        var grace = NewCustomer("Grace Hopper", CustomerKind.Private, "0", true);
-        db.Save(grace);
-        Assert.Throws<StorageException>(() => db.Migrate([Steps[0], ["UPDATE customer SET referred_by = 99;"]]));
-        Assert.Equal(1, db.SchemaVersion());
-        Assert.Null(db.Get<Customer>(grace.Id).ReferredBy);
-    }
-
     [Fact]
     public void EachRecordLivesInItsOwnDataSource()
     {
@@ -304,9 +242,9 @@ public class DbTests
         {
             using (var db = Db.Connect(("main", Dialect.Sqlite, main), ("erp", Dialect.Sqlite, erp)))
             {
-                db.MigrateSource("main", Steps);
+                db.ApplySteps("main", Steps);
                 // A reference to another database is a plain id: no foreign key.
-                db.MigrateSource("erp", [["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"]]);
+                db.ApplySteps("erp", [["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"]]);
                 var ada = Ada();
                 db.Save(ada);
                 db.Save(new Invoice { Number = "INV-1", Customer = ada.Id });
@@ -332,7 +270,7 @@ public class DbTests
     public void ARecordCanLiveInAnExistingTable()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]]);
+        db.ApplySteps([["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]]);
         var first = new Legacy { Number = "INV-1" };
         db.Save(first);
         var second = new Legacy { Number = "INV-2" };

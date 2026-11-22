@@ -1,9 +1,0 @@
-// Written by Clarity from the changes in the data dictionary. Check it
-// before it runs; once a step has run on a database, it never changes.
-migration "Changes by the agent"
-    remove field Project.ledgerFolder
-    add field Category.folder: folder
-    add field Category.color: color
-    rename field Dossier.page to inFolder
-    add field ReviewItem.done: bool
-    remove field ReviewItem.ledgerRef

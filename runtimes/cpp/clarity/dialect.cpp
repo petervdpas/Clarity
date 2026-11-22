@@ -49,6 +49,13 @@ std::string mark(Dialect d, int n) {
 
 std::string number(Dialect d, const std::string& expr) { return d == Dialect::Sqlite ? "CAST(" + expr + " AS REAL)" : expr; }
 
+std::string order_key(Dialect d, const std::string& expr, bool descending) {
+    if (d == Dialect::Sqlite || d == Dialect::Postgres) return expr + (descending ? " DESC" : "") + " NULLS FIRST";
+    if (!descending) return expr;
+    if (d == Dialect::Mysql) return expr + " IS NULL DESC, " + expr + " DESC";
+    return "CASE WHEN " + expr + " IS NULL THEN 0 ELSE 1 END, " + expr + " DESC";
+}
+
 std::string contains(Dialect d, const std::string& column, const std::string& mark) {
     // SQLite's LIKE ignores case already.
     if (d == Dialect::Sqlite) return quote(d, column) + " LIKE " + mark + " ESCAPE '!'";

@@ -11,9 +11,9 @@ Progress: 80%
 - All docs are Markdown.
 
 ## Tests
-- `crates/clarity-spec/tests/manual_catalog.rs` (every parts page holds its palette group, every part its section), `manual_coverage.rs` (every statement, declaration word and tree section has its page; no page links to the old documents), `manual_doc.rs` (snippets parse, the complete example checks clean), `doc_snippets.rs`
+- `crates/clarity-spec/tests/spec/manual_catalog.rs` (every parts page holds its palette group, every part its section), `manual_coverage.rs` (every statement, declaration word and tree section has its page; no page links to the old documents), `manual_doc.rs` (snippets parse, the complete example checks clean), `doc_snippets.rs`
 - `crates/clarity-project/tests/settings.rs:478` (the manual's project files are valid)
-- `app/src/lib/manual.test.ts`; `crates/clarity-spec/tests/editor_snippets.rs` (VS Code snippets parse)
+- `app/src/lib/manual.test.ts`; `crates/clarity-spec/tests/spec/editor_snippets.rs` (VS Code snippets parse)
 
 ## Open
 - The manual in other languages: NOT BUILT (English only).
@@ -52,7 +52,7 @@ manual/
 - 2026-10-17: all documentation, in the repo and generated, is Markdown. User: "all documentation written or stored should be markdown, bc that the best thing for ai and human"
 - 2026-11-12: the manual moved from `docs/manual/` to `manual/` at the repository root; `crates/clarity-tools/src/manual.rs` embeds it from there, its links reach the reference as `../docs/LANGUAGE.md`. User: "yes move manual more toplevel in app?", then the root over `app/manual/`.
 - The manual is in English ("in English, as the whole manual is"; see [mcp-tools](mcp-tools.md)).
-- 2026-11-13: agents read only the manual; docs/LANGUAGE.md and docs/DESIGN.md removed, their content split into manual pages that follow the code and the IDE (one per tree section, palette group, declaration and statement), guarded by crates/clarity-spec/tests/manual_catalog.rs, manual_coverage.rs and manual_doc.rs. User: "agent should only read manuals!", "I think those docs are way too unstructured!", "let reality (code + ide) lead you... nothing else!", "yes, do it".
+- 2026-11-13: agents read only the manual; docs/LANGUAGE.md and docs/DESIGN.md removed, their content split into manual pages that follow the code and the IDE (one per tree section, palette group, declaration and statement), guarded by crates/clarity-spec/tests/spec/manual_catalog.rs, manual_coverage.rs and manual_doc.rs. User: "agent should only read manuals!", "I think those docs are way too unstructured!", "let reality (code + ide) lead you... nothing else!", "yes, do it".
 
 ## Was
 - CONFLICTING.md (removed 2026-11-16) sections 8 and 9; section 6 items not about syntax (:194, :1622, :1491-1512)

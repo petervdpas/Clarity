@@ -1,0 +1,30 @@
+[package]
+name = "clarity-gen-core"
+description = "What Clarity's generators share, whatever stack they write"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-wasm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# The catalog of formats, for data sources that are files (file_sources).
+clarity-formats = { path = "../../runtimes/rust-formats", version = "0.4.0" }
+# What the IDE's preview answers as a program does (preview.rs): a dropdown's options, matched as every runtime matches them.
+clarity-runtime = { path = "../../runtimes/rust" }
+base64 = "0.22"
+# Clarity.UI's library for Go, C and C++, fetched from its release (clarity_ui.rs).
+sha2 = "0.10"
+tar = "0.4"
+flate2 = "1"
+# Cisco serves openh264 compressed with bzip2 (docs/ledger/video-camera.md); pure Rust.
+bzip2 = "0.6"
+# The runtimes the installed Clarity carries, packed with zstd (carried.rs); pure Rust.
+ruzstd = "0.8"
+# The program file's icon on Windows, drawn from the project's picture at every size (windows_icon.rs).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+resvg = "0.49"
+

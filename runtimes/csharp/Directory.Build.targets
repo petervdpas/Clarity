@@ -1,0 +1,19 @@
+<!-- Every packed project of Clarity's C# runtime: before its package is
+     written, the older versions of that package in the same folder go, so
+     bin/Debug and bin/Release hold only the version Directory.Build.props
+     names. The packages published are the release workflow's
+     (.github/workflows/release-csharp-runtime.yml), never these. -->
+<Project>
+  <Target Name="ClarityRemoveOlderPackages" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' != 'false'">
+    <PropertyGroup>
+      <_ClarityPackages>$([MSBuild]::EnsureTrailingSlash('$(PackageOutputPath)'))</_ClarityPackages>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ClarityOlderPackage Include="$(_ClarityPackages)$(PackageId).*.nupkg;$(_ClarityPackages)$(PackageId).*.snupkg"
+                            Exclude="$(_ClarityPackages)$(PackageId).$(PackageVersion).nupkg;$(_ClarityPackages)$(PackageId).$(PackageVersion).snupkg" />
+      <!-- Another package whose name starts with this one's (Clarity.Runtime.Sqlite beside Clarity.Runtime) is not this one's older version. -->
+      <_ClarityOlderPackage Remove="@(_ClarityOlderPackage)" Condition="'%(Filename)' != '' and !$([System.Char]::IsDigit('%(Filename)', $([MSBuild]::Add($(PackageId.Length), 1))))" />
+    </ItemGroup>
+    <Delete Files="@(_ClarityOlderPackage)" />
+  </Target>
+</Project>

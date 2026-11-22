@@ -1,6 +1,7 @@
 // Data events: a record whose entity has them runs them around its save and
 // delete, in one transaction with them, as on the other stacks.
 
+#include "apply_steps.hpp"
 #include "check.hpp"
 #include "clarity/db.hpp"
 #include "clarity/sql.hpp"
@@ -54,7 +55,7 @@ struct Account {
 
 Db accounts() {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL)",
+    apply_steps(db, {{"CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL)",
                  "CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL)"}});
     return db;
 }
@@ -114,7 +115,7 @@ struct Plan {
 
 std::pair<Db, Plan> planned() {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+    apply_steps(db, {{"CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
                  "CREATE TABLE plan_task (id INTEGER PRIMARY KEY, plan INTEGER REFERENCES plan(id), title TEXT NOT NULL)"}});
     Plan plan{0, "Model"};
     db.save(plan);

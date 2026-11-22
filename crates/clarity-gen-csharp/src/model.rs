@@ -1,0 +1,557 @@
+//! Enums and entities as C# enums and record classes.
+
+use clarity_spec::Project;
+use clarity_spec::code::{DataEvent, record_name};
+use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
+
+use super::names::{backing, field_type, pascal, property, string, value_type};
+use clarity_spec::code::check::ValueItem;
+use super::texts::Texts;
+
+/// The enums and records of `file`, in the application's `namespace`; for
+/// the command-line program (`cli`) without what only windows use. The
+/// settings are kept under `program` (`clarity_gen_core::settings_program`).
+pub fn emit(project: &Project, file: &SpecFile, namespace: &str, program: &str, texts: &Texts, cli: bool) -> String {
+    let mut out = String::new();
+    for decl in &file.enums {
+        out.push_str(&enum_decl(decl, namespace, texts, cli));
+    }
+    for entity in &file.entities {
+        if entity.settings {
+            out.push_str(&settings_class(project, entity, program, cli));
+        } else {
+            out.push_str(&record(project, entity));
+        }
+    }
+    for decl in &file.records {
+        out.push_str(&plain_record(project, decl));
+    }
+    out
+}
+
+/// A record (manual/code.engines.md): a class of its fields with their defaults; never
+/// stored, so it has no id and is no `IRecord`.
+fn plain_record(project: &Project, record: &Entity) -> String {
+    let name = &record.name.name;
+    let properties: String = record
+        .fields
+        .iter()
+        .map(|f| {
+            let ty = field_type(&f.ty);
+            let prop = property(name, &f.name.name);
+            let field = backing(&f.name.name);
+            let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+            format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty} {field}{init};\n")
+        })
+        .collect();
+    // A record is a value: its copy has copies of its lists and of the records it holds.
+    let plain = |entity: &str| project.entity(entity).is_some_and(|e| e.record);
+    let copied: String = record
+        .fields
+        .iter()
+        .map(|f| {
+            let prop = property(name, &f.name.name);
+            let value = match &f.ty {
+                FieldType::Values { .. } => format!("[.. {prop}]"),
+                FieldType::Record { entity } if plain(&entity.name) => format!("{prop}.Copy()"),
+                FieldType::List { item } if plain(&item.name) => format!("[.. {prop}.Select(r => r.Copy())]"),
+                FieldType::List { .. } => format!("[.. {prop}]"),
+                _ => prop.clone(),
+            };
+            format!("        {prop} = {value},\n")
+        })
+        .collect();
+    let copy = format!(
+        "\n    /// <summary>A copy of its values: a record is a value, so what keeps or gets one has its own (manual/code.engines.md).</summary>\n    public {name} Copy() => new()\n    {{\n{copied}    }};\n"
+    );
+    format!("/// <summary>A record of values, made in code and never stored.</summary>\npublic sealed partial class {name} : ObservableObject\n{{\n{properties}{copy}}}\n\n")
+}
+
+/// An enum, and its labels for text: `Labels.Of(status)`, in the language
+/// shown; the choices of a dropdown are made each time, so they follow it.
+fn enum_decl(decl: &EnumDecl, namespace: &str, texts: &Texts, cli: bool) -> String {
+    let name = &decl.name.name;
+    let values: String = decl.variants.iter().map(|v| format!("    {},\n", v.name.name)).collect();
+    let labels: String = decl
+        .variants
+        .iter()
+        .map(|v| format!("        {name}.{} => {},\n", v.name.name, texts.code(&v.label)))
+        .collect();
+    let choices: String = decl
+        .variants
+        .iter()
+        .map(|v| format!("        new(global::{namespace}.{name}.{}, {}),\n", v.name.name, texts.code(&v.label)))
+        .collect();
+    // A dropdown's choices: only windows have them.
+    let choices = if cli {
+        String::new()
+    } else {
+        format!("public static partial class Choices\n{{\n    public static Choice[] {name} =>\n    [\n{choices}    ];\n}}\n\n")
+    };
+    format!(
+        "public enum {name}
+{{
+{values}}}
+
+public static partial class Labels
+{{
+    public static string Of({name} value) => value switch
+    {{
+{labels}        _ => \"\",
+    }};
+}}
+
+{choices}"
+    )
+}
+
+/// Fields that are stored in the entity's own table.
+fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
+    entity.fields.iter().filter(|f| !f.ty.is_held())
+}
+
+/// The initial value of a field, when it has one beyond C#'s own default.
+fn initial(field: &Field) -> Option<String> {
+    match (&field.ty, field.modifiers.default.as_ref()) {
+        (clarity_spec::kept_as_text!(), Some(Literal::Str(s))) => Some(string(s)),
+        (clarity_spec::kept_as_text!(), _) => Some("\"\"".into()),
+        (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
+        (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
+        (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
+        // A date default written out (clarity_spec::dates).
+        (FieldType::Date, Some(Literal::Str(s))) => clarity_spec::dates::date(s).map(|d| format!("new DateOnly({}, {}, {})", d.year, d.month, d.day)),
+        (FieldType::DateTime, Some(Literal::Str(s))) => clarity_spec::dates::date_time(s)
+            .map(|d| format!("new DateTime({}, {}, {}, {}, {}, {})", d.year, d.month, d.day, d.hour, d.minute, d.second)),
+        (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
+        (FieldType::List { .. } | FieldType::Values { .. }, _) => Some("[]".into()),
+        // A record held inside starts as a new one (manual/data.entities.md).
+        (FieldType::Record { entity }, _) => Some(format!("new {}()", entity.name)),
+        _ => None,
+    }
+}
+
+/// The person's settings (manual/data.settings.md) as one shared object: every
+/// window's `Settings` is `Settings.Current`. `Start` takes back what was
+/// kept and still fits (the runtime's KeptSettings), shows its language
+/// and theme, keeps every change, and follows the pickers.
+fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) -> String {
+    let name = &entity.name.name;
+    let mut properties = String::new();
+    let mut described = String::new();
+    let mut taken = String::new();
+    let mut applied = String::new();
+    let mut json = String::new();
+    let mut follow = String::new();
+    let mut shown = String::new();
+    for f in &entity.fields {
+        let ty = field_type(&f.ty);
+        let prop = property(name, &f.name.name);
+        let field = backing(&f.name.name);
+        let key = string(&f.name.name);
+        let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+        properties.push_str(&format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}
+    {ty} {field}{init};
+"));
+        let bound = |l: &Option<Literal>| match l {
+            Some(Literal::Number(n)) => string(n),
+            _ => "null".into(),
+        };
+        let (tag, values) = match &f.ty {
+            FieldType::Text { .. } => ("text", "null".to_string()),
+            FieldType::Enum { name } => ("enum", format!("Enum.GetNames<{}>()", name.name)),
+            // The command-line program shows no themes and takes the language kept as it is.
+            FieldType::Language | FieldType::Theme | FieldType::Secret if cli => ("text", "null".into()),
+            FieldType::Language => ("language", "Locale.Offered".into()),
+            FieldType::Theme => ("theme", "[.. Themes.Offered.Select(t => t.Name)]".into()),
+            FieldType::DateTime => ("datetime", "null".into()),
+            // A secret is text, kept apart from the file (manual/data.settings.md).
+            FieldType::Secret => ("text", "null".into()),
+            other => (clarity_spec::widgets::field_type_tag(other), "null".into()),
+        };
+        described.push_str(&format!(
+            "        [{key}] = new({}, {}, {}, {values}),
+",
+            string(tag),
+            bound(&f.modifiers.min),
+            bound(&f.modifiers.max)
+        ));
+        let read = match &f.ty {
+            FieldType::Integer | FieldType::Duration | FieldType::Ref { .. } => "v.GetValue<long>()".to_string(),
+            FieldType::Decimal { .. } | FieldType::Money => "decimal.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)".into(),
+            FieldType::Bool => "v.GetValue<bool>()".into(),
+            FieldType::Date => "DateOnly.ParseExact(v.GetValue<string>(), \"yyyy-MM-dd\", CultureInfo.InvariantCulture)".into(),
+            FieldType::DateTime => "DateTime.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)".into(),
+            FieldType::Enum { name } => format!("Enum.Parse<{}>(v.GetValue<string>())", name.name),
+            _ => "v.GetValue<string>()".into(),
+        };
+        taken.push_str(&format!("        if (kept[{key}] is {{ }} {field}Kept) settings.{prop} = {};
+", read.replace("v.", &format!("{field}Kept."))));
+        // What was sent may also clear a setting that can be none: a reference, a date, a moment.
+        applied.push_str(&format!("        if (kept[{key}] is {{ }} {field}Sent) settings.{prop} = {};
+", read.replace("v.", &format!("{field}Sent."))));
+        if matches!(f.ty, FieldType::Ref { .. } | FieldType::Date | FieldType::DateTime) {
+            applied.push_str(&format!("        else if (sent.TryGetPropertyValue({key}, out var {field}None) && {field}None is null) settings.{prop} = null;
+"));
+        }
+        let written = match &f.ty {
+            FieldType::Decimal { .. } | FieldType::Money => format!("{prop}.ToString(CultureInfo.InvariantCulture)"),
+            FieldType::Date => format!("{prop}?.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture)"),
+            FieldType::DateTime => format!("{prop}?.ToString(\"yyyy-MM-ddTHH:mm:ss\", CultureInfo.InvariantCulture)"),
+            FieldType::Enum { .. } => format!("{prop}.ToString()"),
+            _ => prop.clone(),
+        };
+        json.push_str(&format!("        [{key}] = {written},
+"));
+        match &f.ty {
+            FieldType::Language => {
+                shown.push_str(&format!("        if (!kept.ContainsKey({key})) settings.{prop} = Locale.Current;
+        else if (settings.{prop} != Locale.Current) Locale.Choose(settings.{prop});
+"));
+                follow.push_str(&format!(
+                    "            // The views are rebuilt for a language, so the input that changed it is done first.
+            if (e.PropertyName == nameof({prop}) && settings.{prop} != Locale.Current) Later.Post(() => Locale.Choose(settings.{prop}));
+"
+                ));
+                shown.push_str(&format!("        Locale.Changed += () => settings.{prop} = Locale.Current;
+"));
+            }
+            FieldType::Theme => {
+                shown.push_str(&format!("        if (!kept.ContainsKey({key})) settings.{prop} = Themes.Current ?? \"\";
+        else if (settings.{prop} != Themes.Current) Themes.Choose(settings.{prop});
+"));
+                follow.push_str(&format!("            if (e.PropertyName == nameof({prop}) && settings.{prop} != Themes.Current) Themes.Choose(settings.{prop});
+"));
+                shown.push_str(&format!("        Themes.Changed += () => settings.{prop} = Themes.Current ?? \"\";
+"));
+            }
+            _ => {}
+        }
+    }
+    let _ = project;
+    // The command-line program takes them back when it starts, and keeps
+    // them when a command changed them: it shows no language or theme of
+    // its own and has no windows to follow.
+    // Secret settings (manual/data.settings.md): kept in the system's protected store, never in the file.
+    let secret_names: Vec<String> = entity.fields.iter().filter(|f| f.ty == FieldType::Secret).map(|f| string(&f.name.name)).collect();
+    let (secrets_arg, secrets_field) = if secret_names.is_empty() {
+        (String::new(), String::new())
+    } else {
+        (", Secrets".to_string(), format!("    /// <summary>The settings kept in the system's protected store (manual/data.settings.md).</summary>\n    static readonly string[] Secrets = [{}];\n", secret_names.join(", ")))
+    };
+    let watch = if cli {
+        String::new()
+    } else {
+        format!("{shown}        settings.PropertyChanged += (_, e) =>\n        {{\n            KeptSettings.Keep(ProgramName, settings.ToJson(){secrets_arg});\n{follow}        }};\n")
+    };
+    let keep = if cli { format!("\n    /// <summary>Keeps the settings as they are now.</summary>\n    public static void Keep() => KeptSettings.Keep(ProgramName, Current.ToJson(){secrets_arg});\n") } else { String::new() };
+    format!(
+        "/// <summary>The person's settings: one for the whole application, shared by every window, kept on their machine as they change.</summary>
+public sealed partial class {name} : ObservableObject, ISettings
+{{
+    const string ProgramName = {program};
+{secrets_field}
+
+    /// <summary>The settings shown, the same in every window.</summary>
+    public static {name} Current {{ get; private set; }} = new();
+
+{properties}
+    /// <summary>Takes back what was kept and still fits, shows its language and theme, and keeps every change.</summary>
+    public static void Start()
+    {{
+        var settings = new {name}();
+        var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName{secrets_arg}));
+{taken}        Current = settings;
+{watch}    }}
+
+    /// <summary>Takes the settings a person's browser sent, those that still fit (manual/stacks.csharp.md).</summary>
+    public void Apply(JsonObject sent)
+    {{
+        var settings = this;
+        var kept = KeptSettings.Taken(Described(), sent);
+{applied}    }}
+{keep}
+    /// <summary>The settings as a kept value is checked against them.</summary>
+    static Dictionary<string, Setting> Described() => new()
+    {{
+{described}    }};
+
+    /// <summary>The settings as they are kept.</summary>
+    public JsonObject ToJson() => new()
+    {{
+{json}{keys_json}    }};
+}}
+
+",
+        program = string(program),
+        // The person's keys are kept beside the settings (manual/app.keys.md).
+        keys_json = if project.keys_editable { "        [\"keys\"] = PersonKeys.Json(),\n" } else { "" }
+    )
+}
+
+/// How a field is stored: most values go as they are, enums by name.
+fn to_sql(entity: &str, field: &Field) -> String {
+    let value = property(entity, &field.name.name);
+    match &field.ty {
+        FieldType::Enum { .. } => format!("Sql.Name({value})"),
+        FieldType::Image => format!("Sql.Picture({value})"),
+        // Its content, then its name in the column beside it.
+        FieldType::Blob => format!("Sql.FileContent({value}), Sql.FileName({value})"),
+        // Its items as JSON.
+        FieldType::Values { .. } => format!("ListFields.Kept({value})"),
+        _ => value,
+    }
+}
+
+fn from_sql(field: &Field) -> String {
+    let read = match &field.ty {
+        clarity_spec::kept_as_text!() => "GetText".into(),
+        FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
+        FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
+        FieldType::Bool => "GetBoolean".into(),
+        FieldType::Date => "GetDate".into(),
+        FieldType::DateTime => "GetDateTime".into(),
+        FieldType::Enum { name } => format!("GetName<{}>", name.name),
+        FieldType::Ref { .. } => "GetReference".into(),
+        FieldType::Image => "GetPicture".into(),
+        FieldType::Blob => "GetFile".into(),
+        FieldType::Values { item } => return format!("ListFields.Read<{}>", value_type(&ValueItem::of_list(item).info())),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
+    };
+    format!("Sql.{read}")
+}
+
+fn record(project: &Project, entity: &Entity) -> String {
+    let name = &entity.name.name;
+    // A file has the column of its name beside its own.
+    let columns = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::Blob).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
+        })
+        .map(|c| string(&c))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let properties: String = entity
+        .fields
+        .iter()
+        .map(|f| {
+            let ty = field_type(&f.ty);
+            let prop = property(name, &f.name.name);
+            let field = backing(&f.name.name);
+            let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+            format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty} {field}{init};\n")
+        })
+        .collect();
+    let to_values = stored(entity).map(|f| to_sql(name, f)).collect::<Vec<_>>().join(", ");
+    let mut at = 0;
+    let mut from_values = String::new();
+    for f in stored(entity) {
+        let values = if f.ty == FieldType::Blob { format!("values[{at}], values[{}]", at + 1) } else { format!("values[{at}]") };
+        from_values.push_str(&format!("        {} = {}({}, {values}),\n", property(name, &f.name.name), from_sql(f), string(&f.name.name)));
+        at += if f.ty == FieldType::Blob { 2 } else { 1 };
+    }
+    // The data events written in the entity's code block; each runs the
+    // method generated from it.
+    let events: Vec<DataEvent> = project
+        .files
+        .iter()
+        .flat_map(|f| &f.code)
+        .filter(|b| b.name.name == *name)
+        .flat_map(|b| b.events.iter().map(|e| e.event))
+        .collect();
+    let mut hooks = held_lists(project, entity);
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = clarity_gen_core::cascades(project, name);
+    if !cascades.is_empty() {
+        hooks.push_str("\n    public static bool HasCascades => true;\n\n    public void Cascade(Db db)\n    {\n");
+        for (child, _, column) in &cascades {
+            hooks.push_str(&format!(
+                "        foreach (var child in db.Find<{}>(new Query().Filter(Cond.Compare({column:?}, Op.Eq, Id))))\n            db.Delete(child);\n",
+                child.name.name
+            ));
+        }
+        hooks.push_str("    }\n");
+    }
+    // `writable when` (step 4): checked before a save and a delete, refused with notYours, before the data events of the same moment.
+    let writable = entity.writable.is_some();
+    let checked = |hook: &str| writable && (hook == "BeforeSave" || hook == "BeforeDelete");
+    if !events.is_empty() || writable {
+        hooks.push_str("\n    public static bool HasEvents => true;\n");
+        let check = format!("Clarity.Runtime.Signin.Yours(Logic.Writable{name}(db, this))");
+        for event in &events {
+            let hook = pascal(event.word());
+            let method = pascal(&format!("{}_{}", event.word(), record_name(name)));
+            if checked(&hook) {
+                hooks.push_str(&format!("\n    public void {hook}(Db db)\n    {{\n        {check};\n        Logic.{method}(db, this);\n    }}\n"));
+            } else {
+                hooks.push_str(&format!("\n    public void {hook}(Db db) => Logic.{method}(db, this);\n"));
+            }
+        }
+        for hook in ["BeforeSave", "BeforeDelete"].into_iter().filter(|h| checked(h) && !events.iter().any(|e| pascal(e.word()) == *h)) {
+            hooks.push_str(&format!("\n    public void {hook}(Db db) => {check};\n"));
+        }
+    }
+    // The version a save and a delete check (step 5): only where the entity has one.
+    let version_column = project.version_column(name);
+    if version_column.is_some() {
+        hooks.push_str(&saved_since(project, entity));
+    }
+    // `readable when` (step 4): each record a find gives code is checked, refused with notYours.
+    if entity.readable.is_some() {
+        hooks.push_str(&format!("\n    /// <summary>The records found, each checked by the entity's <c>readable when</c>.</summary>\n    public static List<{name}> Readable_(Db db, List<{name}> found)\n    {{\n        foreach (var record in found)\n            Clarity.Runtime.Signin.Yours(Logic.Readable{name}(db, record));\n        return found;\n    }}\n\n    /// <summary>The record read, checked by the entity's <c>readable when</c>.</summary>\n    public static {name} Readable_(Db db, {name} record)\n    {{\n        Clarity.Runtime.Signin.Yours(Logic.Readable{name}(db, record));\n        return record;\n    }}\n"));
+    }
+    format!(
+        "public sealed partial class {name} : ObservableObject, IRecord<{name}>
+{{
+    public static string SourceName => {source};
+    public static string TableName => {table};
+    public static string KeyColumn => {key};
+    public static IReadOnlyList<string> ColumnNames {{ get; }} = [{columns}];
+{pictures}{required}{version_column}
+    public long Id {{ get; set; }}
+{version}{properties}
+    public object?[] ToValues() => [{to_values}];
+
+    public static {name} FromValues(long id, object?[] values) => new()
+    {{
+        Id = id,
+{from_values}    }};
+{hooks}}}
+
+",
+        source = string(project.source_of(name).unwrap_or_default()),
+        pictures = pictures(entity),
+        required = required(project, entity),
+        version_column = version_column.as_deref().map(|c| format!("    public static string? VersionColumn => {};\n", string(c))).unwrap_or_default(),
+        // On the wire as C and Go name it.
+        version = if version_column.is_some() { format!("    [System.Text.Json.Serialization.JsonPropertyName(\"{}\")]\n    public long Version {{ get; set; }}\n", Project::VERSION_WIRE) } else { String::new() },
+        table = string(&entity.table_name()),
+        key = string(entity.key_column()),
+    )
+}
+
+/// The entity's own text of a refused save (`savedSince @key`, step 5), its
+/// slots filled from `current`, the record as stored now; none without the
+/// line, so the runtime says Clarity's `savedSince`. A slot is filled when a
+/// language's text of the key names it.
+fn saved_since(project: &Project, entity: &Entity) -> String {
+    let Some(key) = &entity.saved_since else { return String::new() };
+    let name = &entity.name.name;
+    let texts: Vec<&String> = project.translations.values().filter_map(|t| t.get(key)).collect();
+    let used = |slot: &str| texts.iter().any(|t| t.contains(&format!("{{{slot}}}")));
+    let id = clarity_spec::code::check::RECORD_ID;
+    // Each record referred to whose fields a slot names, loaded once; a missing one leaves its slots empty.
+    let mut loads = String::new();
+    let mut loaded: Vec<String> = Vec::new();
+    let mut code = format!("Clarity.Runtime.Text.Of({})", string(key));
+    for slot in clarity_spec::versions::saved_since_slots(project, entity).iter().filter(|s| used(s)) {
+        let path: Vec<&str> = slot.split('.').skip(1).collect();
+        let value = match path.as_slice() {
+            [only] if *only == id => Some("Clarity.Runtime.Slot.OfInteger(current.Id, null)".to_string()),
+            [field] | [field, _] => entity.field(field).and_then(|f| {
+                let at = format!("current.{}", property(name, field));
+                match (&f.ty, path.get(1)) {
+                    // The record it refers to by its id, which the record holds.
+                    (FieldType::Ref { .. }, None) => Some(format!("Clarity.Runtime.Slot.OfInteger({at} ?? 0, null)")),
+                    (FieldType::Ref { .. }, Some(member)) if *member == id => Some(format!("Clarity.Runtime.Slot.OfInteger({at} ?? 0, null)")),
+                    (FieldType::Ref { entity: target }, Some(member)) => {
+                        let target_field = project.entity(&target.name)?.field(member)?;
+                        let local = format!("{}_", backing(field).trim_start_matches('_'));
+                        if !loaded.contains(&local) {
+                            let read = super::readable(project, &target.name, "db", format!("db.Load<{}>({at})", target.name));
+                            loads.push_str(&format!("        {}? {local} = null;\n        try\n        {{\n            {local} = {read};\n        }}\n        catch (ClarityException)\n        {{\n        }}\n", target.name));
+                            loaded.push(local.clone());
+                        }
+                        let filled = slot_of(target_field, format!("{local}.{}", property(&target.name, member)))?;
+                        Some(format!("{local} is null ? Clarity.Runtime.Slot.OfText(\"\") : {filled}"))
+                    }
+                    (_, None) => slot_of(f, at),
+                    _ => None,
+                }
+            }),
+            _ => None,
+        };
+        if let Some(value) = value {
+            code.push_str(&format!(".With({}, {value})", string(slot)));
+        }
+    }
+    // Named whole: a field may be called `text` or `slot`.
+    if loads.is_empty() {
+        format!("\n    public static Clarity.Runtime.Text SavedSince(Db db, {name} current) => {code};\n")
+    } else {
+        format!("\n    public static Clarity.Runtime.Text SavedSince(Db db, {name} current)\n    {{\n{loads}        return {code};\n    }}\n")
+    }
+}
+
+/// A field's value `at` as a slot of a text, in the field's format and decimals.
+fn slot_of(field: &Field, at: String) -> Option<String> {
+    let format = field.modifiers.format.as_deref().map_or("null".to_string(), string);
+    Some(match &field.ty {
+        clarity_spec::shown_as_text!() => format!("Clarity.Runtime.Slot.OfText({at})"),
+        FieldType::Integer | FieldType::Id => format!("Clarity.Runtime.Slot.OfInteger({at}, {format})"),
+        FieldType::Duration => format!("Clarity.Runtime.Slot.OfDuration({at})"),
+        FieldType::Decimal { scale, .. } => format!("Clarity.Runtime.Slot.OfDecimal({at}, {scale}, {format})"),
+        FieldType::Money => format!("Clarity.Runtime.Slot.OfMoney({at}, {format})"),
+        FieldType::Date => format!("Clarity.Runtime.Slot.OfDate({at}, {format})"),
+        FieldType::DateTime => format!("Clarity.Runtime.Slot.OfDateTime({at}, {format})"),
+        FieldType::Bool => format!("Clarity.Runtime.Slot.OfBoolean({at})"),
+        FieldType::Enum { name } => format!("Clarity.Runtime.Slot.OfName({at}, {})", string(&name.name)),
+        _ => return None,
+    })
+}
+
+/// The required fields, which a save refuses while one is empty (conformance/required.json).
+fn required(project: &Project, entity: &Entity) -> String {
+    let fields: Vec<String> = clarity_gen_core::required_fields(project, entity).iter().map(|(column, label)| format!("({}, {})", string(column), string(label))).collect();
+    if fields.is_empty() {
+        return String::new();
+    }
+    format!("    public static IReadOnlyList<(string Column, string Label)> Required {{ get; }} = [{}];\n", fields.join(", "))
+}
+
+/// The columns of an entity's image fields, with the file store of each.
+fn pictures(entity: &Entity) -> String {
+    let columns: Vec<String> = entity
+        .fields
+        .iter()
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::Blob))
+        .map(|f| {
+            let column = entity.column_of(&f.name.name);
+            let store = f.modifiers.store.as_deref().map_or("null".to_string(), string);
+            let name = if f.ty == FieldType::Blob { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
+            format!("new({}, {store}{name})", string(&column))
+        })
+        .collect();
+    if columns.is_empty() {
+        return String::new();
+    }
+    format!("    public static IReadOnlyList<PictureColumn> Pictures {{ get; }} = [{}];\n", columns.join(", "))
+}
+
+/// The stored lists of an entity's record (`order.lines`), which load with
+/// it one level deep (`IRecord.LoadLists`): each list's records by its one
+/// reference back, in the order they were stored (docs/ledger/runtime-data.md).
+fn held_lists(project: &Project, entity: &Entity) -> String {
+    let lists = project.held_lists(&entity.name.name);
+    if lists.is_empty() {
+        return String::new();
+    }
+    let name = &entity.name.name;
+    // Each list read once for all the records (Db.FindByOwners), then shared out by the reference back.
+    let mut reads = String::new();
+    let mut shares = String::new();
+    for (list, listed, key) in &lists {
+        let property = super::names::property(name, &list.name.name);
+        reads.push_str(&format!(
+            "        var found{property} = Db.ByOwner(db.FindByOwners<{listed}>({column:?}, owners), item => item.{key});\n",
+            listed = listed.name.name,
+            column = listed.column_of(&key.name.name),
+            key = super::names::property(&listed.name.name, &key.name.name),
+        ));
+        shares.push_str(&format!("            record.{property} = found{property}.TryGetValue(record.Id, out var {local}) ? {local} : [];\n", local = format!("its{property}")));
+    }
+    format!(
+        "\n    public void LoadLists(Db db) => LoadListsOf(db, [this]);\n\n    /// <summary>Loads the stored lists of all records at once, each list with one read.</summary>\n    public static void LoadListsOf(Db db, IReadOnlyList<{name}> records)\n    {{\n        var owners = records.Select(record => record.Id).ToList();\n{reads}        foreach (var record in records)\n        {{\n{shares}        }}\n    }}\n"
+    )
+}

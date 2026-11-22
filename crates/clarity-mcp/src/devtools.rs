@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 
 use clarity_agent::{ToolDef, ToolResult};
-use clarity_gen::tools::devtools::{disk, release, swap};
+use clarity_devtools::{disk, release, swap};
 use clarity_project::dev_asks::{self, Action};
 use serde_json::{Value, json};
 
@@ -62,7 +62,7 @@ its repository (./dev.sh), which builds the cDdev's own build of that piece and 
 agents. Waits for the build and gives how it ended with its last lines. Pieces: {}.",
                 pieces.join(", ")
             ),
-            input_schema: json!({ "type": "object", "properties": { "piece": { "type": "string", "enum": pieces } }, "required": ["piece"] }),
+            input_schema: json!({ "type": "object", "properties": { "piece": { "type": "string", "enum": pieces }, "debug": { "type": "boolean", "description": "Build debug instead: a native library's debug build (target/debug), which C# programs built in Debug and the runtimes' tests take" } }, "required": ["piece"] }),
         },
         ToolDef {
             name: SWAP_PIECE.into(),
@@ -120,7 +120,7 @@ Gives how it ended and what it freed. Folders: {}.",
             name: WRITE_RELEASE_PLAN.into(),
             description: "For working on Clarity itself: writes the Release Helper's plan (its format, ~/Projects/ReleaseHelper/README.md) as \
 releases/<stamp>.json, `stamp` as YYYY-MM-DD-HHMM; its steps begin with the checks on main (a watch step of checks.yml) and an existing \
-plan is never overwritten. `fix` (a plan's stamp) with `commit_message` only changes that plan's commit message, at any time (after a \
+plan is never overwritten; a field the Release Helper does not read (at the top, on a step of its kind, in a check) is refused. `fix` (a plan's stamp) with `commit_message` only changes that plan's commit message, at any time (after a \
 failed release, for the Go sums). A new plan is refused while a release check (release_state) has failed, not run, or ran on another \
 tree than the one now: the person runs them in Clarity settings > DevTools > Release planning (Run release checks). It is the only way \
 a plan is written."
@@ -161,7 +161,7 @@ impl ClarityServer {
             BUILD_PIECE => self.build_piece(client, input),
             SWAP_PIECE => self.swap_piece(client, input),
             RELEASE_STATE => json_of(repo().and_then(|repo| release_state(&repo))),
-            BUMP_VERSIONS => json_of(repo().and_then(|repo| clarity_gen::tools::devtools::bump::bump(&repo)).map(|done| serde_json::to_value(done).unwrap_or_default())),
+            BUMP_VERSIONS => json_of(repo().and_then(|repo| clarity_devtools::bump::bump(&repo)).map(|done| serde_json::to_value(done).unwrap_or_default())),
             DISK_STATE => json_of(repo().map(|repo| disk_state(&repo))),
             WRITE_RELEASE_PLAN => write_release_plan(input),
             _ => self.remove_folder(client, input),
@@ -174,6 +174,12 @@ impl ClarityServer {
         if swap::piece(key).is_none() {
             let keys: Vec<&str> = swap::PIECES.iter().map(|p| p.key).collect();
             return failed(format!("there is no piece '{key}': one of {}", keys.join(", ")));
+        }
+        if input["debug"].as_bool() == Some(true) {
+            if swap::piece(key).and_then(|p| swap::build_debug(std::path::Path::new("."), p)).is_none() {
+                return failed(format!("{key} has no debug build: only a native library has one"));
+            }
+            return self.ask_and_wait(Action::BuildDebug, key, client, &format!("The debug build of {key}"), "press Build debug in Clarity settings > DevTools");
         }
         self.ask_and_wait(Action::Build, key, client, &format!("The build of {key}"), "press Build in Clarity settings > DevTools")
     }

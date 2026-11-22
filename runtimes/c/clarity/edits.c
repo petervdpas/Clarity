@@ -40,8 +40,6 @@ struct ClarityEdits {
     Edits undone;
 };
 
-/// How many edits a window keeps; the oldest go first.
-enum { MAX_EDITS = 500 };
 
 static void* grown(void* items, size_t count) {
     void* more = realloc(items, count);
@@ -157,7 +155,7 @@ void clarity_edits_edit(ClarityEdits* bus, const char* part, const char* scope, 
         return;
     }
     push(&bus->done, edit);
-    if (bus->done.count > MAX_EDITS) {
+    if (bus->done.count > CLARITY_EDIT_BUS_KEEPS) {
         edit_free(bus->done.items[0]);
         take_out(&bus->done, 0);
     }

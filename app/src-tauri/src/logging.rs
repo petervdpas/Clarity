@@ -66,12 +66,17 @@ fn save(home: &Path, choice: &Choice) -> Result<(), String> {
 }
 
 /// Moves the earlier logs one place up, the oldest beyond KEPT going, and
-/// opens a new ide.log.
+/// opens a new ide.log. A log of a start that wrote nothing after its first
+/// line is written over instead: the IDE restarts often while it is worked
+/// on, and empty starts would push out the logs that hold something.
 fn start_file(home: &Path) -> Result<File, String> {
     std::fs::create_dir_all(folder(home)).map_err(|err| format!("cannot make {}: {err}", folder(home).display()))?;
-    let _ = std::fs::remove_file(log_file(home, KEPT - 1));
-    for n in (0..KEPT - 1).rev() {
-        let _ = std::fs::rename(log_file(home, n), log_file(home, n + 1));
+    let last = std::fs::read_to_string(log_file(home, 0)).unwrap_or_default();
+    if last.lines().any(|l| !l.contains("logging started")) {
+        let _ = std::fs::remove_file(log_file(home, KEPT - 1));
+        for n in (0..KEPT - 1).rev() {
+            let _ = std::fs::rename(log_file(home, n), log_file(home, n + 1));
+        }
     }
     let file = log_file(home, 0);
     File::create(&file).map_err(|err| format!("cannot write {}: {err}", file.display()))
@@ -80,8 +85,25 @@ fn start_file(home: &Path) -> Result<File, String> {
 fn start(home: &Path) -> Result<(), String> {
     let file = start_file(home)?;
     *LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some((file, Instant::now()));
-    line("logging started");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    line(&format!("logging started {}", clock_text(now)));
     Ok(())
+}
+
+/// The date and time of `seconds` since 1970 in UTC, as `2026-11-20 17:53:53 UTC`.
+fn clock_text(seconds: u64) -> String {
+    let (days, rest) = ((seconds / 86_400) as i64, seconds % 86_400);
+    // Days to a civil date (Howard Hinnant's days_from_civil, reversed).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02} UTC", rest / 3600, rest % 3600 / 60, rest % 60)
 }
 
 fn stop() {
@@ -193,5 +215,26 @@ mod tests {
         assert_eq!(read(4), "start 2\n");
         assert!(!log_file(&home, 5).exists());
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_start_that_logged_nothing_is_written_over_not_kept() {
+        let home = home("empty");
+        let mut file = start_file(&home).unwrap();
+        writeln!(file, "    0.000s logging started 2026-11-20 18:00:00 UTC\n    1.000s [devtools] swaps by close tab").unwrap();
+        for _ in 0..6 {
+            let mut file = start_file(&home).unwrap();
+            writeln!(file, "    0.000s logging started 2026-11-20 18:05:00 UTC").unwrap();
+        }
+        assert!(std::fs::read_to_string(log_file(&home, 1)).unwrap().contains("[devtools]"), "the log with lines stays the one before");
+        assert!(!log_file(&home, 2).exists(), "the empty starts pushed nothing up");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn the_first_line_says_when_the_ide_started() {
+        assert_eq!(clock_text(0), "1970-01-01 00:00:00 UTC");
+        assert_eq!(clock_text(1_795_197_233), "2026-11-20 17:53:53 UTC");
+        assert_eq!(clock_text(951_782_400), "2000-02-29 00:00:00 UTC");
     }
 }

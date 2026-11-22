@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cornerLine, iconLine, isToastName, levelLine, lifespanLine, newToastText, textLine } from "./toastLines.ts";
+import { readFileSync } from "node:fs";
+import { TOAST_LIFESPAN, cornerLine, iconLine, isToastName, levelLine, lifespanLine, newToastText, textLine } from "./toastLines.ts";
 
 test("each change of a toast is one line, and Clarity's default takes its line away", () => {
   assert.deepEqual(textLine("@savedToast"), { key: "text", line: "text @savedToast" });
@@ -21,4 +22,9 @@ test("a lifespan Clarity cannot show is refused with why", () => {
 test("a new toast has a camelCase name, a text key and Clarity's default lifespan", () => {
   assert.ok(isToastName("saved") && !isToastName("Saved") && !isToastName("not saved"));
   assert.equal(newToastText("saved"), "toast saved\n    text @savedToast\n    lifespan 5000\n");
+});
+
+test("a toast's lifespan is the spec's (conformance/defaults.json)", () => {
+  const defaults = JSON.parse(readFileSync(new URL("../../../conformance/defaults.json", import.meta.url), "utf8"));
+  assert.deepEqual({ ...TOAST_LIFESPAN }, defaults.toastLifespan);
 });

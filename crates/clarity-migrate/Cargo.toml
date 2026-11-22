@@ -1,0 +1,28 @@
+[package]
+name = "clarity-migrate"
+description = "Clarity's own migration tool: applies a project's migration steps to its databases, in Clarity and beside an app made with it"
+edition.workspace = true
+version.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+# Shipped with Clarity and, when a project asks, beside an app made with it; not on crates.io.
+publish = false
+
+[lib]
+name = "clarity_migrate"
+
+[[bin]]
+name = "clarity-migrate"
+path = "src/main.rs"
+
+[dependencies]
+# The runtime's drivers connect to every database kind, and find a connection as an app does
+# (written out, `env:NAME`, or a secret setting from the system's store).
+clarity-runtime = { path = "../../runtimes/rust", default-features = false, features = ["sqlite", "postgres", "mysql", "mssql", "secrets"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+clarity-gen = { path = "../clarity-gen" }
+clarity-project.workspace = true
+clarity-spec.workspace = true

@@ -1,0 +1,30 @@
+{
+  "about": "How Clarity writes a name, the same in the spec (clarity_spec::names, clarity_spec::code::hyphenated) and in the IDE (app/src/lib/names.ts, commandLine.ts). isCamelCase: a small letter, then letters and digits only (every lower-case name: parts, handlers, toasts, functions). camelCase: words split by anything but letters and digits, the first starting small and each next one capital, the rest as written; one that starts with a digit gets an n in front. hyphenated: a command as the command line types it, each capital a hyphen and a small letter, an underscore a hyphen.",
+  "isCamelCase": [
+    { "name": "newGame", "is": true },
+    { "name": "square1", "is": true },
+    { "name": "a", "is": true },
+    { "name": "NewGame", "is": false },
+    { "name": "new_game", "is": false },
+    { "name": "1st", "is": false },
+    { "name": "", "is": false },
+    { "name": "new game", "is": false },
+    { "name": "café", "is": false }
+  ],
+  "camelCase": [
+    { "words": "New game", "name": "newGame" },
+    { "words": "new_game", "name": "newGame" },
+    { "words": "board_clicked", "name": "boardClicked" },
+    { "words": "Square_1", "name": "square1" },
+    { "words": "save click", "name": "saveClick" },
+    { "words": "newGame click", "name": "newGameClick" },
+    { "words": "1st place", "name": "n1stPlace" },
+    { "words": "  spaced   out  ", "name": "spacedOut" }
+  ],
+  "hyphenated": [
+    { "name": "add", "line": "add" },
+    { "name": "addAll", "line": "add-all" },
+    { "name": "importCsvFile", "line": "import-csv-file" },
+    { "name": "add_all", "line": "add-all" }
+  ]
+}

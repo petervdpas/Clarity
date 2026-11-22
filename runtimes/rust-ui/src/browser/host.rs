@@ -20,7 +20,7 @@ use crate::element::Composition;
 use crate::files::StorageFile;
 use crate::geometry::Rect;
 use crate::headless::Driven;
-use crate::input::{Cursor, KeyInput, Modifiers, PointerButton, PressCounter};
+use crate::input::{Cursor, KeyInput, Modifiers, PressCounter};
 use crate::window::WindowStack;
 
 use super::input::{button_of, cursor_css, key_of, modifiers_of, typed_text, wheel_of};
@@ -68,8 +68,6 @@ pub struct BrowserHost {
     songs: Rc<RefCell<Songs>>,
     videos: Rc<RefCell<PageVideoState>>,
     files: Arc<PageFiles>,
-    /// Where the pointer last went down: a file the page gives is taken by a click there again.
-    pressed_at: Option<(f64, f64)>,
     title: Option<String>,
     cursor: Option<Cursor>,
     caret: Option<Option<Rect>>,
@@ -126,7 +124,6 @@ impl BrowserHost {
             songs,
             videos,
             files: page_files,
-            pressed_at: None,
             title: None,
             cursor: None,
             caret: None,
@@ -272,9 +269,6 @@ impl BrowserHost {
                 let Some(button) = button_of(button) else { return };
                 let elapsed = self.started.elapsed().as_millis() as i64;
                 let clicks = self.presses.press(x, y, button, elapsed);
-                if button == PointerButton::Left {
-                    self.pressed_at = Some((x, y));
-                }
                 let screen = self.screen();
                 screen.pointer_moved(x, y);
                 screen.pointer_pressed_with(x, y, button, clicks, held);
@@ -357,10 +351,10 @@ impl BrowserHost {
     /// The person chose a file in the page's file input: the click that asked for it is done again, and the picker gives it.
     pub fn file_chosen(&mut self, name: &str, bytes: Vec<u8>) {
         self.files.give(StorageFile::given(&crate::wire::clean_name(name), bytes));
-        if let Some((x, y)) = self.pressed_at {
-            let screen = self.screen();
-            screen.pointer_pressed_with(x, y, PointerButton::Left, 1, Modifiers::NONE);
-            screen.pointer_released(x, y, PointerButton::Left);
+        // The part that asked takes it when the press that asked comes again, however it was pressed.
+        let screen = self.screen();
+        if let Some(press) = screen.last_press() {
+            screen.press_again(press);
         }
         self.after();
     }

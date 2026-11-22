@@ -84,3 +84,23 @@ fn fields_keep_their_order() {
     assert_eq!(order(&Connections::load(&file).unwrap()), ["baseUrl", "model", "apikey", "kind"]);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_connection_is_refused_as_the_cases_say() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/vault-connections.json");
+    let cases: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    for c in cases["cases"].as_array().unwrap() {
+        let fields: Vec<(String, ConnectionField)> = c["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                let value = &f[1];
+                let field = if value["mode"] == "vault" { ConnectionField::vault(value["category"].as_str().unwrap(), value["key"].as_str().unwrap()) } else { ConnectionField::plain(value["value"].as_str().unwrap()) };
+                (f[0].as_str().unwrap().to_string(), field)
+            })
+            .collect();
+        let want: Vec<String> = c["problems"].as_array().unwrap().iter().map(|p| p.as_str().unwrap().to_string()).collect();
+        assert_eq!(clarity_vault::connection_problems(c["name"].as_str().unwrap(), &fields), want, "{c}");
+    }
+}

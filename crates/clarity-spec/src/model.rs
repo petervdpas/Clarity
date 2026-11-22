@@ -387,6 +387,31 @@ pub enum FieldType {
     },
 }
 
+/// The field types kept as text, as a pattern (`FieldType::kept_as_text`):
+/// `kept_as_text!() => "String"`, so a match still names every type.
+#[macro_export]
+macro_rules! kept_as_text {
+    () => {
+        $crate::shown_as_text!() | $crate::model::FieldType::Secret
+    };
+}
+
+/// The field types a text's slot shows as text, as a pattern
+/// (`FieldType::shown_as_text`): what is kept as text but a secret.
+#[macro_export]
+macro_rules! shown_as_text {
+    () => {
+        $crate::model::FieldType::Text { .. }
+            | $crate::model::FieldType::Email
+            | $crate::model::FieldType::Url
+            | $crate::model::FieldType::Color
+            | $crate::model::FieldType::Folder
+            | $crate::model::FieldType::File
+            | $crate::model::FieldType::Language
+            | $crate::model::FieldType::Theme
+    };
+}
+
 impl FieldType {
     /// Whether the field holds records rather than a value: `list<Line>`,
     /// kept in its own table or (in a web API) inside the record, and a
@@ -464,6 +489,39 @@ impl FieldType {
 
     pub fn is_textual(&self) -> bool {
         matches!(self, Self::Text { .. } | Self::Email | Self::Url | Self::Color | Self::Folder | Self::Language | Self::Theme)
+    }
+
+    /// Whether the value is text in the program and in its column: text,
+    /// email, url, color, folder, file (its path), language, theme and
+    /// secret. Every generator decides its type, its column, how it reads and
+    /// writes it and its empty value by this. Every type says yes or no here,
+    /// so a new one is decided, not forgotten.
+    pub fn kept_as_text(&self) -> bool {
+        match self {
+            crate::kept_as_text!() => true,
+            Self::Integer
+            | Self::Decimal { .. }
+            | Self::Money
+            | Self::Bool
+            | Self::Date
+            | Self::DateTime
+            | Self::Duration
+            | Self::Image
+            | Self::Blob
+            | Self::Id
+            | Self::Enum { .. }
+            | Self::Ref { .. }
+            | Self::Record { .. }
+            | Self::List { .. }
+            | Self::Values { .. } => false,
+        }
+    }
+
+    /// Whether a text's slot shows the value as text (`{customer.email}`): what
+    /// is kept as text, but never a secret, which only a password input shows,
+    /// as dots (manual/data.settings.md).
+    pub fn shown_as_text(&self) -> bool {
+        matches!(self, crate::shown_as_text!())
     }
 }
 

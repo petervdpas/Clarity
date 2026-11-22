@@ -73,21 +73,19 @@ public sealed class ViewModelWireTests
         Assert.Equal([1L, 2L], people.Select(p => p!["id"]!.GetValue<long>()));
         var values = Value(wire.Answer("field_values", """{"entity":"ticket","field":"note"}"""))!.AsArray();
         Assert.Contains("second", values.Select(v => v!.GetValue<string>()));
-        var typed = Value(wire.Answer("find_options", """{"kind":"typed","entity":"ticket","field":"note","typed":"se"}"""))!.AsArray();
-        Assert.Equal(["second"], typed.Select(v => v!.GetValue<string>()));
         // An entity no window offers has no records, and that is no error.
         Assert.Empty(Value(wire.Answer("ref_options", """{"entity":"planet"}"""))!.AsArray());
     }
 
     [Fact]
-    public void A_search_dropdown_offers_the_records_that_fit_with_the_fields_it_shows()
+    public void A_search_dropdown_offers_the_records_with_the_fields_it_shows_by_name()
     {
         var wire = Wire(new TicketsViewModel());
         Opened(wire);
-        var found = Value(wire.Answer("find_options", """{"kind":"search","entity":"person","show":["name","role"],"typed":"lea"}"""))!.AsArray();
-        var cy = Assert.Single(found)!;
-        Assert.Equal(7L, cy["id"]!.GetValue<long>());
-        Assert.Equal("lead", cy["fields"]!["1"]!.GetValue<string>());
+        // Every record: the screen searches them as the person types, in the fields it shows by name.
+        var found = Value(wire.Answer("find_options", """{"entity":"person","show":["name","role"]}"""))!.AsArray();
+        var cy = found.Single(o => o!["id"]!.GetValue<long>() == 7)!;
+        Assert.Equal("lead", cy["fields"]!["role"]!.GetValue<string>());
     }
 
     [Fact]

@@ -12,18 +12,18 @@ import type { Widget } from "@clarity/ui/generated/Widget.ts";
 import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
 
 /** The words the palette shows for an input of a strategy. */
-const INPUT_NAMES: Record<string, string> = {
+export const INPUT_NAMES: Record<string, string> = {
   name: "Name",
   password: "Password",
   code: "Recovery code",
   token: "Token",
 };
 
-/** The words the palette shows for a strategy's button. */
-const BUTTON_NAMES: Record<string, string> = {
+/** The words the palette shows for a strategy's button: the app's own (clarity_spec::translations), tied by signinView.test.ts. */
+export const BUTTON_NAMES: Record<string, string> = {
   password: "Sign in with a password",
-  recovery: "Sign in with a recovery code",
-  token: "Sign in with a token",
+  recovery: "Use a recovery code",
+  token: "Use a token",
   account: "Use this computer's account",
   github: "Sign in with GitHub",
   microsoft: "Sign in with Microsoft",

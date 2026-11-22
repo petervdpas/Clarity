@@ -17,9 +17,9 @@ Progress: 65%
 ## Tests
 - `conformance/data-folder.json`: run by R, Go, C, C++, C#
 - `conformance/unconnected.json`: run by R, Go, C, C++, C#
-- `crates/clarity-spec/tests/sources.rs`, `external.rs`; `crates/clarity-project/tests/external.rs`; `crates/clarity-db/tests/sqlite.rs`
-- `crates/clarity-gen/tests/servers.rs`, Go `server_test.go`, C# `ServerTests.cs` need `CLARITY_TEST_POSTGRES`, `_MYSQL`, `_MSSQL`; CI sets none, so server databases are not tested in CI
-- `crates/clarity-gen/tests/no_datasource.rs`, `unconnected_csharp.rs`
+- `crates/clarity-spec/tests/spec/sources.rs`, `external.rs`; `crates/clarity-project/tests/external.rs`; `crates/clarity-db/tests/sqlite.rs`
+- `crates/clarity-gen/tests/gen/servers.rs`, Go `server_test.go`, C# `ServerTests.cs` need `CLARITY_TEST_POSTGRES`, `_MYSQL`, `_MSSQL`; CI sets none, so server databases are not tested in CI
+- `crates/clarity-gen/tests/gen/no_datasource.rs`, `unconnected_csharp.rs`
 
 ## Open
 - PostgreSQL, MySQL and SQL Server on C and C++: NOT BUILT ("the C backend stores records in SQLite for now", `crates/clarity-gen/src/c/mod.rs:253`).

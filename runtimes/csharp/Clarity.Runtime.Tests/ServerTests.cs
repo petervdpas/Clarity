@@ -156,7 +156,7 @@ public class ServerTests
             db.Batch("main", $"DROP TABLE IF EXISTS {dialect.Quote(table)}");
         var steps = Steps(database);
 
-        Assert.Equal(1, db.Migrate(steps[..1]));
+        Assert.Equal(1, db.ApplySteps(steps[..1]));
         var since = new DateOnly(2026, 1, 15);
         var ada = new Before { Name = "Ada Lovelace", Email = "ada@example.com", Kind = "Business", Limit = 1250.50m, Active = true, Since = since, Notes = "first's" };
         db.Save(ada);
@@ -192,8 +192,8 @@ public class ServerTests
         Assert.Equal(["ORD-G", "ORD-1"], Names(db.Find<Order>(byName), o => o.Number));
         db.Delete(grace2);
 
-        Assert.Equal(1, db.Migrate(steps));
-        Assert.Equal(0, db.Migrate(steps));
+        Assert.Equal(1, db.ApplySteps(steps));
+        Assert.Equal(0, db.ApplySteps(steps));
         Assert.Equal(2, db.SchemaVersion());
 
         var customer = db.Get<Customer>(ada.Id);

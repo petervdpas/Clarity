@@ -1,0 +1,10 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Calculator state"
+    add entity Calc
+        shown: decimal(18, 8), default 0
+        entry: decimal(18, 8), default 0
+        acc: decimal(18, 8), default 0
+        op: text(1)
+        factor: decimal(18, 8), default 1
+        fresh: bool, default true

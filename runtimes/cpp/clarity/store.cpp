@@ -8,7 +8,6 @@
 
 namespace clarity {
 
-std::string applied(int version) { return "INSERT INTO clarity_schema (version) VALUES (" + std::to_string(version) + ")"; }
 
 std::string location(const std::string& text) {
     // A secret setting (manual/data.settings.md): setting:<program>/<name>, from the system's protected store.

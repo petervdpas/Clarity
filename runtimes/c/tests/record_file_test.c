@@ -8,6 +8,7 @@
 #include "clarity/code.h"
 #include "clarity/disk.h"
 #include "clarity/record_file.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 static const char* from_case(const char* name, void* context) {
@@ -84,7 +85,7 @@ void a_file_is_kept_with_its_name_in_the_database_or_its_store(void) {
     ClarityDb* db;
     static const char* const create[] = {"CREATE TABLE product (id INTEGER PRIMARY KEY, manual BLOB, manual_name TEXT NOT NULL DEFAULT '', sheet TEXT, sheet_name TEXT NOT NULL DEFAULT '')"};
     ClarityStep step = {create, 1};
-    REQUIRE_OK(clarity_db_memory(&db) && clarity_migrate(db, "", &step, 1, NULL) && clarity_add_store(db, "documents", store));
+    REQUIRE_OK(clarity_db_memory(&db) && apply_steps(db, "", &step, 1, NULL) && clarity_add_store(db, "documents", store));
     const char* text = "%PDF-1.7 not a picture";
     ClarityBytes pdf = {(const uint8_t*)text, strlen(text)};
     Product p = {0, clarity_record_file("manual.pdf", clarity_picture_new(pdf)), clarity_record_file("sheet.pdf", clarity_picture_new(pdf))};

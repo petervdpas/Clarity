@@ -7,6 +7,7 @@
 
 #include "check.h"
 #include "clarity/code.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 /// A customer as the first step stores it.
@@ -192,7 +193,7 @@ void the_server_scenario_on_sqlite(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_open(&source, 1, &db));
     int applied;
-    CHECK_OK(clarity_migrate(db, "", all, 1, &applied));
+    CHECK_OK(apply_steps(db, "", all, 1, &applied));
     CHECK_INT(applied, 1);
     ClarityDate since;
     clarity_date_parse("2026-01-15", &since);
@@ -239,9 +240,9 @@ void the_server_scenario_on_sqlite(void) {
     CHECK_TEXT(found(db, &before, clarity_where(clarity_query(), clarity_one_of("kind", 1, kinds)), name_at), "Grace Hopper");
     CHECK_TEXT(found(db, &before, clarity_where(clarity_query(), clarity_is_none("since")), name_at), "Grace Hopper");
 
-    CHECK_OK(clarity_migrate(db, "", all, 2, &applied));
+    CHECK_OK(apply_steps(db, "", all, 2, &applied));
     CHECK_INT(applied, 1);
-    CHECK_OK(clarity_migrate(db, "", all, 2, &applied));
+    CHECK_OK(apply_steps(db, "", all, 2, &applied));
     CHECK_INT(applied, 0);
     int version;
     CHECK_OK(clarity_schema_version(db, &version));

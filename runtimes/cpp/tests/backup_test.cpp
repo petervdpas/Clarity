@@ -40,30 +40,3 @@ TEST(backups_are_named_and_pruned_as_every_stack_does) {
     fs::remove_all(dir);
 }
 
-TEST(a_database_with_a_schema_is_backed_up_before_new_steps) {
-    auto dir = fs::temp_directory_path() / "clarity-cpp-backup";
-    fs::remove_all(dir);
-    fs::create_directories(dir);
-    auto path = (dir / "shop.db").string();
-    Step first{"CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')"};
-    Step second{"ALTER TABLE item ADD COLUMN price INTEGER NOT NULL DEFAULT 0"};
-    {
-        Db db = Db::open(path);
-        db.migrate({first});
-        db.batch("", "INSERT INTO item (name) VALUES ('kept')");
-    }
-    CHECK(!fs::exists(dir / "backups"));
-    {
-        Db db = Db::open(path);
-        CHECK_EQ(db.migrate({first, second}), 1);
-    }
-    auto backups = names_in(dir / "backups");
-    REQUIRE(backups.size() == 1);
-    CHECK(backups[0].rfind("shop-", 0) == 0);
-    CHECK(backups[0].find("-before-migration-0002.db") != std::string::npos);
-    {
-        Db copy = Db::open((dir / "backups" / backups[0]).string());
-        CHECK_EQ(copy.schema_version(), 1);
-    }
-    fs::remove_all(dir);
-}

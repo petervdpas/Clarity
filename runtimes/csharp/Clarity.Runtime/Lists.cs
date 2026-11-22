@@ -31,12 +31,12 @@ public static class Lists
     }
 
     /// <summary><c>a div b</c> in code: the quotient of two whole numbers, rounded toward zero.</summary>
-    public static long WholeDiv(long a, long b) => b == 0 ? throw DividedByZero() : b == -1 ? unchecked(-a) : a / b;
+    public static long WholeDiv(long a, long b) => b == 0 ? throw DividedByZero() : b == -1 ? Values.Negate(a) : a / b;
 
     /// <summary><c>a mod b</c> in code: what is left of <c>a div b</c>, with the sign of <c>a</c>.</summary>
     public static long WholeMod(long a, long b) => b == 0 ? throw DividedByZero() : b == -1 ? 0 : a % b;
 
-    static ValueException DividedByZero() => new("division by zero", ClarityException.Own("divisionByZero", "Division by zero"));
+    internal static ValueException DividedByZero() => new("division by zero", ClarityException.Own("divisionByZero", "Division by zero"));
 
     static ValueException Outside(long position, int count) =>
         new($"there is no item {position} in a list of {count}", ClarityException.Own("itemOutsideList", "There is no item {position} in a list of {count}", ("position", position), ("count", count)));

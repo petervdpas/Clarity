@@ -258,8 +258,11 @@ internal sealed class ProgramWire : IDesktop
     /// </summary>
     public bool Served { get; init; }
 
+    /// <summary>How long a served window may go unused before it is let go, unless a test sets it (conformance/defaults.json).</summary>
+    internal static readonly TimeSpan QuietByDefault = TimeSpan.FromMinutes(30);
+
     /// <summary>How long a served window may go unused before it is let go.</summary>
-    internal TimeSpan Quiet { get; set; } = TimeSpan.FromMinutes(30);
+    internal TimeSpan Quiet { get; set; } = QuietByDefault;
 
     /// <summary>The time now, which a test sets.</summary>
     internal Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
@@ -864,12 +867,14 @@ internal sealed class ProgramWire : IDesktop
         return [];
     }
 
-    static JsonArray Options(IEnumerable<Choice> choices) =>
+    /// <summary>Records as the screen takes them: id, text and, with the fields a search dropdown
+    /// shows (<paramref name="show"/>), each of its cells by its field's name.</summary>
+    static JsonArray Options(IEnumerable<Choice> choices, IReadOnlyList<string>? show = null) =>
         new([.. choices.Where(c => c.Value is long).Select(c =>
         {
             var option = new JsonObject { ["id"] = (long)c.Value!, ["text"] = c.Label };
-            if (c.Cells is { Count: > 0 } cells)
-                option["fields"] = new JsonObject(cells.Select((cell, i) => KeyValuePair.Create($"{i}", (JsonNode?)cell)));
+            if (c.Cells is { Count: > 0 } cells && show is { Count: > 0 })
+                option["fields"] = new JsonObject(cells.Take(show.Count).Select((cell, i) => KeyValuePair.Create(show[i], (JsonNode?)cell)));
             return (JsonNode)option;
         })]);
 
@@ -882,18 +887,15 @@ internal sealed class ProgramWire : IDesktop
         return [];
     }
 
-    /// <summary>What a typed or search dropdown offers for what was typed (conformance/dropdown-options.json).</summary>
+    /// <summary>The records a search dropdown offers, each with the fields it shows by name; the screen
+    /// searches them as the person types (conformance/dropdown-options.json).</summary>
     JsonNode FindOptions(JsonObject given)
     {
-        var kind = given["kind"]?.GetValue<string>();
         var entity = given["entity"]?.GetValue<string>() ?? "";
-        var typed = given["typed"]?.GetValue<string>() ?? "";
-        if (kind == "typed")
-            return new JsonArray([.. DropdownOptions.Suggestions(FieldValues(entity, given["field"]?.GetValue<string>() ?? ""), typed).Select(v => (JsonNode?)v)]);
-        var show = (given["show"] as JsonArray)?.Select(s => Members.Pascal(s?.GetValue<string>() ?? "")) ?? [];
+        var show = (given["show"] as JsonArray)?.Select(s => s?.GetValue<string>() ?? "").ToList() ?? [];
         foreach (var window in Newest())
-            if (window.Model.GetType().GetProperty(Members.Pascal(entity) + string.Concat(show) + "Choices", BindingFlags.Public | BindingFlags.Instance)?.GetValue(window.Model) is Choice[] choices)
-                return Options(DropdownOptions.Searched(choices, typed));
+            if (window.Model.GetType().GetProperty(Members.Pascal(entity) + string.Concat(show.Select(Members.Pascal)) + "Choices", BindingFlags.Public | BindingFlags.Instance)?.GetValue(window.Model) is Choice[] choices)
+                return Options(choices, show);
         return Options([]);
     }
 

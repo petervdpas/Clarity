@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="walker.Walker" title="@walkerTitle" main="Field">
+  <Toolbar name="mainToolbar">
+    <Item kind="button" caption="@languageCaption" name="languageButton" icon="languages" opens="language" />
+    <Item kind="button" caption="@themeCaption" name="themeButton" opens="theme" />
+  </Toolbar>
+</App>

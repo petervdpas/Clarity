@@ -37,4 +37,8 @@ ls /usr/share/applications/ | grep -i clarity
 cli=/usr/bin/clarity
 test -x "$cli" || { echo "$cli is not installed" >&2; exit 1; }
 "$cli" --version
+# And Clarity's migration tool, which a build puts beside an app that includes it (docs/ledger/migrations.md).
+migrate=/usr/bin/clarity-migrate
+test -x "$migrate" || { echo "$migrate is not installed" >&2; exit 1; }
+"$migrate" --help
 echo "installed: $package"

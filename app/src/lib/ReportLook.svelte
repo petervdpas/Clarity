@@ -5,7 +5,7 @@
   // properties and for any rule (body, h1, .title) in the Styles tab: one
   // look language, written back into the stylesheet.
 
-  import { stylesheetRules } from "./reportDesign";
+  import { stylesheetRules } from "./reportBackend";
 
   let {
     css,
@@ -20,7 +20,13 @@
     onset: (property: string, value: string) => void;
   } = $props();
 
-  const rule = $derived(stylesheetRules(css)[selector] ?? {});
+  let rule = $state<Record<string, string>>({});
+  $effect(() => {
+    const asked = css;
+    void stylesheetRules(asked).then((rules) => {
+      if (css === asked) rule = rules[selector] ?? {};
+    });
+  });
   const size = $derived((rule["font-size"] ?? "").replace(/pt$/, ""));
   const bold = $derived(rule["font-weight"] === "bold" || Number(rule["font-weight"]) >= 600);
   const italic = $derived(rule["font-style"] === "italic");

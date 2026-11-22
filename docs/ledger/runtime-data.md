@@ -2,21 +2,21 @@
 
 Status: partial. One library of the runtime data every stack holds while a program runs (records, their lists, their values), built once in Rust; step 1 in progress.
 
-Progress: 30%
+Progress: 60%
 
 ## Code
-- Library: `runtimes/rust-data` (crate `clarity-data` 0.1.0: `tree`, `kind`, `numbers`, `fit`, `normal`, moved from Clarity.Formats, which gives them on with `pub use`); release `.github/workflows/release-rust-data.yml`, unit `clarityData` before `clarityFormats` (`crates/clarity-gen/src/tools/devtools/release.rs`)
+- Library: `runtimes/rust-data` (crate `clarity-data` 0.1.0: `tree`, `kind`, `numbers`, `fit`, `normal`, moved from Clarity.Formats, which gives them on with `pub use`; Clarity.UI's `pdf` feature uses `normal` for report data); release `.github/workflows/release-rust-data.yml`, unit `clarityData` before `clarityFormats` (`crates/clarity-gen/src/tools/devtools/release.rs`)
 - Held lists: spec `Project::held_list_key`, `held_lists` (`crates/clarity-spec/src/model.rs`), checker `check_held_lists`; shapes `crates/clarity-gen/src/shape.rs` (a held list as records, one level); runtimes R `Record::load_lists`, `Db::find_alone` (`runtimes/rust/src/lib.rs`), Go `HoldsLists`, `FindAlone` (`runtimes/go/clarity/db.go`), C# `IRecord.LoadLists`, `Db.FindAlone`, C++ `detail::holds_lists`, `Db::find_alone`; C through the generated `<entity>_load_lists` around `clarity_find`; generators `held_lists` in each stack's `model.rs`, records holding their stored lists (Go `record`)
 
 ## Tests
 - `runtimes/rust-data` (moved unit tests), `runtimes/rust-formats` (all targets, through the re-export)
-- Held lists: `crates/clarity-spec/tests/held_lists.rs`; runtimes `runtimes/rust/tests/held_lists.rs`, `runtimes/go/clarity/held_lists_test.go`, `runtimes/csharp/Clarity.Runtime.Tests/HeldListTests.cs`, `runtimes/cpp/tests/held_lists_test.cpp`; generators `crates/clarity-gen/tests/held_lists.rs` (every stack; whole builds per stack, ignored), `src/shape.rs` tests; the sweep `crates/clarity-gen/tests/checks_generate.rs`
+- Held lists: `crates/clarity-spec/tests/spec/held_lists.rs`; runtimes `runtimes/rust/tests/held_lists.rs`, `runtimes/go/clarity/held_lists_test.go`, `runtimes/csharp/Clarity.Runtime.Tests/HeldListTests.cs`, `runtimes/cpp/tests/held_lists_test.cpp`; generators `crates/clarity-gen/tests/gen/held_lists.rs` (every stack; whole builds per stack, ignored), `src/shape.rs` tests; the sweep `crates/clarity-gen/tests/gen/checks_generate.rs`
 
 ## Open
 - Step 1, the core moved out of Clarity.Formats: BUILT 2026-11-20 (needs a release of clarity-data before clarity-formats).
-- Step 2, held lists on every stack: BUILT 2026-11-20 on all five stacks (whole builds on Rust, Go, C, C++; C# waits on Clarity.UI's library); `conformance/held-lists.json` NOT BUILT (each runtime has its own test of the same case); one read per record found, see Open questions.
-- Step 3, part values and report data through the library: NOT BUILT.
-- Step 4, values the same on every stack: NOT BUILT; needs decision.
+- Step 2, held lists on every stack: BUILT 2026-11-20 on all five stacks. A find reads each list once for all the records found, 500 owners per read (R `Record::load_lists_of`, `Db::find_by_owners`, `by_owner`, `OWNERS_PER_READ`; Go `HoldsListsOf`, `FindByOwners`, `ByOwner`; C# `IRecord.LoadListsOf`, `Db.FindByOwners`, `Db.ByOwner`; C++ `holds_lists_of`, `Db::find_by_owners`, `by_owner`; C `clarity_find_by_owners`, `clarity_owned`), generated per stack (`load_lists_of`; `get` goes through it with one record); cases in `conformance/held-lists.json`, read by each runtime's test. Whole builds pass on all five stacks (tests/held_lists.rs, ignored, one per stack).
+- Step 3, report data through the library: BUILT 2026-11-21. The generator writes `reports/<Name>.data.json` beside each report (each Data's kind, from `shape::write_kind`, as `json of` describes a value; `crates/clarity-gen/src/web.rs`), and Clarity.UI writes a report's data through Clarity.Data's `normal` before laying it out (`normal_data` in `runtimes/rust-ui/src/parts/pdf_report.rs`, its `pdf` feature now takes clarity-data), for the pdfReport part and `pdf of` alike, on desktop and web. Tests: `runtimes/rust-ui/tests/parts/parts_pdf_report.rs` (`--features pdf`), `crates/clarity-gen/tests/gen/pdf.rs`. Values a custom part or a tell gets are read by the stack's own code, not through Clarity.UI: they stay pinned by `conformance/values-json.json`. Needs clarity-data released before clarity-ui.
+- Step 4, values the same on every stack: BUILT 2026-11-21 in phase 2 of [modularity](modularity.md), as the user's value rules pinned by conformance files every stack runs (`compare-empty.json`, `decimal-division.json`, `overflow.json`, `table-order.json`, `queries.json`), each stack in its own runtime, not in this library.
 - Open questions: needs decision.
 
 ## Design
@@ -38,7 +38,7 @@ Step 1: the core moved out of Clarity.Formats
 - Settles: one value model, named for what it is, under the formats.
 
 Step 2: held lists on every stack
-- A stored record's list of records (`order.lines`) loads with the record by the one `ref Order` of Line (`Project::held_list_key`), one level deep (the lines do not load their own lists), in the order they were stored; code reads it; setting it is refused (each listed record is saved by itself). Built 2026-11-20: the checker (`check_held_lists`, `crates/clarity-spec/tests/held_lists.rs`) and the Go runtime (`HoldsLists`, `FindAlone`, `runtimes/go/clarity/held_lists_test.go`).
+- A stored record's list of records (`order.lines`) loads with the record by the one `ref Order` of Line (`Project::held_list_key`), one level deep (the lines do not load their own lists), in the order they were stored; code reads it; setting it is refused (each listed record is saved by itself). Built 2026-11-20: the checker (`check_held_lists`, `crates/clarity-spec/tests/spec/held_lists.rs`) and the Go runtime (`HoldsLists`, `FindAlone`, `runtimes/go/clarity/held_lists_test.go`).
 - A kind carries a held list as records (`Kind::Records`), not `Other`, so `json of`, part values and report data hold the lines.
 - Each stack's generator writes a record's list loading beside its other record code (the loading reads the stack's own database); `conformance/held-lists.json` pins what loads, in which order, on every stack.
 
@@ -53,15 +53,15 @@ Later
 
 Open questions
 - The library's name: "Clarity.Data" (crate `clarity-data`, `runtimes/rust-data`), after the user's "data library", in the line of Clarity.Formats and Clarity.Pdf. Made up; used in step 1 until the user names it.
-- Step 4: whether value semantics join this library or get a step of their own.
 - The user, 2026-11-20, naming C#'s ExpandoObject (an object whose fields are added while the program runs, read by name): whether the library gives records shaped at runtime, for data put together in code (R4 of [reports-pdf](reports-pdf.md), `new Report`, `r.add(...)`). Not designed.
 - The user, 2026-11-20: "is the data crate giving solutions for (concurrent)collections and such?" Not yet: each stack's code holds lists in its own collections, on one thread per window. Whether the library holds collections (lists in memory that windows, parts and reports share, with filtering, sorting and lookups) and safe sharing between threads (once background jobs, [background-jobs](background-jobs.md), are built).
-- Loading every order's lines whenever orders are found reads the database once per order: whether a list loads for a whole find at once (one read per list) before step 2 is called done.
+- Loading every order's lines whenever orders are found read the database once per order: settled 2026-11-20, one read per list for a whole find (user agreed the item "Held lists: one read per list").
 
 ## Conflicts
 - none
 
 ## Decisions
+- 2026-11-22: a write waits up to five seconds while another program holds an SQLite database, on every stack (Go `_pragma=busy_timeout(5000)`, C and C++ `sqlite3_busy_timeout(db, 5000)`, Rust's rusqlite default, C#'s Microsoft.Data.Sqlite default), tested in each (`sqlite_busy`); the Go, C and C++ web programs failed with SQLITE_BUSY while anything else touched the database.
 - 2026-11-20: held lists load with the record (option A: "do A, load lists on all stacks"), over a report taking a list as its own data.
 - 2026-11-20: a data library for runtime data, not a database ("not database, runtime data"); design and build ("yes write the design and implement").
 

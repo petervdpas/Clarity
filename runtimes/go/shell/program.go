@@ -136,8 +136,8 @@ func (p *Program) Service() *Service { return p.service }
 // forwarded are the commands the service answers as the wire has them.
 var forwarded = map[string]bool{
 	"start_app": true, "connect": true, "open_window": true, "close_window": true, "return_to": true,
-	"dispatch_event": true, "edit_event": true, "undo_edit": true, "reorder_event": true, "item_event": true,
-	"range_event": true, "canvas_event": true, "step_event": true, "view_event": true, "answer_event": true,
+	"dispatch_event": true, "edit_event": true, "undo_edit": true,
+	"canvas_event": true, "step_event": true, "answer_event": true,
 	"ref_options": true, "field_values": true, "find_options": true, "read_settings": true, "keep_settings": true,
 	"set_language": true, "signin": true, "signout": true, "store_upload": true, "stores": true,
 }

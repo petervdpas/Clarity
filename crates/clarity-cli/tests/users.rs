@@ -69,10 +69,10 @@ fn people_are_added_given_a_password_a_token_and_codes_and_removed() {
 
 #[test]
 fn a_project_without_signin_says_so() {
-    // The records example signs nobody in; it has a database, which the
+    // The records test project (test-projects/records) signs nobody in; it has a database, which the
     // command never reaches without a signin block.
-    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/records.clarity");
-    let (ok, _, said) = clarity(&["users", examples.to_str().unwrap(), "list"], None);
+    let records = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/records.clarity");
+    let (ok, _, said) = clarity(&["users", records.to_str().unwrap(), "list"], None);
     assert!(!ok && said.contains("signs nobody in"), "{said}");
 }
 

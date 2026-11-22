@@ -54,6 +54,15 @@ struct ClarityText {
 ClarityText* clarity_text(const char* text);
 /// The text of key `key`, with its value in the person's language.
 ClarityText* clarity_key_text(const char* key);
+/// One of Clarity's own words: the text of key `key`, with its English for a
+/// project without the key.
+ClarityText* clarity_keyed_text(const char* key, const char* english);
+/// What a window shows when code fails with `error`: a refusal its own text;
+/// a value or a record that is not there, or still used, in Clarity's own
+/// words by a literal key (translated where the project has them). NULL for
+/// any other error, which a window shows by its message, the English of the
+/// shared cases.
+const ClarityText* clarity_said(const ClarityError* error);
 /// Text shown as it is: a brace in it is no slot.
 ClarityText* clarity_plain_text(const char* text);
 /// The slot at `path` gets its value; gives `text` back.

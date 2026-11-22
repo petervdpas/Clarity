@@ -40,6 +40,7 @@ export function askText(ask: BuildAsk): string {
   if (ask.action === "remove") return `${ask.by} asks to remove ${ask.name} Remove it?`;
   if (ask.action === "useOwn") return `${ask.by} asks to use your own build of ${ask.name} for the programs Clarity builds. Use it?`;
   if (ask.action === "useRelease") return `${ask.by} asks to use the release of ${ask.name} for the programs Clarity builds again. Use it?`;
+  if (ask.action === "buildDebug") return `${ask.by} asks to press Build debug of ${ask.name} in DevTools. Build it?`;
   return `${ask.by} asks to press Build of ${ask.name} in DevTools. Build it?`;
 }
 
@@ -119,7 +120,7 @@ class DevToolsStore {
       return;
     }
     try {
-      await invoke("devtools_build", { key: ask.key, by: ask.by, ask: ask.id });
+      await invoke("devtools_build", { key: ask.key, debug: ask.action === "buildDebug", by: ask.by, ask: ask.id });
     } catch {
       // The backend answered the agent with why.
     }

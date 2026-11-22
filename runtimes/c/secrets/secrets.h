@@ -15,3 +15,7 @@ const char* clarity_secret_get(const char* program, const char* name);
 bool clarity_secret_set(const char* program, const char* name, const char* value);
 /// Makes the store the one settings and web API calls use (clarity_secret_store).
 void clarity_secrets_use(void);
+/// The Credential Manager's target of the secret `name` of `program` on
+/// Windows, as every stack keeps it (conformance/secret-store.json): the
+/// program's name, a colon and the setting's. In the scratch arena.
+const char* clarity_secret_windows_target(const char* program, const char* name);

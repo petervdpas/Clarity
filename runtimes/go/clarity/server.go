@@ -189,37 +189,6 @@ func (d *serverDriver) batch(query string) error {
 	return nil
 }
 
-// apply runs every statement of a step and records it: all or nothing where
-// the database can undo changes to tables. Where it cannot, a step that
-// fails halfway keeps what ran before the failure, and says so.
-func (d *serverDriver) apply(version int, statements []string) error {
-	if !d.undoes {
-		for i, statement := range statements {
-			if err := d.batch(statement); err != nil {
-				if i == 0 {
-					return err
-				}
-				return &StorageError{What: fmt.Sprintf("%v; %s cannot undo the %d statement(s) of step %d that ran before it", err, d.kind.Label(), i, version), Err: err}
-			}
-		}
-		return d.batch(applied(version))
-	}
-	tx, err := d.conn.BeginTx(background, nil)
-	if err != nil {
-		return d.failed(err)
-	}
-	defer tx.Rollback()
-	for _, statement := range append(statements, applied(version)) {
-		if _, err := tx.Exec(statement); err != nil {
-			return d.failed(err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return d.failed(err)
-	}
-	return nil
-}
-
 func (d *serverDriver) close() error {
 	d.conn.Close()
 	return d.db.Close()

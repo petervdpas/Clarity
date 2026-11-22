@@ -6,6 +6,12 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+clarity-gen-core = { path = "../clarity-gen-core" }
+clarity-gen-cpp = { path = "../clarity-gen-cpp" }
+clarity-gen-c = { path = "../clarity-gen-c" }
+clarity-gen-csharp = { path = "../clarity-gen-csharp" }
+clarity-gen-rust = { path = "../clarity-gen-rust" }
+clarity-gen-go = { path = "../clarity-gen-go" }
 # The free space of the disk the repository is on (DevTools' Disk tab); the IDE uses the same version.
 sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 clarity-spec.workspace = true
@@ -15,6 +21,8 @@ serde.workspace = true
 serde_json.workspace = true
 # The catalog of formats, for data sources that are files (file_sources).
 clarity-formats = { path = "../../runtimes/rust-formats", version = "0.4.0" }
+# What the IDE's preview answers as a program does (preview.rs): a dropdown's options, matched as every runtime matches them.
+clarity-runtime = { path = "../../runtimes/rust" }
 base64 = "0.22"
 # Clarity.UI's library for Go, C and C++, fetched from its release (clarity_ui.rs).
 sha2 = "0.10"
@@ -29,6 +37,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 resvg = "0.49"
 
 [dev-dependencies]
+clarity-gen-testing = { path = "../clarity-gen-testing" }
+# The examples list the release planning keeps (examples_build).
+clarity-devtools = { path = "../clarity-devtools" }
+# The live tests migrate an app's databases before they start it, as Clarity's Run does (docs/ledger/migrations.md).
+clarity-migrate = { path = "../clarity-migrate" }
 # The running app `<program> mcp` forwards to, in the command-line build tests.
 clarity-app-mcp = { path = "../../runtimes/rust-app-mcp" }
 clarity-formats = { path = "../../runtimes/rust-formats" }

@@ -4,6 +4,7 @@
 // cascades included; redo does it again; a handler that fails leaves
 // nothing behind; an undo whose rows changed since is refused.
 
+#include "apply_steps.hpp"
 #include "check.hpp"
 #include "clarity/db.hpp"
 #include "clarity/sql.hpp"
@@ -44,7 +45,7 @@ struct Shape {
 
 Db drawn() {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL)",
+    apply_steps(db, {{"CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL)",
                  "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER REFERENCES shape(id), text TEXT NOT NULL)"}});
     return db;
 }

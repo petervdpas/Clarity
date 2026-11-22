@@ -5,6 +5,7 @@
 
 #include "check.h"
 #include "clarity/code.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 /// The slot `field` of the refusal a failed check set, or "(not refused)".
@@ -98,7 +99,7 @@ void a_save_refuses_a_record_with_an_empty_required_field(void) {
     static const char* const create[] = {"CREATE TABLE member (id INTEGER PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER)"};
     ClarityStep step = {create, 1};
     ClarityDb* db = NULL;
-    REQUIRE(clarity_db_memory(&db) && clarity_migrate(db, "", &step, 1, NULL));
+    REQUIRE(clarity_db_memory(&db) && apply_steps(db, "", &step, 1, NULL));
     clarity_load_translations("{\"project\":{\"translations\":{\"en\":{\"groupLabel\":\"Group\"}}}}");
     Member empty = {0, "", 1};
     CHECK_TEXT(refused_field(clarity_save(db, &member, &empty)), "Name");

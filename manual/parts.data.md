@@ -114,7 +114,7 @@ code Tasks
 - A width in pixels follows a field: `title 240`. A column without one shares the width that is left. Widths are 20 to 2000 pixels. On the design canvas, dragging the right edge of a header sets the width, and a double click there takes it away. In a `.cxaml` file the widths are `widths="{&quot;title&quot;:240}"`.
 - `link chapter: toChapter` makes a column's cells links, in the theme's accent and underlined, with a hand under the pointer: a click on one chooses its row and runs the handler, which finds the row as the table's `selected` (`placeTable.selected.chapter`). Several columns are written `link chapter: toChapter, layer: toLayer`. In the properties these are **Link handlers**. A link column is one the table shows and does not edit.
 - `resizable`: the widths the person gives are remembered for them, per window and table, and a double click on an edge gives the designed widths back.
-- `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes last either way. Sorting changes only how the rows show: a row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
+- `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes first either way, as in `find ... order by`. Sorting changes only how the rows show: a row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
 - `order by field [desc]`: the order the rows show in when the window opens, as in queries. The field must be one of the `columns`.
 
 #### Editing in a table
@@ -534,7 +534,7 @@ The checker refuses a `max` that is not a number above 0, and an icon Clarity do
 
 ## The parts at a glance
 
-<!-- catalog: written from Clarity's part catalog (crates/clarity-spec/src/widgets.rs) by CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test manual_catalog; not edited by hand -->
+<!-- catalog: written from Clarity's part catalog (crates/clarity-spec/src/widgets.rs) by CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test spec manual_catalog::; not edited by hand -->
 
 | Part | Line | Binds | Size | Grows | Properties | Events |
 |---|---|---|---|---|---|---|

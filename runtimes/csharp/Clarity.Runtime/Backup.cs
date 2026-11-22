@@ -62,28 +62,4 @@ public static class Backup
         }
     }
 
-    /// <summary>Backs up the SQLite database <paramref name="conn"/> has open before <paramref name="step"/> is applied to it; nothing for another kind of database or one in memory. A backup that fails stops the migration.</summary>
-    internal static void BeforeMigration(IDriver conn, int step)
-    {
-        if (conn.Dialect != Dialect.Sqlite)
-            return;
-        var rows = conn.Rows("SELECT file FROM pragma_database_list WHERE name = 'main'", []);
-        if (rows.Count == 0 || rows[0][0] is not string file || file.Length == 0)
-            return;
-        try
-        {
-            var dir = Path.Combine(Path.GetDirectoryName(file) ?? ".", "backups");
-            Directory.CreateDirectory(dir);
-            var first = Path.Combine(dir, FileName(Path.GetFileNameWithoutExtension(file), DateTimeOffset.UtcNow.ToUnixTimeSeconds(), step));
-            var path = first;
-            for (var n = 2; File.Exists(path); n++)
-                path = first[..^3] + "_" + n.ToString(CultureInfo.InvariantCulture) + ".db";
-            conn.Execute("VACUUM INTO ?1", [path]);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or StorageException)
-        {
-            throw new StorageException($"the database was not migrated, since it could not be backed up first: {e.Message}", e);
-        }
-        Prune(file);
-    }
 }

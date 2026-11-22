@@ -165,22 +165,6 @@ function shift(text: string, places: number): string {
   return (negative ? "-" : "") + int + (frac ? "." + frac : "");
 }
 
-/** What was typed in a number input, read in the locale: the value to
- *  store (a number for integers, a decimal string otherwise), or null when
- *  it is not a number of that kind. Thousands separators, spaces, the
- *  currency sign and the percent sign may be typed or left out. */
-/**
- * How a number input (a form's or a table cell's) shows its value for
- * editing and reads what is typed: null when it is no number. A number
- * field always has a value; cleared, it is zero.
- */
-export function numberEditing(field: FieldFormat, f: Formats): { text: (value: unknown) => string; read: (typed: string) => string | number | null } {
-  return {
-    text: (value) => ((typeof value === "string" && value !== "") || typeof value === "number" ? editText(field, value, f) : String(value ?? "")),
-    read: (typed) => (typed.trim() === "" ? (field.kind === "integer" ? 0 : "0") : parseNumber(field, typed, f)),
-  };
-}
-
 export function parseNumber(field: FieldFormat, text: string, f: Formats): string | number | null {
   if (field.kind === "duration") return parseDuration(text);
   const { group, decimal } = separators(f.locale);
@@ -214,64 +198,3 @@ export type Slot = {
  *  with its slot values, whose value the language gives. */
 export type ShownText = string | { text: string; values: Record<string, Slot> } | { key: string; values?: Record<string, Slot> };
 
-/** What went wrong in the backend, as text to show: a refusal arrives as
- *  text with slots, Clarity's own words (why the databases did not open) as
- *  a key with its slots, anything else as a plain message. */
-export function errorText(err: unknown): ShownText {
-  if (typeof err === "object" && err !== null) {
-    if ("text" in err && "values" in err) return err as ShownText;
-    if ("key" in err && typeof err.key === "string") return err as ShownText;
-  }
-  return String(err);
-}
-
-function slotText(
-  slot: Slot | undefined,
-  f: Formats,
-  label: (enumName: string, value: string) => string,
-  word: (text: string) => string,
-): string {
-  if (!slot || slot.value === null) return "";
-  switch (slot.kind) {
-    case "text":
-      return String(slot.value);
-    case "bool":
-      return word(slot.value ? "Yes" : "No");
-    case "enum":
-      return label(slot.enum ?? "", String(slot.value));
-    default:
-      return formatValue({ kind: slot.kind, scale: slot.scale, format: slot.format }, slot.value as string | number, f);
-  }
-}
-
-/** Text as shown: each slot filled with its value in the locale, `{{` and
- *  `}}` as braces. Plain text arrives ready and is shown as it is.
- *  `label` gives the label of an enum value, `word` the renderer's own
- *  words (Yes, No) in the language shown. */
-export function fillText(
-  text: ShownText,
-  f: Formats,
-  label: (enumName: string, value: string) => string,
-  word: (text: string) => string = (t) => t,
-): string {
-  if (typeof text === "string") return text;
-  // A key the language gives no value shows as the key.
-  if ("key" in text) return text.key;
-  const t = text.text;
-  let out = "";
-  let i = 0;
-  while (i < t.length) {
-    if (t.startsWith("{{", i) || t.startsWith("}}", i)) {
-      out += t[i];
-      i += 2;
-    } else if (t[i] === "{" && t.indexOf("}", i) > i) {
-      const end = t.indexOf("}", i);
-      out += slotText(text.values[t.slice(i + 1, end)], f, label, word);
-      i = end + 1;
-    } else {
-      out += t[i];
-      i += 1;
-    }
-  }
-  return out;
-}

@@ -29,7 +29,7 @@ Untried:
 - Narrator in a desktop program and in Edge's hidden mirror; NVDA, VoiceOver, TalkBack: UNTRIED. DESIGN.md:2032-2034.
 - The IDE in WebView2: preview and design canvas drawn by Clarity.UI from the localhost preview server: UNTRIED.
 - `row height 30` alike in designer and program on Windows: UNTRIED.
-- Paging of web APIs on Windows (`cargo test -p clarity-gen --test http_build -- --ignored`): UNTRIED.
+- Paging of web APIs on Windows (`cargo test -p clarity-gen --test gen http_build:: -- --ignored`): UNTRIED.
 - Folder settings: the runtimes' settings and pictures tests on Windows and macOS: UNTRIED.
 - The folder part's button opens the system picker on Windows and macOS, every desktop stack: UNTRIED.
 - Progress and Stop: the runtimes' progress tests on Windows and macOS: UNTRIED.

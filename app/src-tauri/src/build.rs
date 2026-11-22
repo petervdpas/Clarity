@@ -223,6 +223,8 @@ pub struct Generated {
     pub out: PathBuf,
     /// The project's data folder, which Run names in CLARITY_DATA so the program works on the project's data.
     pub data: Option<PathBuf>,
+    /// The program's databases, which Run migrates with clarity-migrate before it starts the program.
+    pub databases: Vec<clarity_migrate::Database>,
     pub toolchain: clarity_gen::Toolchain,
     pub stack: clarity_project::Stack,
     /// The mark of its generated files, which a build records.
@@ -249,6 +251,10 @@ pub fn generate_source(file: &Path) -> Result<Source, String> {
     clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
     let mut source = transpile(file)?;
     source.written = clarity_gen::write_programs_listed(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
+    // With `include migrate`, Clarity's data migration tools beside the programs (docs/ledger/migrations.md).
+    let built = clarity_project::build_settings(&dir, &source.settings);
+    let tools = clarity_gen::write_migration_tools(&source.out, &project, &built, &clarity_gen::clarity_programs_folder())?;
+    source.written.written.extend(tools);
     Ok(source)
 }
 
@@ -271,7 +277,9 @@ fn transpile(file: &Path) -> Result<Source, String> {
     }
     let out = clarity_project::out_dir(file, &settings);
     let formats = project.uses_formats();
-    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default(), formats })
+    // The databases the app owns with their steps, which Run migrates first (the app does not, docs/ledger/migrations.md).
+    let databases = clarity_gen::migrated_databases(&project, &built).map_err(|errors| errors.join("; "))?;
+    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default(), formats, databases })
 }
 
 /// A project's source tree as it was written: its output folder, its settings and programs.
@@ -285,12 +293,14 @@ pub struct Source {
     pub written: clarity_gen::Written,
     /// Whether the code reads or writes a format, so a Go, C or C++ program of any target links Clarity.Formats.
     pub formats: bool,
+    /// The databases the app owns, with every step, as clarity-migrate migrates them.
+    pub databases: Vec<clarity_gen::MigratedDatabase>,
 }
 
 /// What Build and Run build: the source Generate wrote, which must be the
 /// project as it is now; they generate nothing themselves.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
-    let Source { out, settings, programs, shown, formats, .. } = transpile(file)?;
+    let Source { out, settings, programs, shown, formats, databases, .. } = transpile(file)?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {
@@ -312,7 +322,16 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     // Clarity.UI's folder: a desktop program draws with it, and a program whose code uses a format links Clarity.Formats from it.
     let library = (!cli && clarity_gen::uses_clarity_ui(&settings)) || (formats && matches!(settings.stack.backend, clarity_project::Backend::Go | clarity_project::Backend::C | clarity_project::Backend::Cpp));
     let data = clarity_project::data_folder(&clarity_project::module_dir(file), &settings);
-    Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library })
+    // Each database where the program opens it when Run names the data folder.
+    let databases = databases
+        .into_iter()
+        .map(|d| clarity_migrate::Database { source: d.source, dialect: d.dialect, location: d.location, steps: d.steps })
+        .map(|d| match &data {
+            Some(folder) => clarity_migrate::in_data_folder(&d, folder),
+            None => d,
+        })
+        .collect();
+    Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library, databases })
 }
 
 /// Why the generated project in `out` cannot be built on this machine: the
@@ -575,6 +594,16 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         let _ = clarity_gen::record_build(out, &generated.fingerprint, generated.release);
     }
     let binary = out.join(&toolchain.program);
+    // The program does not migrate (docs/ledger/migrations.md): Run migrates its databases first, with clarity-migrate.
+    if run {
+        for database in &generated.databases {
+            match clarity_migrate::migrate(database) {
+                Ok(clarity_migrate::Outcome::Migrated(n)) => send_line(app, format!("{} migrated by {n} step{}", database.source, if n == 1 { "" } else { "s" })),
+                Ok(clarity_migrate::Outcome::UpToDate) => {}
+                Err(why) => return failed(format!("cannot migrate: {why}")),
+            }
+        }
+    }
     if run && let Some(line) = command_line {
         return run_command_line(app, out, &binary, line, generated.data.as_deref());
     }
@@ -811,9 +840,9 @@ mod tests {
         });
     }
 
-    /// A copy of the example `name`, on the stack its project file names:
-    /// an example is generated for its own stack only.
-    fn example(name: &str) -> PathBuf {
+    /// A copy of the project `name` in the repository's `folder` (an example,
+    /// or a project of the tests), on the stack its project file names.
+    fn project_copy(folder: &str, name: &str) -> PathBuf {
         fn copy(from: &Path, to: &Path) {
             std::fs::create_dir_all(to).unwrap();
             for entry in std::fs::read_dir(from).unwrap() {
@@ -829,7 +858,7 @@ mod tests {
                 }
             }
         }
-        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(folder);
         let dir = std::env::temp_dir().join(format!("clarity-run-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -841,7 +870,7 @@ mod tests {
 
     #[test]
     fn generates_the_example_into_out() {
-        let dir = example("shop");
+        let dir = project_copy("test-projects", "shop");
         let file = dir.join("shop.clarity");
         // Build builds only what Generate wrote, and only while it is the project as it is.
         assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("is not generated yet: press Generate first"));
@@ -934,7 +963,7 @@ mod tests {
 
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
-        let dir = example("todo");
+        let dir = project_copy("test-projects", "todo");
         generate_source(&dir.join("todo.clarity")).unwrap();
         let Generated { out, toolchain, .. } = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
         assert!(out.join("Todo.csproj").exists());

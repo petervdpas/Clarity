@@ -16,12 +16,6 @@ export function isDark(mode: ThemeClasses["mode"], systemDark: boolean): boolean
   return mode === "dark" ? true : mode === "light" ? false : systemDark;
 }
 
-/** The class of style `name` in `theme`, if the theme has it. */
-export function styleClass(theme: ThemeClasses | null, name: string | null): string | undefined {
-  if (!theme || !name) return undefined;
-  return theme.styles.find((s) => s.name.name === name)?.class;
-}
-
 /** The theme to show: the one chosen, while the application still offers
  *  it, else the first it offers (the one it starts with). */
 export function pickTheme(offered: readonly string[], chosen: string | undefined): string | undefined {

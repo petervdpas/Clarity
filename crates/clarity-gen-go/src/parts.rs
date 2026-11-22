@@ -1,0 +1,478 @@
+//! Custom parts written in Go (manual/design.custom-parts.md, manual/start.how-it-works.md): a part is a Go package
+//! with its own module (`go "parts/arena"`), which implements the interface
+//! Clarity writes from the declaration into its `clarity.go`. That file is all
+//! the package needs of Clarity: the interface, the canvas it draws on, what
+//! it does through Clarity.UI and its typed tells, in plain Go types. The
+//! program's glue registers each kind of part with Clarity.UI (package ui),
+//! and its go.mod points at the part's module.
+
+use std::fmt::Write;
+
+use clarity_spec::Project;
+use clarity_spec::code::{Param, PartDecl, PartLibrary, TypeRef, TypeRefKind};
+
+/// The project's parts written in Go, each with its folder.
+pub fn go_parts(project: &Project) -> Vec<(&PartDecl, &str)> {
+    project
+        .files
+        .iter()
+        .flat_map(|f| &f.parts)
+        .filter_map(|p| match &p.library {
+            Some(PartLibrary::Go { folder }) => Some((p, folder.as_str())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The Go package name of a part's folder: its last name, as Go writes it.
+pub fn package(folder: &str) -> String {
+    let base = folder.trim_end_matches('/').rsplit('/').next().unwrap_or(folder);
+    let mut out: String = base.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase();
+    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert(0, 'p');
+    }
+    out
+}
+
+/// A value of `ty` as the part's Go takes it: a whole number, a bool, or
+/// text in its plain form (a decimal, money, a date, an enum value).
+fn go_type(ty: &TypeRef) -> &'static str {
+    match ty.kind {
+        TypeRefKind::Integer | TypeRefKind::Duration => "int64",
+        TypeRefKind::Bool => "bool",
+        _ => "string",
+    }
+}
+
+fn pascal(name: &str) -> String {
+    let mut chars = name.chars();
+    chars.next().map(|c| c.to_ascii_uppercase().to_string() + chars.as_str()).unwrap_or_default()
+}
+
+fn params(list: &[Param]) -> String {
+    list.iter().map(|p| format!("{} {}", p.name.name, go_type(&p.ty))).collect::<Vec<_>>().join(", ")
+}
+
+/// The methods the part's type has, in the interface: it draws, and takes
+/// its window's words, each with the context it acts through.
+fn methods(part: &PartDecl) -> Vec<String> {
+    let mut out = vec!["Draw(canvas Canvas, x, y, width, height float64)".to_string(), "SetEnabled(enabled bool, cx Cx)".into()];
+    if let Some(binds) = &part.binds {
+        out.push(format!("SetValue(value {}, cx Cx)", go_type(binds)));
+    }
+    for property in &part.properties {
+        out.push(format!("Set{}({} {}, cx Cx)", pascal(&property.name.name), property.name.name, go_type(&property.ty)));
+    }
+    for hear in &part.hears {
+        let params = params(&hear.params);
+        let comma = if params.is_empty() { "" } else { ", " };
+        out.push(format!("{}({params}{comma}cx Cx)", pascal(&hear.name.name)));
+    }
+    out
+}
+
+/// What a part may do besides drawing and its window's words, each its own
+/// interface, as package ui asks them: (name, method, what it is for).
+const OPTIONAL: [(&str, &str, &str); 13] = [
+    ("Focusable", "Focusable() bool", "says whether it takes the focus, and so keys"),
+    ("Starter", "Start(cx Cx)", "hears that its window opened, after its first values: a timer or an animation starts here"),
+    ("Presser", "PointerPressed(x, y float64, modifiers, clicks uint32, cx Cx)", "hears the main button go down on it"),
+    ("Mover", "PointerMoved(x, y float64, modifiers, clicks uint32, cx Cx)", "hears the pointer move over it, or anywhere while it holds the pointer"),
+    ("Releaser", "PointerReleased(x, y float64, modifiers, clicks uint32, cx Cx)", "hears the main button go up after it was pressed on it"),
+    ("Clicker", "Click(cx Cx)", "hears a press and release with the main button"),
+    ("Wheeler", "Wheel(dx, dy float64, modifiers uint32, cx Cx) bool", "hears the wheel turn over it: true when it took the turn"),
+    ("Keyer", "Key(name string, modifiers uint32, cx Cx) bool", "hears a key by its name (\"Enter\", \"Up\", \"A\") while it has the focus: true when it took it"),
+    ("Typer", "Text(text string, cx Cx)", "hears text typed while it has the focus"),
+    ("FocusTaker", "FocusChanged(focused bool, cx Cx)", "hears that it got or lost the focus"),
+    ("Waker", "Wake(cx Cx)", "hears the time it asked for come (cx.WakeIn)"),
+    ("Stopper", "Stop()", "hears that its window left the screen: it stops what it started"),
+    ("Tipper", "TooltipAt(x, y float64) (string, bool)", "says what it says about a point when the pointer rests there"),
+];
+
+/// `clarity.go` in the part's folder: what its package implements and calls,
+/// over plain Go types only, so the package needs nothing of Clarity's.
+pub fn interface(part: &PartDecl, folder: &str) -> String {
+    let n = &part.name.name;
+    let pkg = package(folder);
+    let mut out = format!(
+        "// Code generated by Clarity from custom part {n} (manual/design.custom-parts.md, manual/start.how-it-works.md); DO NOT EDIT.
+// It is written again when the declaration changes; the rest of the package
+// is yours. The part is a control of Clarity.UI: made when its window opens,
+// it draws itself in its place and hears the person. Every method is called
+// on the screen's thread, one at a time.
+
+package {pkg}
+
+// Canvas is what Draw draws on, in the screen's units. Colors are 0xAARRGGBB.
+type Canvas interface {{
+\tFill(x, y, width, height float64, color uint32, radius float64)
+\tStroke(x, y, width, height float64, color uint32, lineWidth, radius float64)
+\tLine(x1, y1, x2, y2 float64, color uint32, lineWidth float64)
+\tOval(x, y, width, height float64, color uint32, filled bool, lineWidth float64)
+\t// Path draws an SVG path's data (\"M0 0 L10 10 Z\"), filled or stroked.
+\tPath(svg string, color uint32, filled bool, lineWidth float64)
+\t// Text writes text in a box: align 0 left, 1 center, 2 right; size 0 is the look's text size.
+\tText(text string, x, y, width, height float64, color uint32, size float64, bold bool, align int)
+\tMeasure(text string, size float64, bold bool) float64
+\t// Pixels draws RGBA pixels (rows of stride bytes) into a box.
+\tPixels(rgba []byte, width, height, stride int, x, y, boxWidth, boxHeight float64)
+\tClip(x, y, width, height float64)
+\tRestore()
+\t// LookColor is a color of the look by its role (\"accent\", \"text\", \"border\").
+\tLookColor(role string) uint32
+}}
+
+// Cx is what the part does through Clarity.UI, valid only during the call it is given to.
+type Cx interface {{
+\tBounds() (x, y, width, height float64)
+\tEnabled() bool
+\t// Invalidate has it drawn again.
+\tInvalidate()
+\t// WakeIn has Wake called once after ms milliseconds.
+\tWakeIn(ms float64)
+\t// Animate has Draw called every frame while on.
+\tAnimate(on bool)
+\tFocus()
+\t// Change says the person changed the value it binds; Tell tells its window.
+\tChange(value any)
+\tTell(tell string, values ...any)
+}}
+
+// Part is what part {n} does. The package's New makes one:
+//
+//\tfunc New() Part
+type Part interface {{
+"
+    );
+    for method in methods(part) {
+        let _ = writeln!(out, "\t{method}");
+    }
+    out.push_str("}\n\n// What a part may do besides: a method its type has is called, one it has not does nothing.\ntype (\n");
+    for (name, method, what) in OPTIONAL {
+        let _ = writeln!(out, "\t// {name} {what}.\n\t{name} interface {{\n\t\t{method}\n\t}}");
+    }
+    out.push_str(")\n");
+    if let Some(binds) = &part.binds {
+        let _ = write!(out, "\n// Changed says the person changed the value: what it binds takes it (one edit, which Ctrl+Z takes back), and on change runs.\nfunc Changed(cx Cx, value {}) {{ cx.Change(value) }}\n", go_type(binds));
+    }
+    for tell in &part.tells {
+        let names: Vec<&str> = tell.params.iter().map(|p| p.name.name.as_str()).collect();
+        let params = params(&tell.params);
+        let comma = if params.is_empty() { "" } else { ", " };
+        let values = if names.is_empty() { String::new() } else { format!(", {}", names.join(", ")) };
+        let _ = write!(out, "\n// {} tells {}: its handler runs with these values.\nfunc {}(cx Cx{comma}{params}) {{ cx.Tell({:?}{values}) }}\n", pascal(&tell.name.name), tell.name.name, pascal(&tell.name.name), tell.name.name);
+    }
+    out
+}
+
+/// What declaring a Go part writes into its folder: its module, which
+/// draws its name in its place and keeps the part's values.
+pub fn starter(part: &PartDecl) -> Vec<(String, String)> {
+    let Some(PartLibrary::Go { folder }) = &part.library else { return Vec::new() };
+    let n = &part.name.name;
+    let pkg = package(folder);
+    let module = format!("module clarity.parts/{pkg}\n\ngo 1.24\n");
+    let mut fields = vec!["\tenabled bool".to_string()];
+    if let Some(binds) = &part.binds {
+        fields.push(format!("\tvalue   {}", go_type(binds)));
+    }
+    for property in &part.properties {
+        fields.push(format!("\t{} {}", property.name.name, go_type(&property.ty)));
+    }
+    let mut code = format!(
+        "// Custom part {n}: a control of Clarity.UI, drawn on the canvas it is
+// given. Keep the methods of Part (clarity.go), which follow the part's
+// declaration; add those of the interfaces beside it to hear the person.
+package {pkg}
+
+type part struct {{
+{}
+}}
+
+// New makes the part when its window opens.
+func New() Part {{ return &part{{enabled: true}} }}
+
+// Draw draws it in its place, with the look's colors.
+func (p *part) Draw(canvas Canvas, x, y, width, height float64) {{
+\tcanvas.Stroke(x, y, width, height, canvas.LookColor(\"border\"), 1, 4)
+\tcanvas.Text({n:?}, x, y, width, height, canvas.LookColor(\"text\"), 0, false, 1)
+}}
+
+func (p *part) SetEnabled(enabled bool, cx Cx) {{
+\tp.enabled = enabled
+\tcx.Invalidate()
+}}
+",
+        fields.join("\n")
+    );
+    if let Some(binds) = &part.binds {
+        let _ = write!(code, "\nfunc (p *part) SetValue(value {}, cx Cx) {{\n\tp.value = value\n\tcx.Invalidate()\n}}\n", go_type(binds));
+    }
+    for property in &part.properties {
+        let name = &property.name.name;
+        let _ = write!(code, "\nfunc (p *part) Set{}({name} {}, cx Cx) {{\n\tp.{name} = {name}\n\tcx.Invalidate()\n}}\n", pascal(name), go_type(&property.ty));
+    }
+    for hear in &part.hears {
+        let params = params(&hear.params);
+        let comma = if params.is_empty() { "" } else { ", " };
+        let _ = write!(code, "\nfunc (p *part) {}({params}{comma}cx Cx) {{}}\n", pascal(&hear.name.name));
+    }
+    vec![("go.mod".into(), module), (format!("{pkg}.go"), code), ("clarity.go".into(), interface(part, folder))]
+}
+
+/// The module path of a part, as its go.mod gives it.
+pub fn module_of(project: &Project, part: &str, folder: &str) -> String {
+    project
+        .part_files
+        .iter()
+        .flatten()
+        .find(|f| f.part == part && f.path == "go.mod")
+        .and_then(|f| String::from_utf8_lossy(&f.bytes).lines().find_map(|l| l.trim().strip_prefix("module ").map(|m| m.trim().to_string())))
+        .unwrap_or_else(|| format!("clarity.parts/{}", package(folder)))
+}
+
+fn file_text(project: &Project, part: &str, path: &str) -> String {
+    project.part_files.iter().flatten().find(|f| f.part == part && f.path == path).map(|f| String::from_utf8_lossy(&f.bytes).into_owned()).unwrap_or_default()
+}
+
+/// What a part's module requires, as its go.mod lists it.
+pub fn requirements_of(project: &Project, part: &str) -> Vec<(String, String)> {
+    let text = file_text(project, part, "go.mod");
+    let mut out = Vec::new();
+    let mut block = false;
+    for line in text.lines() {
+        let line = line.split("//").next().unwrap_or("").trim();
+        if line == "require (" {
+            block = true;
+            continue;
+        }
+        if block && line == ")" {
+            block = false;
+            continue;
+        }
+        let spec = if block { Some(line) } else { line.strip_prefix("require ") };
+        if let Some(spec) = spec {
+            let mut words = spec.split_whitespace();
+            if let (Some(module), Some(version)) = (words.next(), words.next()) {
+                out.push((module.to_string(), version.to_string()));
+            }
+        }
+    }
+    out
+}
+
+/// A part module's sums, which the program's go.sum carries.
+pub fn sums_of(project: &Project, part: &str) -> String {
+    file_text(project, part, "go.sum")
+}
+
+/// Where a part's module is in the program's folder.
+pub fn out_folder(folder: &str) -> String {
+    format!("parts/{}", package(folder))
+}
+
+/// `parts.go` of the program: each part registered with Clarity.UI, its
+/// window's words passed to its package typed, and every method its type
+/// has besides passed on.
+pub fn glue(project: &Project) -> String {
+    // The imports by path, as gofmt sorts them.
+    let mut imports = vec![("github.com/petervdpas/Clarity/runtimes/go/ui".to_string(), "\t\"github.com/petervdpas/Clarity/runtimes/go/ui\"\n".to_string())];
+    let mut code = String::new();
+    let mut registers = String::new();
+    for (part, folder) in go_parts(project) {
+        let n = &part.name.name;
+        let pkg = package(folder);
+        let alias = format!("{pkg}part");
+        let module = module_of(project, n, folder);
+        imports.push((module.clone(), format!("\t{alias} {module:?}\n")));
+        let read = |ty: &TypeRef, raw: &str| match go_type(ty) {
+            "string" => format!("ui.TextOf({raw})"),
+            "int64" => format!("ui.Integer({raw})"),
+            _ => format!("ui.Bool({raw})"),
+        };
+        let mut sets = String::new();
+        if let Some(binds) = &part.binds {
+            let _ = writeln!(sets, "\tcase \"value\":\n\t\tg.part.SetValue({}, cx)", read(binds, "value"));
+        }
+        for property in &part.properties {
+            let _ = writeln!(sets, "\tcase {:?}:\n\t\tg.part.Set{}({}, cx)", property.name.name, pascal(&property.name.name), read(&property.ty, "value"));
+        }
+        let mut hears = String::new();
+        for hear in &part.hears {
+            let args: Vec<String> = hear.params.iter().enumerate().map(|(i, p)| read(&p.ty, &format!("ui.At(values, {i})")) + ", ").collect();
+            let _ = writeln!(hears, "\tcase {:?}:\n\t\tg.part.{}({}cx)", hear.name.name, pascal(&hear.name.name), args.concat());
+        }
+        let hear_switch = if hears.is_empty() { "\t_, _, _ = name, values, cx\n".to_string() } else { format!("\tswitch name {{\n{hears}\t}}\n") };
+        let glue = format!("{pkg}Glue");
+        let _ = write!(
+            code,
+            "
+// {glue} runs custom part {n} on Clarity.UI.
+type {glue} struct{{ part {alias}.Part }}
+
+func (g {glue}) Set(name string, value json.RawMessage, cx *ui.Cx) {{
+\tswitch name {{
+\tcase \"enabled\":
+\t\tg.part.SetEnabled(ui.Bool(value), cx)
+{sets}\t}}
+}}
+
+func (g {glue}) Hear(name string, values []json.RawMessage, cx *ui.Cx) {{
+{hear_switch}}}
+
+func (g {glue}) Draw(canvas *ui.Canvas, x, y, width, height float64) {{
+\tg.part.Draw(canvas, x, y, width, height)
+}}
+
+func (g {glue}) Focusable() bool {{
+\tp, ok := g.part.({alias}.Focusable)
+\treturn ok && p.Focusable()
+}}
+
+func (g {glue}) Start(cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Starter); ok {{
+\t\tp.Start(cx)
+\t}}
+}}
+
+func (g {glue}) PointerPressed(x, y float64, modifiers, clicks uint32, cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Presser); ok {{
+\t\tp.PointerPressed(x, y, modifiers, clicks, cx)
+\t}}
+}}
+
+func (g {glue}) PointerMoved(x, y float64, modifiers, clicks uint32, cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Mover); ok {{
+\t\tp.PointerMoved(x, y, modifiers, clicks, cx)
+\t}}
+}}
+
+func (g {glue}) PointerReleased(x, y float64, modifiers, clicks uint32, cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Releaser); ok {{
+\t\tp.PointerReleased(x, y, modifiers, clicks, cx)
+\t}}
+}}
+
+func (g {glue}) Click(cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Clicker); ok {{
+\t\tp.Click(cx)
+\t}}
+}}
+
+func (g {glue}) Wheel(dx, dy float64, modifiers uint32, cx *ui.Cx) bool {{
+\tp, ok := g.part.({alias}.Wheeler)
+\treturn ok && p.Wheel(dx, dy, modifiers, cx)
+}}
+
+func (g {glue}) Key(name string, modifiers uint32, cx *ui.Cx) bool {{
+\tp, ok := g.part.({alias}.Keyer)
+\treturn ok && p.Key(name, modifiers, cx)
+}}
+
+func (g {glue}) Text(text string, cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Typer); ok {{
+\t\tp.Text(text, cx)
+\t}}
+}}
+
+func (g {glue}) FocusChanged(focused bool, cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.FocusTaker); ok {{
+\t\tp.FocusChanged(focused, cx)
+\t}}
+}}
+
+func (g {glue}) Wake(cx *ui.Cx) {{
+\tif p, ok := g.part.({alias}.Waker); ok {{
+\t\tp.Wake(cx)
+\t}}
+}}
+
+func (g {glue}) Stop() {{
+\tif p, ok := g.part.({alias}.Stopper); ok {{
+\t\tp.Stop()
+\t}}
+}}
+
+func (g {glue}) TooltipAt(x, y float64) (string, bool) {{
+\tif p, ok := g.part.({alias}.Tipper); ok {{
+\t\treturn p.TooltipAt(x, y)
+\t}}
+\treturn \"\", false
+}}
+"
+        );
+        let _ = write!(registers, "\tif err := ui.Register({n:?}, func() ui.Part {{ return {glue}{{{alias}.New()}} }}); err != nil {{\n\t\treturn err\n\t}}\n");
+    }
+    imports.sort();
+    let imports: String = imports.into_iter().map(|(_, line)| line).collect();
+    format!(
+        "// Code generated by Clarity. DO NOT EDIT.\n\npackage main\n\nimport (\n\t\"encoding/json\"\n\n{imports})\n{code}\n// registerParts registers every kind of part the program has with Clarity.UI.\nfunc registerParts() error {{\n{registers}\treturn nil\n}}\n"
+    )
+}
+
+/// The functions and methods of a Go part's own code: the name, whether it
+/// is a method (it has a receiver), its parameters, the file and where.
+fn funcs(code: &[clarity_gen_core::part_code::Source]) -> Vec<(String, Option<String>, String, usize, usize)> {
+    use clarity_gen_core::part_code::{after, close, find_word, first_word};
+    let mut out = Vec::new();
+    for (k, source) in code.iter().enumerate() {
+        let text = &source.code;
+        for at in find_word(text, "func") {
+            let mut rest = after(text, at + 4);
+            let mut receiver = None;
+            if rest.starts_with('(') {
+                let open = text.len() - rest.len();
+                let Some(end) = close(text, open) else { continue };
+                receiver = Some(text[open..end].to_string());
+                rest = after(text, end);
+            }
+            let name = first_word(rest);
+            if name.is_empty() {
+                continue;
+            }
+            let open = text.len() - rest[name.len()..].trim_start().len();
+            let params = if text[open..].starts_with('(') { close(text, open).map(|end| text[open + 1..end - 1].trim().to_string()).unwrap_or_default() } else { String::new() };
+            out.push((name.to_string(), receiver, params, k, at));
+        }
+    }
+    out
+}
+
+/// What a Go part's own code lacks of `clarity.go`, or still uses that
+/// Clarity no longer has, read from its code without building it.
+pub fn code_mismatches(project: &Project) -> Vec<String> {
+    use clarity_gen_core::part_code::{Lang, names_fn, sources};
+    let mut found = Vec::new();
+    for (p, _) in go_parts(project) {
+        let n = &p.name.name;
+        // The package is the folder's own .go files.
+        let code = sources(project, p, Lang::Go, |path| path.ends_with(".go") && !path.contains('/') && path != "clarity.go" && !path.ends_with("_test.go"));
+        if code.is_empty() {
+            continue;
+        }
+        let funcs = funcs(&code);
+        let receiver = funcs.iter().find_map(|(_, r, _, _, _)| r.clone()).unwrap_or_else(|| "(p *part)".into());
+        for method in methods(p) {
+            let name = clarity_gen_core::part_code::first_word(&method);
+            if !funcs.iter().any(|(f, r, _, _, _)| f == name && r.is_some()) {
+                found.push(format!("custom part {n}: its package has no method {name}, which Part in clarity.go asks: write func {receiver} {method} {{ .. }}"));
+            }
+        }
+        match funcs.iter().find(|(f, r, _, _, _)| f == "New" && r.is_none()) {
+            None => found.push(format!("custom part {n}: its package has no func New, which makes the part: write func New() Part {{ .. }}")),
+            Some((_, _, params, k, at)) if !params.is_empty() => {
+                found.push(format!("custom part {n}: {} func New takes ({params}), but Clarity.UI makes the part with nothing: write func New() Part", code[*k].at(*at)));
+            }
+            _ => {}
+        }
+        // The part host of native windows: its Host is gone.
+        if !funcs.iter().any(|(f, _, _, _, _)| f == "NewHost") {
+            for source in &code {
+                if let Some(at) = names_fn(&source.code, "NewHost") {
+                    found.push(format!("custom part {n}: {} uses NewHost, which Clarity no longer has: the part tells its window through cx (Changed(cx, ..) or a tell)", source.at(at)));
+                }
+            }
+        }
+    }
+    found
+}

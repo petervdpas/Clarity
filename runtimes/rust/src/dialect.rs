@@ -74,6 +74,20 @@ impl Dialect {
         }
     }
 
+    /// `expr` as a key of ORDER BY with an empty value first either way
+    /// (conformance/queries.json): NULLS FIRST on SQLite and PostgreSQL; on
+    /// MySQL and SQL Server, which put an empty value first going up, a key
+    /// going down gets a key before it that is 0 for empty.
+    pub(crate) fn order_key(self, expr: String, descending: bool) -> String {
+        match (self, descending) {
+            (Dialect::Sqlite | Dialect::Postgres, false) => format!("{expr} NULLS FIRST"),
+            (Dialect::Sqlite | Dialect::Postgres, true) => format!("{expr} DESC NULLS FIRST"),
+            (_, false) => expr,
+            (Dialect::Mysql, true) => format!("{expr} IS NULL DESC, {expr} DESC"),
+            (Dialect::Mssql, true) => format!("CASE WHEN {expr} IS NULL THEN 0 ELSE 1 END, {expr} DESC"),
+        }
+    }
+
     /// `column` contains the LIKE pattern `mark`, ignoring case. The
     /// pattern escapes its wildcards with `!`.
     pub(crate) fn contains(self, column: &str, mark: &str) -> String {
@@ -245,7 +259,7 @@ impl Dialect {
 
     /// Creates the table that remembers how many migration steps a
     /// database has had.
-    pub(crate) fn version_table(self) -> &'static str {
+    pub fn version_table(self) -> &'static str {
         match self {
             Dialect::Mssql => "IF OBJECT_ID(N'clarity_schema', N'U') IS NULL CREATE TABLE clarity_schema (version INT NOT NULL)",
             _ => "CREATE TABLE IF NOT EXISTS clarity_schema (version INTEGER NOT NULL)",

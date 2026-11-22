@@ -4,7 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, partGrowsEdit, wireCommand, wireEvent } from "./codeParts.ts";
+import { readdirSync, readFileSync } from "node:fs";
+import { FIXES, commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, partGrowsEdit, wireCommand, wireEvent } from "./codeParts.ts";
 import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
@@ -165,4 +166,18 @@ test("the designer sets whether a custom part grows in the module that declares 
   assert.deepEqual(set?.edit, { op: "setPartGrows", item: 40, grows: true });
   assert.deepEqual(partGrowsEdit(files, "Board", false)?.edit, { op: "setPartGrows", item: 40, grows: false });
   assert.equal(partGrowsEdit(files, "Nowhere", true), null);
+});
+
+test("every fix matches what the checker says, word for word in its source", () => {
+  const folder = new URL("../../../crates/clarity-spec/src/", import.meta.url);
+  const sources: string[] = [];
+  const walk = (dir: URL) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(new URL(`${entry.name}/`, dir));
+      else if (entry.name.endsWith(".rs")) sources.push(readFileSync(new URL(entry.name, dir), "utf8"));
+    }
+  };
+  walk(folder);
+  const spec = sources.join("\n");
+  for (const fix of FIXES) assert.ok(spec.includes(fix.says), `the checker no longer says "${fix.says}"`);
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boxes, centered, columns, endMark, ends, frames, freeName, meeting, pinned, umlMark, type Box } from "./designCanvas.ts";
+import { boxes, centered, columns, endMark, ends, frames, freeName, pinned, umlMark, type Box } from "./designCanvas.ts";
 
 /** Every character is 7 wide, as a monospace font at 12px nearly is. */
 const measure = (text: string) => text.length * 7;
@@ -37,24 +37,6 @@ test("the cells of a row stand in columns as wide as their widest cell", () => {
   assert.equal(type, 12);
   assert.equal(name, 12 + 7 * 7 + 14);
   assert.equal(keys, name + 5 * 7 + 14);
-});
-
-test("a line meets each box at its edge, on the line between their centers", () => {
-  const [from, to] = meeting(box("a", 0, 0, 100, 50), box("b", 300, 0, 100, 50));
-  assert.deepEqual(from, { x: 100, y: 25 });
-  assert.deepEqual(to, { x: 300, y: 25 });
-});
-
-test("lines meeting the same side of a box are spread along it, in the order of their other ends", () => {
-  const album = box("Album", 0, 0, 100, 120);
-  const track = box("Track", 300, -40, 100, 40);
-  const loan = box("Loan", 300, 140, 100, 40);
-  const [toTrack, toLoan] = ends([album, track, loan], [{ left: "Track", right: "Album" }, { left: "Loan", right: "Album" }]);
-  // Both meet Album's right side: Track's above Loan's, a third and two thirds down.
-  assert.deepEqual(toTrack?.[1], { x: 100, y: 40 });
-  assert.deepEqual(toLoan?.[1], { x: 100, y: 80 });
-  // Alone on its side, a line meets the middle of it.
-  assert.deepEqual(toTrack?.[0], { x: 300, y: -20 });
 });
 
 test("a line to itself or to a box not shown has no ends", () => {

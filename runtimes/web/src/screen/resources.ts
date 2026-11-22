@@ -6,14 +6,6 @@
 import type { ResourceKind } from "../generated/ResourceKind";
 import type { ResourceKindInfo } from "../generated/ResourceKindInfo";
 
-
-/** The file key `caption` (`@gameRules`) points at in language `picked`, else in the default language. */
-export function keyResource(keys: Record<string, Record<string, string>> | undefined, caption: string, picked: string, fallback: string): string | undefined {
-  if (!caption.startsWith("@")) return undefined;
-  const key = caption.slice(1);
-  return keys?.[picked]?.[key] ?? keys?.[fallback]?.[key];
-}
-
 /** A resource's type by its file name, as the backend lists the types and their extensions. */
 export function resourceKind(name: string, kinds: ResourceKindInfo[]): ResourceKind {
   const extension = name.includes(".") ? (name.split(".").at(-1)?.toLowerCase() ?? "") : "";

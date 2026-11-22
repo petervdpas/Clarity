@@ -181,7 +181,7 @@ func migratesAndKeepsRecords(t *testing.T, dialect Dialect, at, database string)
 	}
 	all := steps(t, database)
 
-	done, err := db.Migrate(all[:1])
+	done, err := applySteps(db, "", all[:1])
 	must(t, err)
 	equal(t, done, 1)
 	since := Date{2026, 1, 15}
@@ -244,10 +244,10 @@ func migratesAndKeepsRecords(t *testing.T, dialect Dialect, at, database string)
 	must(t, err)
 	equal(t, names(found, byName), []string{"Grace Hopper"})
 
-	done, err = db.Migrate(all)
+	done, err = applySteps(db, "", all)
 	must(t, err)
 	equal(t, done, 1)
-	done, err = db.Migrate(all)
+	done, err = applySteps(db, "", all)
 	must(t, err)
 	equal(t, done, 0)
 	version, err := db.SchemaVersion()

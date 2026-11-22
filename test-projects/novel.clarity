@@ -1,0 +1,11 @@
+// Novel: working on books, from fragment to manuscript. Each book has its
+// chapters with their text and research, and goes out as Markdown (and as
+// Fountain for a screenplay). The chapter list has its properties in a
+// slide-out beside it.
+project Novel
+    title "Novel"
+    stack cpp desktop
+    output "out"
+    datasource main sqlite "data/novel.db"
+    filestore export "export"
+    theme Paper Night Sepia Ink

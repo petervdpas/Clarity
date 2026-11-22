@@ -6,9 +6,7 @@ use std::ffi::{c_char, c_void};
 use std::ptr::null_mut;
 use std::sync::Mutex;
 
-use clarity_runtime::program::{Edit, Program, RangeEdit, Reorder};
-use clarity_runtime::ranges::{Range, RangeKey, RangeMove};
-use clarity_runtime::reorder::{DropAt, Move};
+use clarity_runtime::program::{Edit, Program};
 use clarity_runtime::ui::WindowState;
 use serde_json::{json, Map, Value};
 
@@ -255,17 +253,10 @@ fn each_call_carries_the_wires_arguments() {
     let program = direct(&fake);
     let state = WindowState { window: "Main".into(), instance: 3, data: Map::new(), ..WindowState::default() };
     let edit = Edit { handler: Some("changed".into()), part: "nameBox".into(), scope: "form".into(), ends: true, ..Edit::default() };
-    let _ = program.edit_event(state.clone(), edit);
+    let _ = program.edit_event(state, edit);
     let args = fake.asked("edit_event").unwrap();
     assert_eq!(args["state"]["instance"], 3);
     assert_eq!((args["part"].as_str(), args["scope"].as_str(), args["ends"].as_bool(), args["handler"].as_str()), (Some("nameBox"), Some("form"), Some(true), Some("changed")));
-    let reorder = Reorder { part: "rows".into(), scope: None, list: "lines".into(), by: "pos".into(), parent: None, moved: Move::Drag { row: 1, at: DropAt::After, target: 3 }, handler: None, readonly: false };
-    let _ = program.reorder_event(state.clone(), reorder);
-    assert_eq!(fake.asked("reorder_event").unwrap()["move"], json!({ "row": 1, "where": "after", "target": 3 }));
-    let range = RangeEdit { part: "zoom".into(), scope: None, path: "zoom".into(), range: Range { min: Some("0".into()), max: None, step: "1".into() }, whole: true, moved: RangeMove::Key(RangeKey::PageUp), handler: None, readonly: false };
-    let _ = program.range_event(state, range);
-    let args = fake.asked("range_event").unwrap();
-    assert_eq!((args["key"].as_str(), args["min"].as_str(), args["max"].is_null()), (Some("pageUp"), Some("0"), true));
 }
 
 #[test]

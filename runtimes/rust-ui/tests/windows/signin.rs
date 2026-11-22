@@ -57,6 +57,7 @@ fn type_in(screen: &mut Screen, part: &str, text: &str) {
 
 #[test]
 fn the_sign_in_window_shows_before_the_app_starts() {
+    let _turn = crate::choices_turn();
     let (screen, fake) = signing_in();
     assert_eq!(vec!["open SignIn"], fake.calls());
     assert_eq!(vec!["SignIn"], stack(&screen).windows());
@@ -64,6 +65,7 @@ fn the_sign_in_window_shows_before_the_app_starts() {
 
 #[test]
 fn a_refused_sign_in_says_why_and_stays_on_the_sign_in_window() {
+    let _turn = crate::choices_turn();
     let (mut screen, fake) = signing_in();
     fake.calls();
     type_in(&mut screen, "name", "ann");
@@ -79,6 +81,7 @@ fn a_refused_sign_in_says_why_and_stays_on_the_sign_in_window() {
 
 #[test]
 fn signing_in_opens_the_main_window_and_signing_out_shows_the_sign_in_window_again() {
+    let _turn = crate::choices_turn();
     let (mut screen, fake) = signing_in();
     type_in(&mut screen, "name", "ann");
     type_in(&mut screen, "password", "right");
@@ -107,6 +110,7 @@ fn signing_in_opens_the_main_window_and_signing_out_shows_the_sign_in_window_aga
 
 #[test]
 fn a_program_whose_people_need_not_sign_in_starts_as_it_did() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake::default());
     let program: Arc<dyn Program> = fake.clone();
     let screen = Screen::new(Box::new(WindowStack::start(program, SIGNIN_FILES)), SIGNIN_FILES.look(false));
@@ -151,6 +155,7 @@ fn sign_in_on(driven: &mut clarity_ui::headless::Driven) {
 
 #[test]
 fn a_splash_that_signs_in_stays_after_on_start_and_its_sign_in_opens_the_main_window() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("Welcome".into()), ..Fake::default() });
     let program: Arc<dyn Program> = fake.clone();
     let mut driven = clarity_ui::headless::Driven::start_splashed(program, SPLASH_SIGNS_IN, None);
@@ -175,6 +180,7 @@ fn a_splash_that_signs_in_stays_after_on_start_and_its_sign_in_opens_the_main_wi
 
 #[test]
 fn signed_in_while_the_splash_shows_its_time_the_main_window_follows_once_on_start_ran() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("Welcome".into()), ..Fake::default() });
     let program: Arc<dyn Program> = fake.clone();
     let files = AppFiles { apps: &[("Shop", TIMED_APP)], ..SPLASH_SIGNS_IN };
@@ -198,6 +204,7 @@ fn signed_in_while_the_splash_shows_its_time_the_main_window_follows_once_on_sta
 
 #[test]
 fn a_sign_in_page_other_than_the_splash_skips_the_splash() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("SignIn".into()), ..Fake::default() });
     let program: Arc<dyn Program> = fake.clone();
     let files = AppFiles { windows: &[("Main", HOME), ("Welcome", WELCOME), ("SignIn", SIGN_IN)], ..SPLASH_SIGNS_IN };
@@ -212,6 +219,7 @@ fn a_sign_in_page_other_than_the_splash_skips_the_splash() {
 /// sign-in the main window opens in a desktop window of its own and the splash ends.
 #[test]
 fn on_the_desktop_the_signed_in_splash_asks_for_the_main_window_and_ends() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("Welcome".into()), ..Fake::default() });
     let program: Arc<dyn Program> = fake.clone();
     let running = WindowStack::prepare(program.clone(), SPLASH_SIGNS_IN);
@@ -238,6 +246,7 @@ fn on_the_desktop_the_signed_in_splash_asks_for_the_main_window_and_ends() {
 /// does not close by itself; a sign-in on it asks for the main window again.
 #[test]
 fn on_the_desktop_signing_out_shows_the_splash_in_its_own_window_again() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("Welcome".into()), ..Fake::default() });
     fake.signed_in.store(true, Ordering::SeqCst);
     let program: Arc<dyn Program> = fake.clone();
@@ -280,6 +289,7 @@ fn on_the_desktop_signing_out_shows_the_splash_in_its_own_window_again() {
 /// desktop window of its own and ends; signing out asks for it again.
 #[test]
 fn on_the_desktop_the_sign_in_window_is_a_window_of_its_own() {
+    let _turn = crate::choices_turn();
     let fake = Arc::new(Fake { signin: Some("SignIn".into()), ..Fake::default() });
     let program: Arc<dyn Program> = fake.clone();
     let running = WindowStack::prepare(program.clone(), SIGNIN_FILES);

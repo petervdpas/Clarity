@@ -8,6 +8,7 @@ import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
 import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
 import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
+import { camelCase } from "./names.ts";
 
 /** A handler of the code behind, with the comment lines above it. */
 export type HandlerCode = {
@@ -143,13 +144,6 @@ export function wireEvent(w: {
   return w.handler ? { op: "batch", edits: [update, { op: "addHandler", owner: w.owner, name: w.handler }] } : update;
 }
 
-/** `words` as camelCase: `New game` and `new_game` are `newGame` (clarity_spec::names::camel_case). */
-function camelCase(words: string): string {
-  const parts = words.match(/[A-Za-z0-9]+/g) ?? [];
-  const joined = parts.map((w, i) => (i === 0 ? w[0].toLowerCase() + w.slice(1) : w[0].toUpperCase() + w.slice(1))).join("");
-  return /^[0-9]/.test(joined) ? "n" + joined : joined;
-}
-
 /** The handler a wired event gets: the part's name and the event, `saveClick`, `boardDraw`. */
 export function eventHandler(part: string, event: string): string {
   return camelCase(`${part} ${event}`);
@@ -195,7 +189,7 @@ export type FixCommand = "make_texts_keys" | "move_pages_out";
 
 /** The fixes the Problems list offers, by what the checker says (clarity_spec::names,
  *  the part checks and clarity_spec::translations). */
-const FIXES: ({ says: string } & Fix)[] = [
+export const FIXES: ({ says: string } & Fix)[] = [
   { says: "has no name; every", label: "Name them", edit: { op: "nameParts" } },
   { says: "is not camelCase:", label: "Make them camelCase", edit: { op: "camelNames" } },
   { says: "a sidebar's width is in pixels now", label: "Update the sidebars", edit: { op: "updateSidebars" } },

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="music.GenreBrowse" title="@genreBrowseTitle" onreturn="windowReturned">
+  <Content name="main" at="1,1" span="12" rows="9">
+    <View name="GenreBrowseView" />
+  </Content>
+</Window>

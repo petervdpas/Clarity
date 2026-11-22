@@ -473,3 +473,25 @@ func svgElement(line string) (string, map[string]string, string, bool) {
 		rest = rest[eq+2+close+1:]
 	}
 }
+
+// sameID says whether two record ids are one, whatever number type each came as.
+func sameID(a, b any) bool { return reflect.DeepEqual(asJSON(a), asJSON(b)) }
+
+// chartNumber is a value of the window's data as a number, and whether it is one.
+func chartNumber(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case int64:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case json.Number:
+		n, err := v.Float64()
+		return n, err == nil
+	case string:
+		n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		return n, err == nil && strings.TrimSpace(v) != ""
+	}
+	return 0, false
+}

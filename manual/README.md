@@ -60,7 +60,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Entities and enums](data.entities.md): How you describe your data with enums, entities and records: the field types and modifiers, versions, lists in records, and how the entity editor writes them for you.
 - [Settings](data.settings.md): The app's `settings` block: what each person using the app sets for themselves (Clarity's own language, theme and agent settings, and the app's own), secret, folder and reference settings, and the Settings editor.
 - [Data sources](data.sources.md): Where your records live: the project file's data sources (SQLite, the server databases, web APIs and files), keeping passwords out of the project, several sources and a module's `source`, external databases that Clarity reads without owning, how each database stores a field, and the migration steps of a source.
-- [Migrations](data.migrations.md): How a database follows your entities through migration steps, written as Clarity files that Clarity proposes and the program runs when it starts.
+- [Migrations](data.migrations.md): How a database follows your entities through migration steps, written as Clarity files that Clarity proposes and its migration tool, `clarity-migrate`, applies.
 - [Diagrams](data.diagrams.md): Designing data and code in diagrams: the ERD and class designer, Apply and From project, and the Mermaid Clarity reads.
 - [Pictures and files](data.pictures-files.md): The resources an application carries (fixed pictures, Markdown and other files), pictures and files in records (in the database or in a file store), file stores, and reading and writing files from code.
 

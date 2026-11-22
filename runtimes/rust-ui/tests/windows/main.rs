@@ -28,6 +28,7 @@ mod core_windows;
 mod dialogs_ask;
 mod dialogs_keys;
 mod dialogs_long_call;
+mod every_example;
 mod dialogs_windows;
 mod signin;
 mod signin_part;
@@ -46,6 +47,16 @@ mod window_view;
 mod windows_canvas_drag;
 mod windows_cases;
 mod windows_field_facts;
+mod defaults;
 mod windows_life;
 mod windows_sound;
 mod windows_ticks;
+
+/// The person's kept choices are one per process (`clarity_ui::choices`):
+/// starting a driven program sets them all anew. A test that starts one, changes
+/// choices, or relies on a kept choice takes this turn first, so no other test
+/// replaces the choices under it.
+pub(crate) fn choices_turn() -> std::sync::MutexGuard<'static, ()> {
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    TURN.lock().unwrap_or_else(|p| p.into_inner())
+}

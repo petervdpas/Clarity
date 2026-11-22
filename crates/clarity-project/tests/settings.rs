@@ -63,6 +63,7 @@ fn shop() -> Settings {
         out: "out".into(),
         keeps: Vec::new(),
         keys_editable: false,
+        include_migrate: false,
         signin: None,
         engines_interpreted: false,
         agents_read_closed: false,
@@ -153,7 +154,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, include, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -727,6 +728,25 @@ fn the_project_says_whether_people_set_the_keys() {
     assert_eq!(parse(&format!("{SHOP}    keys mine\n")).unwrap_err(), "line 11: write 'keys editable' to let the people using the application set the keys");
 }
 
+/// Whether the output folder holds Clarity's data migration tools beside the
+/// app (docs/ledger/migrations.md, "Include data migration tools"):
+/// `include migrate`, off without the line.
+#[test]
+fn the_project_says_whether_the_output_includes_the_data_migration_tools() {
+    let text = format!("{SHOP}    include migrate\n");
+    let settings = parse(&text).unwrap();
+    assert!(settings.include_migrate);
+    assert!(!parse(SHOP).unwrap().include_migrate);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    include migrate\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    // Off again, the line goes.
+    let off = write(Some(&written), &Settings { include_migrate: false, ..settings }).unwrap();
+    assert!(!off.contains("include"), "{off}");
+    assert_eq!(parse(&format!("{SHOP}    include tools\n")).unwrap_err(), "line 11: write 'include migrate' to put Clarity's data migration tools in the output folder");
+    assert_eq!(parse(&format!("{SHOP}    include migrate\n    include migrate\n")).unwrap_err(), "line 12: 'include' is set twice");
+}
+
 /// `-> keys` opens the keys window, which the project file allows (manual/app.keys.md).
 #[test]
 fn the_keys_window_opens_where_the_project_allows_it() {
@@ -1120,8 +1140,8 @@ fn a_slide_out_is_no_taller_than_its_window() {
 
 /// A window's parts fit in the rows its height holds under its bars
 /// (conformance/window-room.json): one that reaches further is refused,
-/// with the height it needs (the maintenance app's main window was 2
-/// pixels short for 16 rows under its toolbar, and scrolled).
+/// with the height it needs (a main window was once 2 pixels short for
+/// 16 rows under its toolbar, and scrolled).
 #[test]
 fn a_window_s_parts_fit_its_height() {
     let module = |reach: u32, toolbar: bool| {

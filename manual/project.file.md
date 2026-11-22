@@ -137,6 +137,14 @@ output keeps "vendor", "notes"
 
 Each is the name of one folder in the output, as a text in quotes. A path is refused: "'lib/vendor' is a path; name one folder in the output, like \"vendor\"".
 
+### `include migrate`
+
+The output folder holds Clarity's data migration tools beside the app: Generate puts `clarity-migrate` there, the one installed beside Clarity, with `clarity-migrate.json`, the databases the app owns and their steps. Whoever installs the app runs `clarity-migrate` to bring its databases up to date, without Clarity; the app itself checks its databases at start and does not migrate them. Without the line the output has neither. In the Project settings view it is **Include data migration tools**. See [Migrations](data.migrations.md#what-the-program-does-at-start).
+
+```clarity
+include migrate
+```
+
 ### `language`
 
 The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`, `"sr-Latn-RS"`. It is the default language, whose translation file gives every key its text. Dates and numbers follow the locale of the person using the application; this language where their system names none. Without the line the default language is `en`. See [Languages](languages.md).

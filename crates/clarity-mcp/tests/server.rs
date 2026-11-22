@@ -302,6 +302,35 @@ fn build_piece_asks_the_ide_and_gives_its_answer() {
     assert!(!built.is_error && built.text.contains("Finished release"), "{}", built.text);
 }
 
+/// build_piece with `debug` presses a native library's Build debug (the
+/// IDE takes an ask to build debug); a piece without one is refused at once.
+#[test]
+fn build_piece_with_debug_asks_for_the_debug_build_of_a_native_library() {
+    use clarity_project::dev_asks;
+    let dir = scratch("build-debug");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, true).unwrap();
+    let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
+    let none = server.call_from("Claude Code", "build_piece", &json!({ "piece": "goModule", "debug": true }));
+    assert!(none.is_error && none.text.contains("no debug build"), "{}", none.text);
+    let asks = server.asks();
+    let ide = std::thread::spawn(move || {
+        for _ in 0..100 {
+            if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
+                assert_eq!((ask.action, ask.key.as_str()), (dev_asks::Action::BuildDebug, "clarityUi"));
+                assert!(dev_asks::take(&asks, &ask.id));
+                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: true, text: "Finished `dev` profile".into() }).unwrap();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no ask came");
+    });
+    let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi", "debug": true }));
+    ide.join().unwrap();
+    assert!(!built.is_error && built.text.contains("Finished `dev` profile"), "{}", built.text);
+}
+
 /// swap_piece picks a DevTools tab's own build or the release, as its Swap
 /// does: the IDE takes the ask with the piece and which build, and answers.
 #[test]
@@ -350,7 +379,7 @@ fn release_state_says_how_the_releases_and_their_checks_stand() {
     assert!(!said.is_error, "{}", said.text);
     let state: Value = serde_json::from_str(&said.text).unwrap();
     let releases = state["releases"].as_array().unwrap();
-    assert_eq!(releases.len(), clarity_gen::tools::devtools::release::UNITS.len());
+    assert_eq!(releases.len(), clarity_devtools::release::UNITS.len());
     for r in releases {
         for kind in ["code", "manifest", "tests", "docs"] {
             assert!(r["changes"][kind].is_array(), "{} {kind}", r["name"]);
@@ -416,7 +445,7 @@ fn remove_folder_asks_the_ide_and_gives_its_answer() {
 fn the_devtools_tools_are_never_compiled_into_a_release() {
     let lib = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs")).unwrap();
     assert!(lib.contains("#[cfg(debug_assertions)]\nmod devtools;"), "the module is behind #[cfg(debug_assertions)]");
-    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "write_release_plan", "clarity_gen::tools::devtools", "dev_asks::ask"] {
+    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "write_release_plan", "clarity_devtools", "dev_asks::ask"] {
         let outside = lib.lines().filter(|l| !l.trim_start().starts_with("//")).any(|l| l.contains(name));
         assert!(!outside, "{name} is used outside src/devtools.rs");
     }

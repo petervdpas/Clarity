@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="writing.Novel" title="@novelTitle" main="Bookcase">
+  <Menu name="mainMenu">
+    <Item caption="@languageMenu" name="languageMenu">
+      <Item caption="@englishItem" name="englishItem" onclick="toEnglish" />
+      <Item caption="@dutchItem" name="dutchItem" onclick="toDutch" />
+      <Item caption="@germanItem" name="germanItem" onclick="toGerman" />
+    </Item>
+    <Item caption="@goMenu" name="goMenu">
+      <Item caption="@backItem" name="backItem" key="Alt+Left" opens="back" />
+      <Item caption="@forwardItem" name="forwardItem" key="Alt+Right" opens="forward" />
+    </Item>
+    <Item caption="@themeMenu" name="themeMenu">
+      <Item caption="@themePaper" name="paperItem" onclick="toPaper" />
+      <Item caption="@themeNight" name="nightItem" onclick="toNight" />
+      <Item caption="@themeSepia" name="sepiaItem" onclick="toSepia" />
+      <Item caption="@themeInk" name="inkItem" onclick="toInk" />
+    </Item>
+  </Menu>
+  <Footer status="@novelStatus" columns="12" />
+</App>

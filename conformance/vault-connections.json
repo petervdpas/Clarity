@@ -1,0 +1,11 @@
+{
+  "about": "Why a connection of the IDE's vault cannot be saved (clarity_vault::connection_problems, which save_connection refuses with, and the Vault tab's connectionProblems in app/src/lib/vault.ts, which says it before saving): it needs a name, every field a name used once (ignoring case), and a field from the vault the category and key of its secret. `problems` is what is said, in order; none when it can be saved.",
+  "cases": [
+    { "name": "orders", "fields": [["host", { "mode": "plain", "value": "db.local" }], ["password", { "mode": "vault", "category": "db", "key": "orders" }]], "problems": [] },
+    { "name": " ", "fields": [], "problems": ["The connection needs a name."] },
+    { "name": "orders", "fields": [["", { "mode": "plain", "value": "x" }], [" ", { "mode": "plain", "value": "y" }]], "problems": ["Every field needs a name."] },
+    { "name": "orders", "fields": [["Host", { "mode": "plain", "value": "a" }], ["host", { "mode": "plain", "value": "b" }]], "problems": ["Field host is there twice."] },
+    { "name": "orders", "fields": [["password", { "mode": "vault", "category": "db", "key": " " }]], "problems": ["Field password needs the category and key of its secret."] },
+    { "name": "", "fields": [["user", { "mode": "plain", "value": "ada" }], ["user", { "mode": "vault", "category": "", "key": "" }]], "problems": ["The connection needs a name.", "Field user is there twice.", "Field user needs the category and key of its secret."] }
+  ]
+}

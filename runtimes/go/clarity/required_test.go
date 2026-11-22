@@ -94,7 +94,7 @@ func TestASaveRefusesARecordWithAnEmptyRequiredField(t *testing.T) {
 	db, err := Connect(Source{"", Sqlite, ":memory:"})
 	must(t, err)
 	defer db.Close()
-	_, err = db.Migrate([][]string{{"CREATE TABLE member (id INTEGER PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER)"}})
+	_, err = applySteps(db, "", [][]string{{"CREATE TABLE member (id INTEGER PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER)"}})
 	must(t, err)
 	LoadTranslations([]byte(`{"project":{"translations":{"en":{"groupLabel":"Group"}}}}`))
 	defer LoadTranslations(nil)

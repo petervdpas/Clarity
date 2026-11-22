@@ -191,6 +191,7 @@ fn pinned_it_stays_open_beside_the_parts_which_make_room() {
 
 #[test]
 fn its_inner_edge_is_dragged_within_its_limits_and_the_width_is_kept_per_window() {
+    let _turn = crate::choices_turn();
     let host = FrameHost::new();
     *host.window.borrow_mut() = Some("Orders".into());
     choices::forget("slideout.Orders.details");
@@ -586,12 +587,12 @@ fn a_tall_slide_out_gives_the_window_nothing_to_scroll() {
     assert_eq!(view(&screen).max_scroll_y, 0.0, "the window does not scroll for its slide-out");
 }
 
-/// The maintenance app's main window: a toolbar, a sidebar at the left and
+/// A main window with a toolbar, a sidebar at the left and
 /// a slide-out at the right beside a content whose view is one memo. At 756
 /// pixels, 15 rows fit under the toolbar (16 were 2 pixels too many: the
 /// window scrolled and cut off the memo's bottom edge); the content grows to fill it.
 #[test]
-fn the_maintenance_window_fits_its_rows_and_its_memo_ends_inside() {
+fn a_window_with_a_toolbar_sidebar_and_slide_out_fits_its_rows_and_its_memo_ends_inside() {
     let main = |rows: u32| format!(r#"
     <Toolbar name="mainToolbar">
         <Item kind="button" caption="Projects" name="projectsButton" />

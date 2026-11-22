@@ -14,8 +14,8 @@ Progress: 90%
 - Docs: manual `design.sound.md`, `parts.media.md` (`sound`)
 
 ## Tests
-- `conformance/melody.json`: run by Clarity.UI (`runtimes/rust-ui/tests/parts/core_parts.rs`), spec (`crates/clarity-spec/tests/sound.rs`), C# (`MelodyTests.cs`); Go, C, C++ use Clarity.UI's melodies
-- `crates/clarity-gen/tests/sound.rs`, `audio.rs`, `timers_and_sounds.rs`, `songs_build.rs` (ignored; passes on all five)
+- `conformance/melody.json`: run by Clarity.UI (`runtimes/rust-ui/tests/parts/core_parts.rs`), spec (`crates/clarity-spec/tests/spec/sound.rs`), C# (`MelodyTests.cs`); Go, C, C++ use Clarity.UI's melodies
+- `crates/clarity-gen/tests/gen/sound.rs`, `audio.rs`, `timers_and_sounds.rs`, `songs_build.rs` (ignored; passes on all five)
 - Example: `examples/mp3player` (csharp desktop)
 
 ## Open
@@ -37,7 +37,7 @@ Progress: 90%
 - m4a (AAC) songs play through the sound part. The Symphonia AAC and MP4 decoders are already compiled in for video's sound (`runtimes/rust-audio/Cargo.toml:20-22`); m4a becomes a sound resource (`crates/clarity-spec/src/resources.rs:29`) and a song `resources::plays_songs` counts.
 
 ## Conflicts
-- Melodies are written three times: `crates/clarity-spec/src/sound.rs:73`, `runtimes/rust-ui/src/melodies.rs:16`, `runtimes/csharp/Clarity.Runtime/Melodies.cs:20` (equal today; the C# copy has no callers outside tests).
+- Melodies are written twice: `crates/clarity-spec/src/sound.rs:73` and `runtimes/rust-ui/src/melodies.rs:16` (the dead C# copy was removed 2026-11-21).
 
 ## Decisions
 - 2026-10-24: a built-in `sound` part with no place in the grid, kept in the designer's tray.

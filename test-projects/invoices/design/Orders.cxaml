@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The orders, the lines of the order picked, and its invoice as it prints. -->
+<Window class="invoices.Orders" title="@ordersTitle" onopen="ordersOpened">
+  <Content name="main" at="1,1" span="12" rows="12">
+    <View name="OrdersView" />
+  </Content>
+</Window>

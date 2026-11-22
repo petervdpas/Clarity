@@ -1,0 +1,36 @@
+module ideas
+source ideas
+use todo
+
+// Ideas for later, kept in data/ideas.yaml, laid over by the mapping below:
+// ideas:
+//   - title: Paint the shed
+//     note: before winter
+entity Idea
+    title: text(120), required, label @ideaTitleLabel
+    note: text(400), label @ideaNoteLabel
+
+mapping IdeaList of Idea from yaml
+    at "ideas"
+
+code Ideas
+    handler ideasOpened
+        ideas = find i in Idea order by i.title
+
+code IdeasView
+    handler addClicked
+        let idea = new Idea
+        idea.title = @newIdeaTitle
+        save idea
+        ideas = find i in Idea order by i.title
+
+    handler ideaChanged
+        save table.selected
+
+    handler deleteClicked
+        delete table.selected
+        ideas = find i in Idea order by i.title
+
+    // The tasks as YAML, to copy into another program.
+    handler showTasksClicked
+        tasksText = yaml of find t in Task order by t.title

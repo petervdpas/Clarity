@@ -314,6 +314,22 @@ impl PreviewProgram {
                 values.dedup();
                 json!({ "value": values })
             }
+            // The records a search dropdown offers, from the sample data, as every program gives them; the screen searches them.
+            "find_options" => {
+                let entity = args.get("entity").and_then(Value::as_str).unwrap_or_default().to_string();
+                let show: Vec<String> = args.get("show").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                let rows = self.samples.get(&entity).cloned().unwrap_or_default();
+                let texts = self.displays.get(&entity).cloned().unwrap_or_default();
+                let options = texts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, text)| clarity_runtime::ui::RefOption { id: i as i64 + 1, text: text.clone(), fields: rows.get(i).map(|row| row.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default() })
+                    .collect();
+                match clarity_runtime::dropdown_options::offered(options, &show) {
+                    Ok(found) => json!({ "value": found }),
+                    Err(why) => json!({ "error": why.to_string() }),
+                }
+            }
             "field_bytes" => json!({ "value": null }),
             "watch_progress" => json!({ "value": null }),
             _ if args.get("state").is_some() => reply(sent_state(args), Vec::new()),

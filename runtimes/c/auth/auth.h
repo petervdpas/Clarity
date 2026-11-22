@@ -45,9 +45,15 @@ typedef struct {
     size_t option_count;
 } ClaritySigninStrategy;
 
+/// Clarity's sign-in defaults (conformance/defaults.json): 8 hours a session,
+/// 5 tries per 15 minutes.
+#define CLARITY_SIGNIN_SESSION_SECONDS (8 * 3600)
+#define CLARITY_SIGNIN_TRIES 5
+#define CLARITY_SIGNIN_TRIES_SECONDS (15 * 60)
+
 /// The project's `signin` block as the program uses it. A zero
-/// `session_seconds`, `tries` or `tries_seconds` takes Clarity's default:
-/// 8 hours a session, 5 tries per 15 minutes.
+/// `session_seconds`, `tries` or `tries_seconds` takes Clarity's default
+/// (the generators always pass what the project says).
 typedef struct {
     /// The data source of the entity of people; "" or NULL for the first.
     const char* source;

@@ -51,8 +51,8 @@ fn content_fills_its_rows_as_the_parts_beside_it_do() {
 }
 
 /// A view as high as its content's rows fits in them: its parts end where the
-/// content ends, never under its edge (a memo of a view in the maintenance
-/// app ran past the window, its last line cut off by the window's edge).
+/// content ends, never under its edge (a memo of a view once ran past the
+/// window, its last line cut off by the window's edge).
 #[test]
 fn a_view_as_high_as_its_content_fits_in_it() {
     for markdown in ["", r#" markdown="true""#] {

@@ -23,6 +23,7 @@ const PARTS: &str = r#"<Window name="Main">
   <Canvas name="pad" at="1,2" span="6" undoScope="pad" onclick="paint" ondrag="moved" />
   <Canvas name="sketch" at="1,3" span="6" undoScope="sketch" mode="vector" bind="drawing" units="{&quot;width&quot;:800,&quot;height&quot;:600}" onchange="drawn" />
   <Canvas name="board" at="1,4" span="6" mode="objects" objects="{&quot;list&quot;:&quot;pieces&quot;,&quot;x&quot;:&quot;col&quot;,&quot;y&quot;:&quot;row&quot;}" />
+  <Textbox name="note" at="1,5" span="6" bind="note" noUndo="true" />
 </Window>"#;
 
 fn host() -> (Rc<ProgramHost>, Arc<Fake>) {
@@ -196,4 +197,15 @@ fn the_undo_and_redo_targets_take_back_the_part_that_had_the_focus_last() {
     assert!(host.run(Some("undoButton"), &click("undo")));
     assert!(host.run(Some("redoButton"), &click("redo")));
     assert_eq!(vec!["undo sketch true", "undo sketch false"], fake.calls());
+}
+
+#[test]
+fn the_undo_target_takes_back_nothing_while_a_part_with_no_undo_has_the_focus() {
+    // Ctrl+Z of a menu item (`-> undo`) in a box with `no undo` must not take back an earlier part's edit.
+    let (host, fake) = host();
+    let click = |target: &str| clarity_ui::markup::HandlerCall::new("click", target, Vec::new());
+    host.set_focused("sketch");
+    host.set_focused("note");
+    assert!(host.run(Some("undoItem"), &click("undo")));
+    assert!(fake.calls().is_empty());
 }

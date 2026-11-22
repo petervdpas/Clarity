@@ -6,13 +6,13 @@ use std::process::Command;
 
 #[test]
 fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
-    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects");
     let root = std::env::temp_dir().join(format!("clarity-migrate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("todo")).unwrap();
-    std::fs::copy(examples.join("todo.clarity"), root.join("todo.clarity")).unwrap();
-    for entry in walk(&examples.join("todo")) {
-        let relative = entry.strip_prefix(examples.join("todo")).unwrap();
+    std::fs::copy(source.join("todo.clarity"), root.join("todo.clarity")).unwrap();
+    for entry in walk(&source.join("todo")) {
+        let relative = entry.strip_prefix(source.join("todo")).unwrap();
         if relative.starts_with("data") || relative.starts_with("out") {
             continue;
         }
@@ -31,6 +31,15 @@ fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
     assert!(root.join("todo/data/todo.db").is_file());
     let again = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
     assert!(String::from_utf8_lossy(&again.stderr).contains("is up to date"));
+    // A data source the project does not own is said.
+    let unknown = Command::new(clarity).args(["data", "migrate", "--source", "nope"]).arg(root.join("todo.clarity")).output().unwrap();
+    assert!(!unknown.status.success() && String::from_utf8_lossy(&unknown.stderr).contains("owns no database of data source nope"));
+    // A database ahead of the project's steps (a newer version of the app's) is refused, as clarity-migrate refuses it.
+    let ahead = Command::new("sqlite3").arg(root.join("todo/data/todo.db")).arg("INSERT INTO clarity_schema (version) VALUES (999)").status().unwrap();
+    assert!(ahead.success());
+    let refused = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
+    let said = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success() && said.contains("belongs to a newer version of the app"), "{said}");
     let _ = std::fs::remove_dir_all(&root);
 }
 

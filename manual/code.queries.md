@@ -17,7 +17,7 @@ code Customers
 
 - `find c in Customer` names each record `c`. The name exists only inside the query, so `c.name` never mixes up with a part or a local called `name`.
 - `where` is optional. Without it, `find` reads every record.
-- `order by` takes one or more fields, each with `desc` if you want them from high to low. `order by c.id` is the order the records were stored in, which every record has. Without `order by`, records come in the order they were stored. "order by a field of c, as in 'c.name'"; "cannot order by 'tags', a list".
+- `order by` takes one or more fields, each with `desc` if you want them from high to low. `order by c.id` is the order the records were stored in, which every record has. Without `order by`, records come in the order they were stored. A record whose field is empty (`none`) comes first, with `desc` too, on every database, as in a sorted table. "order by a field of c, as in 'c.name'"; "cannot order by 'tags', a list".
 
 ```text
 find name in Entity [where condition] [order by name.field [desc], ...]

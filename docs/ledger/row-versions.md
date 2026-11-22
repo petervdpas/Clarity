@@ -6,7 +6,7 @@ Progress: 70%
 
 ## Code
 - Spec: `crates/clarity-spec/src/versions.rs` (which entities carry a version, the checks); entity lines `version "Col"`, `version none`, `savedSince @key` (`parser.rs:508-596`); `save x anyway` (`code/parse.rs:649-651`), `reload x`; migration op `AddVersion` (`migrate.rs`); Clarity's words `savedSince`, `undoTooOld` (`translations.rs:218-219`)
-- Generators: version per stored entity in each stack's `model.rs`; tests `crates/clarity-gen/tests/versions_{rust,go,c,cpp,csharp}.rs`
+- Generators: version per stored entity in each stack's `model.rs`; tests `tests/<stack>/versions.rs` of each generator crate (`crates/clarity-gen-{rust,go,c,cpp,csharp}`)
 - Runtimes: R `runtimes/rust/src/lib.rs` (checked UPDATE/DELETE, `UNDO_STEPS` :226), `edits.rs`, `file_source.rs` (file changed on disk); Go `runtimes/go/clarity/db.go`, `record.go`, `undo.go`, `edits.go`; C `runtimes/c/clarity/db.c`, `edits.c`; C++ `runtimes/cpp/clarity/db.cpp`, `edits.cpp`; C# `Clarity.Runtime/Db.cs`, `Record.cs`, `Undo.cs`, `EditBus.cs`
 - Clarity.UI: `rowVersion` carried on the wire with the record (`runtimes/rust-ui/tests` `inputs_record_keys`)
 - IDE: version line in `app/src/lib/EntityEditor.svelte:357-359` (`entity.keptVersion`, not editable)
@@ -15,7 +15,7 @@ Progress: 70%
 ## Tests
 - `conformance/versions.json`: run by R (`runtimes/rust/tests/versions.rs`), Go (`versions_test.go`), C (`versions_test.c`), C++ (`versions_test.cpp`), C# (`Clarity.Runtime.Tests/VersionsTests.cs`, `Clarity.Ui.Native.Tests/FileSourceTests.cs`)
 - `conformance/edit-bus.json`: run by R, Go, C, C++, C#
-- `crates/clarity-spec/tests/versions.rs`, `undo.rs`; per-runtime undo tests (`runtimes/rust/tests/edits.rs`, `undo.rs`, Go `undo_test.go`, C `runtimes/c/tests/undo_test.c`, C++ `runtimes/cpp/tests/undo_test.cpp`, C# `UndoTests.cs`)
+- `crates/clarity-spec/tests/spec/versions.rs`, `undo.rs`; per-runtime undo tests (`runtimes/rust/tests/edits.rs`, `undo.rs`, Go `undo_test.go`, C `runtimes/c/tests/undo_test.c`, C++ `runtimes/cpp/tests/undo_test.cpp`, C# `UndoTests.cs`)
 
 ## Open
 - The IDE's data browser saves through the version check: NOT BUILT (no data browser); see Design "The data browser".
@@ -23,6 +23,7 @@ Progress: 70%
 - Other windows reload a record saved elsewhere: NOT BUILT; see Design "Other windows follow".
 - Shared Rust core for row versions and undo: NOT BUILT; five copies ([modularity](modularity.md) step 2).
 - A background save refused by the version is a failed call: waits on [background-jobs](background-jobs.md).
+- BUG found 2026-11-22 (everything_live, every stack): after Ctrl+Z or Ctrl+Y of an edit whose handler saved records, the window holds the records' old versions (its snapshot) while undo wrote the rows with a new one (`put`: the highest seen plus one), so the window's next save of them is refused with savedSince (reorder, Ctrl+Z, reorder again). Two ways, for the user to choose: undo puts a row back exactly as it was, version included (the window's snapshot then matches), or undo gives the window the versions it wrote. FIXED 2026-11-22, the user chose "undo restores the exact version": put writes the version of the state it returns to, on all five runtimes (conformance/versions.json). Held the 7 failing steps of everything_live (list drag, board drag, paint, vector drawing, tree Alt+Right, tree drag, tree table).
 
 ## Design
 

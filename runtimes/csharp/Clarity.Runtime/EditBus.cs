@@ -23,6 +23,9 @@ public sealed class Edit(string part, string scope, IReadOnlyList<Changed> chang
 /// <summary>The edits of one window, in order.</summary>
 public sealed class EditBus
 {
+    /// <summary>How many edits a window's bus keeps, as every runtime does (conformance/edit-bus.json, <c>keeps</c>).</summary>
+    public const int Keeps = 500;
+
     readonly List<Edit> done = [];
     readonly List<Edit> undone = [];
 
@@ -32,6 +35,8 @@ public sealed class EditBus
         if (edit.Changes.Count == 0 && edit.Step == 0)
             return;
         done.Add(edit);
+        if (done.Count > Keeps)
+            done.RemoveAt(0);
         undone.RemoveAll(e => e.Scope == edit.Scope);
     }
 

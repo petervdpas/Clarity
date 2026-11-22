@@ -235,6 +235,10 @@ code Folders
         // A picked folder hides the tree's Expand all and Collapse all; the table shows its own.
         folderTree.foldButtons = not folderTable.foldButtons
 
+    // A call with values, as a part wires it: every stack runs it by the call as written (conformance/calls.json).
+    handler rated(stars: integer)
+        message @ratedStars(stars = stars)
+
 code SketchTools
     handler stamped
         let n = 1

@@ -44,6 +44,13 @@ inline Text unconnected_reason(const std::exception& e) {
     return Text::key("unconnectedFailed").with("problem", slot_text(e.what()));
 }
 
+/// A database whose migration steps are not the ones the program was made with
+/// (docs/ledger/migrations.md): its message is the English line the program stops with.
+class StepsError : public Error {
+public:
+    using Error::Error;
+};
+
 /// A value does not fit: a wrong date, a reference to nothing, a file that is no picture.
 class InvalidError : public Error {
 public:
@@ -77,6 +84,36 @@ public:
 
 /// `refuse text`.
 [[noreturn]] inline void refuse(Text text) { throw RefusedError(std::move(text)); }
+
+/// A value in code that does not fit where it is used: a position outside
+/// its list, a highest number below 1 (conformance/lists.json); with
+/// Clarity's own words for it, which a window shows, when it has them.
+class ValueError : public Error {
+public:
+    using Error::Error;
+    ValueError(const std::string& what, Text words) : Error(what), words(std::move(words)) {}
+    std::optional<Text> words;
+};
+
+/// A number that does not fit (conformance/overflow.json).
+inline ValueError too_large() { return ValueError("a number too large", Text::keyed("numberTooLarge", "The number is too large")); }
+
+/// a / 0, a div 0 or a mod 0 (conformance/decimal-division.json).
+inline ValueError division_by_zero() { return ValueError("division by zero", Text::keyed("divisionByZero", "Division by zero")); }
+
+/// What a window shows when code fails with `e`: a refusal its own text; a
+/// value or a record that is not there, or still used, in Clarity's own words
+/// by a literal key (translated where the project has them). None for any
+/// other error, which a window shows by its message, the English of the
+/// shared cases.
+inline std::optional<Text> said(const std::exception& e) {
+    if (auto refused = dynamic_cast<const RefusedError*>(&e)) return refused->text;
+    if (auto value = dynamic_cast<const ValueError*>(&e)) return value->words;
+    if (auto missing = dynamic_cast<const NotFoundError*>(&e); missing && missing->id)
+        return Text::keyed("recordNotThere", "There is no {table} with id {id}").with("table", slot_text(missing->table)).with("id", slot_integer(*missing->id));
+    if (auto used = dynamic_cast<const InUseError*>(&e)) return Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", slot_text(used->table));
+    return std::nullopt;
+}
 
 /// A statement broke a reference between records; the store turns it into InvalidError or InUseError.
 class ReferenceFailure : public Error {

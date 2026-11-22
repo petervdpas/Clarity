@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The keypad: the display and the keys. -->
+<View class="calculator.Keypad" columns="4">
+  <Data name="shown" type="decimal" />
+  <Data name="entry" type="decimal" />
+  <Data name="total" type="decimal" />
+  <Data name="pending" type="Operation" />
+  <Data name="factor" type="decimal" default="1" />
+  <Data name="fresh" type="bool" default="true" />
+  <Data name="digits" type="integer" />
+  <Display name="screen" at="1,1" span="4" rows="2" bind="shown" digits="12" style="display" />
+  <Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />
+  <Button name="signKey" at="2,3" span="1" caption="+/-" onclick="changeSign" />
+  <Button name="percentKey" at="3,3" span="1" caption="%" onclick="percent" />
+  <Button name="divideKey" at="4,3" span="1" caption="÷" style="operator" key="/" onclick="operation(Divide)" />
+  <Button name="digit7" at="1,4" span="1" caption="7" key="7" onclick="digit(7)" />
+  <Button name="digit8" at="2,4" span="1" caption="8" key="8" onclick="digit(8)" />
+  <Button name="digit9" at="3,4" span="1" caption="9" key="9" onclick="digit(9)" />
+  <Button name="multiplyKey" at="4,4" span="1" caption="×" style="operator" key="*" onclick="operation(Multiply)" />
+  <Button name="digit4" at="1,5" span="1" caption="4" key="4" onclick="digit(4)" />
+  <Button name="digit5" at="2,5" span="1" caption="5" key="5" onclick="digit(5)" />
+  <Button name="digit6" at="3,5" span="1" caption="6" key="6" onclick="digit(6)" />
+  <Button name="subtractKey" at="4,5" span="1" caption="−" style="operator" key="-" onclick="operation(Subtract)" />
+  <Button name="digit1" at="1,6" span="1" caption="1" key="1" onclick="digit(1)" />
+  <Button name="digit2" at="2,6" span="1" caption="2" key="2" onclick="digit(2)" />
+  <Button name="digit3" at="3,6" span="1" caption="3" key="3" onclick="digit(3)" />
+  <Button name="addKey" at="4,6" span="1" caption="+" style="operator" key="+" onclick="operation(Add)" />
+  <Button name="digit0" at="1,7" span="2" caption="0" key="0" onclick="digit(0)" />
+  <Button name="pointKey" at="3,7" span="1" caption="." key="." onclick="point" />
+  <Button name="equalsKey" at="4,7" span="1" caption="=" style="equals" key="=" default="true" onclick="equals" />
+</View>

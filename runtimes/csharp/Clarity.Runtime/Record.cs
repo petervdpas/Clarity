@@ -89,6 +89,17 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     /// stored lists has none to load.
     /// </summary>
     void LoadLists(Db db) { }
+
+    /// <summary>
+    /// Loads the stored lists of every record of <paramref name="records"/> at
+    /// once, each list with one read for all of them (<see cref="Db.FindByOwners"/>);
+    /// by default each record loads its own.
+    /// </summary>
+    static virtual void LoadListsOf(Db db, IReadOnlyList<TSelf> records)
+    {
+        foreach (var record in records)
+            record.LoadLists(db);
+    }
 }
 
 /// <summary>Whether a record may be saved: none of its required fields is empty (conformance/required.json).</summary>

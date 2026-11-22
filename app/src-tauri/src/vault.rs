@@ -257,13 +257,21 @@ impl Store {
         if (was.is_none() || renamed) && connections.get(&row.name).is_some() {
             return Err(format!("there is a connection {} already", row.name.trim()));
         }
-        let fields = row.fields.iter().map(|(name, value)| {
-            let field = match value {
-                FieldValue::Plain { value } => ConnectionField::plain(value),
-                FieldValue::Vault { category, key } => ConnectionField::vault(category, key),
-            };
-            (name.trim().to_string(), field)
-        });
+        let fields: Vec<(String, ConnectionField)> = row
+            .fields
+            .iter()
+            .map(|(name, value)| {
+                let field = match value {
+                    FieldValue::Plain { value } => ConnectionField::plain(value),
+                    FieldValue::Vault { category, key } => ConnectionField::vault(category, key),
+                };
+                (name.trim().to_string(), field)
+            })
+            .collect();
+        let problems = clarity_vault::connection_problems(&row.name, &fields);
+        if !problems.is_empty() {
+            return Err(problems.join(" "));
+        }
         connections.save(Connection::new(row.name.trim(), fields)).map_err(said)?;
         if let Some(was) = was.filter(|_| renamed) {
             connections.remove(was).map_err(said)?;

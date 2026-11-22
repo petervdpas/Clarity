@@ -11,25 +11,25 @@ void clarity_secrets_use(void) {
     clarity_secret_store = (ClaritySecretStore){clarity_secret_get, clarity_secret_set};
 }
 
+const char* clarity_secret_windows_target(const char* program, const char* name) {
+    return clarity_format("%s:%s", program, name);
+}
+
 #if defined(_WIN32)
 
 #include <windows.h>
 #include <wincred.h>
 
-static const char* target_of(const char* program, const char* name) {
-    return clarity_format("%s:%s", program, name);
-}
-
 const char* clarity_secret_get(const char* program, const char* name) {
     PCREDENTIALA found = NULL;
-    if (!CredReadA(target_of(program, name), CRED_TYPE_GENERIC, 0, &found)) return NULL;
+    if (!CredReadA(clarity_secret_windows_target(program, name), CRED_TYPE_GENERIC, 0, &found)) return NULL;
     const char* secret = clarity_copy_n((const char*)found->CredentialBlob, found->CredentialBlobSize);
     CredFree(found);
     return secret;
 }
 
 bool clarity_secret_set(const char* program, const char* name, const char* value) {
-    const char* target = target_of(program, name);
+    const char* target = clarity_secret_windows_target(program, name);
     if (!value || !*value) {
         if (CredDeleteA(target, CRED_TYPE_GENERIC, 0) || GetLastError() == ERROR_NOT_FOUND) return true;
         return clarity_fail(CLARITY_STORAGE, "the Credential Manager refused to forget the secret '%s'", name);

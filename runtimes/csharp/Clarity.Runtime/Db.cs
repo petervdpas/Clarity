@@ -355,20 +355,21 @@ public sealed partial class Db : IDisposable
     /// <summary>The number of migration steps applied so far to the default database.</summary>
     public int SchemaVersion() => SchemaVersion(Conn(""));
 
-    /// <summary><see cref="MigrateSource"/> for the default database.</summary>
-    public int Migrate(IReadOnlyList<string[]> steps) => MigrateSource("", steps);
-
-    /// <summary>Applies the steps of <paramref name="source"/> its database has not had yet, each on its own.</summary>
-    public int MigrateSource(string source, IReadOnlyList<string[]> steps)
+    /// <summary>
+    /// Whether the database of <paramref name="source"/> has the <paramref name="steps"/>
+    /// migration steps the program was made with: behind or ahead it throws
+    /// <see cref="StepsException"/>, whose message is the English line the program stops
+    /// with (docs/ledger/migrations.md, conformance/migrate-check.json). The program does
+    /// not migrate; clarity-migrate does.
+    /// </summary>
+    public void CheckSteps(string source, int steps)
     {
-        var conn = Conn(source);
-        var done = SchemaVersion(conn);
-        // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-        if (done > 0 && done < steps.Count)
-            Backup.BeforeMigration(conn, done + 1);
-        for (var i = done; i < steps.Count; i++)
-            conn.Apply(i + 1, steps[i]);
-        return Math.Max(0, steps.Count - done);
+        var at = At(source);
+        var had = SchemaVersion(at.Driver);
+        if (had < steps)
+            throw new StepsException($"The database {at.Name} needs migrating: run clarity-migrate");
+        if (had > steps)
+            throw new StepsException($"The database {at.Name} belongs to a newer version of this app");
     }
 
     /// <summary>
@@ -620,12 +621,45 @@ public sealed partial class Db : IDisposable
         return record;
     }
 
-    /// <summary>Loads the stored lists of each record found.</summary>
+    /// <summary>Loads the stored lists of the records found, each list once for all of them.</summary>
     List<R> WithLists<R>(List<R> found) where R : IRecord<R>
     {
-        foreach (var record in found)
-            record.LoadLists(this);
+        if (found.Count > 0)
+            R.LoadListsOf(this, found);
         return found;
+    }
+
+    /// <summary>
+    /// How many owners one read of a stored list asks for (<see cref="FindByOwners"/>),
+    /// well below the fewest parameters a database takes in one statement (SQL Server's 2100).
+    /// </summary>
+    public const int OwnersPerRead = 500;
+
+    /// <summary>
+    /// The records whose reference <paramref name="column"/> points at one of
+    /// <paramref name="owners"/>, in the order they were stored, without their own
+    /// lists: a stored list of many records at once, read <see cref="OwnersPerRead"/> owners at a time.
+    /// </summary>
+    public List<L> FindByOwners<L>(string column, IReadOnlyList<long> owners) where L : IRecord<L>
+    {
+        var found = new List<L>();
+        foreach (var some in owners.Chunk(OwnersPerRead))
+            found.AddRange(FindAlone<L>(new Query().Filter(Cond.OneOf(column, some.Cast<object?>().ToList())).Order(L.KeyColumn, false)));
+        return found;
+    }
+
+    /// <summary>The records of a stored list grouped by the record each refers back to, each group in the order given.</summary>
+    public static Dictionary<long, List<L>> ByOwner<L>(IEnumerable<L> found, Func<L, long?> owner)
+    {
+        var groups = new Dictionary<long, List<L>>();
+        foreach (var item in found)
+            if (owner(item) is long id)
+            {
+                if (!groups.TryGetValue(id, out var group))
+                    groups[id] = group = [];
+                group.Add(item);
+            }
+        return groups;
     }
 
     /// <summary>The record a reference field points at.</summary>

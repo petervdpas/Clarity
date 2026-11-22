@@ -1,5 +1,5 @@
 //! DevTools' release planning tab, for reviewing: how each of Clarity's
-//! releases stands (read from the repository, clarity_gen::tools::devtools::release),
+//! releases stands (read from the repository, clarity_devtools::release),
 //! its changes sorted by kind, the chain of steps releasing the ones whose
 //! code changed would start, and the checks a release needs first (run as
 //! builds, one at a time, beside the pieces'). How each check ends is kept
@@ -9,8 +9,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use clarity_gen::tools::devtools::jobs::{Job, JobState, OnChange};
-use clarity_gen::tools::devtools::release::{self, Check, CheckRecord};
+use clarity_devtools::jobs::{Job, JobState, OnChange};
+use clarity_devtools::release::{self, Check, CheckRecord};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use ts_rs::TS;

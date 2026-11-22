@@ -15,8 +15,8 @@ Progress: 75%
 
 ## Tests
 - `conformance/http.json` (calls against each runtime's own test server, paging on `/paged`, `/offset`, `/cursor`, `/linked`): run by R, Go, C, C++, C#
-- `crates/clarity-spec/tests/http.rs`, `web_sources.rs`, `nested.rs`; `crates/clarity-project/tests/openapi.rs`
-- `crates/clarity-gen/tests/http.rs`, `paging.rs`, `http_build.rs` (ignored; reads a web API, sends records, signs with a secret setting on every stack)
+- `crates/clarity-spec/tests/spec/http.rs`, `web_sources.rs`, `nested.rs`; `crates/clarity-project/tests/openapi.rs`
+- `crates/clarity-gen/tests/gen/http.rs`, `paging.rs`, `http_build.rs` (ignored; reads a web API, sends records, signs with a secret setting on every stack)
 
 ## Open
 - REST entities mapped onto endpoints (list, get, create, update, delete), browsed and saved through the API: PARTIAL (DESIGN.md:140). An OpenAPI file gives entities and one action per operation; entities are never found or saved through the API.

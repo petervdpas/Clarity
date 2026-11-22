@@ -1,10 +1,8 @@
 //! The slider and the spin box (U1c) against the cases every runtime shares
-//! (conformance/ranges.json), and the value `range_event` writes.
+//! (conformance/ranges.json), as Clarity.UI moves a slider or spin box with it.
 
-use clarity_runtime::ranges::{self, Range, RangeMove};
-use clarity_runtime::ui::{Reply, Ui, WindowState};
-use clarity_runtime::{Db, Result};
-use serde_json::{Map, Value, json};
+use clarity_runtime::ranges::{self, Range};
+use serde_json::Value;
 
 const CASES: &str = include_str!("../../../conformance/ranges.json");
 
@@ -52,36 +50,4 @@ fn text_that_is_no_number_gives_nothing() {
     assert_eq!(ranges::typed_in("five", &range), None);
     assert_eq!(ranges::dragged("", &range), None);
     assert_eq!(ranges::dragged("3", &Range { step: "0".into(), ..range.clone() }), Some("3".into()), "no step: the place, within the range");
-}
-
-fn drawn(state: WindowState) -> Result<Reply> {
-    let data = state.data.clone();
-    Ok(Ui::from_state(&state).reply(&state.window, data))
-}
-
-fn album() -> WindowState {
-    let mut data = Map::new();
-    data.insert("album".into(), json!({ "id": 1, "rating": 5, "price": "9.5" }));
-    WindowState::new("Album", data)
-}
-
-#[test]
-fn a_whole_value_is_written_as_a_number_and_a_decimal_as_text() {
-    let db = Db::memory().unwrap();
-    let range = Range { min: Some("0".into()), max: Some("10".into()), step: "1".into() };
-    let up = RangeMove::Key(ranges::RangeKey::Up);
-    let reply = ranges::event(&db, album(), "stars", "album.rating", &range, true, &up, None, drawn, drawn).unwrap();
-    assert_eq!(reply.state.data["album"]["rating"], json!(6));
-    let range = Range { min: Some("0".into()), max: Some("20".into()), step: "0.25".into() };
-    let reply = ranges::event(&db, album(), "price", "album.price", &range, false, &RangeMove::Typed("12.125".into()), None, drawn, drawn).unwrap();
-    assert_eq!(reply.state.data["album"]["price"], json!("12.125"));
-}
-
-#[test]
-fn a_value_that_stays_runs_no_handler() {
-    let db = Db::memory().unwrap();
-    let range = Range { min: Some("0".into()), max: Some("5".into()), step: "1".into() };
-    let up = RangeMove::Key(ranges::RangeKey::Up);
-    let reply = ranges::event(&db, album(), "stars", "album.rating", &range, true, &up, None, |_| panic!("nothing changed"), drawn).unwrap();
-    assert_eq!(reply.state.data["album"]["rating"], json!(5));
 }

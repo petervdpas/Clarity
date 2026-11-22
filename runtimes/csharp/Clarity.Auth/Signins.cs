@@ -51,14 +51,22 @@ public sealed record SigninSource(string Table, string Page)
     /// <summary>The strategies the project names, in its order.</summary>
     public IReadOnlyList<SigninStrategy> Strategies { get; init; } = [];
 
+    /// <summary>Clarity's sign-in defaults (conformance/defaults.json), for a source
+    /// that leaves them as they are (the generators always pass what the project says).</summary>
+    public const long DefaultSessionSeconds = 8 * 3600;
+    /// <inheritdoc cref="DefaultSessionSeconds"/>
+    public const int DefaultTries = 5;
+    /// <inheritdoc cref="DefaultSessionSeconds"/>
+    public const long DefaultTriesSeconds = 15 * 60;
+
     /// <summary>How long a served session lasts.</summary>
-    public long SessionSeconds { get; init; } = 8 * 3600;
+    public long SessionSeconds { get; init; } = DefaultSessionSeconds;
 
     /// <summary>Failed tries per key allowed within <see cref="TriesSeconds"/>.</summary>
-    public int Tries { get; init; } = 5;
+    public int Tries { get; init; } = DefaultTries;
 
     /// <summary>The window failed tries are counted in.</summary>
-    public long TriesSeconds { get; init; } = 15 * 60;
+    public long TriesSeconds { get; init; } = DefaultTriesSeconds;
 
     /// <summary>The program's name, under which its secrets are kept (the remembered sign-in).</summary>
     public string Program { get; init; } = "";

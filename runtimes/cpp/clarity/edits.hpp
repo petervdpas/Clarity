@@ -24,6 +24,9 @@
 
 namespace clarity {
 
+/// How many edits a window keeps; the oldest go first (conformance/defaults.json).
+inline constexpr size_t edit_bus_keeps = 500;
+
 /// One name an edit changed, with its value before and after; none when
 /// the name was not there.
 struct Changed {

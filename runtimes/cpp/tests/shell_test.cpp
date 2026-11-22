@@ -3,7 +3,9 @@
 
 #include <functional>
 
+#include "apply_steps.hpp"
 #include "check.hpp"
+#include "clarity/code.hpp"
 #include "clarity/watch.hpp"
 #include "engine/engine.hpp"
 #include "shell/shell.hpp"
@@ -60,6 +62,7 @@ public:
         if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
         if (handler == "save") refuse(Text("{name} is taken").with("name", slot_text("Ada")));
         if (handler == "fail") throw StorageError("locked");
+        if (handler == "divide") (void)whole_div(1, 0);
         // A wizard's on next that sends it to its last step.
         if (handler == "jump") ui.set_step("wizard", 3);
         // A task added and chosen, as a New button does.
@@ -120,6 +123,8 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}, {"data", json::object()}}}, {"handler", "save"}}),
              json::parse(R"({"error":{"text":"{name} is taken","values":{"name":{"kind":"text","value":"Ada"}}}})"));
     CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}}}, {"handler", "fail"}}), json::parse(R"({"error":"storage: locked"})"));
+    // A value error is said in Clarity's own words by its key, which the screen translates.
+    CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}}}, {"handler", "divide"}}), json::parse(R"({"error":{"key":"divisionByZero","text":"Division by zero"}})"));
     // The answer to a question runs the handler it goes to.
     json answered = service.invoke("answer_event", {{"state", {{"window", "Card"}, {"data", {{"name", "Ada"}}}}}, {"handler", "rename"}, {"values", {7, "Grace"}}});
     CHECK_EQ(answered["value"]["state"]["data"]["name"], json("Grace"));
@@ -189,7 +194,7 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
 // database steps its handler made, and Ctrl+Z takes them back together.
 TEST(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back) {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}});
+    apply_steps(db, {{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}});
     Cards cards;
     shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", &db, &cards});
     auto card = [](const char* name) { return json{{"window", "Card"}, {"instance", 7}, {"data", {{"name", name}}}}; };
@@ -224,44 +229,12 @@ struct Running {
     Db db = Db::memory();
     Cards cards;
     shell::Service service{{"shop", "Shop", "Card", R"({"project":{}})", &db, &cards}};
-    Running() { db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); }
+    Running() { apply_steps(db, {{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); }
 };
 
 json card_with(json data) { return {{"window", "Card"}, {"instance", 8}, {"data", std::move(data)}}; }
 
 }  // namespace
-
-// A dragged row (manual/parts.data.md): the runtime gives the list its new order and
-// numbers, chooses the moved row and runs on reorder, as one edit.
-TEST(the_runtime_reorders_a_list_as_one_edit) {
-    Running app;
-    json tasks = json::parse(R"([{"id":1,"rank":1},{"id":2,"rank":2},{"id":3,"rank":3}])");
-    json state = card_with({{"tasks", tasks}});
-    app.service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}});
-    json move = {{"state", state}, {"part", "taskList"}, {"list", "tasks"}, {"by", "rank"}, {"parent", nullptr}, {"handler", "remember"}, {"scope", "taskList"},
-                 {"move", {{"row", 2}, {"where", "before"}, {"target", 0}}}};
-    json moved = app.service.invoke("reorder_event", move)["value"];
-    CHECK_EQ(moved["state"]["data"]["tasks"], json::parse(R"([{"id":3,"rank":1},{"id":1,"rank":2},{"id":2,"rank":3}])"));
-    CHECK_EQ(moved["state"]["selected"]["taskList"], json(0));
-    CHECK_EQ(moved["step"], json(1));
-    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
-    // Ctrl+Z takes the move back with its handler's step.
-    json back = app.service.invoke("undo_edit", {{"state", moved["state"]}, {"scope", "taskList"}, {"back", true}})["value"];
-    CHECK_EQ(back["state"]["data"]["tasks"], tasks);
-    CHECK(app.db.all<Memo>().empty());
-    // A refused move answers the window as it is and runs nothing.
-    move["move"] = {{"row", 0}, {"key", "up"}};
-    json refused = app.service.invoke("reorder_event", move)["value"];
-    CHECK_EQ(refused["state"]["data"]["tasks"], tasks);
-    CHECK(!refused.contains("step"));
-    CHECK(app.db.all<Memo>().empty());
-    // In a tree a row takes its new parent; without a handler the window is drawn as it is.
-    json tree = json::parse(R"([{"id":1,"up":null,"rank":1},{"id":2,"up":null,"rank":2}])");
-    json right = {{"state", card_with({{"tasks", tree}})}, {"part", "taskTree"}, {"list", "tasks"}, {"by", "rank"}, {"parent", "up"}, {"move", {{"row", 1}, {"key", "right"}}}};
-    json under = app.service.invoke("reorder_event", right)["value"];
-    CHECK_EQ(under["state"]["data"]["tasks"], json::parse(R"([{"id":1,"up":null,"rank":1},{"id":2,"up":1,"rank":1}])"));
-    CHECK_EQ(under["state"]["selected"]["taskTree"], json(1));
-}
 
 // A canvas (manual/parts.graphics.md): the runtime moves an object to its grid and edits
 // a drawing, chooses what it touched and runs on change, as one edit.
@@ -299,63 +272,6 @@ TEST(the_runtime_moves_an_object_and_edits_a_drawing) {
     json kept = app.service.invoke("canvas_event", add)["value"];
     CHECK_EQ(kept["refused"], json(true));
     CHECK_EQ(kept["state"]["data"]["note"], drawn["state"]["data"]["note"]);
-}
-
-// A typed item of a list field (U1c): added by the runtime, or refused with the list as it was.
-TEST(the_runtime_adds_a_typed_item_or_refuses_it) {
-    Running app;
-    json state = card_with({{"album", {{"tags", {"jazz"}}, {"years", {1999}}}}});
-    app.service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}});
-    json typed = {{"state", state}, {"part", "tagsBox"}, {"path", "album.tags"}, {"item", "text"}, {"typed", "  live "}, {"handler", "remember"}, {"scope", "form"}};
-    json added = app.service.invoke("item_event", typed)["value"];
-    CHECK_EQ(added["state"]["data"]["album"]["tags"], json::parse(R"(["jazz","live"])"));
-    CHECK(!added.contains("refused"));
-    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
-    json back = app.service.invoke("undo_edit", {{"state", added["state"]}, {"scope", "form"}, {"back", true}})["value"];
-    CHECK_EQ(back["state"]["data"]["album"]["tags"], json::parse(R"(["jazz"])"));
-    CHECK(app.db.all<Memo>().empty());
-    // No whole number: the list stays, nothing runs, and the reply says so.
-    json wrong = {{"state", state}, {"part", "yearsBox"}, {"path", "album.years"}, {"item", "integer"}, {"typed", "1.5"}, {"handler", "remember"}};
-    json refused = app.service.invoke("item_event", wrong)["value"];
-    CHECK_EQ(refused["refused"], json(true));
-    CHECK_EQ(refused["state"]["data"]["album"]["years"], json::parse("[1999]"));
-    CHECK(app.db.all<Memo>().empty());
-    // Without a scope the handler runs as a dispatch does; an enum item is one of its values.
-    json genre = {{"state", state}, {"part", "genresBox"}, {"path", "genres"}, {"item", "enum"}, {"values", {"Jazz", "Rock"}}, {"typed", "Rock"}, {"handler", "remember"}};
-    json chosen = app.service.invoke("item_event", genre)["value"];
-    CHECK_EQ(chosen["state"]["data"]["genres"], json::parse(R"(["Rock"])"));
-    CHECK_EQ(chosen["step"], json(2));
-}
-
-// A slider's or spin box's value after a key, a drag or typed text, decided by the runtime.
-TEST(the_runtime_moves_a_value_within_its_range) {
-    Running app;
-    json range = {{"state", card_with({{"volume", 5}})}, {"part", "volumeSlider"}, {"path", "volume"}, {"min", "0"}, {"max", "10"}, {"step", "1"}, {"whole", true}};
-    json up = range;
-    up["key"] = "up";
-    CHECK_EQ(app.service.invoke("range_event", up)["value"]["state"]["data"]["volume"], json(6));
-    json drag = range;
-    drag["at"] = "7.4";
-    json dragged = app.service.invoke("range_event", drag)["value"];
-    CHECK_EQ(dragged["state"]["data"]["volume"], json(7));
-    // The screen goes on from the window the reply gave.
-    json typed = range;
-    typed["state"] = dragged["state"];
-    typed["typed"] = "120";
-    typed["handler"] = "remember";
-    typed["scope"] = "volumeSlider";
-    json kept = app.service.invoke("range_event", typed)["value"];
-    CHECK_EQ(kept["state"]["data"]["volume"], json(10));
-    CHECK_EQ(kept["step"], json(1));
-    json back = app.service.invoke("undo_edit", {{"state", kept["state"]}, {"scope", "volumeSlider"}, {"back", true}})["value"];
-    CHECK_EQ(back["state"]["data"]["volume"], json(7));
-    CHECK(app.db.all<Memo>().empty());
-    // A decimal stays exact, as text.
-    json price = {{"state", card_with({{"item", {{"price", "0.2"}}}})}, {"part", "priceBox"}, {"path", "item.price"}, {"min", "0"}, {"max", nullptr}, {"step", "0.1"}, {"whole", false}, {"key", "up"}};
-    CHECK_EQ(app.service.invoke("range_event", price)["value"]["state"]["data"]["item"]["price"], json("0.3"));
-    // Nothing to move by is an error.
-    json none = range;
-    CHECK(app.service.invoke("range_event", none).contains("error"));
 }
 
 // A wizard's Next, Back and Finish (manual/parts.containers.md), decided by the runtime.
@@ -396,66 +312,8 @@ TEST(the_runtime_walks_a_wizard) {
 // What a dropdown offers for typed text (U1c), found by the runtime.
 TEST(the_runtime_finds_a_dropdowns_options) {
     Running app;
-    CHECK_EQ(app.service.invoke("find_options", {{"kind", "typed"}, {"entity", "Album"}, {"field", "city"}, {"typed", "AMST"}}),
-             json::parse(R"({"value":["Amstelveen","amsterdam"]})"));
-    CHECK_EQ(app.service.invoke("find_options", {{"kind", "search"}, {"entity", "Artist"}, {"show", {"city"}}, {"typed", "utrecht"}}),
-             json::parse(R"({"value":[{"id":1,"text":"Jansen","fields":{"city":"Utrecht"}}]})"));
-    CHECK_EQ(app.service.invoke("find_options", {{"kind", "search"}, {"entity", "Artist"}, {"show", json::array()}, {"typed", "jan"}})["value"].size(), size_t(2));
-    CHECK(app.service.invoke("find_options", {{"kind", "other"}, {"entity", "Artist"}}).contains("error"));
-}
-
-namespace {
-
-json board(json views) {
-    return {{"window", "Card"}, {"instance", 9}, {"data", {{"tasks", json::parse(R"([{"id":1,"title":"Milk","up":null},{"id":2,"title":"bread","up":1},{"id":3,"title":"Apples","up":2}])")}}}, {"views", std::move(views)}};
-}
-
-const json table_view = json::parse(R"({"kind":"table","list":"tasks","columns":[{"field":"title","kind":"text","choices":[]}],"order":null,"page":2,"sortable":true})");
-const json tree_view = json::parse(R"({"kind":"tree","list":"tasks","parent":"up","key":"id","open":[]})");
-
-}  // namespace
-
-// The person sorts, turns a page or opens a tree row (manual/start.how-it-works.md): the runtime
-// changes the part's view and answers the window, never as an edit.
-TEST(the_runtime_changes_a_view_for_the_person) {
-    Running app;
-    json state = board({{"taskTable", table_view}, {"taskTree", tree_view}});
-    // Nothing to do: the views are filled.
-    json filled = app.service.invoke("view_event", {{"state", state}, {"part", "taskTable"}, {"action", json::object()}})["value"]["state"];
-    CHECK_EQ(filled["views"]["taskTable"]["shown"], json::parse("[0,1]"));
-    CHECK_EQ(filled["views"]["taskTree"]["shown"], json::parse("[[0,0,true]]"));
-    json sorted = app.service.invoke("view_event", {{"state", filled}, {"part", "taskTable"}, {"action", {{"sort", "title"}}}})["value"]["state"];
-    CHECK_EQ(sorted["views"]["taskTable"]["order"], json::parse(R"({"field":"title","desc":false})"));
-    CHECK_EQ(sorted["views"]["taskTable"]["shown"], json::parse("[2,1]"));
-    json turned = app.service.invoke("view_event", {{"state", sorted}, {"part", "taskTable"}, {"action", {{"page", 2}}}})["value"]["state"];
-    CHECK_EQ(turned["views"]["taskTable"]["shown"], json::parse("[0]"));
-    CHECK_EQ(turned["views"]["taskTable"]["pages"], json::parse(R"({"page":2,"pages":2,"from":3,"to":3,"count":3})"));
-    json opened = app.service.invoke("view_event", {{"state", turned}, {"part", "taskTree"}, {"action", {{"open", 1}}}})["value"]["state"];
-    CHECK_EQ(opened["views"]["taskTree"]["shown"], json::parse("[[0,0,true],[1,1,true]]"));
-    json closed = app.service.invoke("view_event", {{"state", opened}, {"part", "taskTree"}, {"action", {{"close", 1}}}})["value"]["state"];
-    CHECK_EQ(closed["views"]["taskTree"]["open"], json::array());
-    // No edit: there is nothing to take back.
-    CHECK_EQ(app.service.invoke("undo_edit", {{"state", closed}, {"scope", "taskTable"}, {"back", true}})["value"]["state"]["views"]["taskTable"]["at"], json(2));
-    CHECK(app.service.invoke("view_event", {{"state", closed}, {"part", "nothing"}, {"action", {{"page", 1}}}}).contains("error"));
-    // An empty action is no error, even for a part with no view yet.
-    CHECK(app.service.invoke("view_event", {{"state", closed}, {"part", "nothing"}, {"action", json::object()}}).contains("value"));
-}
-
-// A handler that changes the list, and chooses a row, is shown at once: the
-// table turns to the chosen row's page.
-TEST(a_handlers_reply_fills_the_views) {
-    Running app;
-    json state = board({{"taskTable", table_view}});
-    json added = app.service.invoke("dispatch_event", {{"state", state}, {"handler", "add"}})["value"]["state"];
-    CHECK_EQ(added["views"]["taskTable"]["shown"], json::parse("[2,3]"));
-    CHECK_EQ(added["views"]["taskTable"]["pages"]["count"], json(4));
-    CHECK_EQ(added["views"]["taskTable"]["at"], json(2));
-    // The person turns back to the first page: that reply keeps it.
-    json turned = app.service.invoke("view_event", {{"state", added}, {"part", "taskTable"}, {"action", {{"page", 1}}}})["value"]["state"];
-    CHECK_EQ(turned["views"]["taskTable"]["shown"], json::parse("[0,1]"));
-    // Any other reply shows the chosen row's page again.
-    json again = app.service.invoke("dispatch_event", {{"state", turned}, {"handler", "noop"}})["value"]["state"];
-    CHECK_EQ(again["views"]["taskTable"]["shown"], json::parse("[2,3]"));
+    // The records of the entity; the screen searches them as the person types.
+    CHECK_EQ(app.service.invoke("find_options", {{"entity", "Artist"}, {"show", {"city"}}})["value"].size(), size_t(2));
 }
 
 // A readonly part (manual/start.how-it-works.md): whatever the screen changed is taken back to
@@ -470,9 +328,6 @@ TEST(the_runtime_takes_back_a_change_of_a_readonly_part) {
     typed["data"]["name"] = "Ann";
     std::vector<json> commands{
         {{"command", "edit_event"}, {"args", {{"state", typed}, {"part", "nameBox"}, {"scope", "form"}, {"ends", true}, {"handler", "remember"}, {"readonly", true}}}},
-        {{"command", "reorder_event"}, {"args", {{"state", typed}, {"part", "taskList"}, {"list", "tasks"}, {"by", "rank"}, {"move", {{"row", 1}, {"key", "up"}}}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
-        {{"command", "item_event"}, {"args", {{"state", typed}, {"part", "tagsBox"}, {"path", "tags"}, {"item", "text"}, {"typed", "live"}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
-        {{"command", "range_event"}, {"args", {{"state", typed}, {"part", "volumeBox"}, {"path", "volume"}, {"min", "0"}, {"max", "10"}, {"key", "up"}, {"whole", true}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
     };
     for (const auto& c : commands) {
         std::string command = c["command"];
@@ -509,15 +364,4 @@ TEST(the_runtime_takes_back_a_table_edit_outside_its_editable_fields) {
     CHECK(!inside.contains("refused"));
     CHECK_EQ(inside["state"]["data"]["tasks"][0]["done"], json(true));
     CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
-}
-
-// A sort on a table that is not sortable changes nothing, and is no error.
-TEST(the_runtime_sorts_only_a_sortable_table) {
-    Running app;
-    json view = table_view;
-    view.erase("sortable");
-    json state = board({{"taskTable", view}});
-    json reply = app.service.invoke("view_event", {{"state", state}, {"part", "taskTable"}, {"action", {{"sort", "title"}}}})["value"]["state"];
-    CHECK_EQ(reply["views"]["taskTable"]["order"], json(nullptr));
-    CHECK_EQ(reply["views"]["taskTable"]["shown"], json::parse("[0,1]"));
 }

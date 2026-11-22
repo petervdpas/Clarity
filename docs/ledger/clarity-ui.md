@@ -19,10 +19,12 @@ Progress: 90%
 - `conformance/windows.json`, `forms.json`, `tables.json`, `small-parts.json`, `overlays.json`, `display.json`: run by rust-ui only
 - `runtimes/rust-ui/tests/` (1274 tests: parts/, inputs/, data/, windows/, screen/, hosts/, language/); `tests/screen/markup.rs:170` (a kind without a maker); `tests/windows/access.rs`; `tests/hosts/browser_host.rs`, `browser_page.rs` (headless Chromium), `wire_round_trip.rs`
 - `runtimes/rust-ui-ffi/src/tests/`; Go `runtimes/go/ui/ui_test.go`
-- `crates/clarity-gen/tests/everything_live.rs` (driven as a person: go, rust, c, cpp; ignored), `everything_build.rs`, `web_windows.rs`, `rust_ui_library.rs`, `browser_fresh.rs`
-- Guards: `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test web_windows` writes `runtimes/rust-ui/catalog/*.json`
+- `crates/clarity-gen/tests/gen/everything_live.rs` (driven as a person: go, rust, c, cpp; ignored), `everything_build.rs`, `web_windows.rs`, `rust_ui_library.rs`, `browser_fresh.rs`
+- Guards: `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test gen web_windows::` writes `runtimes/rust-ui/catalog/*.json`
 
 ## Open
+- The live run in a browser, a window asked for (fixed 2026-11-22): the dialog did show; a click's handler is a long call there, its answer coming after the step (`read` gave `overlays: 1`, the long-call bar, while it waited), and the dialog steps checked once. They wait as a person does now (`same_soon` in `clarity_live`, opening and closing the dialog). Guarded by `runtimes/rust-ui/tests/hosts/browser_host.rs` (`a_window_asked_for_shows_as_the_dialog_the_steps_reach`, `..._by_a_long_call_shows_when_its_answer_comes`, `..._over_the_wire_...`).
+- The live run in a browser, choosing a file and loading a picture (fixed 2026-11-22): the file the page gives was taken by a pointer press at the host's last page press again, which a driven step, the keyboard or a screen reader never set; the screen keeps the last press now (`Screen::last_press`, `press_again`: a main-button press at a place or a key) and the browser host does it again (`BrowserHost::file_chosen`); test `a_file_the_page_gives_goes_to_the_part_that_asked_however_it_was_pressed`. And the relay's steps carried no gesture, so Chromium opened no file chooser for the page's `input.click()`; `tests/live/browser.mjs` evaluates them with `userGesture`.
 - Reflow of the grid on narrow windows and the web: NOT BUILT (DESIGN.md:487, 2462).
 - A check that a container's contents fit its height: PARTIAL. Windows, views and slide-outs are fitted and checked (`crates/clarity-spec/src/fit.rs`; see [windows-dialogs](windows-dialogs.md)); parts inside a panel or tabs are not (`fit_window` cuts top-level parts only; DESIGN.md:2462).
 - Files dropped from the system onto a part: NOT BUILT (DESIGN.md:1921).
@@ -36,7 +38,7 @@ Progress: 90%
 ## Conflicts
 - Part kinds and their makers: `crates/clarity-spec/src/widgets.rs` and `runtimes/rust-ui/src/parts/mod.rs:585` with the `KINDS` lists; equal, no test.
 - Part properties code can read (34): each generator's logic.rs (`rust/logic.rs:739`, `go/logic.rs:1558`, `cpp/logic.rs:1118`, `csharp/logic.rs:199`, c); equal, no test.
-- Layout constants: `crates/clarity-spec/src/layout.rs` against `runtimes/rust-ui/src/grid.rs:16-42`, `window/view.rs:28`, `window/messages.rs:20`, `parts/containers/popover.rs:39`, `runtimes/web/src/screen/grid.ts:9-55`; `crates/clarity-spec/tests/layout.rs` checks some, not GAP, CELL_HEIGHTS or the popover column.
+- Layout constants: `crates/clarity-spec/src/layout.rs` against `runtimes/rust-ui/src/grid.rs:16-42`, `window/view.rs:28`, `window/messages.rs:20`, `parts/containers/popover.rs:39`, `runtimes/web/src/screen/grid.ts:9-55`; `crates/clarity-spec/tests/spec/layout.rs` checks some, not GAP, CELL_HEIGHTS or the popover column.
 - Two versions: `runtimes/rust-ui/Cargo.toml` 0.25.0, `runtimes/rust-ui-ffi/Cargo.toml` 0.24.0; downloads follow the ffi version.
 - Conformance "about" texts name Avalonia: `forms.json`, `tables.json`, `display.json`, `custom-parts.json`, `table-order.json`, `themes.json`.
 

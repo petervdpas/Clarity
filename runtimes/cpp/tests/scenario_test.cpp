@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "apply_steps.hpp"
 #include "check.hpp"
 #include "clarity/db.hpp"
 #include "clarity/sql.hpp"
@@ -123,7 +124,7 @@ TEST(the_server_scenario_on_sqlite) {
     std::vector<Step> all = cases["steps"]["sqlite"].get<std::vector<Step>>();
     {
         Db db({{"main", Dialect::Sqlite, file.string()}});
-        CHECK_EQ(db.migrate({all[0]}), 1);
+        CHECK_EQ(apply_steps(db, {all[0]}), 1);
         auto since = Date::parse("2026-01-15");
         Before ada{0, "Ada Lovelace", "ada@example.com", "Business", Decimal::parse("1250.50"), true, since, "first's"};
         db.save(ada);
@@ -166,8 +167,8 @@ TEST(the_server_scenario_on_sqlite) {
         CHECK(names(db.find<Before>(Query().filter(Cond::one_of("kind", {std::string("Private")}))), name_of) == Names{"Grace Hopper"});
         CHECK(names(db.find<Before>(Query().filter(Cond::is_none("since"))), name_of) == Names{"Grace Hopper"});
 
-        CHECK_EQ(db.migrate(all), 1);
-        CHECK_EQ(db.migrate(all), 0);
+        CHECK_EQ(apply_steps(db, all), 1);
+        CHECK_EQ(apply_steps(db, all), 0);
         CHECK_EQ(db.schema_version(), 2);
 
         Customer c = db.get<Customer>(ada.id);

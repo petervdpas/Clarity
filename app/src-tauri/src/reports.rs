@@ -22,6 +22,37 @@ fn report_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(dir.join(REPORTS_DIR).join(format!("{name}.{REPORT_EXTENSION}")))
 }
 
+/// A report's text as the report tab's designer holds it (clarity_spec::report_design),
+/// as JSON whose words keep their order; or why it cannot be read.
+#[tauri::command]
+pub fn report_read(text: String) -> Result<String, String> {
+    clarity_spec::report_design::read(&text).map(|design| clarity_spec::report_design::to_json(&design))
+}
+
+/// The text of the design the report tab's designer holds (its JSON), bands in the order they print.
+#[tauri::command]
+pub fn report_write(design: String) -> Result<String, String> {
+    clarity_spec::report_design::from_json(&design).map(|design| clarity_spec::report_design::write(&design))
+}
+
+/// What a new part of `kind` starts with at `at` in its band, as JSON.
+#[tauri::command]
+pub fn report_new_part(kind: String, at: (f64, f64)) -> Result<String, String> {
+    clarity_spec::report_design::new_part(&kind, at).map(|part| clarity_spec::report_design::to_json(&part)).ok_or_else(|| format!("a band has no part '{kind}'"))
+}
+
+/// A report's stylesheet with one declaration of `selector` set, or taken out when `value` is empty.
+#[tauri::command]
+pub fn report_with_declaration(css: String, selector: String, property: String, value: String) -> String {
+    clarity_spec::report_design::with_declaration(&css, &selector, &property, &value)
+}
+
+/// A report's stylesheet's rules by selector (`.title`, `body`), each with its declarations.
+#[tauri::command]
+pub fn report_rules(css: String) -> Vec<(String, Vec<(String, String)>)> {
+    clarity_spec::report_design::rules(&css)
+}
+
 /// Makes report `name`, with what a new report starts with.
 #[tauri::command]
 pub fn add_report(name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {

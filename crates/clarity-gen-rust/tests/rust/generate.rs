@@ -1,0 +1,1086 @@
+use clarity_gen_core::OutFile;
+use clarity_gen_rust::program as generate;
+use clarity_project::{Settings, starter};
+use clarity_spec::load_converted;
+
+const SALES: &str = "module sales
+
+enum OrderStatus
+    Pending
+    Approved
+
+entity Customer
+    name: text(80), required
+    creditLimit: money, default 100
+    active: bool, default true
+    since: date, format long
+
+entity Order
+    number: text(12), unique
+    status: OrderStatus
+    customer: ref Customer
+    total: money
+
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
+
+function doubled(n: integer) -> money
+    ensure result >= 0
+    let x: money = n * 2
+    if x < 0
+        return 0
+    return x + 0.5
+
+function bigOrders(limit: money) -> list<Order>
+    return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
+
+action approve(order: Order)
+    require order.status == Pending
+    require withinCredit(order)
+    effects db.write
+    order.status = Approved
+    save order
+
+page OrderForm: window
+    title \"Order\"
+    data order: Order
+    data orders: list<Order>
+    on return: windowReturned
+    form name orderForm at 1,1 span 12 rows 1 bind order on submit: orderSubmitted
+        textbox name numberInput at 1,1 span 4 bind order.number readonly
+    table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: gridOpened
+    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked
+    textbox name numberFilter at 1,7 span 4 on change: filterChanged
+
+code OrderForm
+    handler approveClicked
+        if not withinCredit(order)
+            message warning \"Too much\"
+            approveButton.enabled = false
+            return
+        approve(order)
+        message \"Approved {order.number}\"
+
+    handler windowReturned
+        reload orders
+        reload order
+        filterChanged()
+
+    handler filterChanged
+        orders = find o in Order where o.number contains numberFilter.text and not (o.customer == order.customer) order by o.number
+        if order.number contains \"ORD\"
+            numberFilter.text = \"\"
+
+    handler orderSubmitted
+        numberInput.error = \"Check the number\"
+        numberInput.readonly = not numberInput.readonly
+
+    handler gridOpened
+        open OrderForm with order = grid.selected
+        close
+";
+
+fn shop() -> Settings {
+    starter("Shop", "shop")
+}
+
+fn files() -> Vec<OutFile> {
+    let project = load_converted([("sales.clarity", SALES)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    generate(&project, &shop()).unwrap()
+}
+
+/// The program's code: main.rs.
+fn program(files: &[OutFile]) -> String {
+    file(files, "src/main.rs").to_string()
+}
+
+fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
+    &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
+}
+
+#[test]
+fn writes_a_complete_cargo_project() {
+    let files = files();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "Cargo.toml",
+            // It links Clarity.UI's ready-made library (manual/start.how-it-works.md).
+            "README.md",
+            "build.rs",
+            "src/facts.rs",
+            "src/main.rs",
+            "src/model.json",
+            "src/modules.rs",
+            "src/modules/sales.rs",
+            "src/schema.rs",
+            "windows/OrderForm.cxaml",
+        ]
+    );
+    let cargo = file(&files, "Cargo.toml");
+    // Clarity.UI draws the desktop program (manual/start.how-it-works.md), from its ready-made library: no crate of it, nothing of a webview.
+    assert!(!cargo.contains("clarity-ui = ") && !cargo.contains("tauri"), "{cargo}");
+    assert!(cargo.contains("name = \"shop\""), "{cargo}");
+    // The runtime crate from crates.io, at the version this generator is made
+    // with, with the features of the project's databases and the library's desktop only.
+    let dependency = format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"native-ui\", \"sqlite\"] }}", runtime_version());
+    assert!(cargo.contains(&dependency), "{cargo}");
+    // A project of its own, not in a workspace around it.
+    assert!(cargo.contains("\n[workspace]\n"), "{cargo}");
+    assert!(file(&files, "src/main.rs").contains("mod modules;"));
+    assert!(file(&files, "src/modules.rs").contains("pub mod sales;"));
+}
+
+#[test]
+fn is_deterministic() {
+    assert_eq!(files(), files());
+}
+
+#[test]
+fn entities_become_records_with_their_defaults() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub struct Customer {"), "{sales}");
+    assert!(sales.contains("    pub creditLimit: Decimal,"), "{sales}");
+    assert!(sales.contains("    pub since: Option<NaiveDate>,"), "{sales}");
+    assert!(sales.contains("    pub customer: Option<Id>,"), "{sales}");
+    assert!(sales.contains("creditLimit: Decimal::new(100, 0),"), "{sales}");
+    assert!(sales.contains("active: true,"), "{sales}");
+    assert!(sales.contains("const TABLE: &'static str = \"order\";"), "{sales}");
+    assert!(sales.contains("pub enum OrderStatus {"), "{sales}");
+    // A save refuses a customer without a name (conformance/required.json).
+    assert!(sales.contains("    const REQUIRED: &'static [(&'static str, &'static str)] = &[(\"name\", \"Name\")];\n"), "{sales}");
+    assert_eq!(sales.matches("const REQUIRED").count(), 1, "{sales}");
+}
+
+#[test]
+fn the_schema_is_the_first_migration() {
+    let files = files();
+    // The program knows its database was made with one step; clarity-migrate gets its SQL.
+    assert!(file(&files, "src/schema.rs").contains("pub const SOURCES: &[(&str, usize)] = &[\n    (\"main\", 1),\n];"));
+    let schema = steps_sql(&load_converted([("sales.clarity", SALES)]), &shop(), "main").concat().join("\n");
+    assert!(schema.contains("CREATE TABLE \"order\" ("), "{schema}");
+    // Empty text is no value, so unique text is unique among filled values.
+    assert!(schema.contains("\"number\" TEXT NOT NULL DEFAULT '',\n"), "{schema}");
+    assert!(
+        schema.contains("CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';"),
+        "{schema}"
+    );
+    assert!(schema.contains("\"customer\" INTEGER REFERENCES \"customer\" (\"id\")"), "{schema}");
+    assert!(schema.contains("\"credit_limit\" TEXT NOT NULL DEFAULT '100'"), "{schema}");
+}
+
+#[test]
+fn functions_and_actions_become_rust_functions() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub fn withinCredit(db: &Db, order: &Order) -> Result<bool> {"), "{sales}");
+    assert!(
+        sales.contains("(order.total <= db.load::<Customer>(order.customer)?.creditLimit)"),
+        "{sales}"
+    );
+    assert!(sales.contains("pub fn approve(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("require((order.status == OrderStatus::Pending), \"order.status == Pending\")?;"), "{sales}");
+    assert!(sales.contains("require(withinCredit(db, order)?, \"withinCredit(order)\")?;"), "{sales}");
+    assert!(sales.contains("order.status = OrderStatus::Approved;"), "{sales}");
+    assert!(sales.contains("db.save(order)?;"), "{sales}");
+    // Integers widen where a decimal is expected, and ensure wraps the body.
+    assert!(sales.contains("let mut x: Decimal = Decimal::from(clarity_runtime::whole_mul(n, 2i64)?);"), "{sales}");
+    assert!(sales.contains("return Ok(Decimal::from(0i64));"), "{sales}");
+    assert!(sales.contains("return Ok(clarity_runtime::decimal_add(x, Decimal::new(5, 1))?);"), "{sales}");
+    assert!(sales.contains("ensure((result >= Decimal::from(0i64)), \"result >= 0\")?;"), "{sales}");
+}
+
+#[test]
+fn refuses_a_project_with_errors() {
+    let project = load_converted([("sales.clarity", "module sales\n\nentity A\n    b: Nope\n")]);
+    let errors = generate(&project, &shop()).unwrap_err();
+    assert!(errors[0].contains("fix the errors"), "{errors:?}");
+}
+
+#[test]
+fn handlers_work_on_the_window_and_the_screen() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub struct OrderFormWindow {\n    pub order: Order,\n    pub orders: Vec<Order>,\n}"), "{sales}");
+    assert!(sales.contains("orders: db.all::<Order>()?,"), "{sales}");
+    assert!(
+        sales.contains("pub fn order_form__approve_clicked(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui) -> Result<()> {"),
+        "{sales}"
+    );
+    assert!(sales.contains("if !withinCredit(db, &w.order)? {"), "{sales}");
+    // Shown text goes to the screen as text with slots, which the screen
+    // fills in the format of the person using the application.
+    assert!(sales.contains("ui.message(Level::Warning, Text::plain(\"Too much\"));"), "{sales}");
+    assert!(
+        sales.contains("ui.message(Level::Info, Text::new(\"Approved {order.number}\").with(\"order.number\", Slot::text(w.order.number.clone())));"),
+        "{sales}"
+    );
+    assert!(sales.contains("ui.set_error(\"numberInput\", Text::plain(\"Check the number\"));"), "{sales}");
+    assert!(sales.contains("ui.set_enabled(\"approveButton\", false);"), "{sales}");
+    assert!(sales.contains("approve(db, &mut w.order)?;"), "{sales}");
+    assert!(sales.contains("ui.open(\"OrderForm\", vec![(\"order\", to_value(&ui.selected(\"grid\", &w.orders)?)?)]);"), "{sales}");
+    assert!(sales.contains("ui.close = true;"), "{sales}");
+
+    let main = &program(&files);
+    assert!(main.contains("(\"OrderForm\", \"approveClicked\") => {"), "{main}");
+    assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
+    assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\")];"), "{main}");
+    assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
+}
+
+/// The backend translates text code makes: it loads the model's
+/// translations, and the screen names the language it picked.
+#[test]
+fn the_backend_translates_in_the_language_the_screen_picked() {
+    let files = files();
+    let main = &program(&files);
+    assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
+    let mut web = shop();
+    web.stack.targets = vec![clarity_project::Target::Web];
+    let web = generate(&load_converted([("sales.clarity", SALES)]), &web).unwrap();
+    // The browser's commands, set_language among them, go to the program through the runtime's wire.
+    assert!(file(&web, "src/main.rs").contains("clarity_runtime::wire::answer(&app, command, args)"), "{}", file(&web, "src/main.rs"));
+}
+
+#[test]
+fn handlers_set_errors_and_readonly_on_inputs() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(
+        sales.contains("ui.set_error(\"numberInput\", Text::plain(\"Check the number\"));"),
+        "{sales}"
+    );
+    assert!(
+        sales.contains("ui.set_readonly(\"numberInput\", !ui.readonly(\"numberInput\", true));"),
+        "{sales}"
+    );
+    let main = &program(&files);
+    assert!(main.contains("(\"OrderForm\", \"orderSubmitted\") => {"), "{main}");
+}
+
+#[test]
+fn window_events_and_reload_reach_the_backend() {
+    let files = files();
+    let main = &program(&files);
+    assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"windowReturned\"),"), "{main}");
+    assert!(main.contains("fn close_window("), "{main}");
+    assert!(main.contains("on_event(db, state, \"open\")"), "{main}");
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("    w.orders = db.all::<Order>()?;\n"), "{sales}");
+    assert!(sales.contains("    if w.order.id != 0 {\n        w.order = db.get::<Order>(w.order.id)?;\n    }\n"), "{sales}");
+}
+
+#[test]
+fn queries_become_database_queries() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(
+        sales.contains(
+            "return Ok(db.find::<Order>(&Query::new().filter(Cond::number(\"total\", Op::GtEq, sql::decimal(limit)).and(Cond::one_of(\"status\", vec![sql::name(&OrderStatus::Pending), sql::name(&OrderStatus::Approved)]))).order_number(\"total\", true).order(\"number\", false))?);"
+        ),
+        "{sales}"
+    );
+    assert!(
+        sales.contains(
+            "w.orders = db.find::<Order>(&Query::new().filter(Cond::contains(\"number\", &ui.text(\"numberFilter\")).and(Cond::compare(\"customer\", Op::Eq, sql::reference(w.order.customer)).negated())).order(\"number\", false))?;"
+        ),
+        "{sales}"
+    );
+    assert!(sales.contains("if contains(&w.order.number, &String::from(\"ORD\")) {"), "{sales}");
+    assert!(sales.contains("ui.set_text(\"numberFilter\", String::from(\"\"));"), "{sales}");
+    // A handler runs another handler of its window.
+    assert!(sales.contains("    order_form__filter_changed(db, w, ui)?;\n"), "{sales}");
+}
+
+/// The version of the runtime crate, as runtimes/rust/Cargo.toml names it.
+fn runtime_version() -> &'static str {
+    let manifest = include_str!("../../../../runtimes/rust/Cargo.toml");
+    let start = manifest.find("\nversion = \"").unwrap() + "\nversion = \"".len();
+    &manifest[start..start + manifest[start..].find('"').unwrap()]
+}
+
+/// The program builds on the runtime crate and carries no copy of it.
+#[test]
+fn no_runtime_source_is_copied() {
+    let copied: Vec<String> = files().into_iter().map(|f| f.path).filter(|p| p.starts_with("clarity-runtime/")).collect();
+    assert!(copied.is_empty(), "{copied:?}");
+}
+
+/// While working on the runtime, `.cargo/config.toml` in the project patches
+/// the crate with the runtime in this repository; Clarity keeps that folder
+/// when it writes the project again.
+#[test]
+fn a_cargo_patch_survives_writing_the_project_again() {
+    assert!(clarity_gen_core::build_output(clarity_project::Backend::Rust).contains(&".cargo"));
+}
+
+/// SALES as it was: a `limit`, an integer total, a note, no unique number.
+const FIRST_STEP: &str = "migration \"First\"
+    add entity Customer
+        version
+        name: text(80)
+        limit: money, default 100
+        active: bool, default true
+        since: date
+    add entity Order
+        version
+        number: text(12)
+        status: OrderStatus
+        customer: ref Customer
+        total: integer
+        note: text
+";
+
+const SECOND_STEP: &str = "migration \"Tidy up\"
+    rename field Customer.limit to creditLimit
+    change field Order.total: money
+    remove field Order.note
+    add unique Order.number
+";
+
+/// The SQL of every step of `source`, as clarity-migrate gets it (docs/ledger/migrations.md):
+/// the program itself only checks how many steps its database has.
+fn steps_sql(project: &clarity_spec::Project, settings: &clarity_project::Settings, source: &str) -> Vec<Vec<String>> {
+    clarity_gen_core::migrated_databases(project, settings).unwrap().into_iter().find(|d| d.source == source).unwrap().steps
+}
+
+#[test]
+fn every_migration_step_becomes_sql() {
+    let project = clarity_spec::load_with_migrations(
+        clarity_spec::converted([("sales.clarity", SALES)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        [("0001.clarity", FIRST_STEP), ("0002.clarity", SECOND_STEP)],
+    );
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    // The program knows how many steps its database was made with; clarity-migrate gets their SQL.
+    assert!(file(&files, "src/schema.rs").contains("    (\"main\", 2),\n"));
+    let steps = steps_sql(&project, &shop(), "main");
+    assert_eq!(steps.len(), 2);
+    assert!(steps[0][0].starts_with("CREATE TABLE \"customer\" ("), "{steps:#?}");
+    let schema = steps.iter().flatten().cloned().collect::<Vec<_>>().join("\n");
+    assert!(schema.contains("ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";"), "{schema}");
+    // SQLite changes a column's type by building the table again.
+    assert!(schema.contains("CREATE TABLE \"order__new\" ("), "{schema}");
+    assert!(schema.contains("COALESCE(CAST(\"total\" AS TEXT), '0')"), "{schema}");
+    assert!(schema.contains("DROP TABLE \"order\";\nALTER TABLE \"order__new\" RENAME TO \"order\";"), "{schema}");
+    assert!(
+        schema.contains("CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';"),
+        "{schema}"
+    );
+}
+
+#[test]
+fn changes_without_a_step_are_not_generated() {
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("sales.clarity", SALES)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", FIRST_STEP)]);
+    let errors = generate(&project, &shop()).unwrap_err();
+    assert!(errors[0].contains("not in a migration yet"), "{errors:?}");
+    assert!(errors[0].contains("rename") || errors[0].contains("remove field Customer.limit"), "{errors:?}");
+    assert!(errors[0].contains("clarity migrate"), "{errors:?}");
+}
+
+#[test]
+fn each_data_source_gets_its_own_database() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    number: text(20)\n    customer: ref Customer\n";
+    let project = clarity_spec::load_in(
+        clarity_spec::converted([("sales.clarity", SALES), ("erp.clarity", erp)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        std::iter::empty(),
+        &[SourceRef::sql("main"), SourceRef::sql("erp")],
+    );
+    assert!(project.diagnostics.iter().all(|d| d.severity == clarity_spec::Severity::Warning), "{:#?}", project.diagnostics);
+    let mut settings = shop();
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, beside: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new(), paging: None, file: None });
+    // Without steps yet, generating is refused for both.
+    assert_eq!(generate(&project, &settings).unwrap_err().len(), 2);
+
+    let project = clarity_spec::load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let mut project = project;
+    project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp")];
+    let files = generate(&project, &settings).unwrap();
+    let main = &program(&files);
+    assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\"), (\"erp\", Dialect::Sqlite, \"data/erp.db\")];"), "{main}");
+    let erp_rs = file(&files, "src/modules/erp.rs");
+    assert!(erp_rs.contains("const SOURCE: &'static str = \"erp\";"), "{erp_rs}");
+    assert!(file(&files, "src/schema.rs").contains("    (\"erp\", 1),\n"));
+    let schema = steps_sql(&project, &settings, "erp").concat().join("\n");
+    // The customer is in the other database, so no foreign key.
+    assert!(schema.contains("\"customer\" INTEGER,\n    \"row_version\" INTEGER NOT NULL DEFAULT 1\n"), "{schema}");
+}
+
+#[test]
+fn an_external_source_is_opened_but_never_migrated() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
+    let mut project = load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp").external()];
+    let mut settings = shop();
+    settings.datasources.push(DataSource {
+        name: "erp".into(),
+        kind: SourceKind::Sqlite,
+        url: "legacy/erp.db".into(),
+        auth: None,
+        external: true,
+        readonly: false,
+        beside: false,
+        openapi: None,
+        picks: Vec::new(),
+        pick_schemas: Vec::new(),
+        paging: None,
+        file: None,
+    });
+    let files = generate(&project, &settings).unwrap();
+    let main = &program(&files);
+    assert!(main.contains("(\"erp\", Dialect::Sqlite, \"legacy/erp.db\")"), "{main}");
+    let schema = file(&files, "src/schema.rs");
+    assert!(!schema.contains("(\"erp\""), "{schema}");
+    assert!(!schema.contains("tblInvoice"), "{schema}");
+    let erp_rs = file(&files, "src/modules/erp.rs");
+    assert!(erp_rs.contains("const TABLE: &'static str = \"tblInvoice\";"), "{erp_rs}");
+    assert!(erp_rs.contains("const KEY: &'static str = \"InvoiceID\";"), "{erp_rs}");
+    assert!(erp_rs.contains("const COLUMNS: &'static [&'static str] = &[\"InvNo\", \"total\"];"), "{erp_rs}");
+    assert!(erp_rs.contains("Cond::contains(\"InvNo\", &String::from(\"INV\"))"), "{erp_rs}");
+    assert!(erp_rs.contains(".order(\"InvNo\", false)"), "{erp_rs}");
+}
+
+#[test]
+fn a_taken_over_database_keeps_its_names() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let start = "module start\npage Start: window\n    title \"Start\"\n";
+    let erp = "module erp\nsource erp\n\nentity Invoice\n    table \"invoices\"\n    key \"InvoiceID\"\n    number: text(20), unique, column \"InvoiceNumber\"\n    total: money\n";
+    let baseline = "migration \"Taken over\" baseline\n    add entity Invoice\n        table \"tblInvoice\"\n        key \"InvoiceID\"\n        number: text(20), unique, column \"InvNo\"\n        total: money\n";
+    let remap = "migration \"Tidy names\"\n    map table Invoice to \"invoices\"\n    map column Invoice.number to \"InvoiceNumber\"\n    add version Invoice\n";
+    let project = clarity_spec::load_in(
+        clarity_spec::converted([("start.clarity", start), ("erp.clarity", erp)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        [("migrations/erp/0001.clarity", baseline), ("migrations/erp/0002.clarity", remap)],
+        &[SourceRef::sql("main"), SourceRef::sql("erp")],
+    );
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = shop();
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, beside: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new(), paging: None, file: None });
+    generate(&project, &settings).unwrap();
+    let schema = steps_sql(&project, &settings, "erp").concat().join("\n");
+    // The baseline creates only what is missing, under the old names.
+    assert!(schema.contains("CREATE TABLE IF NOT EXISTS \"tblInvoice\" (\n    \"InvoiceID\" INTEGER PRIMARY KEY,\n    \"InvNo\" TEXT NOT NULL DEFAULT ''"), "{schema}");
+    assert!(schema.contains("CREATE UNIQUE INDEX IF NOT EXISTS \"tblInvoice_InvNo_unique\""), "{schema}");
+    // Then the renames, with the unique index following its column.
+    assert!(schema.contains("ALTER TABLE \"tblInvoice\" RENAME TO \"invoices\";"), "{schema}");
+    assert!(schema.contains("ALTER TABLE \"invoices\" RENAME COLUMN \"InvNo\" TO \"InvoiceNumber\";"), "{schema}");
+    assert!(schema.contains("CREATE UNIQUE INDEX \"invoices_InvoiceNumber_unique\""), "{schema}");
+}
+
+#[test]
+fn data_events_become_record_hooks() {
+    let text = SALES.to_string()
+        + "
+code Order
+    before save
+        if order.total < 0
+            refuse \"An order cannot have a negative total\"
+
+    after delete
+        refuse \"Deleted {order.number}\"
+";
+    let project = load_converted([("sales.clarity", text.as_str())]);
+    assert!(!project.has_errors(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub fn before_save_order(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("return Err(Error::Refused(Text::plain(\"An order cannot have a negative total\")));"), "{sales}");
+    assert!(
+        sales.contains("return Err(Error::Refused(Text::new(\"Deleted {order.number}\").with(\"order.number\", Slot::text(order.number.clone()))));"),
+        "{sales}"
+    );
+    assert!(sales.contains("    const EVENTS: bool = true;\n"), "{sales}");
+    assert!(sales.contains("    fn before_save(&mut self, db: &Db) -> Result<()> {\n        before_save_order(db, self)\n    }\n"), "{sales}");
+    assert!(sales.contains("    fn after_delete(&mut self, db: &Db) -> Result<()> {\n        after_delete_order(db, self)\n    }\n"), "{sales}");
+    // Only the entity with events gets hooks.
+    assert_eq!(sales.matches("const EVENTS").count(), 1, "{sales}");
+}
+
+#[test]
+fn the_renderer_gets_the_language_and_currency() {
+    let mut project = load_converted([("sales.clarity", SALES)]);
+    project.locale.language = Some("nl-NL".into());
+    project.locale.currency = Some("EUR".into());
+    let files = generate(&project, &shop()).unwrap();
+    let model = file(&files, "src/model.json");
+    assert!(model.contains("\"locale\":{\"language\":\"nl-NL\",\"currency\":\"EUR\"}"), "{model}");
+}
+
+#[test]
+fn slots_carry_typed_values_with_their_format() {
+    let text = SALES.to_string()
+        + "
+action check(order: Order, rate: decimal)
+    if order.total > 1000
+        refuse \"{order.number} of {order.total} is {order.status} at {rate}, for a customer since {order.customer.since}\"
+";
+    let project = load_converted([("sales.clarity", text.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let sales = file(&files, "src/modules/sales.rs");
+    for slot in [
+        ".with(\"order.number\", Slot::text(order.number.clone()))",
+        ".with(\"order.total\", Slot::money(order.total, None))",
+        ".with(\"order.status\", Slot::name(&order.status, \"OrderStatus\"))",
+        ".with(\"rate\", Slot::decimal(rate, None, None))",
+        // The field's format travels with the value.
+        ".with(\"order.customer.since\", Slot::date(db.load::<Customer>(order.customer)?.since, Some(\"long\")))",
+    ] {
+        assert!(sales.contains(slot), "{slot} in\n{sales}");
+    }
+}
+
+#[test]
+fn a_refusal_reaches_the_screen_with_its_slots() {
+    let files = files();
+    let main = &program(&files);
+    // What goes wrong is the runtime's text: a refusal with its slots, any other error or a panic plainly (runtimes/rust/tests/program.rs).
+    assert!(main.contains("use clarity_runtime::program::{self, Answer, Program};"), "{main}");
+    assert!(main.contains("program::guarded(&app.0, run)"), "{main}");
+    assert!(main.contains("    fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {"), "{main}");
+}
+
+#[test]
+fn the_application_carries_its_translations() {
+    let mut project = load_converted([("sales.clarity", SALES)]);
+    project.translations.insert("nl".into(), [("Order".to_string(), "Bestelling".to_string())].into());
+    let files = generate(&project, &shop()).unwrap();
+    let model = file(&files, "src/model.json");
+    assert!(model.contains("\"translations\":{\"nl\":{\"Order\":\"Bestelling\"}}"), "{model}");
+}
+
+#[test]
+fn the_application_carries_its_theme() {
+    let text = SALES.to_string() + "\ntheme Shop\n    color accent \"#1f6f5c\"\n    style primary background accent\n";
+    let mut project = load_converted([("sales.clarity", text.as_str())]);
+    clarity_spec::themes::use_themes(&mut project, &["Shop"]);
+    let files = generate(&project, &shop()).unwrap();
+    let model = file(&files, "src/model.json");
+    assert!(model.contains("\"themes\":[\"Shop\"]"), "{model}");
+    assert!(model.contains("\"light\":\"#1f6f5c\""), "{model}");
+}
+
+/// A window opens at the size it says: Clarity.UI opens the desktop window
+/// at the main window's size, else the standard one.
+#[test]
+fn a_window_opens_at_its_size() {
+    assert!(program(&files()).contains("    width: 1100.0,\n    height: 760.0,\n"));
+    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
+    let project = load_converted([("sales.clarity", sized.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let main = program(&generate(&project, &shop()).unwrap());
+    assert!(main.contains("    width: 640.0,\n    height: 480.0,\n"), "{main}");
+}
+
+/// A record's id, which code can read, is the record's `id`.
+#[test]
+fn a_record_s_id_reads_as_its_id() {
+    let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("Ok((order.id == other.id))"), "{sales}");
+}
+
+/// The selected row goes on into paths and calls, as any record does.
+#[test]
+fn the_selected_row_is_a_record_in_any_expression() {
+    let source = SALES.replace(
+        "        open OrderForm with order = grid.selected\n",
+        "        approve(grid.selected)\n        message \"{grid.selected.number} of {grid.selected.customer.name} is approved\"\n        open OrderForm with order = grid.selected\n",
+    );
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("approve(db, &mut ui.selected(\"grid\", &w.orders)?)?;"), "{sales}");
+    assert!(sales.contains("ui.selected(\"grid\", &w.orders)?.number"), "{sales}");
+}
+
+/// A record given to a reference field is stored as its id.
+#[test]
+fn a_reference_field_takes_a_record() {
+    let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("order.customer = Some(customer.id);"), "{sales}");
+}
+
+/// `none`, the empty value of a date or reference (X2).
+#[test]
+fn none_is_an_empty_option() {
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    for line in ["order.customer.is_none()", "!db.load::<Customer>(order.customer)?.since.is_none()", "customer.since = None;", "order.customer = None;", "Cond::is_none(\"customer\")"] {
+        assert!(sales.contains(line), "{line} not in {sales}");
+    }
+}
+
+/// `today()` and `now()` read the runtime's clock (X2).
+#[test]
+fn today_reads_the_clock() {
+    let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("customer.since = Some(clarity_runtime::today());"), "{sales}");
+    assert!(sales.contains("(customer.since > Some(clarity_runtime::today()))"), "{sales}");
+}
+
+/// An unbound checkbox holds its own state, sent with the window (X2).
+#[test]
+fn an_unbound_checkbox_is_checked_in_the_window_state() {
+    let source = SALES
+        .replace("    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n", "    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n    checkbox \"Only mine\" name mine at 5,7 span 3\n")
+        .replace("            numberFilter.text = \"\"\n", "            numberFilter.text = \"\"\n        if mine.checked\n            mine.checked = false\n");
+    let project = load_converted([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("if ui.checked(\"mine\") {"), "{sales}");
+    assert!(sales.contains("ui.set_checked(\"mine\", false);"), "{sales}");
+}
+
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction albumLength(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
+
+/// A duration is whole seconds; its slot shows it as 3:45 (X2).
+#[test]
+fn a_duration_is_seconds_with_its_own_slot() {
+    let project = load_converted([("music.clarity", MUSIC)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let music = file(&files, "src/modules/music.rs");
+    assert!(music.contains("pub length: i64,"), "{music}");
+    assert!(music.contains("            length: 180i64,"), "{music}");
+    assert!(music.contains(".with(\"track.length\", Slot::duration(track.length))"), "{music}");
+}
+
+/// X2: a query through a reference: the condition and the order read the
+/// referred record in a subquery.
+#[test]
+fn a_query_goes_through_a_reference() {
+    let source = format!(
+        "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
+    );
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    for expected in [
+        ".filter(Cond::through(\"customer\", \"customer\", \"id\", Cond::contains(\"name\", &name)).and(Cond::through(\"customer\", \"customer\", \"id\", Cond::number(\"credit_limit\", Op::Gt, ",
+        ".order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"name\", true, false).order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true))?",
+    ] {
+        assert!(sales.contains(expected), "{expected}\nin\n{sales}");
+    }
+}
+
+/// A loop that changes and saves its records works on the records in the
+/// list, as on the other stacks.
+#[test]
+fn a_loop_changes_and_saves_its_records() {
+    let source = format!("{SALES}\naction approveAll(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
+    assert!(sales.contains("for order in found.iter() {"), "{sales}");
+}
+
+/// Rows read again, or replaced by a query, are other records: a table or
+/// list showing them loses its selected row, as on every stack.
+#[test]
+fn rows_read_again_lose_their_selected_row() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("    w.orders = db.all::<Order>()?;\n    ui.deselect(\"grid\");\n"), "{sales}");
+    assert!(sales.contains(".order(\"number\", false))?;\n    ui.deselect(\"grid\");\n"), "{sales}");
+    // A single record read again keeps what is chosen.
+    assert_eq!(sales.matches("ui.deselect(").count(), 2, "{sales}");
+}
+
+/// The record a table shows is saved and deleted as it is, as every stack
+/// does: `save grid.selected` after a cell was edited (LANGUAGE.md, Editing
+/// in a table).
+#[test]
+fn the_selected_row_is_saved_and_deleted_as_it_is() {
+    let source = SALES.replace(
+        "    handler gridOpened\n",
+        "    handler gridChanged\n        save grid.selected\n        delete grid.selected\n\n    handler gridOpened\n",
+    );
+    let project = load_converted([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("    db.save(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
+    assert!(sales.contains("    db.delete(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
+}
+
+/// A click passes values: each written call is dispatched with its values
+/// compiled in, and a handler may call another with values.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = SALES
+        .replace(
+            "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
+            "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"7\" name d7 at 3,6 span 1 on click: digit(7)\n    button \"Half\" name half at 4,6 span 1 on click: scale(0.5, \"half\", true)\n    button \"Ok\" name ok at 5,6 span 1 on click: mark(Approved)",
+        )
+        .replace(
+            "    handler orderSubmitted\n",
+            "    handler digit(d: integer)\n        numberFilter.text = \"\"\n\n    handler scale(by: decimal, word: text, loud: bool)\n        digit(3)\n\n    handler mark(status: OrderStatus)\n        digit(1)\n\n    handler orderSubmitted\n",
+        );
+    let project = load_converted([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub fn order_form__digit(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, d: i64) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("pub fn order_form__scale(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, by: Decimal, word: String, loud: bool) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("    order_form__digit(db, w, ui, 3i64)?;\n"), "{sales}");
+    let main = &program(&files);
+    assert!(main.contains("(\"OrderForm\", \"digit(7)\") => {"), "{main}");
+    assert!(main.contains("sales::order_form__digit(db, &mut w, &mut ui, 7i64)?;"), "{main}");
+    assert!(main.contains("(\"OrderForm\", \"scale(0.5, \\\"half\\\", true)\") => {"), "{main}");
+    // main.rs reaches the module's types by their paths.
+    assert!(main.contains("sales::order_form__scale(db, &mut w, &mut ui, clarity_runtime::Decimal::new(5, 1), String::from(\"half\"), true)?;"), "{main}");
+    assert!(main.contains("sales::order_form__mark(db, &mut w, &mut ui, modules::sales::OrderStatus::Approved)?;"), "{main}");
+    // A handler that takes values is only called with them.
+    assert!(!main.contains("(\"OrderForm\", \"digit\")"), "{main}");
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A function that returns texts, plain and with a slot.
+const VERDICT: &str = "
+function verdict(n: integer) -> text
+    if n > 2
+        return \"Draw\"
+    return \"Turn {n}\"
+";
+
+/// A window holds plain values: fields of its data, at their default or
+/// empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SALES}{CALC}{VERDICT}");
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", source.as_str())], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    for field in ["pub shown: Decimal,", "pub pending: OrderStatus,", "pub fresh: bool,", "pub word: String,", "pub count: i64,", "pub rate: Decimal,"] {
+        assert!(sales.contains(field), "{field} in {sales}");
+    }
+    for load in ["shown: Default::default(),", "pending: Default::default(),", "fresh: true,", "word: clarity_runtime::i18n::text(\"calcWord\"),", "count: 2i64,", "rate: Decimal::new(5, 1),"] {
+        assert!(sales.contains(load), "{load} in {sales}");
+    }
+    assert!(sales.contains("w.fresh = false;"), "{sales}");
+    assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    assert!(sales.contains("ui.set_shown(\"word\", Text::plain(\"x\"));"), "{sales}");
+    assert!(sales.contains("return Ok(String::from(\"Draw\"));"), "{sales}");
+    assert!(sales.contains("Text::new(\"Turn {n}\").with(\"n\", "), "{sales}");
+}
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_converted([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("round(x, 2i64)"), "{code}");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
+
+code Dial
+    handler drawDial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler fasterClicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing; every handler of the
+/// window, and opening it, draws the canvas anew.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SALES}{DIAL}");
+    let project = load_converted([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("ui.draw(\"dial\", serde_json::json!({\"op\": \"clear\", \"color\": "), "{sales}");
+    assert!(sales.contains("\"op\": \"line\", \"x1\": (50i64) as f64, \"y1\": (50i64) as f64, \"x2\": clarity_runtime::units("), "{sales}");
+    assert!(sales.contains("clarity_runtime::cos(w.angle)"), "{sales}");
+    assert!(sales.contains("\"width\": (3i64) as f64}));"), "{sales}");
+    // Left out: the text's color and size.
+    assert!(sales.contains("\"color\": \"text\", \"size\": 10.0, \"align\": \"center\", \"style\": \"\"}));"), "{sales}");
+    let main = &program(&files);
+    assert!(main.contains("ui.begin_drawing(\"dial\");\n            modules::sales::dial__draw_dial(db, &mut w, &mut ui)?;"), "{main}");
+    assert!(main.contains("redraw(db, "), "{main}");
+}
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
+    let project = load_converted([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("clarity_runtime::whole_add(ui.x(\"dial\"), ui.y(\"dial\"))?"), "{sales}");
+}
+
+/// The web target (manual/project.run-build.md, round B of 7.9): the program serves
+/// Clarity.UI's browser files and answers their wire with the program;
+/// beside the desktop target, one program does both and `--serve` serves.
+#[test]
+fn the_web_target_serves_the_browser_files_and_the_wire() {
+    use clarity_project::Target;
+    let project = load_converted([("sales.clarity", SALES)]);
+    let main_of = |targets: Vec<Target>| {
+        let mut settings = shop();
+        settings.stack.targets = targets;
+        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+        file(&files, "src/main.rs").to_string()
+    };
+    let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
+    let desktop = main_of(vec![Target::Desktop]);
+    assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
+    has(&desktop, "    let app = App(Mutex::new(db));\n    clarity_runtime::native_ui::run(app, FILES)\n");
+    let web = main_of(vec![Target::Web]);
+    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &|command, args| clarity_runtime::wire::answer(&app, command, args))");
+    // Nor does it link Clarity.UI: the browser files are in the program.
+    assert!(!web.contains("clarity_ui"), "{web}");
+    for served in ["index.html", "clarity/files.json", "clarity-ui.js", "clarity-ui.wasm", "clarity-ui-worker.js", "clarity-ui-page.js"] {
+        has(&web, &format!("            \"{served}\" => Some(include_bytes!(\"../browser/{served}\").to_vec()),\n"));
+    }
+    // The facts the parts read, answered over the wire as on the desktop.
+    has(&web, "    fn facts_json(&self) -> Value {\n        facts::FACTS.to_json()\n    }\n");
+    let mut settings = shop();
+    settings.stack.targets = vec![Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    assert!(!file(&files, "Cargo.toml").contains("clarity-ui"), "{}", file(&files, "Cargo.toml"));
+    assert!(files.iter().any(|f| f.path == "browser/clarity/files.json") && !files.iter().any(|f| f.path.starts_with("ui/")));
+    // Both: the desktop program, which serves with --serve.
+    let both = main_of(vec![Target::Desktop, Target::Web]);
+    has(&both, "    if std::env::args().any(|arg| arg == \"--serve\") {\n        let files = |path: &str|");
+    has(&both, "        return std::process::ExitCode::SUCCESS;\n    }\n    clarity_runtime::native_ui::run(app, FILES)\n");
+    settings.stack.targets = vec![Target::Desktop, Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    // The desktop links Clarity.UI's ready-made library; the browser files are in the program.
+    assert!(file(&files, "Cargo.toml").contains("\"native-ui\"") && files.iter().any(|f| f.path == "build.rs"));
+    assert!(files.iter().any(|f| f.path == "browser/index.html") && files.iter().any(|f| f.path == "windows/OrderForm.cxaml"));
+}
+
+/// Backend drives frontend (manual/start.how-it-works.md): the screen sends the person's
+/// action and the runtime decides what it does, on the desktop and on the web.
+#[test]
+fn the_runtime_decides_what_the_persons_action_does() {
+    use clarity_project::Target;
+    let project = load_converted([("sales.clarity", SALES)]);
+    let main = program(&files());
+    // Clarity.UI decides a moved row, a typed item, a stepped slider and a view itself and sends the result as an edit;
+    // the program answers a wizard's step, a canvas action and an edit.
+    for (command, readonly, call) in [
+        ("step_event", false, "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
+    ] {
+        // A part's options are the runtime's parameters (manual/start.how-it-works.md): a readonly part's change is taken back.
+        // The program (manual/start.how-it-works.md) calls the runtime.
+        assert!(main.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{main}");
+        // A wizard's Next and Finish run handlers, whose refused save shows at its input.
+        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { format!("shown_at_input(db, state, |state| {call})") };
+        assert!(main.contains(&format!("window_reply(locked(self, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
+    }
+    // Canvas modes (manual/parts.graphics.md): the runtime applies the person's action and runs on change as one edit.
+    assert!(main.contains("window_reply(locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
+    assert!(main.contains("clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
+    assert!(main.contains("window_reply(locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::stepped(db, || dispatch(db, state, handler)))))"), "{main}");
+    let mut settings = shop();
+    settings.stack.targets = vec![Target::Web];
+    let web = generate(&project, &settings).unwrap();
+    let web = file(&web, "src/main.rs");
+    // The browser's commands reach the same program, through the runtime's wire (clarity_runtime::wire).
+    assert!(web.contains("&|command, args| clarity_runtime::wire::answer(&app, command, args)"), "{web}");
+    for command in ["step_event", "canvas_event"] {
+        assert!(web.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{web}");
+    }
+    assert!(web.contains("clarity_runtime::dropdown_options::offered(options(db, entity)?, show)"), "{web}");
+}
+
+#[test]
+fn the_program_answers_no_event_clarity_ui_decides_itself() {
+    let main = program(&files());
+    for command in ["reorder_event", "item_event", "range_event", "view_event"] {
+        assert!(!main.contains(&format!("fn {command}(")), "{command} in\n{main}");
+    }
+    assert!(!main.contains("views::"), "{main}");
+}
+
+/// A canvas with a mode (manual/parts.graphics.md): handlers read and set its tool, brush
+/// and ink as part state, each with its design value, and read what the
+/// person touched: an object's record, or a shape's place from 1.
+#[test]
+fn a_canvas_with_a_mode_has_its_tool_brush_ink_and_selected() {
+    let source = "module board
+
+entity Shape
+    x: integer
+    y: integer
+
+entity Note
+    drawing: text
+
+page Board: window
+    data shapes: list<Shape>
+    data note: Note
+    data picked: integer
+    canvas name diagram at 1,1 span 6 rows 6 mode objects shapes at x, y on draw: drawBoard on change: moved
+    canvas name sketch at 7,1 span 6 rows 6 bind note.drawing mode vector tools rect, line brush 4 ink accent on change: drew
+    canvas name plain at 1,7 span 6 rows 6 bind note.drawing mode vector on change: drew
+
+code Board
+    handler drawBoard
+        diagram.clear(\"#ffffff\")
+
+    handler moved
+        picked = diagram.selected.x
+
+    handler drew
+        picked = sketch.selected
+        sketch.tool = \"line\"
+        sketch.brush = sketch.brush + plain.brush
+        sketch.ink = plain.ink + plain.tool
+";
+    let project = load_converted([("board.clarity", source)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let board = file(&files, "src/modules/board.rs");
+    for code in [
+        "ui.selected(\"diagram\", &w.shapes)?.x",
+        "ui.selected_place(\"sketch\")",
+        "ui.set_tool(\"sketch\", String::from(\"line\"));",
+        "ui.set_brush(\"sketch\", clarity_runtime::whole_add(ui.brush(\"sketch\", 4), ui.brush(\"plain\", 2))?);",
+        "ui.ink(\"plain\", \"text\")",
+        "ui.tool(\"plain\", \"select\")",
+    ] {
+        assert!(board.contains(code), "{code} in\n{board}");
+    }
+}
+
+/// An action takes a record to change only when it changes it (sets its
+/// fields, saves or deletes it, or hands it to an action that does), so code
+/// can hand it a record it only reads, as a loop's.
+#[test]
+fn an_action_takes_a_record_to_change_only_when_it_changes_it() {
+    let source = "module boxes
+
+entity Box
+    name: text(40)
+    x: integer
+    y: integer
+
+action width(b: Box) -> integer
+    effects db.read
+    return length(b.name) * 7
+
+action moved(b: Box)
+    effects db.write
+    b.x = b.x + 20
+    save b
+
+action movedTwice(b: Box)
+    effects db.write
+    moved(b)
+    moved(b)
+
+action widest(boxes: list<Box>) -> integer
+    effects db.read
+    let most = 0
+    for b in boxes
+        if width(b) > most
+            most = width(b)
+    return most
+";
+    // A window to start with: these come after the shop's own module.
+    let project = load_converted([("sales.clarity", SALES), ("boxes.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
+    assert!(code.contains("pub fn width(db: &Db, b: &Box) -> Result<i64>"), "{code}");
+    assert!(code.contains("pub fn moved(db: &Db, b: &mut Box) -> Result<()>"), "{code}");
+    assert!(code.contains("pub fn movedTwice(db: &Db, b: &mut Box) -> Result<()>"), "a record handed on to an action that changes it is changed: {code}");
+    assert!(code.contains("for b in boxes.iter() {"), "{code}");
+    assert!(code.contains("width(db, b)?"), "a record the loop only reads goes as it is: {code}");
+}
+
+/// A loop over a list of the window that runs a handler of the window holds
+/// its item by its place in the list, as the other stacks hold the list's
+/// own item: the handler takes the whole window, and the loop ends when the
+/// handler left its item out of the list.
+#[test]
+fn a_loop_that_runs_a_handler_holds_its_item_by_its_place() {
+    let source = "module tally
+
+entity Tile
+    x: integer
+
+page Tally: window
+    data tiles: list<Tile>
+    data total: integer
+    button \"Count\" name countButton at 1,1 span 2 on click: counted
+
+code Tally
+    handler counted
+        for t in tiles
+            add(t.x)
+
+    handler add(n: integer)
+        total = total + n
+";
+    let project = load_converted([("sales.clarity", SALES), ("tally.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
+    assert!(code.contains("'at_t: while at_t < w.tiles.len() {\n            tally__add(db, w, ui, w.tiles[at_t].x)?;\n            if at_t >= w.tiles.len() {\n                break 'at_t;"), "{code}");
+}
+
+/// A web page's tab shows the application's icon, a picture among its resources.
+#[test]
+fn the_page_shows_the_application_s_icon() {
+    let page = clarity_gen_core::web_browser::page("Shop", Some("app.png"));
+    assert!(page.contains("<link rel=\"icon\" href=\"clarity/resources/app.png\">"), "{page}");
+    assert!(!clarity_gen_core::web_browser::page("Shop", None).contains("rel=\"icon\""));
+}

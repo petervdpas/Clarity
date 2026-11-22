@@ -1,0 +1,100 @@
+module calculator
+
+// What each person sets for themselves, kept on their machine: the
+// language, the look, and the decimals a result is rounded to.
+settings
+    language
+    theme
+    decimals: integer, min 0, max 8, default 4, label @settingsDecimalsLabel
+
+theme Calculator
+    title @calculatorTheme
+    mode system
+    color lcd "#c7d3a8" dark "#1d2618"
+    color lcd_text "#1f2a14" dark "#a8e890"
+    style display background lcd, text lcd_text, border none, radius 6
+    style operator background accent_soft, text accent, weight bold
+    style equals background accent, text on_accent, weight bold
+
+enum Operation
+    Nothing label @operationNothing
+    Add label @operationAdd
+    Subtract label @operationSubtract
+    Multiply label @operationMultiply
+    Divide label @operationDivide
+
+function calculate(a: decimal, op: Operation, b: decimal) -> decimal
+    if op == Add
+        return a + b
+    if op == Subtract
+        return a - b
+    if op == Multiply
+        return a * b
+    if op == Divide
+        if b == 0
+            refuse @cannotDivideByZero
+        return a / b
+    return b
+
+code Keypad
+    handler digit(d: integer)
+        if fresh
+            entry = 0
+            factor = 1
+            digits = 0
+            fresh = false
+        // A display holds 12 digits; a leading zero is none.
+        if digits == 12
+            return
+        if d == 0 and entry == 0 and factor == 1
+            shown = entry
+            return
+        digits = digits + 1
+        if factor == 1
+            entry = entry * 10 + d
+        else
+            entry = entry + d * factor
+            factor = factor / 10
+        shown = entry
+
+    handler point
+        if fresh
+            entry = 0
+            shown = 0
+            fresh = false
+            factor = 0.1
+        else if factor == 1
+            factor = 0.1
+
+    handler operation(op: Operation)
+        if pending == Nothing
+            total = entry
+        else if not fresh
+            total = calculate(total, pending, entry)
+        shown = round(total, settings.decimals)
+        pending = op
+        fresh = true
+
+    handler equals
+        if pending != Nothing
+            entry = calculate(total, pending, entry)
+            total = entry
+            shown = round(entry, settings.decimals)
+            pending = Nothing
+        fresh = true
+
+    handler clear
+        shown = 0
+        entry = 0
+        total = 0
+        pending = Nothing
+        factor = 1
+        fresh = true
+
+    handler changeSign
+        entry = -entry
+        shown = entry
+
+    handler percent
+        entry = entry / 100
+        shown = entry

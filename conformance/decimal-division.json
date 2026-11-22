@@ -1,0 +1,19 @@
+{
+  "about": "Dividing decimals (`a / b`) on every stack (the user, 2026-11-21: \"28 significant digits\" and, for dividing by zero, \"Value error, handler stops\"): the quotient as a decimal of up to 28 places whose whole number of units fits in 96 bits, the last digit rounded, as Rust and C# divide; an exact quotient keeps only the places it needs. Dividing by zero is a value error: the handler stops and the window says it. Each case gives `a`, `b` and the `quotient` as text, or `error` true.",
+  "cases": [
+    { "a": "1", "b": "3", "quotient": "0.3333333333333333333333333333" },
+    { "a": "2", "b": "3", "quotient": "0.6666666666666666666666666667" },
+    { "a": "10", "b": "3", "quotient": "3.3333333333333333333333333333" },
+    { "a": "1", "b": "7", "quotient": "0.1428571428571428571428571429" },
+    { "a": "-1", "b": "3", "quotient": "-0.3333333333333333333333333333" },
+    { "a": "1000000000000", "b": "3", "quotient": "333333333333.33333333333333333" },
+    { "a": "100", "b": "8", "quotient": "12.5" },
+    { "a": "1.00", "b": "4", "quotient": "0.25" },
+    { "a": "6.0", "b": "3", "quotient": "2" },
+    { "a": "1", "b": "0.5", "quotient": "2" },
+    { "a": "100", "b": "0.5", "quotient": "200" },
+    { "a": "1250.50", "b": "2", "quotient": "625.25" },
+    { "a": "1", "b": "0", "error": true },
+    { "a": "0", "b": "0.00", "error": true }
+  ]
+}

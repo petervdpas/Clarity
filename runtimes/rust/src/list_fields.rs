@@ -3,8 +3,7 @@
 //! text that is no value of the list's kind is refused, and the screen keeps
 //! it as typed. Every runtime adds alike (conformance/list-fields.json, added).
 
-use crate::ui::{Reply, WindowState};
-use crate::{Db, Decimal, Error, NaiveDate, Result};
+use crate::{Decimal, NaiveDate};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -78,40 +77,4 @@ pub fn added(kind: ItemKind, values: &[String], items: &[Value], typed: &str) ->
         list.push(item);
     }
     Added::Items(list)
-}
-
-/// `item_event` (manual/start.how-it-works.md): an item typed for the list at `path` in the
-/// window's data. An added item sets the list, then `run` runs the handler
-/// as an edit ends (`edits::ended`); nothing added answers the window as it
-/// is (`draw`), and a refused item too, with the reply saying `refused`.
-#[allow(clippy::too_many_arguments)]
-pub fn event(
-    db: &Db,
-    mut state: WindowState,
-    part: &str,
-    path: &str,
-    kind: ItemKind,
-    values: &[String],
-    typed: &str,
-    scope: Option<&str>,
-    run: impl FnOnce(WindowState) -> Result<Reply>,
-    draw: impl FnOnce(WindowState) -> Result<Reply>,
-) -> Result<Reply> {
-    let items = match crate::ui::data_at(&state.data, path) {
-        Some(Value::Array(items)) => items.clone(),
-        Some(Value::Null) | None => vec![],
-        Some(_) => return Err(Error::Invalid(format!("{path} is no list"))),
-    };
-    match added(kind, values, &items, typed) {
-        Added::Refused => {
-            let mut reply = draw(state)?;
-            reply.refused = true;
-            Ok(reply)
-        }
-        Added::Items(list) if list == items => draw(state),
-        Added::Items(list) => {
-            crate::ui::set_data_at(&mut state.data, path, Value::Array(list))?;
-            crate::edits::ended(db, state, part, scope, run)
-        }
-    }
 }

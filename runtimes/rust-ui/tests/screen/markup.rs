@@ -102,6 +102,14 @@ fn every_kind_of_the_catalog_reads() {
     }
 }
 
+/// Every kind of the catalog has its drawer: none shows "not drawn yet" in a program.
+#[test]
+fn every_kind_of_the_catalog_is_drawn() {
+    let drawn = clarity_ui::parts::drawn();
+    let missing: Vec<&str> = markup::kinds().filter(|k| !drawn.iter().any(|d| d == k)).collect();
+    assert!(missing.is_empty(), "kinds of the catalog Clarity.UI does not draw: {missing:?}");
+}
+
 #[test]
 fn a_markup_with_an_unknown_part_or_no_well_formed_xml_is_refused() {
     assert!(markup::read("<Window><Gizmo /></Window>").is_err());

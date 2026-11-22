@@ -49,7 +49,7 @@ fi
 # The package carries Clarity.UI's library for Go, C and C++ builds (manual/start.how-it-works.md);
 # Skia's text needs fontconfig and freetype, the sound part ALSA.
 bash .github/scripts/stage-clarity-ui.sh
-# The package ships the clarity command-line tool as /usr/bin/clarity.
+# The package ships the clarity command-line tool as /usr/bin/clarity, and Clarity's migration tool as /usr/bin/clarity-migrate.
 bash .github/scripts/stage-clarity-cli.sh
 
 cd app

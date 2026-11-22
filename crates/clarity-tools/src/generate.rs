@@ -41,6 +41,9 @@ pub fn generate(project_file: &Path, out: Option<&Path>) -> Result<Vec<String>, 
             .map_err(|why| vec![why])?;
     }
     let changed = clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).map_err(|err| vec![format!("cannot write {}: {err}", out.display())])?;
+    // With `include migrate`, Clarity's data migration tools beside the programs (docs/ledger/migrations.md).
+    let tools = clarity_gen::write_migration_tools(&out, &project, &built, &clarity_gen::clarity_programs_folder()).map_err(|why| vec![why])?;
+    lines.extend(tools.iter().map(|name| format!("wrote {}", out.join(name).display())));
     for program in &programs {
         let dir = clarity_project::target_dir(&out, program.target);
         lines.push(format!("{} file(s) in {}", program.files.len(), dir.display()));

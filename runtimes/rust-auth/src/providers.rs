@@ -108,7 +108,7 @@ fn discovery(issuer: &str) -> Result<Map<String, Value>, String> {
 
 /// A GET whose answer is JSON, with the access token when given.
 fn get_json(url: &str, token: Option<&str>) -> Result<Value, String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(30))).http_status_as_error(false).build().into();
+    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(crate::HTTP_SECONDS))).http_status_as_error(false).build().into();
     let mut request = agent.get(url).header("Accept", "application/json").header("User-Agent", "Clarity");
     if let Some(token) = token {
         request = request.header("Authorization", &format!("Bearer {token}"));

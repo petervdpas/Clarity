@@ -111,20 +111,5 @@ internal abstract class ServerDriver(DbConnection conn) : IDriver
         return command.ExecuteNonQuery();
     });
 
-    /// <summary>Runs every statement of a step and records it, all or nothing.</summary>
-    public virtual void Apply(int version, IReadOnlyList<string> statements) => Run(() =>
-    {
-        using var tx = Conn.BeginTransaction();
-        foreach (var statement in statements)
-        {
-            using var command = Command(statement, [], tx);
-            command.ExecuteNonQuery();
-        }
-        using (var applied = Command(Store.Applied(version), [], tx))
-            applied.ExecuteNonQuery();
-        tx.Commit();
-        return 0;
-    });
-
     public void Dispose() => Conn.Dispose();
 }

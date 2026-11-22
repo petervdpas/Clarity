@@ -112,6 +112,12 @@ From tightest to loosest:
 7. `and`
 8. `or`
 
+### Numbers that do not fit
+
+Every stack works numbers out alike. A whole number is 64 bits, from -9223372036854775808 to 9223372036854775807. A decimal or money holds up to 28 places, and up to 79228162514264337593543950335 units: `1.5 * 1.5` is 2.25, and a result with more places than fit is rounded to the places that do, a tie to the even digit. `a / b` gives up to 28 places, the last one rounded; an exact quotient keeps only the places it needs, so `6.0 / 3` is 2.
+
+A result that does not fit, such as `9223372036854775807 + 1`, is an error, as dividing by zero is: the handler stops, nothing it changed is kept, and the window says why in Clarity's words `numberTooLarge` ("The number is too large") or `divisionByZero` ("Division by zero"). Every project with windows has both words in its language files.
+
 In `write text to store "path"`, the `to` belongs to `write`.
 
 ```clarity

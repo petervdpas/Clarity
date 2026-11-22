@@ -16,12 +16,6 @@ use super::{EditApplied, HistoryState, WatchState, apply_edit, open_dir_of};
 /// The rows a preview shows of each table.
 const PREVIEW_ROWS: usize = 50;
 
-/// Every mapping of the open project, in file order.
-#[tauri::command]
-pub fn list_mappings(state: State<WatchState>) -> Result<Vec<MappingEntry>, String> {
-    clarity_project::mappings::mappings(&open_dir_of(&state)?)
-}
-
 /// The mapping called `name`: where it is declared and its form.
 #[tauri::command]
 pub fn read_mapping(name: String, state: State<WatchState>) -> Result<MappingEntry, String> {

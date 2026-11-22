@@ -52,18 +52,31 @@ void clarity_sort_files(ClarityFileList* files, size_t count, const ClarityFileO
 }
 
 bool clarity_outside(int64_t position, size_t count) {
-    return clarity_fail(CLARITY_VALUE, "there is no item %lld in a list of %zu", (long long)position, count);
+    ClarityText* said = clarity_text_with(clarity_text_with(clarity_keyed_text("itemOutsideList", "There is no item {position} in a list of {count}"), "position", clarity_slot_integer(position, NULL)), "count",
+                                          clarity_slot_integer((int64_t)count, NULL));
+    return clarity_value_error(said, "there is no item %lld in a list of %zu", (long long)position, count);
 }
 
+static bool too_large(void) { return clarity_too_large(); }
+
+bool clarity_whole_add(int64_t a, int64_t b, int64_t* out) { return __builtin_add_overflow(a, b, out) ? too_large() : true; }
+
+bool clarity_whole_sub(int64_t a, int64_t b, int64_t* out) { return __builtin_sub_overflow(a, b, out) ? too_large() : true; }
+
+bool clarity_whole_mul(int64_t a, int64_t b, int64_t* out) { return __builtin_mul_overflow(a, b, out) ? too_large() : true; }
+
+bool clarity_whole_neg(int64_t a, int64_t* out) { return __builtin_sub_overflow((int64_t)0, a, out) ? too_large() : true; }
+
 bool clarity_whole_div(int64_t a, int64_t b, int64_t* out) {
-    if (b == 0) return clarity_fail(CLARITY_VALUE, "division by zero");
-    // The lowest number divided by -1 has no whole quotient in 64 bits: it wraps, as the other runtimes do.
-    *out = b == -1 ? (int64_t)(0 - (uint64_t)a) : a / b;
+    if (b == 0) return clarity_division_by_zero();
+    // The lowest number divided by -1 has no whole quotient in 64 bits.
+    if (b == -1) return clarity_whole_neg(a, out);
+    *out = a / b;
     return true;
 }
 
 bool clarity_whole_mod(int64_t a, int64_t b, int64_t* out) {
-    if (b == 0) return clarity_fail(CLARITY_VALUE, "division by zero");
+    if (b == 0) return clarity_division_by_zero();
     *out = b == -1 ? 0 : a % b;
     return true;
 }

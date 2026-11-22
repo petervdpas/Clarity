@@ -73,7 +73,7 @@ public sealed class RequiredTests
     public void An_order_without_its_customer_is_not_saved_and_stays_new()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]);
+        db.ApplySteps([["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]);
         var order = new Ordered { Number = "ORD-1" };
         Assert.Equal("Customer is required", Assert.Throws<RefusedException>(() => db.Save(order)).Message);
         Assert.Equal(0, order.Id);
@@ -92,7 +92,7 @@ public sealed class RequiredTests
     public void A_refused_required_field_shows_why_at_its_input_and_code_gets_the_refusal()
     {
         using var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]);
+        db.ApplySteps([["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]);
         var window = new OrderFormViewModel(db);
         window.SaveClicked();
         // The person sees why at the input that shows the field, as a form check shows it; no message beside it.

@@ -126,7 +126,7 @@ func eachDb(t *testing.T, test func(t *testing.T, db *Db)) {
 			for _, table := range []string{"account", "log", "clarity_schema"} {
 				must(t, db.Batch("", "DROP TABLE IF EXISTS "+d.dialect.Quote(table)))
 			}
-			_, err = db.Migrate([][]string{eventTables[d.dialect]})
+			_, err = applySteps(db, "", [][]string{eventTables[d.dialect]})
 			must(t, err)
 			test(t, db)
 		})
@@ -209,8 +209,8 @@ func TestTextTravelsAsTheOtherRuntimesSendIt(t *testing.T) {
 		With("paid", SlotBool(true)).
 		With("kind", SlotEnum("Business", "CustomerKind"))
 	wire, _ := json.Marshal(saved)
-	equal(t, string(wire), `{"text":"Saved {customer.name} on {when}: {total}, {paid}, {kind}","values":{"customer.name":{"kind":"text","value":"Ada"},"kind":{"kind":"enum","value":"Business","enum":"CustomerKind"},"paid":{"kind":"bool","value":true},"total":{"kind":"decimal","value":"1250.5","scale":2},"when":{"kind":"date","value":"2026-10-17","format":"long"}}}`)
-	equal(t, saved.Show(), "Saved Ada on 2026-10-17: 1250.5, yes, Business")
+	equal(t, string(wire), `{"text":"Saved {customer.name} on {when}: {total}, {paid}, {kind}","values":{"customer.name":{"kind":"text","value":"Ada"},"kind":{"kind":"enum","value":"Business","enum":"CustomerKind"},"paid":{"kind":"bool","value":true},"total":{"kind":"decimal","value":"1250.50","scale":2},"when":{"kind":"date","value":"2026-10-17","format":"long"}}}`)
+	equal(t, saved.Show(), "Saved Ada on 2026-10-17: 1250.50, yes, Business")
 	var back Text
 	must(t, json.Unmarshal(wire, &back))
 	equal(t, back.Show(), saved.Show())

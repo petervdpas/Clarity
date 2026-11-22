@@ -17,6 +17,10 @@ obj/
 /examples/*/data/backups/
 # The files the examples' programs export, such as a saved invoice PDF.
 /examples/*/data/exports/
+# The same for the projects of the tests.
+/test-projects/*/out/
+/test-projects/*/data/backups/
+/test-projects/*/data/exports/
 
 # Settings folders older secrets tests left beside where they ran.
 /clarity-secret-settings-*/

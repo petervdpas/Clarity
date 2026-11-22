@@ -257,21 +257,6 @@ function center(r: Rect): Point {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }
 
-/** Where the line from the center of `r` toward `toward` leaves `r`. */
-function edge(r: Rect, toward: Point): Point {
-  const c = center(r);
-  const dx = toward.x - c.x;
-  const dy = toward.y - c.y;
-  if (dx === 0 && dy === 0) return c;
-  const scale = Math.min(dx === 0 ? Infinity : r.w / 2 / Math.abs(dx), dy === 0 ? Infinity : r.h / 2 / Math.abs(dy));
-  return { x: c.x + dx * scale, y: c.y + dy * scale };
-}
-
-/** Where a line between `a` and `b` meets each of them, on the line between their centers. */
-export function meeting(a: Rect, b: Rect): [Point, Point] {
-  return [edge(a, center(b)), edge(b, center(a))];
-}
-
 type Side = "left" | "right" | "top" | "bottom";
 
 /** The side of `r` the line from its center toward `toward` leaves by. */

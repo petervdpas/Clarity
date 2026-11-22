@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDE_COMMANDS, alsoHas, assign, clashes, commandFor, eventKey, fieldKeeps, keysOf, refused, reset, shownKey, type Layer } from "./keys.ts";
+import { IDE_COMMANDS, alsoHas, assign, commandFor, eventKey, fieldKeeps, keysOf, refused, reset, shownKey, type Layer } from "./keys.ts";
 
 const press = (key: string, more: Partial<KeyboardEventInit & { code: string }> = {}) => ({ key, code: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...more });
 
@@ -36,10 +36,6 @@ test("the innermost active layer answers first, and a key no layer has answers n
   assert.equal(commandFor("F5", ["project", "global"], IDE_COMMANDS, {}), "project.reload");
 });
 
-test("the IDE's own keys do not clash within a layer", () => {
-  assert.deepEqual(clashes(IDE_COMMANDS, {}), []);
-});
-
 test("the person's keys take the place of the design's, and only what differs is kept", () => {
   const choices = assign(IDE_COMMANDS, {}, "vault.lock", "Ctrl+K").choices;
   assert.deepEqual(choices, { "vault.lock": ["Ctrl+K"] });
@@ -50,16 +46,6 @@ test("the person's keys take the place of the design's, and only what differs is
   assert.deepEqual(assign(IDE_COMMANDS, choices, "vault.lock", "Ctrl+L").choices, {});
   // A command without a key in the design gets one.
   assert.deepEqual(assign(IDE_COMMANDS, {}, "agent", "Ctrl+J").choices, { agent: ["Ctrl+J"] });
-});
-
-test("a key taken in the same layer swaps: the other command gets the key this one had", () => {
-  const done = assign(IDE_COMMANDS, {}, "vault.add", "Ctrl+Shift+C");
-  assert.equal(done.swapped, "vault.copy");
-  assert.deepEqual(done.choices, { "vault.add": ["Ctrl+Shift+C"], "vault.copy": ["Ctrl+N"] });
-  assert.deepEqual(clashes(IDE_COMMANDS, done.choices), []);
-  // An outer layer's key is no clash: the inner one wins while it shows.
-  assert.equal(assign(IDE_COMMANDS, {}, "vault.lock", "Ctrl+O").swapped, null);
-  assert.equal(assign(IDE_COMMANDS, {}, "vault.lock", "Ctrl+N").swapped, null);
 });
 
 test("the keys the system and the inputs need are refused, saying why", () => {

@@ -64,16 +64,6 @@ fn a_folder_is_a_full_path() {
     assert_eq!(Folders::problem(&taken), Some(format!("{taken} is a file, not a folder")));
 }
 
-#[test]
-fn a_new_project_name_is_a_file_in_the_projects_folder() {
-    let folders = Folders { projects: Some(PathBuf::from("/work")), output: None };
-    assert_eq!(folders.new_project_file("shop").unwrap(), Path::new("/work/shop.clarity"));
-    assert_eq!(folders.new_project_file(" my shop.clarity ").unwrap(), Path::new("/work/my shop.clarity"));
-    assert!(folders.new_project_file("").unwrap_err().contains("name"));
-    assert!(folders.new_project_file("a/b").unwrap_err().contains("name"));
-    assert!(Folders::default().new_project_file("shop").unwrap_err().contains("projects folder"));
-}
-
 /// The New project dialog's folder: the project's file and its modules'
 /// folder go there, and a name that is taken there is refused before anything is made.
 #[test]
@@ -86,6 +76,9 @@ fn a_new_project_goes_in_the_folder_chosen_unless_its_name_is_taken() {
     std::fs::create_dir_all(dir.join("modules")).unwrap();
     assert!(new_project_in(&dir, "modules").unwrap_err().contains("is there already"), "its modules' folder is taken");
     assert!(new_project_in(&dir, "").unwrap_err().contains("name"));
+    // A name is trimmed and its `.clarity` taken off; one with a slash names no file of the folder.
+    assert_eq!(new_project_in(&dir, " my shop.clarity ").unwrap(), dir.join("my shop.clarity"));
+    assert!(new_project_in(&dir, "a/b").unwrap_err().contains("name"));
     assert!(new_project_in(Path::new(""), "shop").unwrap_err().contains("choose the folder"));
     assert!(new_project_in(Path::new("relative"), "shop").unwrap_err().contains("not a full path"));
     assert!(new_project_in(&dir.join("taken.clarity"), "shop").unwrap_err().contains("is a file"));

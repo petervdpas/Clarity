@@ -83,3 +83,15 @@ void a_database_connects_with_a_secret_setting(void) {
     remove(file);
     clarity_secret_store = (ClaritySecretStore){0};
 }
+
+// On Windows a secret is kept as every stack keeps it (conformance/secret-store.json): its target names the program and the setting.
+void a_secrets_windows_target_is_every_stacks(void) {
+    cJSON* cases = conformance("secret-store.json");
+    REQUIRE(cases);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "windows")) {
+        const char* target = clarity_secret_windows_target(cJSON_GetObjectItem(c, "program")->valuestring, cJSON_GetObjectItem(c, "name")->valuestring);
+        CHECK(strcmp(target, cJSON_GetObjectItem(c, "target")->valuestring) == 0);
+    }
+    cJSON_Delete(cases);
+}

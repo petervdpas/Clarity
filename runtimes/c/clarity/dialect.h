@@ -17,6 +17,11 @@ const char* clarity_quote(ClarityDialect d, const char* name);
 const char* clarity_mark(ClarityDialect d, int n);
 /// A decimal as a comparison reads it: SQLite stores decimals as text.
 const char* clarity_number_sql(ClarityDialect d, const char* expr);
+/// `expr` as a key of ORDER BY with an empty value first either way
+/// (conformance/queries.json): NULLS FIRST on SQLite and PostgreSQL; on
+/// MySQL and SQL Server, which put an empty value first going up, a key
+/// going down gets a key before it that is 0 for empty.
+const char* clarity_order_key_sql(ClarityDialect d, const char* expr, bool descending);
 /// `column` containing the LIKE pattern `mark`, ignoring case; wildcards are escaped with !.
 const char* clarity_contains_sql(ClarityDialect d, const char* column, const char* mark);
 /// Whether the JSON list kept in `column` holds the item `mark` (a list field).

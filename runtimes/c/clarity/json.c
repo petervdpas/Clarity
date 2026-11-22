@@ -1,7 +1,17 @@
 #include "clarity/json.h"
 
 cJSON* clarity_json_text(const char* value) { return cJSON_CreateString(value ? value : ""); }
-cJSON* clarity_json_integer(int64_t value) { return cJSON_CreateNumber((double)value); }
+/// A whole number as JSON, exact: cJSON keeps numbers as doubles, which hold
+/// whole numbers exactly only up to 2^53; one beyond is written as its digits
+/// (conformance/values-json.json), one within as a number, so records still
+/// compare alike (`_same`).
+static cJSON* exact_integer(int64_t value) {
+    const int64_t exact = (int64_t)1 << 53;
+    if (value >= -exact && value <= exact) return cJSON_CreateNumber((double)value);
+    return cJSON_CreateRaw(clarity_format("%lld", (long long)value));
+}
+
+cJSON* clarity_json_integer(int64_t value) { return exact_integer(value); }
 cJSON* clarity_json_decimal(ClarityDecimal value) { return cJSON_CreateString(clarity_decimal_text(value)); }
 cJSON* clarity_json_bool(bool value) { return cJSON_CreateBool(value); }
 
@@ -13,7 +23,7 @@ cJSON* clarity_json_date_time(ClarityDateTime value) {
     return clarity_date_time_is_none(value) ? cJSON_CreateNull() : cJSON_CreateString(clarity_date_time_text(value));
 }
 
-cJSON* clarity_json_reference(int64_t id) { return id ? cJSON_CreateNumber((double)id) : cJSON_CreateNull(); }
+cJSON* clarity_json_reference(int64_t id) { return id ? exact_integer(id) : cJSON_CreateNull(); }
 
 const cJSON* clarity_json_given(const cJSON* in, const char* name) {
     const cJSON* v = cJSON_GetObjectItemCaseSensitive(in, name);

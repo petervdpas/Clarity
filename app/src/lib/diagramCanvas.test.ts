@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boxName, centerScroll, marksOf, themeVariables } from "./diagramCanvas.ts";
+import { readFileSync } from "node:fs";
+import { DIAGRAM_EXTENSION, boxName, centerScroll, marksOf, themeVariables } from "./diagramCanvas.ts";
 
 test("the drawing takes the IDE theme's colors", () => {
   const vars: Record<string, string> = {
@@ -46,4 +47,9 @@ test("centering scrolls the drawing to the middle of the room the drawer leaves 
   // its middle (300, 150) goes to (300, 300).
   assert.deepEqual(centerScroll({ left: 100, top: 50, width: 400, height: 200 }, { width: 800, height: 600 }, 200), { dx: 0, dy: -150 });
   assert.deepEqual(centerScroll({ left: 0, top: 0, width: 400, height: 200 }, { width: 800, height: 600 }, 0), { dx: -200, dy: -200 });
+});
+
+test("a diagram file has the spec's extension (clarity_spec::diagrams::DIAGRAM_EXTENSION)", () => {
+  const rust = readFileSync(new URL("../../../crates/clarity-spec/src/diagrams/mod.rs", import.meta.url), "utf8");
+  assert.equal(rust.match(/pub const DIAGRAM_EXTENSION: &str = "([^"]+)";/)?.[1], DIAGRAM_EXTENSION);
 });

@@ -5,10 +5,7 @@
 //! range move, a canvas's arguments, an engine's input) are written here.
 
 use clarity_runtime::canvas::CanvasArgs;
-use clarity_runtime::list_fields::ItemKind;
-use clarity_runtime::program::{CanvasEdit, Edit, ItemEdit, RangeEdit, Reorder, StepPress, Started, Unconnected};
-use clarity_runtime::ranges::{RangeKey, RangeMove};
-use clarity_runtime::reorder::{DropAt, Move, MoveKey};
+use clarity_runtime::program::{CanvasEdit, Edit, StepPress, Started, Unconnected};
 use clarity_runtime::screen::{Drawn, Hears, ScreenInput, ScreenTell};
 use clarity_runtime::ui::{Text, WindowState};
 use serde_json::{json, Map, Value};
@@ -46,104 +43,6 @@ pub fn edit(at: &WindowState, edit: &Edit) -> Map<String, Value> {
         "path": edit.path,
         "editable": edit.editable,
     }))
-}
-
-fn drop_at(at: DropAt) -> &'static str {
-    match at {
-        DropAt::Before => "before",
-        DropAt::After => "after",
-        DropAt::Into => "into",
-    }
-}
-
-fn move_key(key: MoveKey) -> &'static str {
-    match key {
-        MoveKey::Up => "up",
-        MoveKey::Down => "down",
-        MoveKey::Left => "left",
-        MoveKey::Right => "right",
-    }
-}
-
-/// A row's move as the wire's `move`.
-pub fn moved(moved: &Move) -> Value {
-    match *moved {
-        Move::Drag { row, at, target } => json!({ "row": row, "where": drop_at(at), "target": target }),
-        Move::Key { row, key } => json!({ "row": row, "key": move_key(key) }),
-    }
-}
-
-/// `reorder_event`'s arguments.
-pub fn reorder(at: &WindowState, reorder: &Reorder) -> Map<String, Value> {
-    object(json!({
-        "state": state(at),
-        "part": reorder.part,
-        "scope": reorder.scope,
-        "list": reorder.list,
-        "by": reorder.by,
-        "parent": reorder.parent,
-        "move": moved(&reorder.moved),
-        "handler": reorder.handler,
-        "readonly": reorder.readonly,
-    }))
-}
-
-fn item_kind(kind: ItemKind) -> &'static str {
-    match kind {
-        ItemKind::Text => "text",
-        ItemKind::Integer => "integer",
-        ItemKind::Decimal => "decimal",
-        ItemKind::Date => "date",
-        ItemKind::Enum => "enum",
-    }
-}
-
-/// `item_event`'s arguments.
-pub fn item(at: &WindowState, item: &ItemEdit) -> Map<String, Value> {
-    object(json!({
-        "state": state(at),
-        "part": item.part,
-        "scope": item.scope,
-        "path": item.path,
-        "item": item_kind(item.item),
-        "values": item.values,
-        "typed": item.typed,
-        "handler": item.handler,
-        "readonly": item.readonly,
-    }))
-}
-
-fn range_key(key: RangeKey) -> &'static str {
-    match key {
-        RangeKey::Up => "up",
-        RangeKey::Down => "down",
-        RangeKey::PageUp => "pageUp",
-        RangeKey::PageDown => "pageDown",
-        RangeKey::Home => "home",
-        RangeKey::End => "end",
-    }
-}
-
-/// `range_event`'s arguments: the move as one of `key`, `at` and `typed`.
-pub fn range(at: &WindowState, range: &RangeEdit) -> Map<String, Value> {
-    let mut args = object(json!({
-        "state": state(at),
-        "part": range.part,
-        "scope": range.scope,
-        "path": range.path,
-        "min": range.range.min,
-        "max": range.range.max,
-        "step": range.range.step,
-        "whole": range.whole,
-        "handler": range.handler,
-        "readonly": range.readonly,
-    }));
-    match &range.moved {
-        RangeMove::Key(key) => args.insert("key".into(), json!(range_key(*key))),
-        RangeMove::At(place) => args.insert("at".into(), json!(place)),
-        RangeMove::Typed(typed) => args.insert("typed".into(), json!(typed)),
-    };
-    args
 }
 
 fn canvas_args(canvas: &CanvasArgs) -> Map<String, Value> {

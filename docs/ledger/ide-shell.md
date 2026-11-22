@@ -27,7 +27,7 @@ Progress: 75%
 - `crates/clarity-project/tests/browse.rs`, recent.rs
 
 ## Open
-- Translations of the IDE's own words: NOT BUILT. English in the Svelte files (the project rule)
+- Translations of the IDE's own words: NOT WANTED. The IDE stays English in its Svelte files; translations are for the apps Clarity makes. User 2026-11-21: "the ide doesnt needs translates!"
 - Project-wide search: NOT BUILT. Only Ctrl+F in editors and filters in translations, vault and manual
 - The file browser starts in the open project's folder: PARTIAL (`app/src-tauri/src/browse.rs:56` starts at the last folder, then the asked one, then Home)
 - System dialog plugin: PARTIAL. No screen uses it, but `tauri-plugin-dialog` is a dependency and initialised (`app/src-tauri/Cargo.toml:36`, `app/src-tauri/src/lib.rs:921`, `app/package.json:29`)
@@ -35,7 +35,7 @@ Progress: 75%
 - No macOS IDE installer; see [release-ci](release-ci.md)
 
 ## Conflicts
-- CLAUDE.md "Every text a person reads comes from the translations" vs the IDE's English words in `app/src/**/*.svelte`
+- CLAUDE.md "Every text a person reads comes from the translations" holds for generated apps; the IDE's English words in `app/src/**/*.svelte` stay (user 2026-11-21)
 - manual/start.overview.md:41 tree names (App, Settings, Windows, Data, Web APIs, Diagrams, Themes, Languages, Resources, Modules): the tree says i18n, not Languages; README, Sign-in, Agents, Views, Mappings, Engines, Custom parts, Libraries, Commands are missing; sidebar (Main window); :52 settings sections leave out Keys, Environment, Logging
 - manual/app.keys.md:76-83 vs design.text.md:55-56: Tab is always four spaces (`lib/SourceEditor.svelte:72`); Escape closes the panel vs goes back to Properties
 

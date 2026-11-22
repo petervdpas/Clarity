@@ -58,12 +58,6 @@ pub fn set_folder(which: String, path: Option<String>) -> Result<FoldersView, St
     set(&folders::file(), &which, path)
 }
 
-/// The project file a new project named `name` gets in the projects folder.
-#[tauri::command]
-pub fn new_project_file(name: String) -> Result<String, String> {
-    Ok(Folders::current().new_project_file(&name)?.display().to_string())
-}
-
 /// Where a new project named `name` goes in `folder`, checked: the New project dialog shows it as it is typed.
 #[tauri::command]
 pub fn new_project_path(folder: String, name: String) -> Result<String, String> {

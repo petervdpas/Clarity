@@ -7,12 +7,9 @@ package shell
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -170,10 +167,12 @@ func opensLink(address string) bool {
 	return false
 }
 
+// failed is the answer of a command that failed: a refusal, and a value or a
+// record that is not there or still used, in their words (clarity.Said);
+// anything else by its message.
 func failed(err error) Answer {
-	var refused *clarity.RefusedError
-	if errors.As(err, &refused) {
-		return Answer{Error: refused.Text}
+	if said, ok := clarity.Said(err); ok {
+		return Answer{Error: said}
 	}
 	return Answer{Error: err.Error()}
 }
@@ -371,40 +370,22 @@ type Args struct {
 	Data     string          `json:"data"`
 	Instance uint64          `json:"instance"`
 	Part     string          `json:"part"`
-	Kind     string          `json:"kind"`
 	Hear     string          `json:"hear"`
 	X        int             `json:"x"`
 	Y        int             `json:"y"`
 	Shown    bool            `json:"shown"`
 	Value    json.RawMessage `json:"value"`
-	// A row moved (reorder_event, manual/parts.data.md): the list at List, numbered in
-	// By, a tree's parent field Parent (nil in a list), and the move.
-	List   string       `json:"list"`
-	By     string       `json:"by"`
-	Parent *string      `json:"parent"`
-	Move   clarity.Move `json:"move"`
-	// Item is the kind of a list field's items (item_event); Typed what the
-	// person typed, as text or, for a range, as a number.
-	Item  string          `json:"item"`
-	Typed json.RawMessage `json:"typed"`
-	// A range (range_event): its ends and step as text or numbers, null for
-	// none, whether it holds whole numbers, and the key or the place dragged to.
-	Min   json.RawMessage `json:"min"`
-	Max   json.RawMessage `json:"max"`
-	Step  json.RawMessage `json:"step"`
-	Whole bool            `json:"whole"`
-	Key   string          `json:"key"`
-	At    json.RawMessage `json:"at"`
+	// A canvas's list (canvas_event, manual/parts.graphics.md).
+	List string `json:"list"`
+	// The x and y fields of a canvas of objects (canvas_event).
+	At json.RawMessage `json:"at"`
 	// A wizard's button (step_event), its count of steps and its on next and
 	// on finish handlers.
 	Button string `json:"button"`
 	Steps  int64  `json:"steps"`
 	Next   string `json:"next"`
 	Finish string `json:"finish"`
-	// Show are the fields a search dropdown shows (find_options).
-	Show []string `json:"show"`
-	// Action is what the person did to a part's view (view_event): sort,
-	// page, open or close, with its field, page or row id.
+	// Action is what the person did on a canvas (canvas_event).
 	Action map[string]json.RawMessage `json:"action"`
 	// Readonly is the part's readonly as the screen has it (manual/start.how-it-works.md): the
 	// runtime takes back what the person changed. Editable are the fields a
@@ -423,7 +404,7 @@ type Args struct {
 }
 
 // watched are the commands that run a handler, which may make a long engine call.
-var watched = map[string]bool{"start_app": true, "open_window": true, "close_window": true, "return_to": true, "dispatch_event": true, "answer_event": true, "edit_event": true, "reorder_event": true, "item_event": true, "range_event": true, "step_event": true, "canvas_event": true}
+var watched = map[string]bool{"start_app": true, "open_window": true, "close_window": true, "return_to": true, "dispatch_event": true, "answer_event": true, "edit_event": true, "step_event": true, "canvas_event": true}
 
 // progressScript tells the screen how far a long call is; none once it ended.
 func progressScript(done, total int64, ended bool) string {
@@ -544,29 +525,10 @@ func (c *Service) watchedAnswer(ctx context.Context, command string, a Args) (an
 // answer runs a command, holding mu. A window's reply is where its edits
 // start (manual/code.handlers.md): what a handler changed is never the person's edit.
 func (c *Service) answer(ctx context.Context, command string, a Args) Answer {
-	// The chosen rows as the screen sent them: a handler may change the map itself.
-	sent := maps.Clone(a.State.Selected)
 	out := c.command(ctx, command, a)
 	reply, ok := out.Value.(clarity.Reply)
 	if !ok {
 		return out
-	}
-	// What each table, tree and chart shows, filled after every reply (DESIGN
-	// 1.7); a reply that lost the window's views keeps those the screen sent.
-	if reply.State.Views == nil && reply.State.Instance == a.State.Instance {
-		reply.State.Views = a.State.Views
-	}
-	// Every reply shows the chosen rows (their page, the tree rows above them
-	// open), as a handler or a move may have changed where they are; only the
-	// person's own view action leaves the view as they set it.
-	chosen := map[string]bool{}
-	for part, row := range reply.State.Selected {
-		if was, had := sent[part]; command != "view_event" || !had || was != row {
-			chosen[part] = true
-		}
-	}
-	if err := clarity.FillViews(reply.State, chosen); err != nil {
-		return failed(err)
 	}
 	out.Value = reply
 	// A closed window's record is gone; its last reply starts none.
@@ -678,17 +640,16 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 			bus.Drag(a.Part, a.Scope, clarity.EditData(reply.State), steps)
 		}
 		return answer(reply, nil)
-	case "reorder_event", "item_event", "range_event", "canvas_event":
-		// The person's action, which the runtime decides (manual/start.how-it-works.md), then
+	case "canvas_event":
+		// The person's action on a canvas, which the runtime decides (manual/start.how-it-works.md), then
 		// ends as an edit does.
 		if a.Readonly {
 			return c.takenBack(a.State)
 		}
-		decide := map[string]func(Args) (bool, bool, error){"reorder_event": reordered, "item_event": itemAdded, "range_event": ranged, "canvas_event": canvasChanged}[command]
 		if a.State.Selected == nil {
 			a.State.Selected = map[string]int{}
 		}
-		changed, refused, err := decide(a)
+		changed, refused, err := canvasChanged(a)
 		if err != nil {
 			return failed(err)
 		}
@@ -701,13 +662,6 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		return c.edited(a.State, a.Part, a.Scope, a.Handler)
 	case "step_event":
 		return answer(c.stepEvent(a))
-	case "view_event":
-		// The person sorted, turned a page, or opened or closed a tree row:
-		// that view changes, and the window is answered. Never an edit.
-		if err := clarity.ViewEvent(a.State, a.Part, a.Action); err != nil {
-			return failed(err)
-		}
-		return answer(c.onEventless(a.State))
 	case "find_options":
 		return c.findOptions(a)
 	case "undo_edit":
@@ -821,9 +775,6 @@ func (c *Service) edited(state clarity.WindowState, part, scope, handler string)
 	return answer(reply, nil)
 }
 
-// reordered moves a row of the list at a.List (conformance/reorder.json):
-// the list in its new order, each row's number in a.By and, in a tree, its
-// parent, and the moved row chosen. False when the move changes nothing.
 // canvasChanged applies the person's action on a canvas (manual/parts.graphics.md).
 func canvasChanged(a Args) (bool, bool, error) {
 	canvas := clarity.CanvasArgs{Part: a.Part, Mode: a.Mode, List: a.List, Path: a.Path, Units: a.Units, Grid: a.Grid, Snap: a.Snap}
@@ -834,184 +785,6 @@ func canvasChanged(a Args) (bool, bool, error) {
 	}
 	changed, err := clarity.CanvasEvent(a.State, canvas, a.Action)
 	return changed, !changed, err
-}
-
-func reordered(a Args) (bool, bool, error) {
-	value, _ := clarity.ValueAt(a.State.Data, a.List)
-	list, ok := value.([]any)
-	if !ok {
-		return false, false, &clarity.InvalidError{What: fmt.Sprintf("the window has no list %s", a.List)}
-	}
-	parent := ""
-	if a.Parent != nil {
-		parent = *a.Parent
-	}
-	records := make([]map[string]any, len(list))
-	rows := make([]clarity.TreeRow, len(list))
-	for i, row := range list {
-		record, ok := row.(map[string]any)
-		if !ok {
-			return false, false, &clarity.InvalidError{What: fmt.Sprintf("the rows of %s are no records", a.List)}
-		}
-		records[i] = record
-		rows[i] = clarity.TreeRow{ID: record["id"]}
-		if parent != "" {
-			rows[i].Parent = record[parent]
-		}
-	}
-	moved, ok := clarity.Reorder(rows, a.Move, parent != "")
-	if !ok {
-		return false, false, nil
-	}
-	ordered := make([]any, len(moved.Order))
-	for i, place := range moved.Order {
-		record := records[place]
-		if a.By != "" {
-			record[a.By] = moved.Numbers[i]
-		}
-		if parent != "" {
-			record[parent] = moved.Parents[i]
-		}
-		ordered[i] = record
-		if place == a.Move.Row {
-			a.State.Selected[a.Part] = i
-		}
-	}
-	return true, false, clarity.SetValueAt(a.State.Data, a.List, ordered)
-}
-
-// itemAdded adds the typed item to the list at a.Path
-// (conformance/list-fields.json, added): refused when it is no value of the
-// list's kind; false when it adds nothing.
-func itemAdded(a Args) (bool, bool, error) {
-	value, _ := clarity.ValueAt(a.State.Data, a.Path)
-	items, _ := value.([]any)
-	if items == nil {
-		items = []any{}
-	}
-	typed, err := typedText(a.Typed)
-	if err != nil {
-		return false, false, err
-	}
-	values := make([]string, 0, len(a.Values))
-	for _, raw := range a.Values {
-		var v string
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return false, false, &clarity.InvalidError{What: fmt.Sprintf("an enum's value is text, not %s", raw)}
-		}
-		values = append(values, v)
-	}
-	added, refused := clarity.AddTyped(a.Item, items, typed, values)
-	if refused || len(added) == len(items) {
-		return false, refused, nil
-	}
-	return true, false, clarity.SetValueAt(a.State.Data, a.Path, added)
-}
-
-// ranged moves the value at a.Path within its range (conformance/ranges.json)
-// by a.Key, a drag to a.At or the typed a.Typed: a whole number as a number,
-// a decimal as text. Typed text that is no number is refused; false when the
-// value stays.
-func ranged(a Args) (bool, bool, error) {
-	low, err := numberText(a.Min)
-	if err != nil {
-		return false, false, err
-	}
-	high, err := numberText(a.Max)
-	if err != nil {
-		return false, false, err
-	}
-	step, err := numberText(a.Step)
-	if err != nil {
-		return false, false, err
-	}
-	r := clarity.NumberRange{Min: low, Max: high}
-	if step != nil {
-		r.Step = *step
-	}
-	value, _ := clarity.ValueAt(a.State.Data, a.Path)
-	now := valueText(value)
-	var next string
-	switch {
-	case a.Key != "":
-		next, err = clarity.RangeKeyed(now, r, a.Key)
-	case len(a.At) > 0 && string(a.At) != "null":
-		var at *string
-		if at, err = numberText(a.At); err == nil && at != nil {
-			next, err = clarity.RangeDragged(*at, r)
-		}
-	default:
-		typed, terr := numberText(a.Typed)
-		if terr != nil || typed == nil {
-			return false, true, nil
-		}
-		if next, err = clarity.RangeTyped(*typed, r); err != nil {
-			return false, true, nil
-		}
-	}
-	if err != nil {
-		return false, false, err
-	}
-	if now != nil && sameNumber(*now, next) {
-		return false, false, nil
-	}
-	var taken any = next
-	if a.Whole {
-		taken = json.Number(next)
-	}
-	return true, false, clarity.SetValueAt(a.State.Data, a.Path, taken)
-}
-
-// typedText is what the person typed: text, or a number as it was sent.
-func typedText(raw json.RawMessage) (string, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return "", nil
-	}
-	var text string
-	if json.Unmarshal(raw, &text) == nil {
-		return text, nil
-	}
-	var number json.Number
-	if err := json.Unmarshal(raw, &number); err != nil {
-		return "", &clarity.InvalidError{What: fmt.Sprintf("typed is text, not %s", raw)}
-	}
-	return number.String(), nil
-}
-
-// numberText is a number the screen sent as text or as a number, exactly as
-// written; nil for none.
-func numberText(raw json.RawMessage) (*string, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil, nil
-	}
-	text, err := typedText(raw)
-	if err != nil {
-		return nil, err
-	}
-	return &text, nil
-}
-
-// valueText is a value of the window's data as a number's text; nil for none.
-func valueText(value any) *string {
-	var text string
-	switch v := value.(type) {
-	case string:
-		text = v
-	case float64:
-		text = strconv.FormatFloat(v, 'f', -1, 64)
-	case json.Number:
-		text = v.String()
-	default:
-		return nil
-	}
-	return &text
-}
-
-// sameNumber says whether two numbers' texts are one value.
-func sameNumber(a, b string) bool {
-	x, errA := clarity.RangeTyped(a, clarity.NumberRange{})
-	y, errB := clarity.RangeTyped(b, clarity.NumberRange{})
-	return errA == nil && errB == nil && x == y
 }
 
 // stepEvent is a wizard's button (conformance/steps.json): Next runs on next
@@ -1052,31 +825,15 @@ func (c *Service) stepEvent(a Args) (clarity.Reply, error) {
 	return clarity.Reply{}, &clarity.InvalidError{What: fmt.Sprintf("a wizard has no button %s", a.Button)}
 }
 
-// findOptions is what a dropdown offers for typed text
-// (conformance/dropdown-options.json): for a typed dropdown, the values the
-// field already has; for a search, the records of the entity by the fields
-// it shows. A list, not a window.
+// findOptions is what a search dropdown offers: the records of the entity,
+// which the screen searches as the person types (conformance/dropdown-options.json).
+// A list, not a window.
 func (c *Service) findOptions(a Args) Answer {
-	typed, err := typedText(a.Typed)
+	options, err := c.options.Windows.Options(c.options.Db, a.Entity)
 	if err != nil {
 		return failed(err)
 	}
-	db := c.options.Db
-	switch a.Kind {
-	case "typed":
-		values, err := c.options.Windows.Values(db, a.Entity, a.Field)
-		if err != nil {
-			return failed(err)
-		}
-		return Answer{Value: clarity.Suggestions(values, typed)}
-	case "search":
-		options, err := c.options.Windows.Options(db, a.Entity)
-		if err != nil {
-			return failed(err)
-		}
-		return Answer{Value: clarity.Searched(options, typed, a.Show)}
-	}
-	return Answer{Error: "a dropdown finds its options by typed or search, not " + a.Kind}
+	return Answer{Value: options}
 }
 
 // takenBack refuses what the person changed (manual/start.how-it-works.md): the window's data

@@ -193,6 +193,8 @@ translation de
     itemOutsideList "Es gibt kein Element {position} in einer Liste von {count}"
     recordNotThere "Es gibt kein {table} mit der ID {id}"
     recordStillUsed "Dieses {table} wird noch von anderen Datensätzen verwendet"
+    divisionByZero "Division durch null"
+    numberTooLarge "Die Zahl ist zu groß"
     engineTooLong "{engine} lief länger als {seconds} Sekunden und wurde gestoppt"
     engineStopped "{engine} wurde gestoppt"
     engineBroke "{engine} funktioniert in {function} nicht mehr"

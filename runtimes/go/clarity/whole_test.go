@@ -5,7 +5,7 @@ import "testing"
 // WholeDiv and WholeMod are `a div b` and `a mod b`: rounded toward zero, the
 // sign of a, and a division by zero an error.
 func TestWholeNumbersDivideTowardZero(t *testing.T) {
-	cases := []struct{ a, b, div, mod int64 }{{7, 2, 3, 1}, {-7, 2, -3, -1}, {7, -2, -3, 1}, {-9223372036854775808, -1, -9223372036854775808, 0}}
+	cases := []struct{ a, b, div, mod int64 }{{7, 2, 3, 1}, {-7, 2, -3, -1}, {7, -2, -3, 1}, {-9223372036854775807, -1, 9223372036854775807, 0}}
 	for _, c := range cases {
 		d, err := WholeDiv(c.a, c.b)
 		m, err2 := WholeMod(c.a, c.b)

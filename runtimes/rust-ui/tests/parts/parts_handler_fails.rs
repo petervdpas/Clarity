@@ -64,22 +64,10 @@ impl Program for Failing {
     fn undo_edit(&self, state: WindowState, _scope: &str, _back: bool) -> Answer<Reply> {
         Ok(reply(state))
     }
-    fn reorder_event(&self, state: WindowState, _reorder: program::Reorder) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn item_event(&self, state: WindowState, _item: program::ItemEdit) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn range_event(&self, state: WindowState, _range: program::RangeEdit) -> Answer<Reply> {
-        Ok(reply(state))
-    }
     fn canvas_event(&self, state: WindowState, _canvas: program::CanvasEdit) -> Answer<Reply> {
         Ok(reply(state))
     }
     fn step_event(&self, state: WindowState, _step: program::StepPress) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn view_event(&self, state: WindowState, _part: &str, _action: Map<String, Value>) -> Answer<Reply> {
         Ok(reply(state))
     }
     fn answer_event(&self, state: WindowState, _handler: &str, _values: Vec<Value>) -> Answer<Reply> {
@@ -91,7 +79,7 @@ impl Program for Failing {
     fn field_values(&self, _entity: &str, _field: &str) -> Answer<Vec<String>> {
         Ok(Vec::new())
     }
-    fn find_options(&self, _kind: &str, _entity: &str, _field: Option<&str>, _show: &[String], _typed: &str) -> Answer<Value> {
+    fn find_options(&self, _entity: &str, _show: &[String]) -> Answer<Value> {
         Ok(Value::Null)
     }
     fn field_bytes(&self, _entity: &str, _id: i64, _field: &str) -> Answer<Option<Vec<u8>>> {

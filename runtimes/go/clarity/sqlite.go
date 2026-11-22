@@ -27,7 +27,8 @@ func openSqlite(path string) (driver, error) {
 			}
 		}
 	}
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	// A write waits up to five seconds while another program holds the database, as on every stack.
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, &StorageError{What: err.Error(), Err: err}
 	}
@@ -144,39 +145,6 @@ func readRows(rows *sql.Rows) ([][]any, error) {
 
 func (d *sqliteDriver) batch(query string) error {
 	if _, err := d.db.Exec(query); err != nil {
-		return sqliteFailed(err)
-	}
-	return nil
-}
-
-// apply runs a step with references unchecked, since a step may build a
-// table again that others refer to; they are checked before the step is kept.
-func (d *sqliteDriver) apply(version int, statements []string) error {
-	if err := d.batch("PRAGMA foreign_keys = OFF"); err != nil {
-		return err
-	}
-	defer d.batch("PRAGMA foreign_keys = ON")
-	tx, err := d.db.Begin()
-	if err != nil {
-		return sqliteFailed(err)
-	}
-	defer tx.Rollback()
-	for _, statement := range statements {
-		if _, err := tx.Exec(statement); err != nil {
-			return sqliteFailed(err)
-		}
-	}
-	var broken int64
-	if err := tx.QueryRow("SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&broken); err != nil {
-		return sqliteFailed(err)
-	}
-	if broken > 0 {
-		return &StorageError{What: "migration step leaves references to records that do not exist"}
-	}
-	if _, err := tx.Exec(applied(version)); err != nil {
-		return sqliteFailed(err)
-	}
-	if err := tx.Commit(); err != nil {
 		return sqliteFailed(err)
 	}
 	return nil

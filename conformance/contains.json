@@ -1,0 +1,19 @@
+{
+  "about": "Clarity's `contains` outside a query (text contains part): whether a text holds a part, case ignored for every letter by its simple lower-case form, the same whatever the person's language (no culture: a Turkish person's I is still i), on every stack. An empty part is in every text. Greek final sigma and the Turkish dotted capital I are left out: their lower-case forms differ by language. Each case gives `text`, `part` and whether the text `contains` it.",
+  "cases": [
+    { "text": "Hello world", "part": "WORLD", "contains": true },
+    { "text": "Hello world", "part": "planet", "contains": false },
+    { "text": "anything", "part": "", "contains": true },
+    { "text": "", "part": "a", "contains": false },
+    { "text": "ÉCOLE PRIMAIRE", "part": "école", "contains": true },
+    { "text": "Ångström", "part": "ÅNG", "contains": true },
+    { "text": "Crème brûlée", "part": "BRÛLÉE", "contains": true },
+    { "text": "Łódź", "part": "ŁÓDŹ", "contains": true },
+    { "text": "Ŕĺŝţ", "part": "ŕĹŜŢ", "contains": true },
+    { "text": "ΑΘΗΝΑ", "part": "αθη", "contains": true },
+    { "text": "МОСКВА", "part": "москва", "contains": true },
+    { "text": "Ёжик", "part": "ЁЖ", "contains": true },
+    { "text": "TITLE", "part": "title", "contains": true },
+    { "text": "über", "part": "UBER", "contains": false }
+  ]
+}

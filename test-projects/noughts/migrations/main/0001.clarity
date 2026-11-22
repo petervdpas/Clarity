@@ -1,0 +1,15 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Players, games and moves"
+    add entity Player
+        name: text(40), unique
+        created: datetime
+    add entity Game
+        player: ref Player
+        started: datetime
+        result: GameResult, default Playing
+    add entity Move
+        game: ref Game
+        number: integer
+        square: integer
+        mark: Mark

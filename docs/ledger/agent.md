@@ -27,7 +27,7 @@ Progress: 60%
 - A Clarity Entra app registration so `clientId` is optional: NOT BUILT; see Design.
 - Foundry sign-in against a real tenant: UNTRIED; see Design.
 - AI proposals inside a project (layout, data model, slow handlers, duplicated logic), patterns across projects, run-time measurements: NOT BUILT. The only proposals are for diagrams ([diagrams](diagrams.md)).
-- The panel's words from translations: NOT BUILT (IDE words are English in the Svelte files; see [ide-shell](ide-shell.md)).
+- The panel's words from translations: NOT WANTED (the IDE stays English; see [ide-shell](ide-shell.md)).
 
 ## Design
 The smaller tool set and local models wait for a stronger machine (Decisions 2026-11-10).

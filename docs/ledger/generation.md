@@ -15,7 +15,7 @@ Progress: 70%
 - Docs: manual `project.run-build.md`; per-stack output in [stack-rust](stack-rust.md), [stack-go](stack-go.md), [stack-c](stack-c.md), [stack-cpp](stack-cpp.md), [stack-csharp](stack-csharp.md); targets in [web-target](web-target.md), [cli-target](cli-target.md)
 
 ## Tests
-- `crates/clarity-gen/tests/out_layout.rs`, `windows_resources.rs`, `icons.rs`, `readme.rs`, `versions_{rust,go,c,cpp,csharp}.rs`, the per-stack `rust.rs`, `go.rs`, `c.rs`, `cpp.rs`, `csharp.rs`, `everything.rs`
+- `crates/clarity-gen/tests/gen/out_layout.rs`, `windows_resources.rs`, `icons.rs`, `readme.rs`, `versions_{rust,go,c,cpp,csharp}.rs`, the per-stack `rust.rs`, `go.rs`, `c.rs`, `cpp.rs`, `csharp.rs`, `everything.rs`
 - Ignored (real tools): `examples_build.rs` (one per example, each on its own stack), `everything_build.rs`
 - No conformance file (generation is per stack)
 

@@ -15,7 +15,7 @@ Progress: 30%
 - Docs: manual `design.video.md`, `parts.media.md` (`video`)
 
 ## Tests
-- `crates/clarity-spec/tests/video.rs`; `crates/clarity-gen/tests/videos_build.rs` (ignored; passes on all five); `runtimes/rust-video` tests with `tests/videos/bar.mp4`
+- `crates/clarity-spec/tests/spec/video.rs`; `crates/clarity-gen/tests/gen/videos_build.rs` (ignored; passes on all five); `runtimes/rust-video` tests with `tests/videos/bar.mp4`
 - No conformance file
 - Example: `examples/videoplayer` (go desktop)
 

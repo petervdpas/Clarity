@@ -41,6 +41,10 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// </summary>
     public virtual void Allow() { }
 
+    /// <summary>The Run_ of a call with values (<c>digit(7)</c>, as the screen sends it), which runs it and
+    /// says whether its handler refused; none for a call the window does not wire. The generator writes it.</summary>
+    protected internal virtual Func<bool>? CallOf(string written) => null;
+
     /// <summary>The messages on screen, newest last; the shell's, once it shows the window.</summary>
     public ObservableCollection<Message> Messages { get; internal set; } = [];
 

@@ -67,6 +67,8 @@ public sealed class ShelfViewModel() : WindowViewModel(Db.Empty())
 
     public bool Run_Digit7() => Handle(() => OnDigit(7), command: "Digit7");
 
+    protected internal override Func<bool>? CallOf(string written) => written == "digit(7)" ? Run_Digit7 : null;
+
     void OnSave()
     {
         Saved++;

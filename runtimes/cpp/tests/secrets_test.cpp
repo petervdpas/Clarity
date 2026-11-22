@@ -8,6 +8,7 @@
 #include <string>
 
 #include "check.hpp"
+#include "conformance.hpp"
 #include "clarity/db.hpp"
 #include "clarity/errors.hpp"
 #include "clarity/settings.hpp"
@@ -95,4 +96,10 @@ TEST(a_database_connects_with_a_secret_setting) {
     CHECK(refused);
     std::filesystem::remove(file);
     secret_store = SecretStore{};
+}
+
+// On Windows a secret is kept as every stack keeps it (conformance/secret-store.json): its target names the program and the setting.
+TEST(a_secrets_windows_target_is_every_stacks) {
+    for (const auto& c : conformance("secret-store.json")["windows"])
+        CHECK_EQ(secret_windows_target(c["program"].get<std::string>(), c["name"].get<std::string>()), c["target"].get<std::string>());
 }

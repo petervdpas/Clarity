@@ -40,7 +40,7 @@ func SlotInteger(value int64, format_ string) Slot {
 // SlotDecimal is a decimal, as text so no precision is lost; scale is the
 // field's decimals, or -1 for a value of its own.
 func SlotDecimal(value decimal.Decimal, scale int, format_ string) Slot {
-	s := Slot{Kind: "decimal", Value: value.String(), Format: format(format_)}
+	s := Slot{Kind: "decimal", Value: DecimalText(value), Format: format(format_)}
 	if scale >= 0 {
 		s.Scale = &scale
 	}
@@ -48,7 +48,7 @@ func SlotDecimal(value decimal.Decimal, scale int, format_ string) Slot {
 }
 
 func SlotMoney(value decimal.Decimal, format_ string) Slot {
-	return Slot{Kind: "money", Value: value.String(), Format: format(format_)}
+	return Slot{Kind: "money", Value: DecimalText(value), Format: format(format_)}
 }
 
 func SlotDate(value *Date, format_ string) Slot {

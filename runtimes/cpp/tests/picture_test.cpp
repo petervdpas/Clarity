@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "apply_steps.hpp"
 #include "check.hpp"
 #include "clarity/db.hpp"
 #include "clarity/sql.hpp"
@@ -49,7 +50,7 @@ std::filesystem::path scratch(const std::string& name) {
 
 Db albums(const std::filesystem::path& store) {
     Db db = Db::memory();
-    db.migrate({{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}});
+    apply_steps(db, {{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}});
     db.add_store("photos", store.string());
     return db;
 }

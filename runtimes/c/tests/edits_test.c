@@ -178,3 +178,39 @@ void the_edit_bus_puts_back_what_code_set_on_parts(void) {
         clarity_edits_free(bus);
     }
 }
+
+static bool took_nothing(const int64_t* steps, size_t count, bool back, void* context) {
+    (void)steps;
+    (void)count;
+    (void)back;
+    (void)context;
+    return true;
+}
+
+// A window's bus keeps its last edits as every runtime does (conformance/edit-bus.json, `keeps`): one past
+// them drops the oldest, so that many undos take back the last ones and the next finds nothing.
+void the_bus_keeps_as_many_edits_as_every_runtime_keeps(void) {
+    cJSON* file = conformance("edit-bus.json");
+    REQUIRE(file);
+    int keeps = cJSON_GetObjectItem(file, "keeps")->valueint;
+    ClarityEdits* bus = clarity_edits_new();
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "count", 0);
+    clarity_edits_reset(bus, data);
+    for (int n = 1; n <= keeps + 1; n++) {
+        cJSON_ReplaceItemInObject(data, "count", cJSON_CreateNumber(n));
+        clarity_edits_edit(bus, "countBox", "form", data, NULL, 0);
+    }
+    for (int i = 0; i < keeps; i++) {
+        bool found = false;
+        cJSON* after = NULL;
+        REQUIRE(clarity_edits_undo(bus, "form", data, true, took_nothing, NULL, &found, &after));
+        REQUIRE(found);
+        data = after;
+    }
+    bool found = true;
+    cJSON* after = NULL;
+    clarity_edits_undo(bus, "form", data, true, took_nothing, NULL, &found, &after);
+    CHECK(!found);
+    clarity_edits_free(bus);
+}

@@ -5,7 +5,6 @@
 // A text of the design that is no key (`7`) shows as written. The rules
 // are pure, so the shared cases in conformance/translations.json check them.
 
-import type { ShownText } from "./format";
 
 /** Every language's value of each key. */
 export type Values = Record<string, Record<string, string>>;
@@ -45,63 +44,44 @@ export function translate(text: string, texts: Texts): string {
   return keyValue(key, texts) ?? key;
 }
 
-/** Clarity's own words the backend sends by key, in English, as they read
- *  until the project gives them a value (translations UNCONNECTED_KEYS). */
-const OWN_TEXTS: Record<string, string> = {
-  unconnectedNotKept: "The database connection is not set yet",
-  unconnectedFailed: "The database did not open: {problem}",
-  // Why an engine beside the screen stopped (translations SCREEN_ENGINE_KEYS).
-  screenEngineFailed: "The engine stopped: {problem}",
-  // Why an undo was refused (translations UNDO_KEYS).
-  undoChangedSince: "This was changed since, so it cannot be taken back",
-  // The keys window (translations KEYS_WINDOW_KEYS).
-  keysTitle: "Keys",
-  keysEverywhere: "Everywhere",
-  keysChange: "Change",
-  keysReset: "Reset",
-  keysResetAll: "Reset all",
-  keysClose: "Close",
-  keysPress: "Press the new key; Escape stops",
-  keysNone: "None",
-  keysTaken: "{key} is the key of {command}. Swap them?",
-  keysSwap: "Swap",
-  keysAlso: "{key} is also the key of {command}, elsewhere; here {mine} goes first",
-  keysTyping: "{key} cannot be used: a key without Ctrl or Alt is typing",
-  keysTab: "{key} cannot be used: Tab moves between fields",
-  keysEnter: "{key} cannot be used: Enter confirms",
-  keysEscape: "{key} cannot be used: Escape cancels",
+/** Languages named in themselves, as a running app names them (Clarity.UI's choices.rs language_name). */
+const LANGUAGE_NAMES: Record<string, string> = {
+  ar: "العربية",
+  cs: "Čeština",
+  da: "Dansk",
+  de: "Deutsch",
+  el: "Ελληνικά",
+  en: "English",
+  es: "Español",
+  fi: "Suomi",
+  fr: "Français",
+  fy: "Frysk",
+  he: "עברית",
+  hi: "हिन्दी",
+  hu: "Magyar",
+  id: "Indonesia",
+  it: "Italiano",
+  ja: "日本語",
+  ko: "한국어",
+  nb: "Norsk bokmål",
+  nl: "Nederlands",
+  no: "Norsk",
+  pl: "Polski",
+  pt: "Português",
+  ro: "Română",
+  ru: "Русский",
+  sk: "Slovenčina",
+  sv: "Svenska",
+  th: "ไทย",
+  tr: "Türkçe",
+  uk: "Українська",
+  vi: "Tiếng Việt",
+  zh: "中文",
+  ca: "Català",
 };
 
-/** Text from the backend: a key takes its value, keeping its slot values;
- *  other text is as the backend wrote it. */
-export function translateText(text: ShownText, texts: Texts): ShownText {
-  if (typeof text === "string" || "text" in text) return text;
-  const value = keyValue(text.key, texts) ?? OWN_TEXTS[text.key] ?? text.key.replaceAll("{", "{{").replaceAll("}", "}}");
-  return { text: value, values: text.values ?? {} };
-}
-
-/** The languages an application can switch between: the one its texts are
- *  written in first, then those it has translations for. */
-export function languagesOf(base: string | null, available: readonly string[]): string[] {
-  const written = base ?? "en";
-  return [written, ...available.filter((a) => a !== written).sort()];
-}
-
-/** A language named in itself, as people look for it: `nl` is Nederlands. */
+/** A language named in itself, as people look for it and as the running app shows it: `nl` is Nederlands; one not known is its tag. */
 export function languageName(tag: string): string {
-  try {
-    const name = new Intl.DisplayNames([tag], { type: "language" }).of(tag) ?? tag;
-    return name.charAt(0).toLocaleUpperCase(tag) + name.slice(1);
-  } catch {
-    return tag;
-  }
+  return LANGUAGE_NAMES[tag.split(/[-_]/)[0].toLowerCase()] ?? tag;
 }
 
-/** A language chosen in an earlier run, as the choice to show: null for
- *  the texts as written, undefined to follow the locale when the project
- *  no longer has that language. */
-export function rememberedChoice(stored: string | null, base: string | null, available: readonly string[]): string | null | undefined {
-  if (!stored) return undefined;
-  if (stored === (base ?? "en")) return null;
-  return available.includes(stored) ? stored : undefined;
-}

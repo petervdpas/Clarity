@@ -230,6 +230,17 @@ bool clarity_in_use(const char* table, int64_t id) {
     return false;
 }
 
+bool clarity_value_error(const ClarityText* text, const char* format, ...) {
+    char message[sizeof last.message];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(message, sizeof message, format, args);
+    va_end(args);
+    set(CLARITY_VALUE, message);
+    last.text = text;
+    return false;
+}
+
 bool clarity_refuse(const ClarityText* text) {
     set(CLARITY_REFUSED, clarity_text_show(text));
     last.text = text;

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { besideEngines, canvasEvents, engineText, formOf, freeName, functionLine, paramsOf, paramsText, projectEngines, runEngine, signature } from "./engines.ts";
+import { readFileSync } from "node:fs";
+import { besideEngines, canvasEvents, engineText, formOf, freeName, paramsOf, paramsText, projectEngines, runEngine, SERVICES } from "./engines.ts";
 import type { Project } from "@clarity/ui/generated/Project.ts";
 
 const span = (start: number, end: number) => ({ start, end, line: 1, col: 1 });
@@ -41,10 +42,6 @@ test("the engines of a project, each with its module and the errors inside its d
   assert.deepEqual(engines[0].problems, ["engine Pricing: 'pricing.wasm' has no function total"]);
 });
 
-test("a function of an engine reads as it is declared", () => {
-  assert.equal(signature(pricing.functions[0] as never), "total(lines: list<Line>) -> money");
-});
-
 test("an engine's declaration reads into the inspector's form and writes back as Clarity text", () => {
   const form = formOf({ ...pricing, uses: [ident("clock"), ident("log")], says: ["You win", "A draw"], state: "window", opens: true, seconds: 2, megabytes: null } as never);
   assert.deepEqual(form, {
@@ -69,13 +66,6 @@ test("an engine's declaration reads into the inspector's form and writes back as
   assert.equal(engineText({ ...plain, megabytes: 64 }).split("\n")[1], "    limit 64 MB");
   // Services in the order Clarity lists them, whatever order they were ticked in.
   assert.equal(engineText({ ...plain, uses: ["log", "clock"] }).split("\n")[1], "    uses clock, log");
-});
-
-test("a function is found in the engine's source by its line, for jumping to it", () => {
-  const source = "clarity_engine::interface!();\n\n// play\nclarity_engine::function!(play, |(s,): (i64,)| {\n    Ok(s)\n});\n";
-  assert.equal(functionLine(source, "play"), 4);
-  assert.equal(functionLine(source, "pla"), null);
-  assert.equal(functionLine(source, "mark"), null);
 });
 
 test("a function's values are typed in one cell, as the declaration writes them", () => {
@@ -149,4 +139,22 @@ test("a canvas runs an engine beside the screen, which draws it and tells throug
   assert.deepEqual(canvasEvents(["draw", "resize"], null), ["draw", "resize"]);
   assert.deepEqual(canvasEvents(["draw", "resize"], "Screen"), []);
   assert.deepEqual(canvasEvents(["draw", "resize", "change"], null, "vector"), ["draw", "change"]);
+});
+
+// The services stand in the spec (clarity_spec::engines::SERVICES); the engine editor's copy follows it, or saving drops one.
+test("the services an engine may use are the spec's SERVICES", () => {
+  const spec = readFileSync(new URL("../../../crates/clarity-spec/src/engines.rs", import.meta.url), "utf8");
+  const written = spec.match(/pub const SERVICES: \[&str; \d+\] = \[([^\]]*)\]/);
+  assert.ok(written, "SERVICES in engines.rs");
+  assert.deepEqual([...SERVICES], [...written[1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]));
+});
+
+// As the checker allows them (clarity_spec::widgets, a canvas's events): a diagram's objects connect too;
+// a painting or a vector drawing has its own lines; a canvas with a mode or an engine has its own size.
+test("a canvas offers the events the checker allows it", () => {
+  assert.deepEqual(canvasEvents(["draw", "connect", "resize", "change"], null, "objects"), ["draw", "connect", "change"]);
+  assert.deepEqual(canvasEvents(["draw", "connect", "resize", "change"], null, "paint"), ["draw", "change"]);
+  assert.deepEqual(canvasEvents(["draw", "connect", "resize", "change"], null, "vector"), ["draw", "change"]);
+  assert.deepEqual(canvasEvents(["draw", "connect", "resize", "change"], "Screen", null), ["change"]);
+  assert.deepEqual(canvasEvents(["draw", "connect", "resize", "change"], null, null), ["draw", "connect", "resize", "change"]);
 });

@@ -53,6 +53,8 @@ export function windowSize(page: { size: { width: number; height: number } | nul
 export const CONTENT_PADDING = 12;
 /** The width of one column of a popover's grid (layout.rs POPOVER_COLUMN): it does not follow the window's. */
 export const POPOVER_COLUMN = 80;
+/** A slide-out's width when its line says none (model.rs SLIDEOUT_WIDTH). */
+export const SLIDEOUT_WIDTH = 420;
 
 /**
  * The row of `grid` at `offset` pixels from its top, as the screen shows

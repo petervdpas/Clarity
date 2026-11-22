@@ -1,0 +1,17 @@
+[package]
+name = "clarity-devtools"
+description = "DevTools: the cDdev's tools for working on Clarity itself"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-gen-core = { path = "../clarity-gen-core" }
+clarity-project.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# The free space of the disk the repository is on (DevTools' Disk tab); the IDE uses the same version.
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
+
+[dev-dependencies]
+clarity-spec.workspace = true

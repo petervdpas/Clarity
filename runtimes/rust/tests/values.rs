@@ -317,7 +317,7 @@ fn a_handler_copies_the_last_text_it_copies() {
 fn whole_numbers_divide_toward_zero() {
     use clarity_runtime::{whole_div, whole_mod};
     assert_eq!((whole_div(7, 2).unwrap(), whole_div(-7, 2).unwrap(), whole_mod(7, 3).unwrap(), whole_mod(-7, 3).unwrap()), (3, -3, 1, -1));
-    assert_eq!(whole_div(i64::MIN, -1).unwrap(), i64::MIN, "wraps, as every runtime does");
+    assert!(matches!(whole_div(i64::MIN, -1), Err(clarity_runtime::Error::TooLarge)), "too large, as every runtime says (conformance/overflow.json)");
     let failed = whole_div(1, 0).unwrap_err();
     assert_eq!("division by zero", failed.to_string());
     assert_eq!(Some("divisionByZero"), clarity_runtime::program::said(&failed).key.as_deref());

@@ -1,10 +1,11 @@
 // How a handler call the library sends runs on a generated view model (the
-// logic of ViewModelHost before the library drew the windows): a handler
-// without values by its On<Handler> through the view model's Handle, which
-// says whether it refused; a call with values by the Run_ the generator
-// writes beside its command (Run_Digit7); a command where there is nothing
-// else; a click that names a window by its Open_ command. Each is found by
-// the name the C# generator gives it (crates/clarity-gen/src/csharp/windows.rs).
+// logic of ViewModelHost before the library drew the windows): a call with
+// values by the Run_ the view model's CallOf gives for it, as the screen
+// sends it (digit(7), conformance/calls.json); a handler without values by
+// its On<Handler> through the view model's Handle, which says whether it
+// refused; a command where there is nothing else; a click that names a
+// window by its Open_ command. Each is found by the name the C# generator
+// gives it (crates/clarity-gen-csharp/src/windows.rs).
 
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -21,13 +22,13 @@ internal static class Handlers
     /// </summary>
     public static bool Run(WindowViewModel model, string written)
     {
-        var (handler, args) = Members.Call(written);
-        var shape = Shape.Of(model.GetType());
-        if (args.Count == 0 && Handler(model, shape, handler) is { } own)
-            return model.Handle(own, null, CommandName(shape, handler));
-        if (args.Count > 0 && RunOf(model, shape, handler, args) is { } withValues)
+        if (model.CallOf(written) is { } withValues)
             return withValues();
-        if (Command(model, shape, handler, args) is { } command)
+        var handler = written.Trim();
+        var shape = Shape.Of(model.GetType());
+        if (!handler.Contains('(') && Handler(model, shape, handler) is { } own)
+            return model.Handle(own, null, CommandName(shape, handler));
+        if (!handler.Contains('(') && Command(model, shape, handler) is { } command)
         {
             if (!command.CanExecute(null))
                 return false;
@@ -42,8 +43,8 @@ internal static class Handlers
     /// <summary>Whether the view model has a command for <paramref name="written"/>.</summary>
     public static bool Has(WindowViewModel model, string written)
     {
-        var (handler, args) = Members.Call(written);
-        return Command(model, Shape.Of(model.GetType()), handler, args) is not null;
+        var handler = written.Trim();
+        return model.CallOf(written) is not null || (!handler.Contains('(') && Command(model, Shape.Of(model.GetType()), handler) is not null);
     }
 
     /// <summary>The view model's name as its markup goes by: MainViewModel is the window Main.</summary>
@@ -70,35 +71,9 @@ internal static class Handlers
         return method is { ReturnType.Name: "Void" } ? method.CreateDelegate<Action>(model) : null;
     }
 
-    /// <summary>The command of a handler call: its handler's, its call's with values, or a window it opens.</summary>
-    static ICommand? Command(WindowViewModel model, Shape shape, string handler, List<string> args)
-    {
-        if (args.Count == 0)
-            return Named(model, shape, CommandName(shape, handler)) ?? Target(model, shape, handler);
-        return CommandOf(model, shape, handler, args) is { } name ? Named(model, shape, name) : null;
-    }
-
-    /// <summary>The name of the command of a call with values, as the generator wrote it; the generator numbers a name that is taken (Digit7, then Digit72).</summary>
-    static string? CommandOf(WindowViewModel model, Shape shape, string handler, List<string> args)
-    {
-        var name = Members.CallCommand(handler, args);
-        for (var n = 1; n < 10; n++)
-        {
-            var numbered = n == 1 ? name : $"{name}{n}";
-            if (Named(model, shape, numbered) is not null)
-                return numbered;
-        }
-        return null;
-    }
-
-    /// <summary>The Run_ of a call with values (Run_Digit7), which runs it and says whether its handler refused.</summary>
-    static Func<bool>? RunOf(WindowViewModel model, Shape shape, string handler, List<string> args)
-    {
-        if (CommandOf(model, shape, handler, args) is not { } name)
-            return null;
-        var method = model.GetType().GetMethod("Run_" + name, BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes);
-        return method is { ReturnType.Name: "Boolean" } ? method.CreateDelegate<Func<bool>>(model) : null;
-    }
+    /// <summary>The command of a handler without values: its handler's, or a window it opens.</summary>
+    static ICommand? Command(WindowViewModel model, Shape shape, string handler) =>
+        Named(model, shape, CommandName(shape, handler)) ?? Target(model, shape, handler);
 
     static ICommand? Named(WindowViewModel model, Shape shape, string command) =>
         shape.Commands.GetValueOrDefault(command)?.GetValue(model) as ICommand;

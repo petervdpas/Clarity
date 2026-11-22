@@ -99,3 +99,11 @@ test("each mode's tools are the spec's CanvasMode::tools", () => {
     assert.deepEqual([...CANVAS_MODE_TOOLS[mode]], words(written[1]));
   }
 });
+
+test("the parts that take dragged rows are the parser's (on drop from)", () => {
+  const parser = readFileSync(new URL("../../../crates/clarity-spec/src/parser/parts.rs", import.meta.url), "utf8");
+  const at = parser.indexOf("if event == Event::Drop && cursor.eat_keyword(\"from\")");
+  const kinds = [...parser.slice(at, parser.indexOf("{", parser.indexOf("matches!(kind,", at))).matchAll(/WidgetKind::(\w+)/g)].map((m) => m[1][0].toLowerCase() + m[1].slice(1));
+  assert.ok(at > 0 && kinds.length > 0);
+  assert.deepEqual([...DROP_KINDS], kinds);
+});

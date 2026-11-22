@@ -9,7 +9,7 @@ using namespace clarity;
 TEST(whole_numbers_divide_toward_zero) {
     CHECK_EQ(whole_div(-7, 2), int64_t{-3});
     CHECK_EQ(whole_mod(-7, 3), int64_t{-1});
-    CHECK_EQ(whole_div(INT64_MIN, -1), INT64_MIN);
+    CHECK_THROWS(ValueError, whole_div(INT64_MIN, -1));
     CHECK_THROWS(ValueError, whole_div(1, 0));
     CHECK_THROWS(ValueError, whole_mod(1, 0));
 }

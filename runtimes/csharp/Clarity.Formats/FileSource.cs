@@ -445,8 +445,5 @@ internal sealed class FileDriver : IDriver
         Keep();
     }
 
-    /// <summary>A file source is external: Clarity writes no steps for it.</summary>
-    public void Apply(int version, IReadOnlyList<string> statements) { }
-
     public void Dispose() => db.Dispose();
 }

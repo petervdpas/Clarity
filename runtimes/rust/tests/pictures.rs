@@ -5,6 +5,10 @@ use clarity_runtime::picture::{self, Picture, PictureColumn};
 use clarity_runtime::{Db, Dialect, Error, Id, Record, SqlValue, sql};
 use serde_json::Value;
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 const CASES: &str = include_str!("../../../conformance/pictures.json");
 
 fn cases() -> Value {
@@ -97,7 +101,7 @@ const JPG: [u8; 4] = [0xFF, 0xD8, 0xFF, 0xE0];
 
 fn albums(store: &std::path::Path) -> Db {
     let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
     db.add_store("photos", &store.display().to_string()).unwrap();
     db
 }
@@ -221,7 +225,7 @@ fn a_store_keeps_its_files_in_a_folder_setting() {
     let program = "clarity-folder-test";
     let settings_folder = clarity_runtime::settings::file(program).unwrap().parent().unwrap().to_path_buf();
     let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
     db.add_store_setting("photos", program, "photosFolder", "photos").unwrap();
     let name = picture::file_name(&JPG).unwrap();
 

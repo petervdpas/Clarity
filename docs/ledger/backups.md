@@ -1,6 +1,6 @@
 # Backups
 
-Status: partial. Copies of a project's owned SQLite databases, taken by hand (IDE, command line, agent) and by every runtime before a migration, listed, pruned and restored.
+Status: partial. Copies of a project's owned SQLite databases, taken by hand (IDE, command line, agent) and by clarity-migrate before a migration (the programs do not migrate, docs/ledger/migrations.md), listed, pruned and restored.
 
 Progress: 60%
 

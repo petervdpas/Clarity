@@ -29,7 +29,7 @@ What each stack writes in `out/cli/`:
 
 ## Tests
 - `conformance/command-line.json`: run by R (`runtimes/rust/tests/cli.rs`), Go (`cli_test.go`), C (`cli_test.c`), C++ (`cli_test.cpp`), C# (`CliCaseTests.cs`); skipped by none
-- `crates/clarity-spec/tests/commands.rs`; `crates/clarity-gen/tests/commands.rs`
+- `crates/clarity-spec/tests/spec/commands.rs`; `crates/clarity-gen/tests/gen/commands.rs`
 - Examples: `ledger` (csharp cli), `stock` (go desktop cli)
 
 ## Open

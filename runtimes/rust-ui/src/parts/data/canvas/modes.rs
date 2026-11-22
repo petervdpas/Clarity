@@ -14,6 +14,10 @@
 //!     chosen one, Delete deletes it, and the text tool takes its text where
 //!     it was pressed until Enter places it.
 
+mod painting;
+mod toolbar;
+mod vector;
+
 use std::cell::RefCell;
 
 use crate::wire::FieldContent;
@@ -289,38 +293,8 @@ impl CanvasPart {
     }
 
     /// Whether the person acts on it: it has a mode, may be used and changed.
-    pub(super) fn acts(&self) -> bool {
+    pub(in crate::parts::data::canvas) fn acts(&self) -> bool {
         matches!(self.mode().as_str(), "objects" | "paint" | "vector") && !self.base.read_only() && self.base.enabled()
-    }
-
-    /// The tools its toolbar shows: the canvas's own, of its mode, in the mode's order; all of them when it names none.
-    pub fn tools_shown(&self) -> Vec<&'static str> {
-        let all: &[&'static str] = match self.mode().as_str() {
-            "paint" => &PAINT_TOOLS,
-            "vector" => &VECTOR_TOOLS,
-            // A diagram has tools only where it draws lines (`on connect`); else a press drags, as before.
-            "objects" if self.handles("connect") => &OBJECT_TOOLS,
-            _ => return Vec::new(),
-        };
-        let named = self.base.spec.names("tools");
-        all.iter().copied().filter(|t| named.is_empty() || named.iter().any(|n| n == t)).collect()
-    }
-
-    /// The tool in hand: the one its state names, when the canvas has it, else its first.
-    pub fn tool_in_hand(&self) -> &'static str {
-        let tools = self.tools_shown();
-        let named = self.base.state().and_then(|s| s.tool.clone()).unwrap_or_default();
-        tools.iter().copied().find(|t| *t == named).or_else(|| tools.first().copied()).unwrap_or("")
-    }
-
-    /// How wide it paints or draws, in its units.
-    pub fn brush(&self) -> f64 {
-        self.base.state().and_then(|s| s.brush).map(|b| b as f64).or_else(|| self.base.spec.number("brush")).unwrap_or(2.0)
-    }
-
-    /// The color it paints or draws with: the theme's by name, or written out.
-    pub fn ink(&self) -> String {
-        self.base.state().and_then(|s| s.ink.clone()).filter(|i| !i.is_empty()).or_else(|| self.base.spec.text("ink").map(str::to_string)).unwrap_or_else(|| "text".to_string())
     }
 
     /// The shape chosen, its place in the drawing from 0, as the window keeps it (`selected`, as a table's chosen row); none for none.
@@ -357,126 +331,6 @@ impl CanvasPart {
 
     // -- The toolbar -------------------------------------------------------------
 
-    /// How its toolbox shows (`toolbox popup` or `toolbox slideout`): none without one, or on a canvas without a mode.
-    pub fn toolbox_shows(&self) -> Option<super::toolbox::Shows> {
-        if !matches!(self.mode().as_str(), "paint" | "vector" | "objects") {
-            return None;
-        }
-        match self.base.spec.text("toolbox") {
-            Some("popup") => Some(super::toolbox::Shows::Popup),
-            Some("slideout") => Some(super::toolbox::Shows::Slideout),
-            _ => None,
-        }
-    }
-
-    /// Its toolbox, which shows while the person may paint on it.
-    pub fn toolbox(&self) -> &std::rc::Rc<super::toolbox::Toolbox> {
-        &self.modes.toolbox
-    }
-
-    /// Laid out: its toolbox opens, follows it, or goes when it may no longer be painted on.
-    pub(super) fn follow_toolbox(&mut self, cx: &mut Cx) {
-        let shows = self.toolbox_shows().filter(|_| self.acts());
-        let Some(name) = self.base.name().map(str::to_string) else { return };
-        let link: (std::rc::Rc<dyn crate::parts::PartHost>, String) = (self.base.host.clone(), name);
-        let tools = self.tools_shown();
-        let paints = self.mode() == "paint";
-        // The toolbox page's parts, placed in the canvas; without one, the built-in toolbox of its mode.
-        let (parts, columns) = if self.base.spec.children.is_empty() {
-            (super::toolbox::built_in(&self.mode(), &tools), 4)
-        } else {
-            (self.base.spec.children.clone(), self.base.spec.number("toolboxColumns").map_or(4, |c| c as i64))
-        };
-        self.follow_adjust(cx);
-        self.check_layers();
-        let following = super::toolbox::Following { shows, paints, canvas: self.base.node.bounds, link, parts, columns, written: (self.brush(), self.ink()) };
-        self.modes.toolbox.follow(following, cx);
-        match self.modes.toolbox.take_ask() {
-            Some(super::toolbox::Ask::Import) => {
-                let picker = crate::files::system();
-                let title = locale::translate("importPicture", "Import a picture");
-                let filter = crate::files::FileFilter { name: title.clone(), patterns: ["*.png", "*.jpg", "*.jpeg", "*.webp"].iter().map(|p| p.to_string()).collect() };
-                let options = crate::files::PickerOptions { file_type: Some(filter), ..crate::files::PickerOptions::titled(&title) };
-                cx.later(self.base.node.id(), move || Imported(picker.open_file(&options).and_then(|f| f.read())));
-            }
-            Some(super::toolbox::Ask::Export) => {
-                let bytes = clarity_image::encode(&self.painted_pixels());
-                let picker = crate::files::system();
-                let title = locale::translate("exportPicture", "Export the picture");
-                let name = format!("{}.png", self.base.name().unwrap_or("picture"));
-                cx.later(self.base.node.id(), move || {
-                    let options = crate::files::PickerOptions { suggested_name: Some(name), ..crate::files::PickerOptions::titled(&title) };
-                    if let Some(file) = picker.save_file(&options) {
-                        picker.write(&file, &bytes);
-                    }
-                    Exported
-                });
-            }
-            Some(super::toolbox::Ask::Transform(t)) => self.transform(t, cx),
-            Some(super::toolbox::Ask::Zoom(closer)) => self.zoom_step(closer, cx),
-            Some(super::toolbox::Ask::Adjust) => self.open_adjust(cx),
-            Some(super::toolbox::Ask::Layer(ask)) => self.layer_ask(ask, cx),
-            // A memo's; a canvas's toolbox has no Cut, Copy and Paste row.
-            Some(super::toolbox::Ask::Text(_)) | None => {}
-        }
-    }
-
-    /// A picture file the person chose, laid on the paper: scaled to fit it, in the middle, over what is painted; one edit.
-    pub fn import(&mut self, bytes: &[u8], cx: &mut Cx) {
-        let Ok(picture) = clarity_image::decode(bytes) else {
-            eprintln!("{}: the file is no picture", self.base.name().unwrap_or("canvas"));
-            return;
-        };
-        let mut paper = self.painted_pixels();
-        let (pw, ph) = (f64::from(paper.width()), f64::from(paper.height()));
-        let fit = (pw / f64::from(picture.width())).min(ph / f64::from(picture.height())).min(1.0);
-        let (w, h) = (((f64::from(picture.width()) * fit).round() as u32).max(1), ((f64::from(picture.height()) * fit).round() as u32).max(1));
-        let scaled = clarity_image::ops::resize(&picture, w, h);
-        clarity_image::ops::blend(&mut paper, &scaled, ((pw - f64::from(w)) / 2.0) as i64, ((ph - f64::from(h)) / 2.0) as i64, 100);
-        let png = clarity_image::encode(&paper);
-        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&png))));
-        cx.invalidate();
-        self.act(json!({ "stroke": FieldContent::New(png).value() }));
-    }
-
-    /// Its toolbar's buttons on the screen, in the order of its tools; none when its tools are in a toolbox.
-    pub fn tool_buttons(&self, cx_fonts: &crate::fonts::Fonts, look: &crate::theme::ThemeLook) -> Vec<(&'static str, Rect)> {
-        if self.toolbox_shows().is_some() {
-            return Vec::new();
-        }
-        let b = self.base.node.bounds;
-        let mut x = b.x + 6.0;
-        self.tools_shown()
-            .into_iter()
-            .map(|tool| {
-                let width = cx_fonts.measure(&tool_word(tool), "text", look.size("small"), false) + 16.0;
-                let place = Rect::new(x, b.y + 6.0, width, TOOL_HEIGHT);
-                x += width + 2.0;
-                (tool, place)
-            })
-            .collect()
-    }
-
-    /// Its toolbar's buttons as last drawn, on the screen; none before it was drawn.
-    pub fn toolbar_drawn(&self) -> Vec<(&'static str, Rect)> {
-        self.modes.toolbar.borrow().clone()
-    }
-
-    fn draw_toolbar(&self, p: &Painter) {
-        let look = p.look;
-        let in_hand = self.tool_in_hand();
-        let usable = self.acts();
-        let buttons = self.tool_buttons(p.fonts, look);
-        *self.modes.toolbar.borrow_mut() = buttons.clone();
-        for (tool, place) in buttons {
-            // The tool in hand shows in the accent only while the person may use it.
-            let chosen = usable && tool == in_hand;
-            p.fill(place, look.color(if chosen { "accent" } else { "panel" }), look.radius("button"));
-            p.stroke(place, look.color("border"), look.border(), look.radius("button"));
-            p.text(&tool_word(tool), place, look.color(if chosen { "on_accent" } else { "text" }), look.size("small"), "text", false, TextAlign::Center);
-        }
-    }
-
     // -- objects -----------------------------------------------------------------
 
     fn object_records(&self) -> Vec<Value> {
@@ -492,7 +346,7 @@ impl CanvasPart {
     }
 
     /// A drawing drawn anew (after any handler, a timer's tick too) keeps a drag going, on the same record's object in it.
-    pub(super) fn drawing_changed(&mut self) {
+    pub(in crate::parts::data::canvas) fn drawing_changed(&mut self) {
         let Some(held) = self.modes.dragging else { return };
         let record = self.modes.shown_objects.get(held.place).cloned().unwrap_or(Value::Null);
         let place = self.drawing().iter().position(|s| matches!(s, Shape::Object { record: r, .. } if *r == record));
@@ -501,7 +355,7 @@ impl CanvasPart {
     }
 
     /// The drawing as it shows: an object being dragged moved with what is drawn after it.
-    pub(super) fn mode_shapes(&self, shapes: Vec<Shape>) -> Vec<Shape> {
+    pub(in crate::parts::data::canvas) fn mode_shapes(&self, shapes: Vec<Shape>) -> Vec<Shape> {
         match self.modes.dragging {
             Some(d) if d.moved => with_object_moved(shapes, d.place, d.by.0, d.by.1),
             _ => shapes,
@@ -510,312 +364,9 @@ impl CanvasPart {
 
     // -- paint -------------------------------------------------------------------
 
-    /// The picture of the bound image field, read again when the field holds another.
-    fn painted(&self) -> Option<Image> {
-        let now = self.painted_for();
-        if let Some((from, image)) = self.modes.painted.borrow().as_ref() {
-            if *from == now {
-                return image.clone();
-            }
-        }
-        // A stored picture, or one of the field's file store, is fetched before
-        // it is painted on (as a picture field fetches it), so a stroke never
-        // sends a blank picture over the one the record has.
-        let bind = self.base.bound();
-        let bytes = match now.0.as_ref().map(FieldContent::read) {
-            Some(Some(FieldContent::New(bytes))) => Some(bytes),
-            Some(Some(FieldContent::Stored)) => bind.and_then(|b| self.base.host.fetch(b, None)),
-            Some(Some(FieldContent::InStore(path))) => bind.and_then(|b| self.base.host.fetch(b, Some(&path))),
-            _ => None,
-        };
-        // Fail safe: a picture that does not load leaves the canvas blank to paint on.
-        let image = bytes.and_then(|b| {
-            let image = Image::from_encoded(skia_safe::Data::new_copy(&b));
-            if image.is_none() {
-                eprintln!("{}: its picture did not load", self.base.name().unwrap_or("canvas"));
-            }
-            image
-        });
-        *self.modes.painted.borrow_mut() = Some((now, image.clone()));
-        image
-    }
-
-    /// The bound field's value and the record it is in.
-    pub(super) fn painted_for(&self) -> PaintedFor {
-        let Some(bind) = self.base.bound() else { return (None, None) };
-        let value = self.base.host.read(bind);
-        let record = bind.rfind('.').filter(|d| *d > 0).and_then(|d| self.base.host.read(&bind[..d]));
-        (value, record)
-    }
-
-    /// The size of the picture painted on: the picture's own, else the canvas's units.
-    fn picture_size(&self) -> (i32, i32) {
-        match self.painted() {
-            Some(p) => (p.width(), p.height()),
-            None => {
-                let (uw, uh) = self.units();
-                ((uw.round() as i32).max(1), (uh.round() as i32).max(1))
-            }
-        }
-    }
-
-    fn end_stroke(&mut self, points: Vec<(f64, f64)>, cx: &mut Cx) {
-        let (width, height) = self.picture_size();
-        let (uw, uh) = self.units();
-        // The units in the picture's pixels: the same when it is the canvas's size.
-        let sx = width as f64 / uw.max(1.0);
-        let sy = height as f64 / uh.max(1.0);
-        let scaled: Vec<(f64, f64)> = points.iter().map(|(x, y)| (x * sx, y * sy)).collect();
-        let bytes = painted_with(self.painted().as_ref(), width, height, &scaled, self.tool_in_hand(), color_of(cx.look(), &self.ink()), self.brush() * sx, self.modes.toolbox.opacity());
-        // Shown as painted at once; the field's picture follows from the runtime.
-        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&bytes))));
-        cx.invalidate();
-        let stroke = FieldContent::New(bytes).value();
-        self.act(json!({ "stroke": stroke }));
-    }
-
-    /// The picture painted on as pixels, a blank one of its size when there is none yet.
-    /// The pixels the tools work on: the layer in hand when there are layers, else the picture.
-    pub(super) fn painted_pixels(&self) -> clarity_image::RgbaImage {
-        let layers = &self.modes.layers;
-        if layers.active() {
-            return layers.list[layers.in_hand].pixels.clone();
-        }
-        self.field_pixels()
-    }
-
-    /// The picture as shown, the layers composed.
-    pub(super) fn field_pixels(&self) -> clarity_image::RgbaImage {
-        let (width, height) = self.picture_size();
-        self.painted()
-            .and_then(|i| i.encode(None, EncodedImageFormat::PNG, None))
-            .and_then(|png| clarity_image::decode(png.as_bytes()).ok())
-            .unwrap_or_else(|| clarity_image::RgbaImage::new(width.max(1) as u32, height.max(1) as u32))
-    }
-
-    /// The picture's pixel under a point in units.
-    fn pixel_of(&self, unit: (f64, f64), pixels: &clarity_image::RgbaImage) -> Option<(u32, u32)> {
-        let (uw, uh) = self.units();
-        let (x, y) = (unit.0 * f64::from(pixels.width()) / uw.max(1.0), unit.1 * f64::from(pixels.height()) / uh.max(1.0));
-        (x >= 0.0 && y >= 0.0 && x < f64::from(pixels.width()) && y < f64::from(pixels.height())).then_some((x as u32, y as u32))
-    }
-
-    /// The fill bucket: the area of near colours under the point takes the ink, as one edit.
-    fn fill_at(&mut self, unit: (f64, f64), cx: &mut Cx) {
-        let mut pixels = self.painted_pixels();
-        let Some((x, y)) = self.pixel_of(unit, &pixels) else { return };
-        let ink = color_of(cx.look(), &self.ink());
-        let alpha = (f64::from(ink.a()) * self.modes.toolbox.opacity() / 100.0).round() as u8;
-        clarity_image::ops::fill(&mut pixels, x, y, clarity_image::Rgba([ink.r(), ink.g(), ink.b(), alpha]), FILL_TOLERANCE);
-        self.show_and_send(clarity_image::encode(&pixels), cx);
-    }
-
-    /// A new picture painted: shown at once, and sent as one edit; the field's picture follows from the runtime.
-    pub(super) fn show_and_send(&mut self, png: Vec<u8>, cx: &mut Cx) {
-        // With layers, what the tools made is the layer in hand; the layers composed are kept.
-        if self.modes.layers.active() {
-            if let Ok(pixels) = clarity_image::decode(&png) {
-                let at = self.modes.layers.in_hand;
-                self.modes.layers.list[at].pixels = pixels;
-            }
-            self.send_composed(cx);
-            return;
-        }
-        self.send_picture(png, cx);
-    }
-
-    /// The picture shown and kept as one edit.
-    pub(super) fn send_picture(&mut self, png: Vec<u8>, cx: &mut Cx) {
-        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&png))));
-        cx.invalidate();
-        self.act(json!({ "stroke": FieldContent::New(png).value() }));
-    }
-
-    /// A picture shown while the person works (a selection lifted), not sent; with layers, the layer in hand as it would be.
-    pub(super) fn show_only(&self, png: &[u8]) {
-        let shown = if self.modes.layers.active() {
-            let (w, h) = self.field_pixels_size();
-            let mut layers: Vec<super::layers::Layer> = self.modes.layers.list.clone();
-            if let Ok(pixels) = clarity_image::decode(png) {
-                layers[self.modes.layers.in_hand].pixels = pixels;
-            }
-            let all = super::layers::Layers { list: layers, in_hand: self.modes.layers.in_hand, sent: Vec::new(), seen: None };
-            clarity_image::encode(&all.composed(w, h))
-        } else {
-            png.to_vec()
-        };
-        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&shown))));
-    }
-
-    /// The picture's size in pixels.
-    pub(super) fn field_pixels_size(&self) -> (u32, u32) {
-        let (w, h) = self.picture_size();
-        (w.max(1) as u32, h.max(1) as u32)
-    }
-
-    pub(super) fn modes_layers(&self) -> &super::layers::Layers {
-        &self.modes.layers
-    }
-
-    pub(super) fn modes_layers_mut(&mut self) -> &mut super::layers::Layers {
-        &mut self.modes.layers
-    }
-
-    /// The toolbox's layers tool sees the layers as they are.
-    pub(super) fn share_layers(&self) {
-        self.modes.toolbox.set_layer_rows(self.modes.layers.rows());
-    }
-
-    /// The opacity the toolbox paints with, 0 to 100.
-    pub(super) fn opacity(&self) -> f64 {
-        self.modes.toolbox.opacity()
-    }
-
-    /// What the raster tools keep while the person works (raster.rs).
-    pub(super) fn raster(&mut self) -> &mut super::raster::RasterState {
-        &mut self.modes.raster
-    }
-
-    pub(super) fn raster_ref(&self) -> &super::raster::RasterState {
-        &self.modes.raster
-    }
-
-    /// The colour picker: the pixel under the point becomes the ink, written out.
-    fn pick_at(&mut self, unit: (f64, f64)) {
-        let pixels = self.painted_pixels();
-        let Some((x, y)) = self.pixel_of(unit, &pixels) else { return };
-        let p = pixels.get_pixel(x, y);
-        let ink = format!("#{:02x}{:02x}{:02x}", p[0], p[1], p[2]);
-        if let Some(name) = self.base.name() {
-            crate::parts::change_state(&*self.base.host, name, |s| s.ink = Some(ink.clone()));
-        }
-    }
-
     // -- vector ------------------------------------------------------------------
 
-    /// The shapes of the bound drawing, as the runtime reads its SVG.
-    pub fn vector_shapes(&self) -> Vec<Map<String, Value>> {
-        let svg = self.base.bound().and_then(|path| self.base.host.read(path)).and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-        if let Some((kept, shapes)) = self.modes.vector.borrow().as_ref() {
-            if *kept == svg {
-                return shapes.clone();
-            }
-        }
-        let (uw, uh) = self.units();
-        let (_, shapes) = super::drawing::drawing_shapes(&svg, [uw as i64, uh as i64]);
-        *self.modes.vector.borrow_mut() = Some((svg, shapes.clone()));
-        shapes
-    }
-
-    /// The topmost shape whose box holds a unit, a few pixels around it too.
-    fn vector_shape_at(&self, p: (f64, f64)) -> Option<usize> {
-        let near = 4.0 / self.viewport().scale.max(1e-6);
-        self.vector_shapes().iter().enumerate().rev().find_map(|(i, shape)| {
-            let b = box_of(shape)?;
-            (p.0 >= b.x - near && p.0 <= b.right() + near && p.1 >= b.y - near && p.1 <= b.bottom() + near).then_some(i)
-        })
-    }
-
-    /// The shape `tool` draws from one unit to another, in the canvas's ink and brush; none when it has no size.
-    pub fn sketched(&self, tool: &str, from: (f64, f64), to: (f64, f64), points: &[(f64, f64)]) -> Option<Value> {
-        let (left, top) = (from.0.min(to.0), from.1.min(to.1));
-        let (w, h) = ((to.0 - from.0).abs(), (to.1 - from.1).abs());
-        if tool != "path" && w == 0.0 && h == 0.0 {
-            return None;
-        }
-        let (ink, brush) = (self.ink(), as_value(self.brush()));
-        let v = as_value;
-        Some(match tool {
-            "line" => json!({"op": "line", "x1": v(from.0), "y1": v(from.1), "x2": v(to.0), "y2": v(to.1), "color": ink, "width": brush}),
-            "rect" => json!({"op": "rect", "x": v(left), "y": v(top), "width": v(w), "height": v(h), "color": ink}),
-            "ellipse" => json!({"op": "ellipse", "x": v(left + w / 2.0), "y": v(top + h / 2.0), "rx": v(w / 2.0), "ry": v(h / 2.0), "color": ink}),
-            "path" if points.len() >= 2 => {
-                let all: Vec<Value> = points.iter().flat_map(|p| [v(p.0), v(p.1)]).collect();
-                json!({"op": "path", "points": all, "color": ink, "width": brush})
-            }
-            _ => return None,
-        })
-    }
-
-    fn start_typing(&mut self, unit: (f64, f64), cx: &mut Cx) {
-        self.end_typing(true, cx);
-        let mut editor = TextEditor::new(false);
-        editor.placeholder = Some(locale::translate("canvasText", "The text"));
-        // The canvas keeps the keyboard and hands the input its keys and text.
-        editor.focus_moved(true, cx);
-        self.modes.typing = Some((unit, editor));
-        self.place_typing(cx);
-        cx.invalidate();
-    }
-
-    /// The box the text being typed takes on the screen, where it goes.
-    fn typing_box(&self, cx: &Cx) -> Option<Rect> {
-        let ((x, y), editor) = self.modes.typing.as_ref()?;
-        let point = self.at(self.viewport(), *x, *y);
-        let size = cx.look().size("text");
-        let width = (cx.fonts().measure(&editor.text(), "text", size, false) + 24.0).max(160.0);
-        let height = (size * 2.0).max(28.0);
-        Some(Rect::new(point.x as f64, point.y as f64 - height / 2.0, width, height))
-    }
-
-    /// Places the text input where its text goes, as wide as the text needs.
-    pub(super) fn place_typing(&mut self, cx: &Cx) {
-        if let Some(place) = self.typing_box(cx) {
-            if let Some((_, editor)) = self.modes.typing.as_mut() {
-                editor.place(place, cx);
-            }
-        }
-    }
-
-    /// A press in the text input moves its caret; true when it was in it.
-    pub(super) fn typing_pressed(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
-        let Some((_, editor)) = self.modes.typing.as_mut() else { return false };
-        let place = editor.node().bounds;
-        if !place.contains(at.screen_x, at.screen_y) {
-            return false;
-        }
-        let b = self.base.node.bounds;
-        let inside = PointerInput { x: at.x - (place.x - b.x), y: at.y - (place.y - b.y), ..at };
-        editor.node_mut().pressed = true;
-        editor.pressed(inside, cx);
-        true
-    }
-
-    /// An input method composes in the text being typed.
-    pub(super) fn typing_compose(&mut self, composing: Option<crate::element::Composition>, cx: &mut Cx) {
-        if let Some((_, editor)) = self.modes.typing.as_mut() {
-            editor.compose(composing, cx);
-        }
-    }
-
-    /// A press that went to the text input selects as it moves and ends as it is let go; true when it was one.
-    fn typing_dragged(&mut self, at: PointerInput, released: bool, cx: &mut Cx) -> bool {
-        let b = self.base.node.bounds;
-        let Some((_, editor)) = self.modes.typing.as_mut().filter(|(_, e)| e.node().pressed) else { return false };
-        let place = editor.node().bounds;
-        let inside = PointerInput { x: at.x - (place.x - b.x), y: at.y - (place.y - b.y), ..at };
-        if released {
-            editor.released();
-            editor.node_mut().pressed = false;
-        } else {
-            editor.dragged(inside, cx);
-        }
-        true
-    }
-
-    /// Places the text typed (`place`) or drops it.
-    pub fn end_typing(&mut self, place: bool, cx: &mut Cx) {
-        let Some((at, mut editor)) = self.modes.typing.take() else { return };
-        editor.focus_moved(false, cx);
-        let text = editor.text();
-        cx.invalidate();
-        if place && !text.trim().is_empty() {
-            let size = as_value((self.brush() * 4.0).max(10.0));
-            self.act(json!({"add": {"op": "text", "x": as_value(at.0), "y": as_value(at.1), "text": text, "color": self.ink(), "size": size}}));
-        }
-    }
-
-    pub(super) fn mode_text(&mut self, text: &str, cx: &mut Cx) {
+    pub(in crate::parts::data::canvas) fn mode_text(&mut self, text: &str, cx: &mut Cx) {
         if let Some((_, editor)) = self.modes.typing.as_mut() {
             editor.typed(text, cx);
             self.place_typing(cx);
@@ -823,7 +374,7 @@ impl CanvasPart {
         }
     }
 
-    pub(super) fn mode_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+    pub(in crate::parts::data::canvas) fn mode_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         if let Some((_, editor)) = self.modes.typing.as_mut() {
             // Enter places the text, Escape drops it; every other key is the text input's.
             if matches!(key.key, Key::Enter | Key::Escape) {
@@ -851,7 +402,7 @@ impl CanvasPart {
     // -- the pointer ----------------------------------------------------------------
 
     /// A press of a canvas with a mode; true when the mode took it.
-    pub(super) fn mode_pressed(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+    pub(in crate::parts::data::canvas) fn mode_pressed(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
         if !self.acts() {
             return false;
         }
@@ -904,7 +455,7 @@ impl CanvasPart {
         true
     }
 
-    pub(super) fn mode_moved(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+    pub(in crate::parts::data::canvas) fn mode_moved(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
         if self.typing_dragged(at, false, cx) {
             return true;
         }
@@ -937,7 +488,7 @@ impl CanvasPart {
         false
     }
 
-    pub(super) fn mode_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+    pub(in crate::parts::data::canvas) fn mode_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
         if self.typing_dragged(at, true, cx) {
             return true;
         }
@@ -980,7 +531,7 @@ impl CanvasPart {
     }
 
     /// The pointer was taken away: a drag, a stroke or a shape being drawn is dropped, not sent.
-    pub(super) fn mode_cancelled(&mut self) {
+    pub(in crate::parts::data::canvas) fn mode_cancelled(&mut self) {
         self.modes.dragging = None;
         self.modes.stroke = None;
         self.modes.sketching = None;
@@ -990,7 +541,7 @@ impl CanvasPart {
     // -- drawing ----------------------------------------------------------------------
 
     /// What a mode draws over the drawing: the painted picture and the stroke, or the vector shapes, the chosen one's frame and the one being drawn; and its toolbar.
-    pub(super) fn draw_mode(&self, p: &Painter, v: Viewport) {
+    pub(in crate::parts::data::canvas) fn draw_mode(&self, p: &Painter, v: Viewport) {
         let at = |x: f64, y: f64| self.at(v, x, y);
         let pictures = |name: &str| self.picture(name);
         let canvas = p.canvas;

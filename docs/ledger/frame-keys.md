@@ -8,7 +8,7 @@ Progress: 80%
 - Spec: `crates/clarity-spec/src/frame.rs` (regions :16, :54-96; `BUILT_IN_COMMANDS` quit, close, language, theme, keys, undo, redo, back, forward :187; `BUTTON_COMMANDS` :191; sign-in and sign-out targets :195), `shortcuts.rs` (`catalog`: commands per place), `check.rs` (`check_page_keys` :673, `frame_keys` :2789; a frame on a non-window page :467)
 - Project file: `keys editable` (`crates/clarity-project/src/file.rs:351`)
 - Generators: frames written into the app and window markup (`crates/clarity-gen/src/web_windows.rs`); catalog `runtimes/rust-ui/catalog/command-*.json`, `sidebar-*.json`
-- Runtimes: key rules and the person's keys R `runtimes/rust/src/keys.rs` (used by Clarity.UI for every stack); C# `Clarity.Runtime/KeyRules.cs`, `PersonKeys.cs`; ribbon and sidebar state in each runtime's part state
+- Runtimes: key rules and the person's keys R `runtimes/rust/src/keys.rs` (used by Clarity.UI for every stack); C# `PersonKeys.cs`; ribbon and sidebar state in each runtime's part state
 - Clarity.UI: `runtimes/rust-ui/src/frame/` (`menu_bar.rs` with Alt letters and F10, `menus.rs`, `toolbar.rs`, `ribbon.rs`, `sidebar.rs`, `footer.rs`, `buttons.rs`, `rules.rs`, `spec.rs`), `shortcuts.rs`, `dialogs/keys.rs` (keys window), person's keys kept through the program's settings (`window/mod.rs:103-109`)
 - Footer: its own part is the status item, see [parts-inputs](parts-inputs.md); a footer with parts is a row high and 8 more (`layout.rs` `FOOTER_PARTS_BEYOND_ROW`, `STATUS_HEIGHT` for a status line alone; see [windows-dialogs](windows-dialogs.md))
 - IDE: `app/src/lib/FrameProperties.svelte` (also a part's context menu, Add item and Add separator; see [by-hand](by-hand.md)); the IDE's own keys are [ide-shell](ide-shell.md)
@@ -27,7 +27,7 @@ Progress: 80%
 
 ## Conflicts
 - The person's keys in C# have two writers: Clarity.UI keeps them through the program's settings (`runtimes/rust-ui/src/window/mod.rs:103-109`), and the C# program writes `keys` from `PersonKeys`, read once at start (`crates/clarity-gen/src/csharp/model.rs:287`, `runtimes/csharp/Clarity.Runtime/PersonKeys.cs:25`). A save after a key change may write the old keys back.
-- Key rules written three times: `runtimes/rust/src/keys.rs:99`, `runtimes/csharp/Clarity.Runtime/KeyRules.cs:79` (no callers outside tests), `runtimes/web/src/host/keys.ts:151`. C# counts UTF-16 units for one-letter keys, Rust chars (keys.rs:107).
+- Key rules written twice: `runtimes/rust/src/keys.rs:99` and `runtimes/web/src/host/keys.ts:151` (C#'s dead `KeyRules.cs` was removed 2026-11-21).
 
 ## Decisions
 - 2026-10-25: keys belong to layers, the innermost first: the focused part, the view, the window's frame, the app's frame; a key is unique within one layer, an inner layer may reuse an outer's.

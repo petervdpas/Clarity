@@ -1,0 +1,10 @@
+{
+  "about": "The frame a window shows (clarity_spec::frame::shown, the designer's shownFrame in runtimes/web/src/screen/frame.ts): each region the window has replaces the app's of the same kind (a sidebar, of the same side); a region it lacks is the app's; a dialog shows none. `app` and `own` name the regions each has (menu, toolbar, left, right, footer); `shows` says, per region, whose it shows: own, app, or null for none.",
+  "cases": [
+    { "name": "a window without regions shows the app's", "dialog": false, "app": ["menu", "toolbar", "left", "footer"], "own": [], "shows": { "menu": "app", "toolbar": "app", "left": "app", "right": null, "footer": "app" } },
+    { "name": "a window's own region replaces the app's of its kind", "dialog": false, "app": ["menu", "toolbar", "left", "footer"], "own": ["toolbar", "right"], "shows": { "menu": "app", "toolbar": "own", "left": "app", "right": "own", "footer": "app" } },
+    { "name": "a sidebar replaces only the one on its side", "dialog": false, "app": ["left", "right"], "own": ["left"], "shows": { "menu": null, "toolbar": null, "left": "own", "right": "app", "footer": null } },
+    { "name": "without an app frame a window shows its own", "dialog": false, "app": [], "own": ["menu", "left"], "shows": { "menu": "own", "toolbar": null, "left": "own", "right": null, "footer": null } },
+    { "name": "a dialog shows no frame", "dialog": true, "app": ["menu", "toolbar", "left", "right", "footer"], "own": [], "shows": { "menu": null, "toolbar": null, "left": null, "right": null, "footer": null } }
+  ]
+}

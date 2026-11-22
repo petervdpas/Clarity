@@ -32,7 +32,7 @@
   import type { Settings } from "@clarity/ui/generated/Settings.ts";
   import type { Selected } from "./selection";
   import type { WidgetInfo } from "@clarity/ui/generated/WidgetInfo.ts";
-  import { NO_FRAME, findApp, findFrameElement, shownFrame } from "@clarity/ui/screen/frame.ts";
+  import { findApp, findFrameElement, frameForPage, shownFrame } from "@clarity/ui/screen/frame.ts";
   import { themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
   import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
@@ -194,9 +194,7 @@
   const frame = $derived(
     app !== null
       ? shownFrame(null, page.frame)
-      : page.kind === "dialog"
-        ? NO_FRAME
-        : shownFrame(projectApp, page.kind === "window" ? page.frame : null),
+      : frameForPage(projectApp, page),
   );
   // Where Clarity.UI drew the window's parts and grids, for the design layer over it.
   let laid = $state<Layout | null>(null);

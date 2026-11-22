@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="todo.Users" title="@usersTitle" onopen="usersOpened">
+  <Menu name="usersMenu">
+    <Item caption="@fileItem" name="usersFileItem">
+      <Item caption="@mainItem" name="mainItem" opens="close" />
+      <Item kind="separator" />
+      <Item caption="@languageItem" name="usersLanguageItem" opens="language" />
+      <Item caption="@themeItem" name="usersThemeItem" opens="theme" />
+      <Item kind="separator" />
+      <Item caption="@quitItem" name="usersQuitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+  </Menu>
+  <Ribbon name="usersRibbon" collapsible="true">
+    <Tab title="@homeTab" name="usersHomeTab">
+      <Group title="@peopleGroup" name="usersPeopleGroup">
+        <Item kind="button" caption="@mainButtonCaption" name="mainButton" icon="list" large="true" opens="close" />
+      </Group>
+      <Group title="@settingsGroup" name="usersSettingsGroup">
+        <Item kind="button" caption="@languageButtonCaption" name="usersLanguageButton" icon="languages" large="true" opens="language" />
+        <Item kind="button" caption="@themeButtonCaption" name="usersThemeButton" large="true" opens="theme" />
+      </Group>
+    </Tab>
+  </Ribbon>
+  <Content name="main" at="1,1" span="12" rows="11">
+    <View name="UsersView" />
+  </Content>
+  <Slideout name="personPanel" at="1,1" span="6" rows="4" caption="@personSlideout" slideWidth="460" pinnable="true" onclose="personPanelClosed">
+    <Content name="personPanelContent" at="1,1" span="6" rows="4">
+      <View name="PersonEditor" />
+    </Content>
+  </Slideout>
+</Window>

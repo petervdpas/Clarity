@@ -1,6 +1,6 @@
 {
   "bundle": {
-    "externalBin": ["binaries/clarity"],
+    "externalBin": ["binaries/clarity", "binaries/clarity-migrate"],
     "resources": {
       "clarity-ui/include/*": "clarity-ui/include/",
       "clarity-ui/lib/*": "clarity-ui/lib/",

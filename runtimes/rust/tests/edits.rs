@@ -127,3 +127,22 @@ fn a_setting_a_part_changed_is_taken_back() {
     assert_eq!(now.data["name"], json!("Ada"));
     assert_eq!(now.data["settings"]["id"], json!(0));
 }
+
+/// A window's bus keeps its last edits as every runtime does (conformance/edit-bus.json, `keeps`): one past
+/// them drops the oldest, so that many undos take back the last ones and the next finds nothing.
+#[test]
+fn the_bus_keeps_as_many_edits_as_every_runtime_keeps() {
+    let file: Value = serde_json::from_str(include_str!("../../../conformance/edit-bus.json")).unwrap();
+    let keeps = file["keeps"].as_u64().unwrap() as usize;
+    let data = |n: usize| json!({ "count": n }).as_object().unwrap().clone();
+    let mut bus = EditBus::default();
+    bus.reset(&data(0));
+    for n in 1..=keeps + 1 {
+        bus.edit("countBox", "form", &data(n), &[]);
+    }
+    let mut now = data(keeps + 1);
+    for _ in 0..keeps {
+        now = bus.undo("form", &now, true, |_, _| Ok(())).unwrap().expect("an edit to take back");
+    }
+    assert!(bus.undo("form", &now, true, |_, _| Ok(())).unwrap().is_none(), "the oldest went past the bus's keeping");
+}

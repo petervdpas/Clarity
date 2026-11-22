@@ -6,6 +6,7 @@
 
 #include "check.h"
 #include "clarity/code.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 typedef struct {
@@ -94,7 +95,7 @@ static bool accounts(ClarityDb** out) {
     static const char* const create[] = {"CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL)",
                                          "CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL)"};
     ClarityStep step = {create, 2};
-    return clarity_db_memory(out) && clarity_migrate(*out, "", &step, 1, NULL);
+    return clarity_db_memory(out) && apply_steps(*out, "", &step, 1, NULL);
 }
 
 /// The log, one line after another.
@@ -231,7 +232,7 @@ static bool planned(ClarityDb** db, Plan* out) {
     static const char* const create[] = {"CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
                                          "CREATE TABLE plan_task (id INTEGER PRIMARY KEY, plan INTEGER REFERENCES plan(id), title TEXT NOT NULL)"};
     ClarityStep step = {create, 2};
-    if (!clarity_db_memory(db) || !clarity_migrate(*db, "", &step, 1, NULL)) return false;
+    if (!clarity_db_memory(db) || !apply_steps(*db, "", &step, 1, NULL)) return false;
     *out = (Plan){0, "Model"};
     if (!clarity_save(*db, &plan, out)) return false;
     PlanTask draw = {0, out->id, "Draw"}, write = {0, out->id, "Write"};

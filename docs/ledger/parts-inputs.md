@@ -7,7 +7,7 @@ Progress: 90%
 ## Code
 - Spec: `crates/clarity-spec/src/widgets.rs` (catalog entries, events per kind from `enum Event` :166, `CODE_LANGUAGES` :600), `colors.rs`, `icons.rs` (Lucide 1.50.0 vendored in `crates/clarity-spec/icons`)
 - Generators: parts written into window markup (`crates/clarity-gen/src/web_windows.rs`), form labels and undo scopes filled in; part properties code reads in each stack's logic.rs
-- Runtimes: ranges R `runtimes/rust/src/ranges.rs`, Go `clarity/ranges.go`, C `clarity/ranges.c`, C++ `clarity/ranges.cpp`, C# `Ranges.cs`; dropdown options `dropdown_options.*` in R, Go, C, C++, C# `DropdownOptions.cs`; list fields `list_fields.*` in all five (C# `ListFields.cs`); spin range from code (`spin_min`, `SpinMin`, `clarity_ui_spin_min`, `PartState.SpinMin`)
+- Runtimes: ranges R `runtimes/rust/src/ranges.rs`, Go `clarity/ranges.go`, C `clarity/ranges.c`, C++ `clarity/ranges.cpp`, (C#'s dead `Ranges.cs` removed 2026-11-21); dropdown options `dropdown_options.*` in R, Go, C, C++, C# `DropdownOptions.cs`; list fields `list_fields.*` in all five (C# `ListFields.cs`); spin range from code (`spin_min`, `SpinMin`, `clarity_ui_spin_min`, `PartState.SpinMin`)
 - Clarity.UI: `runtimes/rust-ui/src/parts/` `label.rs`, `heading.rs`, `button.rs`, `text_box.rs` (text, password with eye and copy), `text_editor.rs` (memo), `code_colors.rs` (19 languages), `check_box.rs`, `inputs/` (`number.rs`, `slider.rs`, `toggle.rs`, `dropdown.rs`, `typed_dropdown.rs`, `choice_list.rs`, `radio.rs`, `date.rs`, `calendar.rs`, `color.rs`, `file.rs`, `folder.rs`, `tags.rs`, `link.rs`, `picture_field.rs`, `formats.rs`), `containers/` (`small.rs` help, badge, progress, busy; `text.rs`, `icon.rs`, `separator.rs`, `buttons.rs`, `image.rs`, `display.rs`); system pickers `desktop/files/` (portal, osascript, Windows COM)
 - Status item (2026-11-13): spec `widgets.rs` (`StatusItem`, :1246, in the palette's Data group), `check.rs` (max), `code/check.rs` (caption, checked, error set by code; a bound one keeps its own check mark); Clarity.UI `parts/containers/small.rs` (`StatusItemPart`), `access/mod.rs`; C# window state `csharp/windows.rs`; the every-part fixture's `copiesItem`
 - IDE: `app/src/lib/PageProperties.svelte` (Placeholder, Code, Copy button, Undo, ranges), `PartTile.svelte`, `IconField.svelte`
@@ -15,7 +15,7 @@ Progress: 90%
 
 ## Tests
 - `conformance/forms.json`, `small-parts.json`: run by rust-ui only
-- `conformance/ranges.json`, `dropdown-options.json`: run by R, Go, C, C++, rust-ui (ranges also `runtimes/web`); skipped by C# (`Ranges.cs`, `DropdownOptions.cs` name them in a comment, no test loads them)
+- `conformance/ranges.json`, `dropdown-options.json`: run by R, Go, C, C++, rust-ui ; skipped by C# (`DropdownOptions.cs` names it in a comment, no test loads it); `runtimes/web`'s copy of the range arithmetic was removed 2026-11-21 (only the designer's `numberRange` is left)
 - `conformance/list-fields.json`: run by all five, rust-ui, `runtimes/web`
 - `conformance/colors.json`, `code-languages.json`: run by rust-ui and the spec; `display.json`: rust-ui and `runtimes/web`
 - spec `status_item.rs`; rust-ui `tests/parts/parts_status_item.rs` (caption, gauge, check mark, warning and tooltip, click)
@@ -38,7 +38,6 @@ Progress: 90%
 - Decision needed: CLAUDE.md:19 says no dialog of the system. Generated apps open the system's file and folder pickers (`runtimes/rust-ui/src/desktop/files/mod.rs`), and manual `parts.input.md:202`, `data.settings.md:137` describe the folder picker as intended.
 - Code-language list twice: `crates/clarity-spec/src/widgets.rs:600`, `runtimes/rust-ui/src/parts/code_colors.rs:9`; equal.
 - Display formats three times: `runtimes/rust-ui/src/parts/inputs/formats.rs`, `runtimes/web/src/screen/format.ts`, `runtimes/csharp/Clarity.Runtime/Formats.cs`; equal on the cases.
-- C# `Ranges.cs` and `Palette.cs` have no callers outside tests.
 
 ## Decisions
 - 2026-10-19: every input tells a change only when the person changed it to a value that differs, never for what code sets.

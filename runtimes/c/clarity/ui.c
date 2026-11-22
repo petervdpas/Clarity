@@ -663,7 +663,6 @@ cJSON* clarity_window_state_json(const ClarityWindowState* s) {
     for (size_t i = 0; i < s->part_count; ++i) cJSON_AddItemToObject(parts, s->parts[i].name, part_json(&s->parts[i]));
     cJSON* selected = cJSON_AddObjectToObject(out, "selected");
     for (size_t i = 0; i < s->selected_count; ++i) cJSON_AddNumberToObject(selected, s->selected[i].name, s->selected[i].index);
-    if (s->views) cJSON_AddItemToObject(out, "views", cJSON_Duplicate(s->views, true));
     return out;
 }
 
@@ -689,8 +688,6 @@ bool clarity_window_state_from_json(const cJSON* in, ClarityWindowState* out) {
         if (!cJSON_IsNumber(item)) continue;
         s.selected[s.selected_count++] = (ClaritySelected){clarity_copy(item->string), (int)item->valuedouble};
     }
-    const cJSON* views = cJSON_GetObjectItemCaseSensitive(in, "views");
-    if (cJSON_IsObject(views)) s.views = cJSON_Duplicate(views, true);
     *out = s;
     return true;
 }
@@ -775,4 +772,17 @@ cJSON* clarity_json_object(int count, ...) {
     }
     va_end(args);
     return out;
+}
+
+cJSON* clarity_data_at(const cJSON* data, const char* path) {
+    const cJSON* at = data;
+    const char* name = path ? path : "";
+    if (!*name) return NULL;
+    while (at && *name) {
+        const char* dot = strchr(name, '.');
+        size_t length = dot ? (size_t)(dot - name) : strlen(name);
+        at = cJSON_IsObject(at) ? cJSON_GetObjectItemCaseSensitive(at, clarity_copy_n(name, length)) : NULL;
+        name += length + (dot ? 1 : 0);
+    }
+    return (cJSON*)at;
 }

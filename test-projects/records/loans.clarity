@@ -1,0 +1,101 @@
+module loans
+
+use music
+
+entity Friend
+    name: text(80), required, unique, label @friendNameLabel
+    phone: text(20), label @friendPhoneLabel
+    email: email, label @friendEmailLabel
+
+// An album lent to a friend, until it comes back.
+entity Loan
+    album: ref Album, required, label @loanAlbumLabel
+    friend: ref Friend, required, label @loanFriendLabel
+    lentOn: date, required, label @loanLentOnLabel
+    returnedOn: date, help @loanReturnedOnHelp, label @loanReturnedOnLabel
+
+// Whether an album is with a friend now, other than in `loan`.
+function lentElsewhere(loan: Loan) -> bool
+    let open = find l in Loan where l.album == loan.album and l.returnedOn == none
+    for other in open
+        if other.id != loan.id
+            return true
+    return false
+
+action bringBack(loan: Loan)
+    require loan.returnedOn == none
+    effects db.write
+    loan.returnedOn = today()
+    save loan
+
+code LoanBrowse
+    handler windowReturned
+        if showReturned.checked
+            loans = find l in Loan order by l.lentOn desc
+        else
+            loans = find l in Loan where l.returnedOn == none order by l.lentOn
+
+code LoanBrowseView
+    handler openClicked
+        open LoanDialog with loan = loanGrid.selected
+
+    handler lendClicked
+        open LoanDialog
+
+    handler removeClicked
+        delete loanGrid.selected
+        windowReturned()
+
+    handler backClicked
+        bringBack(loanGrid.selected)
+        message @titleIsBack(title = loanGrid.selected.album.title)
+        windowReturned()
+
+code LoanDialog
+    handler dialogOpened
+        // A new loan starts today.
+        if loan.lentOn == none
+            loan.lentOn = today()
+
+    handler saveClicked
+        album.error = ""
+        friend.error = ""
+        if loan.album == none
+            album.error = @chooseTheAlbum
+            return
+        if loan.friend == none
+            friend.error = @chooseWhoBorrowsIt
+            return
+        save loan
+        message @lentTitleToName(title = loan.album.title, name = loan.friend.name)
+        close
+
+code FriendBrowse
+    handler windowReturned
+        reload friends
+
+code FriendBrowseView
+    handler openClicked
+        open FriendDialog with friend = friendGrid.selected
+
+    handler newClicked
+        open FriendDialog
+
+    // A friend who borrowed albums stays, and says so.
+    handler removeClicked
+        delete friendGrid.selected
+        reload friends
+
+code FriendDialog
+    handler saveClicked
+        name.error = ""
+        if friend.name == ""
+            name.error = @aFriendNeedsAName
+            return
+        save friend
+        close
+
+code Loan
+    before save
+        if loan.returnedOn == none and lentElsewhere(loan)
+            refuse @titleIsWithAnotherFriend(title = loan.album.title)

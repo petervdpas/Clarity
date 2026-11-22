@@ -4,7 +4,7 @@
 // `design/Main.cxaml#Main/saveButton`, see `DesignKey`). Pure, so the
 // placing is tested without a browser.
 
-import { ROW_HEIGHT } from "@clarity/ui/screen/grid.ts";
+import { GAP, POPOVER_COLUMN, ROW_HEIGHT, SLIDEOUT_WIDTH } from "@clarity/ui/screen/grid.ts";
 import type { Command } from "@clarity/ui/generated/Command.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
@@ -275,12 +275,12 @@ export function opening(w: Widget, shown: number): Opening | null {
  * How big the canvas of the slide-out or popover `w` designed on its own is,
  * as it opens and as the preview draws it (crates/clarity-gen's
  * `files_json_own_canvas`): a slide-out as wide as it slides out and as high
- * as the window (`windowHeight`); a popover its columns of 80 and rows of
- * `rowHeight`, a gap of 8 between each.
+ * as the window (`windowHeight`); a popover its columns of POPOVER_COLUMN and
+ * rows of `rowHeight`, a GAP between each.
  */
 export function canvasSize(w: Widget, windowHeight: number, rowHeight: number): { width: number; height: number } {
-  if (w.props.kind !== "popover") return { width: w.props.slideWidth ?? 420, height: windowHeight };
+  if (w.props.kind !== "popover") return { width: w.props.slideWidth ?? SLIDEOUT_WIDTH, height: windowHeight };
   const columns = Math.max(1, w.props.width);
   const rows = Math.max(1, w.props.height);
-  return { width: 80 * columns + 8 * (columns - 1), height: rowHeight * rows + 8 * (rows - 1) };
+  return { width: POPOVER_COLUMN * columns + GAP * (columns - 1), height: rowHeight * rows + GAP * (rows - 1) };
 }

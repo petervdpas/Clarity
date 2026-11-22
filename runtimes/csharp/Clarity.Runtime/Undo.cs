@@ -244,15 +244,15 @@ public sealed partial class Db
     object?[]? Row(string source, string table, string key, IReadOnlyList<string> columns, long id) => State(source, table, key, columns, null, id).Row;
 
     /// <summary>
-    /// Makes a row so: gone, or with these values and its own id. A versioned row put back gets a
-    /// version past both its current one and <paramref name="version"/>, the one of the state it
-    /// returns to, so a copy read before is refused.
+    /// Makes a row so: gone, or with these values and its own id. A versioned row put back gets
+    /// <paramref name="version"/>, the one of the state it returns to, exactly, so a window holding
+    /// that state can save it again.
     /// </summary>
     void Put(Change change, object?[]? values, long? version)
     {
         var (row, current) = State(change.Source, change.Table, change.Key, change.Columns, change.Version, change.Id);
         var there = row is not null;
-        var next = Math.Max(current ?? 0, version ?? 0) + 1;
+        var next = version ?? (current ?? 0) + 1;
         var conn = Conn(change.Source);
         var d = conn.Dialect;
         var table = d.Quote(change.Table);

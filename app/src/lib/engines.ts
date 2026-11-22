@@ -3,7 +3,6 @@
 // such as a file that is missing or lacks a declared function.
 
 import type { EngineDecl } from "@clarity/ui/generated/EngineDecl.ts";
-import type { EngineFunction } from "@clarity/ui/generated/EngineFunction.ts";
 import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
 import type { Handler } from "@clarity/ui/generated/Handler.ts";
 import type { Project } from "@clarity/ui/generated/Project.ts";
@@ -37,14 +36,8 @@ export function engineNote(engine: EngineDecl): string {
   return `${kind}, ${count === 1 ? "1 function" : `${count} functions`}`;
 }
 
-/** A function of an engine as it is declared: `total(lines: list<Line>) -> money`. */
-export function signature(f: EngineFunction): string {
-  const params = f.params.map((p) => `${p.name.name}: ${typeText(p.ty.kind)}`).join(", ");
-  return `${f.name.name}(${params})` + (f.returns ? ` -> ${typeText(f.returns.kind)}` : "");
-}
-
 /** The services an engine may use, in the order Clarity lists them (clarity_spec::engines::SERVICES). */
-export const SERVICES = ["clock", "random", "log", "language"] as const;
+export const SERVICES = ["clock", "random", "log", "language", "progress"] as const;
 
 /** An engine's declaration as its inspector edits it. */
 export type EngineForm = {
@@ -125,17 +118,6 @@ export function withEngineLine(text: string, kind: EngineLine, line: string | nu
   return lines.join("\n");
 }
 
-/** The line (from 1) where an engine's Rust source writes the function `name`, as clarity_project::engines finds it. */
-export function functionLine(source: string, name: string): number | null {
-  const lines = source.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    for (const match of lines[i].matchAll(/function!\(\s*([A-Za-z0-9_]+)/g)) {
-      if (match[1] === name) return i + 1;
-    }
-  }
-  return null;
-}
-
 /** The values of a function as typed in one cell: `square: integer, level: Level`. */
 export function paramsOf(text: string): { name: string; type: string }[] {
   return text
@@ -184,11 +166,15 @@ export function runEngine<P extends Running>(canvas: P, engine: EngineDecl | nul
 }
 
 /**
- * A canvas's events: none to draw it while an engine does; connect and resize
- * only on a canvas its code draws (no engine, no mode), whose boxes a new line
- * joins and people resize.
+ * A canvas's events, as the checker allows them (clarity_spec::widgets): none
+ * to draw it while an engine does; connect where boxes are joined by a new line
+ * (a canvas its code draws, or a diagram's objects), not on a painting or a
+ * vector drawing, which have their own lines, nor under an engine; resize only
+ * on a canvas with no mode and no engine, whose size people change.
  */
 export function canvasEvents(events: PartEvent[], runs: string | null, mode: string | null = null): PartEvent[] {
   const drawn = runs === null ? events : events.filter((e) => e !== "draw");
-  return runs === null && mode === null ? drawn : drawn.filter((e) => e !== "connect" && e !== "resize");
+  const connects = runs === null && mode !== "paint" && mode !== "vector";
+  const resizes = runs === null && mode === null;
+  return drawn.filter((e) => (e !== "connect" || connects) && (e !== "resize" || resizes));
 }

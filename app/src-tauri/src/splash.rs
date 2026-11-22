@@ -93,12 +93,6 @@ pub fn done(app: &AppHandle) {
     });
 }
 
-/// Clarity's window has drawn itself and shows: the splash screen goes.
-#[tauri::command]
-pub fn splash_done(app: AppHandle) {
-    done(&app);
-}
-
 /// Shows `window` a while after the start, if its page has not shown it by
 /// then, so a page that fails to load still leaves a window to see.
 pub fn show_later(window: tauri::WebviewWindow) {
@@ -115,12 +109,6 @@ pub fn main_drawn(app: AppHandle) {
         let _ = main.show();
     }
     done(&app);
-}
-
-/// The IDE says what it loads, on the splash screen while it is open.
-#[tauri::command]
-pub fn splash_status(app: AppHandle, text: String) {
-    status(&app, &text);
 }
 
 #[cfg(test)]

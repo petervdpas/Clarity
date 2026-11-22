@@ -15,7 +15,7 @@ Progress: 75%
 
 ## Tests
 - `conformance/picture-functions.json`: run by `runtimes/rust-image/tests/pictures.rs` only; skipped by every stack's wrapper (R, Go, C, C++, C#)
-- `crates/clarity-spec/tests/picture_functions.rs`; `crates/clarity-gen/tests/picture_functions_build.rs` (ignored, real tools); `runtimes/csharp/Clarity.Ui.Native.Tests/PictureFunctionsTests.cs`
+- `crates/clarity-spec/tests/spec/picture_functions.rs`; `crates/clarity-gen/tests/gen/picture_functions_build.rs` (ignored, real tools); `runtimes/csharp/Clarity.Ui.Native.Tests/PictureFunctionsTests.cs`
 - Guard: `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image --test pictures` (CLAUDE.md "Generated-file guards")
 
 ## Open

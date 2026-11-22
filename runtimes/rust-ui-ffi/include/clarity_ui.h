@@ -165,16 +165,12 @@ CLARITY_API ClarityStatus clarity_translate(const char *key, size_t key_len, con
  *   dispatch_event {state, handler}        -> Reply
  *   edit_event     {state, handler, part, scope, ends, readonly, path, editable}  -> Reply
  *   undo_edit      {state, scope, back}    -> Reply
- *   reorder_event  {state, part, scope, list, by, parent, move, handler, readonly} -> Reply
- *   item_event     {state, part, scope, path, item, values, typed, handler, readonly} -> Reply
- *   range_event    {state, part, scope, path, min, max, step, whole, key | at | typed, handler, readonly} -> Reply
  *   canvas_event   {state, part, mode, list, at, path, units, grid, snap, action, scope, handler, readonly} -> Reply
  *   step_event     {state, part, button, steps, next, finish} -> Reply
- *   view_event     {state, part, action}   -> Reply
  *   answer_event   {state, handler, values} -> Reply
  *   ref_options    {entity}                -> [RefOption]
  *   field_values   {entity, field}         -> [string]
- *   find_options   {kind, entity, field, show, typed} -> value
+ *   find_options   {entity, show} -> value
  *   field_bytes    {entity, id, field}     -> base64 string | null
  *   store_file     {store, path}           -> base64 string
  *   read_settings  {}                      -> object

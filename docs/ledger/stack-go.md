@@ -21,7 +21,7 @@ Progress: 90%
 ## Tests
 - Runtime tests: `runtimes/go/clarity/*_test.go`, `shell/*_test.go` (agents_test.go among them), `ui/ui_test.go`, `engine/*_test.go`, `secrets/secrets_test.go`
 - Conformance run by Go: every runtime file except `shortcut-keys`, `secret-store` (Go writes the keychain itself), `formats` (display formats), `picture-functions` (CONFLICTING 3); `app-mcp` is read by `clarity/agents_test.go`
-- Generator: `crates/clarity-gen/tests/go.rs`, versions_go.rs, signin_go.rs; build: go_build.rs (ignored)
+- Generator: the crate `crates/clarity-gen-go`, its tests one program `cargo test -p clarity-gen-go --test go` (`tests/go/`: generate, signin, versions); build: `tests/go/build.rs` of the same program (ignored)
 - Examples on this stack: calculator, dial, pills, records, videoplayer, waves (`go desktop`), stock (`go desktop cli`), invaders (`go web`)
 
 ## Open

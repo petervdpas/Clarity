@@ -30,18 +30,6 @@ export function openLink(address: string) {
   invoke("open_link", { address }).catch((err) => console.error(`cannot open ${address}: ${err}`));
 }
 
-/**
- * A line of an engine beside the screen, into the application's log through
- * the shell, where the backend's engines write; the page's console when the
- * shell cannot take it.
- */
-export function logLine(line: string): Promise<void> {
-  return invoke<null>("log_line", { line }).then(
-    () => undefined,
-    () => console.info(line),
-  );
-}
-
 /** What a page a server serves does in the browser itself: its tab, links, files and the person's settings. */
 export interface BrowserPage {
   setTitle(title: string): void;

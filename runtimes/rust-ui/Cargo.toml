@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.30.0"
+version = "0.31.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -25,16 +25,18 @@ audio = ["desktop", "dep:clarity-audio"]
 video = ["audio", "dep:clarity-video"]
 # Reports' pages (pdfReport) drawn from Clarity.Pdf's laid-out pages with
 # Skia (docs/ledger/reports-pdf.md): the generator turns it on for a program
-# with a pdfReport part.
-pdf = ["dep:clarity-pdf"]
+# with a pdfReport part. A report's data is written through Clarity.Data,
+# as every stack's `json of` is.
+pdf = ["dep:clarity-pdf", "dep:clarity-data"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.63.0", default-features = false }
-clarity-auth = { path = "../rust-auth", version = "0.3.0" }
+clarity-runtime = { path = "../rust", version = "0.64.0", default-features = false }
+clarity-auth = { path = "../rust-auth", version = "0.4.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/ledger/canvas-toolbox.md).
 clarity-image = { path = "../rust-image", version = "0.2.0" }
 clarity-graph = { path = "../rust-graph", version = "0.2.0" }
-clarity-pdf = { path = "../rust-pdf", version = "0.1.0", optional = true }
+clarity-pdf = { path = "../rust-pdf", version = "0.2.0", optional = true }
+clarity-data = { path = "../rust-data", version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # A new picture or file goes to the program as base64 in its JSON value.
@@ -53,9 +55,15 @@ accesskit = "0.25"
 
 # The desktop host's crates; a browser build (wasm32-unknown-emscripten) has
 # none of them: the page does the window, clipboard, sound and files there.
+# Only for the tests: the IDE's preview of every example (tests/windows/every_example.rs).
+# A path-only dependency, left out when the crate is published.
+[dev-dependencies]
+clarity-gen = { path = "../../crates/clarity-gen" }
+clarity-project = { path = "../../crates/clarity-project" }
+
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
 # Signing in with a provider through the system's browser (GitHub, Microsoft, OpenID): the desktop only.
-clarity-auth = { path = "../rust-auth", version = "0.3.0", features = ["openid"] }
+clarity-auth = { path = "../rust-auth", version = "0.4.0", features = ["openid"] }
 winit = { version = "0.30", optional = true }
 glutin = { version = "0.32", optional = true }
 glutin-winit = { version = "0.5", optional = true }

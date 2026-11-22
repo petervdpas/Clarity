@@ -127,6 +127,12 @@ bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value);
 bool clarity_dates_set(ClarityDates list, int64_t position, ClarityDate value);
 /// The error of a position outside a list of `count` items: false.
 bool clarity_outside(int64_t position, size_t count);
+/// `a + b`, `a - b`, `a * b` and `-a` of whole numbers in code
+/// (conformance/overflow.json): a value error when the result does not fit in 64 bits.
+bool clarity_whole_add(int64_t a, int64_t b, int64_t* out);
+bool clarity_whole_sub(int64_t a, int64_t b, int64_t* out);
+bool clarity_whole_mul(int64_t a, int64_t b, int64_t* out);
+bool clarity_whole_neg(int64_t a, int64_t* out);
 /// `a div b` and `a mod b` in code: the quotient of two whole numbers rounded
 /// toward zero, and what is left with the sign of `a`; dividing by zero fails.
 bool clarity_whole_div(int64_t a, int64_t b, int64_t* out);

@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{Connection, OpenFlags};
 
 /// How many automatic backups each database keeps.
-pub const KEPT_AUTOMATIC: usize = 10;
+pub const KEPT_AUTOMATIC: usize = clarity_spec::defaults::KEPT_BACKUPS as usize;
 
 /// The reason of a backup the person asked for.
 pub const MANUAL: &str = "manual";

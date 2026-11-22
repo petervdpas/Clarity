@@ -405,6 +405,12 @@ fn classes(css: &str) -> Vec<String> {
     found
 }
 
+/// The papers as a sentence: "A3, A4, A5, Letter or Legal".
+fn papers_said() -> String {
+    let papers = crate::report_design::PAPERS;
+    format!("{} or {}", papers[..papers.len() - 1].join(", "), papers[papers.len() - 1])
+}
+
 /// What is wrong in a project's reports.
 pub fn check(project: &Project) -> Vec<Diagnostic> {
     let mut found = check_parts(project);
@@ -428,6 +434,18 @@ pub fn check(project: &Project) -> Vec<Diagnostic> {
         }
         if let Some(other) = root.get("headerFirst").filter(|v| !["true", "false"].contains(v)) {
             checking.error(format!("'headerFirst' of Report is true or false, not '{other}'"), root.span);
+        }
+        // The papers the Reports tab offers (crate::report_design::PAPERS), written as it writes them, turned or not.
+        if let Some(paper) = root.get("paper") {
+            let words: Vec<&str> = paper.split_whitespace().collect();
+            let fits = match words.as_slice() {
+                [name] => crate::report_design::PAPERS.contains(name),
+                [name, turn] => crate::report_design::PAPERS.contains(name) && ["landscape", "portrait"].contains(turn),
+                _ => false,
+            };
+            if !fits {
+                checking.error(format!("'paper' of Report is {}, with landscape or portrait after it, not '{paper}'", papers_said()), root.span);
+            }
         }
         let named_sheet = root.get("stylesheet");
         if named_sheet.is_some() && file.stylesheet.is_none() {

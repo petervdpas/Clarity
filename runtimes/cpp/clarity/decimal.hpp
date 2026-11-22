@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <array>
 #include <compare>
 #include <cstdint>
 #include <string>
@@ -16,8 +17,6 @@ class Decimal {
 public:
     /// The most decimals a value keeps; more are rounded off.
     static constexpr int max_scale = 28;
-    /// The decimals a division gives, before trailing zeros go.
-    static constexpr int division_scale = 16;
 
     Decimal() = default;
     Decimal(int64_t whole) : units_(whole) {}  // NOLINT: an integer widens to a decimal
@@ -45,10 +44,12 @@ public:
     }
 
     Decimal operator-() const;
+    /// `a + b`, `a - b` and `a * b` in code (conformance/overflow.json): rounded to the
+    /// places that fit; throws ValueError when the result does not fit with no places.
     friend Decimal operator+(const Decimal& a, const Decimal& b);
     friend Decimal operator-(const Decimal& a, const Decimal& b);
     friend Decimal operator*(const Decimal& a, const Decimal& b);
-    /// Throws InvalidError when dividing by zero.
+    /// Throws ValueError when dividing by zero or when the quotient does not fit.
     friend Decimal operator/(const Decimal& a, const Decimal& b);
     Decimal& operator+=(const Decimal& other) { return *this = *this + other; }
     Decimal& operator-=(const Decimal& other) { return *this = *this - other; }
@@ -58,6 +59,7 @@ public:
     friend bool operator==(const Decimal& a, const Decimal& b) { return (a <=> b) == 0; }
 
 private:
+    static Decimal fitted(bool negative, const std::array<uint32_t, 8>& exact, int places);
     __int128 units_ = 0;
     int scale_ = 0;
 };

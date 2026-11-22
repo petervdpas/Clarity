@@ -23,17 +23,20 @@ void a_decimal_keeps_its_decimals(void) {
 }
 
 void decimals_add_multiply_divide_and_compare_by_value(void) {
-    CHECK_TEXT(clarity_decimal_text(clarity_decimal_add(d("1.25"), d("2.5"))), "3.75");
-    CHECK_TEXT(clarity_decimal_text(clarity_decimal_sub(d("1.25"), clarity_decimal_of(2))), "-0.75");
-    CHECK_TEXT(clarity_decimal_text(clarity_decimal_mul(d("19.99"), clarity_decimal_of(3))), "59.97");
     ClarityDecimal q;
+    CHECK_OK(clarity_decimal_add(d("1.25"), d("2.5"), &q));
+    CHECK_TEXT(clarity_decimal_text(q), "3.75");
+    CHECK_OK(clarity_decimal_sub(d("1.25"), clarity_decimal_of(2), &q));
+    CHECK_TEXT(clarity_decimal_text(q), "-0.75");
+    CHECK_OK(clarity_decimal_mul(d("19.99"), clarity_decimal_of(3), &q));
+    CHECK_TEXT(clarity_decimal_text(q), "59.97");
     CHECK_OK(clarity_decimal_div(clarity_decimal_of(10), clarity_decimal_of(4), &q));
     CHECK_TEXT(clarity_decimal_text(q), "2.5");
     CHECK_OK(clarity_decimal_div(clarity_decimal_of(1), clarity_decimal_of(3), &q));
-    CHECK_TEXT(clarity_decimal_text(q), "0.3333333333333333");
+    CHECK_TEXT(clarity_decimal_text(q), "0.3333333333333333333333333333");
     CHECK_OK(clarity_decimal_div(clarity_decimal_of(2), clarity_decimal_of(3), &q));
-    CHECK_TEXT(clarity_decimal_text(q), "0.6666666666666667");
-    CHECK_FAILS(CLARITY_INVALID, clarity_decimal_div(clarity_decimal_of(1), clarity_decimal_of(0), &q));
+    CHECK_TEXT(clarity_decimal_text(q), "0.6666666666666666666666666667");
+    CHECK_FAILS(CLARITY_VALUE, clarity_decimal_div(clarity_decimal_of(1), clarity_decimal_of(0), &q));
     CHECK(clarity_decimal_compare(d("1.50"), d("1.5")) == 0);
     CHECK(clarity_decimal_compare(d("99.5"), d("1250.50")) < 0);
     CHECK_TEXT(clarity_decimal_text(clarity_decimal_rescaled(d("2.345"), 2)), "2.35");
@@ -358,8 +361,8 @@ void whole_numbers_divide_toward_zero(void) {
     CHECK_OK(clarity_whole_mod(-7, 3, &r));
     CHECK_INT(q, -3);
     CHECK_INT(r, -1);
-    CHECK_OK(clarity_whole_div(INT64_MIN, -1, &q));
-    CHECK(q == INT64_MIN);
+    CHECK_FAILS(CLARITY_VALUE, clarity_whole_div(INT64_MIN, -1, &q));
+    CHECK_TEXT(clarity_error()->message, "a number too large");
     CHECK_FAILS(CLARITY_VALUE, clarity_whole_div(1, 0, &q));
     CHECK_TEXT(clarity_error()->message, "division by zero");
     CHECK_FAILS(CLARITY_VALUE, clarity_whole_mod(1, 0, &r));

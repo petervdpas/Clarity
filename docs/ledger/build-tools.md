@@ -19,7 +19,7 @@ Per stack: R cargo; Go go (cgo to Clarity.UI); C and C++ a compiler, CMake, make
 Paths for other tools go through `clarity_project::slashed` (plain, `/` between folders).
 
 ## Tests
-- `crates/clarity-gen/tests/toolchain.rs`, `tools.rs`, `environment.rs`, `installed.rs`, `library_choices.rs`
+- `crates/clarity-gen/tests/gen/toolchain.rs`, `tools.rs`, `environment.rs`, `installed.rs`, `library_choices.rs`
 - `app/src/lib/stackTools.test.ts`, `libraries.test.ts`
 - No conformance file
 

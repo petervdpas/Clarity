@@ -4,17 +4,6 @@
 
 export const scheme = $state({ dark: false });
 
-/** Follows the system's light or dark mode for the page, from now on. */
-export function followSystemScheme() {
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const apply = () => {
-    scheme.dark = media.matches;
-    document.documentElement.dataset.scheme = media.matches ? "dark" : "light";
-  };
-  apply();
-  media.addEventListener("change", apply);
-}
-
 /** The theme a person chose among those the application offers; undefined
  *  shows the one it starts with. The designer sets it to show its canvas
  *  in another theme. */

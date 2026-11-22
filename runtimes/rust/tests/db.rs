@@ -5,6 +5,10 @@ use std::str::FromStr;
 
 use clarity_runtime::{Cond, Db, Dialect, Decimal, Error, Id, NaiveDate, Op, Query, Record, Show, SqlValue, require, sql};
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum CustomerKind {
     #[default]
@@ -91,8 +95,8 @@ const CUSTOMERS: &str = "CREATE TABLE customer (
 const STEPS: [&[&str]; 1] = [&[CUSTOMERS]];
 
 fn db() -> Db {
-    let mut db = Db::memory().unwrap();
-    assert_eq!(db.migrate(&STEPS).unwrap(), 1);
+    let db = Db::memory().unwrap();
+    assert_eq!(apply_steps(&db, "", &STEPS).unwrap(), 1);
     db
 }
 
@@ -135,24 +139,6 @@ fn saves_loads_updates_and_deletes_records() {
     db.delete(&customer).unwrap();
     assert_eq!(db.get::<Customer>(1), Err(Error::NotFound { table: "customer", id: Some(1) }));
     assert_eq!(db.load::<Customer>(None), Err(Error::NotFound { table: "customer", id: None }));
-}
-
-#[test]
-fn applies_each_migration_step_once() {
-    let mut db = db();
-    assert_eq!(db.schema_version().unwrap(), 1);
-    assert_eq!(db.migrate(&STEPS).unwrap(), 0);
-    let more = [STEPS[0], &["ALTER TABLE customer ADD COLUMN notes TEXT;"]];
-    assert_eq!(db.migrate(&more).unwrap(), 1);
-    assert_eq!(db.schema_version().unwrap(), 2);
-}
-
-#[test]
-fn a_failed_step_changes_nothing() {
-    let mut db = db();
-    let broken = [STEPS[0], &["ALTER TABLE customer ADD COLUMN a TEXT; THIS IS NOT SQL;"]];
-    assert!(db.migrate(&broken).is_err());
-    assert_eq!(db.schema_version().unwrap(), 1);
 }
 
 #[test]
@@ -292,6 +278,19 @@ fn orders_what_it_finds() {
 }
 
 #[test]
+fn a_record_with_an_empty_value_comes_first_either_way() {
+    let (db, mut all) = three();
+    all[0].since = NaiveDate::from_ymd_opt(2020, 1, 1);
+    all[2].since = NaiveDate::from_ymd_opt(2024, 1, 1);
+    db.save(&mut all[0]).unwrap();
+    db.save(&mut all[2]).unwrap();
+    let up = Query::new().order("since", false);
+    assert_eq!(names(&db.find::<Customer>(&up).unwrap()), ["Grace Hopper", "Ada Lovelace", "Linus"]);
+    let down = Query::new().order("since", true);
+    assert_eq!(names(&db.find::<Customer>(&down).unwrap()), ["Grace Hopper", "Linus", "Ada Lovelace"]);
+}
+
+#[test]
 fn contains_treats_wildcards_as_text() {
     let db = db();
     let mut odd = customer("100% sure_thing", CustomerKind::Private, "0", true);
@@ -312,50 +311,9 @@ fn a_query_is_sql_with_parameters() {
     let (sql, params) = query.sql(Dialect::Sqlite, "customer", "id", "\"id\", \"name\"");
     assert_eq!(
         sql,
-        "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '!' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC, \"id\""
+        "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '!' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC NULLS FIRST, \"id\""
     );
     assert_eq!(params, [sql::text("%a%"), sql::integer(5)]);
-}
-
-/// The table built again, as a step that changes a column does it.
-const REBUILD: &str = "CREATE TABLE customer__new (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    credit_limit TEXT NOT NULL,
-    active INTEGER NOT NULL,
-    since TEXT,
-    referred_by INTEGER REFERENCES customer (id)
-);
-INSERT INTO customer__new (id, name, kind, credit_limit, active, since, referred_by)
-    SELECT id, name, kind, credit_limit, active, since, referred_by FROM customer;
-DROP TABLE customer;
-ALTER TABLE customer__new RENAME TO customer;";
-
-#[test]
-fn a_step_can_build_a_referenced_table_again() {
-    let mut db = db();
-    let mut ada = ada();
-    db.save(&mut ada).unwrap();
-    let mut grace = customer("Grace Hopper", CustomerKind::Private, "0", true);
-    grace.referred_by = Some(ada.id);
-    db.save(&mut grace).unwrap();
-
-    assert_eq!(db.migrate(&[STEPS[0], &[REBUILD]]).unwrap(), 1);
-    assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, Some(ada.id));
-    // References are checked again after the step.
-    assert_eq!(db.delete(&ada), Err(Error::InUse { table: "customer", id: ada.id }));
-}
-
-#[test]
-fn a_step_that_breaks_references_changes_nothing() {
-    let mut db = db();
-    let mut grace = customer("Grace Hopper", CustomerKind::Private, "0", true);
-    db.save(&mut grace).unwrap();
-    let dangling = "UPDATE customer SET referred_by = 99;";
-    assert!(db.migrate(&[STEPS[0], &[dangling]]).is_err());
-    assert_eq!(db.schema_version().unwrap(), 1);
-    assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, None);
 }
 
 /// A record kept in another database than the customers.
@@ -398,10 +356,10 @@ fn each_record_lives_in_its_own_data_source() {
     let _ = std::fs::remove_dir_all(&dir);
     let main = dir.join("main.db");
     let erp = dir.join("erp.db");
-    let mut db = Db::connect(&[("main", Dialect::Sqlite, main.to_str().unwrap()), ("erp", Dialect::Sqlite, erp.to_str().unwrap())]).unwrap();
-    db.migrate_source("main", &STEPS).unwrap();
+    let db = Db::connect(&[("main", Dialect::Sqlite, main.to_str().unwrap()), ("erp", Dialect::Sqlite, erp.to_str().unwrap())]).unwrap();
+    apply_steps(&db, "main", &STEPS).unwrap();
     // A reference to another database is a plain id: no foreign key.
-    db.migrate_source("erp", &[&["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"]])
+    apply_steps(&db, "erp", &[&["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"]])
         .unwrap();
 
     let mut ada = ada();
@@ -457,8 +415,8 @@ impl Record for Legacy {
 
 #[test]
 fn a_record_can_live_in_an_existing_table() {
-    let mut db = Db::memory().unwrap();
-    db.migrate(&[&["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]])
+    let db = Db::memory().unwrap();
+    apply_steps(&db, "", &[&["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]])
         .unwrap();
     let mut first = Legacy { number: "INV-1".into(), ..Legacy::default() };
     db.save(&mut first).unwrap();

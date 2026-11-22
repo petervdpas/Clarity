@@ -17,5 +17,9 @@ std::optional<std::string> secret_get(const std::string& program, const std::str
 void secret_set(const std::string& program, const std::string& name, const std::string& value);
 /// Makes the store the one settings and web API calls use (secret_store).
 void secrets_use();
+/// The Credential Manager's target of the secret `name` of `program` on
+/// Windows, as every stack keeps it (conformance/secret-store.json): the
+/// program's name, a colon and the setting's.
+std::string secret_windows_target(const std::string& program, const std::string& name);
 
 }  // namespace clarity

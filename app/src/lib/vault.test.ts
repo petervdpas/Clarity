@@ -2,6 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { connectionProblems, freshName, shownSecrets } from "./vault.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
@@ -67,4 +68,9 @@ test("the categories editor adds, renames and removes, keeping the secrets with 
   assert.equal(editor.rename("Anthropic", "Claude"), null);
   assert.deepEqual(editor.result(), { names: ["azure", "Claude", "DB"], renames: [{ from: "Postgres", to: "DB" }] });
   assert.equal(editor.usage("DB"), 2);
+});
+
+test("a connection is refused as the cases the vault runs say (conformance/vault-connections.json)", () => {
+  const cases = JSON.parse(readFileSync(new URL("../../../conformance/vault-connections.json", import.meta.url), "utf8"));
+  for (const c of cases.cases) assert.deepEqual(connectionProblems({ name: c.name, fields: c.fields }), c.problems, JSON.stringify(c));
 });

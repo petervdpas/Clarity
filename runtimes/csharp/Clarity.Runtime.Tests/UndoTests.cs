@@ -44,7 +44,7 @@ public class UndoTests
     static Db Drawing()
     {
         var db = Sqlite.Memory();
-        db.Migrate([[
+        db.ApplySteps([[
             "CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL);",
             "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER REFERENCES shape(id), text TEXT NOT NULL);",
         ]]);

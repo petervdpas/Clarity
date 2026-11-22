@@ -52,7 +52,7 @@ public class EditTests
     static Db Drawing()
     {
         var db = Sqlite.Memory();
-        db.Migrate([["CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL);", "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER, text TEXT NOT NULL);"]]);
+        db.ApplySteps([["CREATE TABLE shape (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, x INTEGER NOT NULL);", "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, shape INTEGER, text TEXT NOT NULL);"]]);
         return db;
     }
 
@@ -227,5 +227,19 @@ public class RecordUndoTests
         window.UndoEdit("shapeForm", back: false);
         Assert.Same(window.Shapes[1], window.Shape);
         Assert.Equal(9, window.Shape.X);
+    }
+
+    /// A window's bus keeps its last edits as every runtime does (conformance/edit-bus.json, `keeps`): one past
+    /// them drops the oldest, so that many undos take back the last ones and the next finds nothing.
+    [Fact]
+    public void The_bus_keeps_as_many_edits_as_every_runtime_keeps()
+    {
+        var keeps = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "edit-bus.json"))).RootElement.GetProperty("keeps").GetInt32();
+        var bus = new EditBus();
+        for (var n = 0; n <= keeps; n++)
+            bus.Push(new Edit("countBox", "form", [new Changed("Count", System.Text.Json.Nodes.JsonValue.Create(n), System.Text.Json.Nodes.JsonValue.Create(n + 1))], 0));
+        for (var n = 0; n < keeps; n++)
+            Assert.NotNull(bus.Undo("form"));
+        Assert.Null(bus.Undo("form"));
     }
 }

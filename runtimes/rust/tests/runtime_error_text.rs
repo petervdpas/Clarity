@@ -30,3 +30,12 @@ fn a_window_says_the_failure_in_clarity_s_own_words() {
     let failed = clarity_runtime::program::guarded(&db, |_| clarity_runtime::at(&[1_i64], 10).copied());
     assert_eq!(failed.unwrap_err().key.as_deref(), Some("itemOutsideList"));
 }
+
+#[test]
+fn a_number_too_large_is_said_by_its_key() {
+    let failed = clarity_runtime::whole_add(i64::MAX, 1).unwrap_err();
+    assert_eq!(failed.to_string(), "a number too large");
+    let shown = said(&failed);
+    assert_eq!(shown.key.as_deref(), Some("numberTooLarge"));
+    assert_eq!(shown.show(), "The number is too large");
+}

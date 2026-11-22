@@ -2,7 +2,7 @@
 //! tested with (conformance/engines/sky.clarity, screen-engines.json
 //! `written`). The renderers run the compiled sky.wasm and the interpreted
 //! sky-interpreted.wasm, which this test keeps in step with their source:
-//! with CLARITY_RECORD_SKY=1 it writes them.
+//! with CLARITY_WRITE_SKY=1 it writes them.
 
 use clarity_runtime::engine::{Declaration, Engine, Limits, State};
 use serde_json::Value;
@@ -26,10 +26,10 @@ fn interpreted() -> Vec<u8> {
 fn the_sky_files_are_their_source_built() {
     for (file, bytes) in [("sky.wasm", compiled()), ("sky-interpreted.wasm", interpreted())] {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/engines").join(file);
-        if std::env::var_os("CLARITY_RECORD_SKY").is_some() {
-            std::fs::write(&path, &bytes).unwrap();
+        if std::env::var_os("CLARITY_WRITE_SKY").is_some() {
+            write_changed(&path, &bytes);
         }
-        assert_eq!(std::fs::read(&path).ok().as_deref(), Some(bytes.as_slice()), "{file} is not sky.clarity built: write it with CLARITY_RECORD_SKY=1");
+        assert_eq!(std::fs::read(&path).ok().as_deref(), Some(bytes.as_slice()), "{file} is not sky.clarity built: write it with CLARITY_WRITE_SKY=1");
     }
 }
 
@@ -53,5 +53,14 @@ fn frames(engine: &Engine, cases: &Value) {
         }
         assert_eq!(engine.call("clarity_tick", vec![frame["tick"].clone()]).unwrap(), Value::Null);
         assert_eq!(engine.call("clarity_draw", vec![]).unwrap(), frame["draws"], "frame {i}");
+    }
+}
+
+/// Writes a guard's file only when its content differs, so writing it again
+/// changes nothing on disk (a running IDE sees no change and does not restart).
+pub(crate) fn write_changed(path: impl AsRef<std::path::Path>, bytes: impl AsRef<[u8]>) {
+    let (path, bytes) = (path.as_ref(), bytes.as_ref());
+    if std::fs::read(path).ok().as_deref() != Some(bytes) {
+        std::fs::write(path, bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     }
 }

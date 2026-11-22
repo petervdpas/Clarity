@@ -105,6 +105,8 @@ translation nl
     pasteText "Plakken"
     recordNotThere "Er is geen {table} met id {id}"
     recordStillUsed "Deze {table} wordt nog door andere records gebruikt"
+    divisionByZero "Deling door nul"
+    numberTooLarge "Het getal is te groot"
     removeRow "Verwijderen"
     removeRowAsk "{row} verwijderen?"
     selectAllText "Alles selecteren"

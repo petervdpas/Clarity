@@ -30,7 +30,7 @@ Progress: 90%
 ## Decisions
 - 2026-10-22: long texts are Markdown files among the resources; a key's value in a language may point at one (`gameRules resource "rules-nl.md"`), never a long text in a language file.
 - 2026-10-22: one Markdown subset on every stack; links open in the browser only for http, https and mailto.
-- 2026-11-14: Markdown takes the part's whole width by default; the old reading-width column is the part option `readingWidth` (`reading width` on the line), on markdown parts and memos, off by default (`runtimes/rust-ui/src/parts/containers/markdown.rs`, tests `crates/clarity-spec/tests/reading_width.rs`, `with_reading_width_the_lines_keep_a_reading_column`). User: "markdown preview should take full width!", "yes, add the reading width option".
+- 2026-11-14: Markdown takes the part's whole width by default; the old reading-width column is the part option `readingWidth` (`reading width` on the line), on markdown parts and memos, off by default (`runtimes/rust-ui/src/parts/containers/markdown.rs`, tests `crates/clarity-spec/tests/spec/reading_width.rs`, `with_reading_width_the_lines_keep_a_reading_column`). User: "markdown preview should take full width!", "yes, add the reading width option".
 
 - 2026-11-19: tables and TeX math join Clarity's Markdown on every reader and part (screen math as TeX until step 5 of reports-pdf). User: "Whole Markdown".
 

@@ -217,18 +217,26 @@ func NewToken(call AuthCall) (string, error) {
 // AddSignin names the people of the program and how they sign in, after
 // the databases opened. Fails when Clarity.Auth cannot be reached or does
 // not know a strategy, or a strategy names more columns than it has roles.
+// The sign-in's defaults, for a source that leaves them out (the
+// generators always pass what the project says): conformance/defaults.json.
+const (
+	SigninSessionSeconds = 8 * 3600
+	SigninTries          = 5
+	SigninTriesSeconds   = 15 * 60
+)
+
 func (db *Db) AddSignin(source SigninSource, call AuthCall) error {
 	if source.Key == "" {
 		source.Key = "id"
 	}
 	if source.SessionSeconds <= 0 {
-		source.SessionSeconds = 8 * 3600
+		source.SessionSeconds = SigninSessionSeconds
 	}
 	if source.Tries <= 0 {
-		source.Tries = 5
+		source.Tries = SigninTries
 	}
 	if source.TriesSeconds <= 0 {
-		source.TriesSeconds = 15 * 60
+		source.TriesSeconds = SigninTriesSeconds
 	}
 	if len(source.Targets) == 0 {
 		source.Targets = []string{"web"}

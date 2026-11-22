@@ -1376,7 +1376,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-auth"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -1402,8 +1402,10 @@ dependencies = [
  "clap",
  "clarity-auth",
  "clarity-db",
+ "clarity-devtools",
  "clarity-gen",
  "clarity-mcp",
+ "clarity-migrate",
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
@@ -1423,6 +1425,18 @@ dependencies = [
  "clarity-spec",
  "rusqlite",
  "serde_json",
+]
+
+[[package]]
+name = "clarity-devtools"
+version = "0.1.0"
+dependencies = [
+ "clarity-gen-core",
+ "clarity-project",
+ "clarity-spec",
+ "serde",
+ "serde_json",
+ "sysinfo",
 ]
 
 [[package]]
@@ -1462,7 +1476,16 @@ dependencies = [
  "base64 0.22.1",
  "bzip2",
  "clarity-app-mcp",
+ "clarity-devtools",
  "clarity-formats",
+ "clarity-gen-c",
+ "clarity-gen-core",
+ "clarity-gen-cpp",
+ "clarity-gen-csharp",
+ "clarity-gen-go",
+ "clarity-gen-rust",
+ "clarity-gen-testing",
+ "clarity-migrate",
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
@@ -1476,6 +1499,158 @@ dependencies = [
  "sha2 0.10.9",
  "sysinfo",
  "tar",
+]
+
+[[package]]
+name = "clarity-gen-c"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-gen-core",
+ "clarity-gen-testing",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-cpp"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-gen-c",
+ "clarity-gen-core",
+ "clarity-gen-testing",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-csharp"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-gen-core",
+ "clarity-gen-testing",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-go"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-gen-core",
+ "clarity-gen-testing",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-rust"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bzip2",
+ "clarity-formats",
+ "clarity-gen-core",
+ "clarity-gen-testing",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "clarity-wasm",
+ "flate2",
+ "image",
+ "resvg 0.49.0",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "clarity-gen-testing"
+version = "0.1.0"
+dependencies = [
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "serde_json",
 ]
 
 [[package]]
@@ -1507,6 +1682,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-agent",
+ "clarity-devtools",
  "clarity-gen",
  "clarity-project",
  "clarity-spec",
@@ -1517,8 +1693,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "clarity-pdf"
+name = "clarity-migrate"
 version = "0.1.0"
+dependencies = [
+ "clarity-gen",
+ "clarity-project",
+ "clarity-runtime",
+ "clarity-spec",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "clarity-pdf"
+version = "0.2.0"
 dependencies = [
  "barcoders",
  "base64 0.22.1",
@@ -1549,7 +1737,9 @@ dependencies = [
  "clarity-acp",
  "clarity-agent",
  "clarity-db",
+ "clarity-devtools",
  "clarity-gen",
+ "clarity-migrate",
  "clarity-pdf",
  "clarity-project",
  "clarity-spec",
@@ -1588,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.63.0"
+version = "0.64.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1642,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -1651,9 +1841,12 @@ dependencies = [
  "clarity-app-mcp",
  "clarity-audio",
  "clarity-auth",
+ "clarity-data",
+ "clarity-gen",
  "clarity-graph",
  "clarity-image",
  "clarity-pdf",
+ "clarity-project",
  "clarity-runtime",
  "clarity-video",
  "glutin",
@@ -1678,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui-ffi"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-audio-ffi",

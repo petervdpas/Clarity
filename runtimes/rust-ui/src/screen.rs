@@ -6,6 +6,11 @@
 //! then `wake_due`). Every host sends the pointer, the wheel, keys going down
 //! and up and typed text through the same methods here.
 
+mod focus;
+mod overlays;
+mod pointer;
+mod tips;
+
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -39,6 +44,13 @@ pub type KeysHook = Box<dyn FnMut(KeyInput, &mut Cx) -> bool>;
 
 /// The look for the system's light (false) or dark (true), in the theme the person chose (`choices`).
 pub type LooksFor = Box<dyn Fn(bool) -> Arc<ThemeLook>>;
+
+/// A press that may ask for something: the main button at a place, or a key.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Press {
+    At(f64, f64),
+    Key(KeyInput),
+}
 
 pub struct Screen {
     root: Box<dyn Element>,
@@ -80,11 +92,36 @@ pub struct Screen {
     /// Whether something took the last key pressed; the character it types is then no shortcut.
     key_taken: bool,
     pointing: bool,
+    /// The last press that may have asked for something: the main button at
+    /// a place, or a key (`Screen::last_press`).
+    last_press: Option<Press>,
     /// The time now, as the screen's clock tells it; a test sets its own.
     pub now: Box<dyn Fn() -> Instant>,
 }
 
 impl Screen {
+    /// The last press that may have asked for something, from whatever
+    /// pressed it (the pointer, a key, a driven step, a screen reader): what a
+    /// host does again when an answer comes later than the part could wait
+    /// (a file the page gives), so the part that asked takes it.
+    pub fn last_press(&self) -> Option<Press> {
+        self.last_press
+    }
+
+    /// Does `press` again, as it was done.
+    pub fn press_again(&mut self, press: Press) {
+        match press {
+            Press::At(x, y) => {
+                self.pointer_moved(x, y);
+                self.click(x, y);
+            }
+            Press::Key(key) => {
+                self.key_pressed(key);
+                self.key_released(key);
+            }
+        }
+    }
+
     pub fn new(root: Box<dyn Element>, look: Arc<ThemeLook>) -> Screen {
         let fonts = Rc::new(Fonts::new(look.clone()));
         let mut screen = Screen {
@@ -122,6 +159,7 @@ impl Screen {
             held: PointerButton::Left,
             key_taken: false,
             pointing: false,
+            last_press: None,
             now: Box::new(Instant::now),
         };
         let mut cx = screen.cx();
@@ -436,15 +474,6 @@ impl Screen {
         self.redraw = false;
     }
 
-    /// A tooltip in Clarity's look: the tooltip part's colors, else a panel with a strong border.
-    fn draw_tip(p: &Painter, tip: &Tooltip) {
-        let look = p.look.part("tooltip", None);
-        let radius = look.radius.map(|r| r as f64).unwrap_or_else(|| p.look.radius("input"));
-        p.fill(tip.place, look.background.unwrap_or_else(|| p.look.color("panel")), radius);
-        p.stroke(tip.place, look.border.unwrap_or_else(|| p.look.color("strong_border")), p.look.border(), radius);
-        p.text(&tip.text, tip.place.inset(TIP_PAD), look.text.unwrap_or_else(|| p.look.color("text")), p.look.size("small"), "text", false, TextAlign::Left);
-    }
-
     // -- What elements ask -------------------------------------------------------
 
     fn cx(&self) -> Cx {
@@ -553,93 +582,6 @@ impl Screen {
         }
     }
 
-    fn focus_now(&mut self, id: Option<ElementId>, cx: &mut Cx) {
-        let id = id.filter(|i| self.element(*i).is_some());
-        if id == self.focused {
-            return;
-        }
-        let was = self.focused;
-        self.set_flag(was, |n| n.focused = false);
-        self.focused = id;
-        self.set_flag(id, |n| n.focused = true);
-        if let Some(e) = was.and_then(|w| self.element_mut(w)) {
-            element::safely(e, cx, (), |e, cx| e.on_focus_changed(false, cx));
-        }
-        if let Some(e) = id.and_then(|i| self.element_mut(i)) {
-            element::safely(e, cx, (), |e, cx| e.on_focus_changed(true, cx));
-        }
-        let pointing = self.pointing;
-        element::safely(self.root.as_mut(), cx, (), |root, cx| root.focus_moved(id, pointing, cx));
-        self.redraw = true;
-    }
-
-    fn open_now(&mut self, mut overlay: Overlay, cx: &mut Cx) {
-        self.hide_tip();
-        if overlay.covers {
-            overlay.place = self.whole();
-        }
-        element::arrange_safely(overlay.content.as_mut(), overlay.place, cx);
-        element::attach_all(overlay.content.as_mut(), cx);
-        self.overlays.push(overlay);
-        self.redraw = true;
-    }
-
-    fn close_now(&mut self, id: ElementId, cx: &mut Cx) {
-        let Some(index) = self.overlays.iter().position(|o| o.id() == id) else { return };
-        let focused_inside = self.focused.is_some_and(|f| element::find(self.overlays[index].content.as_ref(), f).is_some());
-        if focused_inside {
-            self.focus_now(None, cx);
-        }
-        let mut overlay = self.overlays.remove(index);
-        element::detach_all(overlay.content.as_mut(), cx);
-        for gone in [&mut self.hovered, &mut self.pressed] {
-            if gone.is_some_and(|g| element::find(overlay.content.as_ref(), g).is_some()) {
-                *gone = None;
-            }
-        }
-        self.redraw = true;
-        if let Some(closed) = overlay.closed.take() {
-            closed();
-        }
-        if let Some(e) = overlay.opener.and_then(|o| self.element_mut(o)) {
-            e.on_overlay_closed(id, cx);
-        }
-    }
-
-    /// Opens an overlay over the window.
-    pub fn open(&mut self, overlay: Overlay) -> ElementId {
-        let mut cx = self.cx();
-        let id = cx.open(overlay);
-        self.settle(cx);
-        id
-    }
-
-    /// Closes the overlay of that id.
-    pub fn close(&mut self, id: ElementId) {
-        let mut cx = self.cx();
-        cx.close(id);
-        self.settle(cx);
-    }
-
-    /// What the person typed in the part with the focus is taken, as when they leave it.
-    pub fn take_typed(&mut self) {
-        let focused = self.focused;
-        let mut cx = self.cx();
-        let tree: &mut dyn Element = match self.overlays.iter_mut().rev().find(|o| focused.is_some_and(|f| element::find(o.content.as_ref(), f).is_some())) {
-            Some(overlay) => overlay.content.as_mut(),
-            None => self.root.as_mut(),
-        };
-        element::take_typed_from(tree, focused, &mut cx);
-        self.settle(cx);
-    }
-
-    /// Gives the focus to the element of that id, or takes it away.
-    pub fn focus(&mut self, id: Option<ElementId>) {
-        let mut cx = self.cx();
-        cx.focus(id);
-        self.settle(cx);
-    }
-
     // -- Wake-ups --------------------------------------------------------------
 
     /// When the next element or tooltip wakes; none when none waits. The host calls `wake_due` then.
@@ -681,536 +623,9 @@ impl Screen {
 
     // -- Tooltips ----------------------------------------------------------------
 
-    /// What the element at a point, or one it is in, says about that place.
-    fn tip_of(&self, at: Option<ElementId>, x: f64, y: f64) -> Option<String> {
-        let at = at?;
-        let tree = self.overlays.iter().rev().map(|o| o.content.as_ref()).find(|c| element::find(*c, at).is_some()).unwrap_or(self.root.as_ref());
-        let ids = element::chain(tree, at)?;
-        ids.iter().rev().filter_map(|id| element::find(tree, *id)).find_map(|e| e.tooltip_at(x, y).or_else(|| Self::designed_tip(e)).filter(|t| !t.is_empty()))
-    }
-
-    /// The tooltip a part is designed with (`tooltip "@saveTooltip"`), in the person's language; none for none.
-    fn designed_tip(e: &dyn Element) -> Option<String> {
-        let base = e.as_part()?.base();
-        let written = base.spec.text("tooltip").filter(|t| !t.is_empty())?;
-        Some(base.host.text(Some(written)))
-    }
-
-    /// The pointer rests on `text` from now (none: on nothing that says something).
-    fn rest(&mut self, text: Option<String>, x: f64, y: f64) {
-        if text == self.tip_waiting {
-            return;
-        }
-        self.hide_tip();
-        self.tip_point = (x, y);
-        if text.is_some() {
-            self.tip_due = Some((self.now)() + TIP_PAUSE);
-            self.wakes_changed = true;
-        }
-        self.tip_waiting = text;
-    }
-
-    /// The tooltip goes, and none waits.
-    fn hide_tip(&mut self) {
-        self.tip_waiting = None;
-        self.tip_due = None;
-        if self.tip.take().is_some() {
-            self.redraw = true;
-        }
-    }
-
-    /// Where a tooltip shows: under the pointer, inside the screen.
-    fn tip_place(&self, text: &str) -> Rect {
-        let size = self.look.size("small");
-        let width = self.fonts.measure(text, "text", size, false) + 2.0 * TIP_PAD;
-        let height = size + 2.0 * TIP_PAD + 2.0;
-        let (px, py) = self.tip_point;
-        let x = px.min(self.width - width).max(0.0);
-        let y = if py + 20.0 + height > self.height { py - 8.0 - height } else { py + 20.0 };
-        Rect::new(x, y.max(0.0), width, height)
-    }
-
     // -- The pointer -------------------------------------------------------------
 
-    /// The deepest element at a point: in the top overlay that has it, else in the window.
-    pub fn at(&self, x: f64, y: f64) -> Option<ElementId> {
-        for overlay in self.overlays.iter().rev() {
-            if let Some(inside) = element::at(overlay.content.as_ref(), x, y) {
-                return Some(inside);
-            }
-            if overlay.modal {
-                return None;
-            }
-        }
-        element::at(self.root.as_ref(), x, y)
-    }
-
-    fn input(e: &dyn Element, x: f64, y: f64, modifiers: Modifiers, clicks: u32) -> PointerInput {
-        Self::input_of(e, x, y, modifiers, clicks, PointerButton::Left)
-    }
-
-    fn input_of(e: &dyn Element, x: f64, y: f64, modifiers: Modifiers, clicks: u32, button: PointerButton) -> PointerInput {
-        let b = e.node().bounds;
-        PointerInput { screen_x: x, screen_y: y, x: x - b.x, y: y - b.y, modifiers, clicks, button }
-    }
-
-    /// The tree an element is in: the top overlay that holds it, else the window.
-    fn tree_of(&self, at: ElementId) -> &dyn Element {
-        self.overlays.iter().rev().map(|o| o.content.as_ref()).find(|c| element::find(*c, at).is_some()).unwrap_or(self.root.as_ref())
-    }
-
-    /// The ids from the element of that id up to its tree's root, itself first.
-    fn upward(&self, at: ElementId) -> Vec<ElementId> {
-        let mut ids = element::chain(self.tree_of(at), at).unwrap_or_default();
-        ids.reverse();
-        ids
-    }
-
-    /// The shape over a point: of what holds the pointer, else of the deepest
-    /// element there or one it is in; a disabled one shows the plain pointer.
-    fn shape_at(&self, at: Option<ElementId>, x: f64, y: f64) -> Cursor {
-        let Some(from) = self.pressed.or(at) else { return Cursor::Default };
-        if !self.element(from).is_some_and(element::enabled_in_tree) {
-            return Cursor::Default;
-        }
-        for id in self.upward(from) {
-            if let Some(e) = self.element(id) {
-                if let Some(shape) = element::safely_read(e, None, |e| e.cursor_at(x, y)) {
-                    return shape;
-                }
-            }
-        }
-        Cursor::Default
-    }
-
-    fn shape(&mut self, shape: Cursor) {
-        if shape != self.cursor {
-            self.cursor = shape;
-            self.cursor_changed = true;
-        }
-    }
-
-    pub fn pointer_moved(&mut self, x: f64, y: f64) {
-        self.mark();
-        let mut cx = self.cx();
-        let held = self.held;
-        if let Some(e) = self.pressed.and_then(|p| self.element_mut(p)) {
-            let input = Self::input_of(e, x, y, Modifiers::NONE, 1, held);
-            element::safely(e, &mut cx, (), |e, cx| e.on_pointer_moved(input, cx));
-        }
-        let at = self.at(x, y);
-        if at.is_some() && at != self.pressed {
-            if let Some(e) = at.and_then(|a| self.element_mut(a)).filter(|e| element::enabled_in_tree(&**e)) {
-                let input = Self::input(e, x, y, Modifiers::NONE, 1);
-                element::safely(e, &mut cx, (), |e, cx| e.on_pointer_moved(input, cx));
-            }
-        }
-        let shape = self.shape_at(at, x, y);
-        self.shape(shape);
-        let tip = if self.pressed.is_none() { self.tip_of(at, x, y) } else { None };
-        self.rest(tip, x, y);
-        if at != self.hovered {
-            let was = self.hovered;
-            self.set_flag(was, |n| n.hovered = false);
-            self.hovered = at;
-            self.set_flag(at, |n| n.hovered = true);
-            self.redraw = true;
-        }
-        self.settle(cx);
-    }
-
-    pub fn pointer_left(&mut self) {
-        self.hide_tip();
-        if self.pressed.is_none() {
-            self.shape(Cursor::Default);
-        }
-        if let Some(was) = self.hovered.take() {
-            self.set_flag(Some(was), |n| n.hovered = false);
-            self.redraw = true;
-        }
-    }
-
-    /// The deepest element at or above `at` that takes the focus; none when that one is disabled.
-    fn taker(&self, at: ElementId) -> Option<ElementId> {
-        let found = self.upward(at).into_iter().find(|id| self.element(*id).is_some_and(|e| e.focusable()))?;
-        self.element(found).is_some_and(element::enabled_in_tree).then_some(found)
-    }
-
-    pub fn pointer_pressed(&mut self, x: f64, y: f64, button: PointerButton, clicks: u32) {
-        self.pointer_pressed_with(x, y, button, clicks, Modifiers::NONE);
-    }
-
-    pub fn pointer_pressed_with(&mut self, x: f64, y: f64, button: PointerButton, clicks: u32, modifiers: Modifiers) {
-        self.hide_tip();
-        // A press outside the overlays closes them, top first, and goes no
-        // further, unless the one closed lets it through (a dropdown's list).
-        // One that stays (a pinned slide-out) is left open, and the press goes on.
-        if let Some(top) = self.overlays.iter().rev().find(|o| !(o.staying() && !o.content.node().bounds.contains(x, y))) {
-            let anchored = top.anchor.and_then(|a| self.element(a)).is_some_and(|a| a.node().bounds.contains(x, y));
-            if !top.modal && !top.content.node().bounds.contains(x, y) && !top.place.contains(x, y) && !anchored {
-                let (id, through) = (top.id(), top.through);
-                self.close(id);
-                if !through {
-                    return;
-                }
-                return self.pointer_pressed_with(x, y, button, clicks, modifiers);
-            }
-        }
-        self.pointer_moved(x, y);
-        // A press starts no new pause: the tip of what was pressed shows again only once the pointer went elsewhere.
-        self.tip_due = None;
-        // What is disabled (or in a disabled part) takes no press, no focus and no menu.
-        let Some(at) = self.at(x, y) else { return };
-        if !self.element(at).is_some_and(element::enabled_in_tree) {
-            return;
-        }
-        // A right press is a drag of a part that takes right drags (a canvas draws a line with it); else it opens the menu there.
-        let right_drag = button == PointerButton::Right
-            && self.element(at).is_some_and(|e| {
-                let b = e.node().bounds;
-                element::safely_read(e, false, |e| e.right_drags(x - b.x, y - b.y))
-            });
-        if button == PointerButton::Right && !right_drag {
-            self.context_pressed(at, x, y);
-            return;
-        }
-        if button != PointerButton::Left && !right_drag {
-            return;
-        }
-        // A right drag holds the pointer until the right button goes up.
-        if self.pressed.is_some() && self.held == PointerButton::Right {
-            return;
-        }
-        self.held = button;
-        // Focus by the pointer: what was pressed stays where it is (no scrolling into view), so the release lands on it.
-        self.pointing = true;
-        let mut cx = self.cx();
-        cx.focus(self.taker(at));
-        self.settle(cx);
-        self.pointing = false;
-        self.pressed = Some(at);
-        self.set_flag(Some(at), |n| n.pressed = true);
-        let mut cx = self.cx();
-        if let Some(e) = self.element_mut(at) {
-            let input = Self::input_of(e, x, y, modifiers, clicks.max(1), button);
-            element::safely(e, &mut cx, (), |e, cx| e.on_pointer_pressed(input, cx));
-        }
-        self.settle(cx);
-        self.redraw = true;
-    }
-
-    /// A right press: what takes the focus there takes it (a text box keeps
-    /// its selection for Copy), then the element there, or one it is in,
-    /// gives its menu, which opens at the pointer (a part's `menu`); a table,
-    /// list or tree chooses the row there first, as a left press does.
-    fn context_pressed(&mut self, at: ElementId, x: f64, y: f64) {
-        if let Some(taker) = self.taker(at) {
-            self.focus(Some(taker));
-        }
-        // A table, list or tree chooses the row under the pointer first, menu or not.
-        let rows = self.upward(at).into_iter().any(|id| {
-            self.element(id).and_then(|e| e.as_part()).is_some_and(|p| matches!(p.base().spec.kind.as_str(), "table" | "list" | "tree" | "treeTable"))
-        });
-        if rows {
-            self.pointer_pressed(x, y, PointerButton::Left, 1);
-            self.pointer_released(x, y, PointerButton::Left);
-        }
-        let found = self.upward(at).into_iter().find_map(|id| {
-            let e = self.element(id)?;
-            let entries = element::safely_read(e, None, |e| e.context_menu_at(x, y)).filter(|entries| !entries.is_empty())?;
-            Some((id, entries))
-        });
-        let Some((id, entries)) = found else { return };
-        let mut cx = self.cx();
-        self.context_menus.open((id, 0), entries, Rect::new(x, y - 1.0, 0.0, 0.0), None, &mut cx);
-        self.settle(cx);
-        self.redraw = true;
-    }
-
-    pub fn pointer_released(&mut self, x: f64, y: f64, button: PointerButton) {
-        if button != self.held || self.pressed.is_none() {
-            return;
-        }
-        if button == PointerButton::Right {
-            return self.right_released(x, y);
-        }
-        let Some(was) = self.pressed.take() else { return };
-        self.set_flag(Some(was), |n| n.pressed = false);
-        let mut cx = self.cx();
-        if let Some(e) = self.element_mut(was) {
-            let input = Self::input(e, x, y, Modifiers::NONE, 1);
-            element::safely(e, &mut cx, (), |e, cx| e.on_pointer_released(input, cx));
-        }
-        self.settle(cx);
-        self.redraw = true;
-        if self.at(x, y) == Some(was) {
-            let mut cx = self.cx();
-            if let Some(e) = self.element_mut(was) {
-                element::safely(e, &mut cx, (), |e, cx| e.on_click(cx));
-            }
-            self.settle(cx);
-        }
-        self.mark();
-        let shape = self.shape_at(self.at(x, y), x, y);
-        self.shape(shape);
-    }
-
-    /// The right button went up on a right drag: the part used it, or it opens its menu where it was pressed.
-    fn right_released(&mut self, x: f64, y: f64) {
-        self.held = PointerButton::Left;
-        let Some(was) = self.pressed.take() else { return };
-        self.set_flag(Some(was), |n| n.pressed = false);
-        let mut cx = self.cx();
-        let used = match self.element_mut(was) {
-            Some(e) => {
-                let input = Self::input_of(e, x, y, Modifiers::NONE, 1, PointerButton::Right);
-                element::safely(e, &mut cx, true, |e, cx| e.on_right_released(input, cx))
-            }
-            None => true,
-        };
-        self.settle(cx);
-        self.redraw = true;
-        if !used {
-            self.context_pressed(was, x, y);
-        }
-        self.mark();
-        let shape = self.shape_at(self.at(x, y), x, y);
-        self.shape(shape);
-    }
-
-    /// The pointer was taken away mid-press (the window lost the focus
-    /// during a drag): what holds it lets go without a release and without a
-    /// click, so a drag in progress is dropped, not committed.
-    pub fn pointer_cancelled(&mut self) {
-        self.held = PointerButton::Left;
-        let Some(was) = self.pressed.take() else { return };
-        self.set_flag(Some(was), |n| n.pressed = false);
-        let mut cx = self.cx();
-        if let Some(e) = self.element_mut(was) {
-            element::safely(e, &mut cx, (), |e, cx| e.on_pointer_cancelled(cx));
-        }
-        self.settle(cx);
-        self.redraw = true;
-        self.shape(Cursor::Default);
-    }
-
-    /// A press and its release at a point: a click.
-    pub fn click(&mut self, x: f64, y: f64) {
-        self.pointer_pressed(x, y, PointerButton::Left, 1);
-        self.pointer_released(x, y, PointerButton::Left);
-    }
-
-    /// The wheel turned at a point: the deepest element there that scrolls
-    /// takes it. In the screen's units: a positive `dy` shows what is further
-    /// down, a positive `dx` what is further right, with the keys `held`.
-    /// Shift turns a wheel that only goes up and down sideways, as every
-    /// system's scrolling does.
-    pub fn wheel(&mut self, x: f64, y: f64, dx: f64, dy: f64, held: Modifiers) {
-        self.hide_tip();
-        let (dx, dy) = if held.has(Modifiers::SHIFT) && dx == 0.0 { (dy, 0.0) } else { (dx, dy) };
-        let Some(at) = self.at(x, y) else { return };
-        let ids = self.upward(at);
-        let mut cx = self.cx();
-        for id in ids {
-            if let Some(e) = self.element_mut(id) {
-                if element::safely(e, &mut cx, false, |e, cx| e.on_wheel(dx, dy, held, cx)) {
-                    cx.invalidate();
-                    break;
-                }
-            }
-        }
-        self.settle(cx);
-    }
-
     // -- Keys --------------------------------------------------------------------
-
-    /// The elements Tab reaches, in Tab order: in the dialog on top, else in
-    /// what lies over the window that has the focus (a slide-out), else in the window.
-    pub fn tab_order(&self) -> Vec<ElementId> {
-        match self.overlays.last() {
-            Some(top) if top.modal => element::focus_takers(top.content.as_ref()),
-            _ => {
-                let holding = self.focused.and_then(|f| self.overlays.iter().rev().find(|o| element::find(o.content.as_ref(), f).is_some()));
-                let inside = holding.map(|o| element::focus_takers(o.content.as_ref())).filter(|t| !t.is_empty());
-                inside.unwrap_or_else(|| element::focus_takers(self.root.as_ref()))
-            }
-        }
-    }
-
-    /// The focus goes to the next element in Tab order, or the one before.
-    pub fn move_focus(&mut self, back: bool) {
-        let takers = self.tab_order();
-        if takers.is_empty() {
-            return;
-        }
-        let at = self.focused.and_then(|f| takers.iter().position(|t| *t == f));
-        let next = if back {
-            match at {
-                Some(i) if i > 0 => i - 1,
-                _ => takers.len() - 1,
-            }
-        } else {
-            at.map(|i| (i + 1) % takers.len()).unwrap_or(0)
-        };
-        self.focus(Some(takers[next]));
-    }
-
-    fn modal_on_top(&self) -> bool {
-        self.overlays.last().is_some_and(|o| o.modal)
-    }
-
-    /// The window's own keys (its hook, then the root's): a button's
-    /// shortcut, Enter for the default button, Escape for the cancel
-    /// button. Not asked while a dialog is on top: its keys are its own.
-    fn window_keys(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
-        if self.modal_on_top() {
-            return false;
-        }
-        let hooked = self.keys.as_mut().is_some_and(|keys| keys(key, cx));
-        hooked || element::safely(self.root.as_mut(), cx, false, |root, cx| root.window_key(key, cx))
-    }
-
-    /// The part with the focus, or the first part it is in: in the overlays, top first, then in the window.
-    /// Found once per element that has the focus; looked for again while it is in no part yet.
-    fn focused_part(&self) -> Option<FocusedPart> {
-        let focused = self.focused;
-        let (at, known) = self.focus_part.borrow().clone();
-        if at == focused && (known.is_some() || focused.is_none()) {
-            return known;
-        }
-        let found = focused.and_then(|f| {
-            let roots = self.overlays.iter().rev().map(|o| o.content.as_ref()).chain([self.root.as_ref()]);
-            roots.into_iter().find_map(|root| crate::window::focused_part_in(root, f))
-        });
-        *self.focus_part.borrow_mut() = (focused, found.clone());
-        found
-    }
-
-    /// The focused element, when the person may use it.
-    fn focused_enabled(&self) -> Option<ElementId> {
-        self.focused.filter(|f| self.element(*f).is_some_and(element::enabled_in_tree))
-    }
-
-    /// A key pressed: a dialog on top hears it first, then the part with the
-    /// focus (a text box keeps Ctrl+A and its arrows), then the window's own
-    /// keys. True when something on the screen took it.
-    pub fn key_pressed(&mut self, key: KeyInput) -> bool {
-        self.hide_tip();
-        self.mark();
-        self.key_taken = true;
-        let mut cx = self.cx();
-        let top_modal = self.modal_on_top();
-        // A dialog on top hears its keys before the part with the focus.
-        if top_modal {
-            let took = match self.overlays.last_mut() {
-                Some(top) => element::safely(top.content.as_mut(), &mut cx, false, |c, cx| c.dialog_key(key, cx)),
-                None => false,
-            };
-            if took {
-                cx.invalidate();
-                self.settle(cx);
-                return true;
-            }
-        }
-        let focused = self.focused_enabled();
-        let focused_key = |screen: &mut Screen, cx: &mut Cx| match focused.and_then(|f| screen.element_mut(f)) {
-            Some(e) => element::safely(e, cx, false, |e, cx| e.on_key(key, cx)),
-            None => false,
-        };
-        // Escape closes the overlay on top, unless the part with the focus takes it (a list that closes itself).
-        // One that stays (a pinned slide-out) closes only while the focus is in it.
-        let focus_in = |o: &Overlay| focused.is_some_and(|f| element::find(o.content.as_ref(), f).is_some());
-        let closing = self.overlays.iter().rev().find(|o| !o.staying() || focus_in(o)).map(Overlay::id);
-        if key.key == Key::Escape && closing.is_some() && !top_modal {
-            if !focused_key(self, &mut cx) {
-                if let Some(top) = closing {
-                    cx.close(top);
-                }
-            }
-            self.settle(cx);
-            return true;
-        }
-        if key.key == Key::Tab && !key.control() && !key.alt() {
-            // A part that takes Tab itself but lets it go (past a table's last cell) has the focus move on as Tab does.
-            let wants_tab = focused.and_then(|f| self.element(f)).is_some_and(|e| e.wants_tab());
-            if wants_tab && focused_key(self, &mut cx) {
-                self.settle(cx);
-                return true;
-            }
-            self.settle(cx);
-            self.move_focus(key.shift());
-            return !self.tab_order().is_empty();
-        }
-        if focused_key(self, &mut cx) {
-            cx.invalidate();
-            self.settle(cx);
-            return true;
-        }
-        if self.window_keys(key, &mut cx) {
-            cx.invalidate();
-            self.settle(cx);
-            return true;
-        }
-        self.settle(cx);
-        self.key_taken = false;
-        false
-    }
-
-    /// A key let go: the window hears it first (Alt for its menu bar), then the part with the focus.
-    pub fn key_released(&mut self, key: KeyInput) {
-        let mut cx = self.cx();
-        let top_modal = self.modal_on_top();
-        if !top_modal && element::safely(self.root.as_mut(), &mut cx, false, |root, cx| root.window_key_up(key, cx)) {
-            cx.invalidate();
-            self.settle(cx);
-            return;
-        }
-        if let Some(e) = self.focused.and_then(|f| self.element_mut(f)) {
-            element::safely(e, &mut cx, (), |e, cx| e.on_key_up(key, cx));
-        }
-        self.settle(cx);
-    }
-
-    /// Text typed: after a key nothing took, a single character is first the
-    /// window's (a character shortcut such as `*`, matched by what the
-    /// keyboard typed, not where its key is), else the focused part's.
-    pub fn text_typed(&mut self, text: &str) {
-        self.mark();
-        let mut cx = self.cx();
-        let mut chars = text.chars();
-        let single = match (chars.next(), chars.next()) {
-            (Some(c), None) if !c.is_control() => Some(c),
-            _ => None,
-        };
-        let shortcut = !self.key_taken && single.is_some_and(|c| self.window_keys(KeyInput::typed(c), &mut cx));
-        self.key_taken = false;
-        if shortcut {
-            cx.invalidate();
-            self.settle(cx);
-            return;
-        }
-        if let Some(e) = self.focused_enabled().and_then(|f| self.element_mut(f)) {
-            element::safely(e, &mut cx, (), |e, cx| e.on_text(text, cx));
-        }
-        self.settle(cx);
-    }
-
-    /// An input method composes text (none: it stopped): the part with the
-    /// focus shows it at its caret. What it commits comes as `text_typed`.
-    pub fn compose(&mut self, composing: Option<Composition>) {
-        let mut cx = self.cx();
-        if let Some(e) = self.focused.and_then(|f| self.element_mut(f)) {
-            e.on_compose(composing, &mut cx);
-        }
-        cx.invalidate();
-        self.settle(cx);
-    }
-
-    /// Where the caret of the part with the focus is, in the screen's units:
-    /// an input method shows its window by it; none when no part types.
-    pub fn caret_area(&self) -> Option<Rect> {
-        self.focused.and_then(|f| self.element(f)).and_then(|e| e.caret_area())
-    }
 
     /// The screen is no longer shown: its overlays close and every element leaves it, so what they started stops.
     pub fn dispose(&mut self) {

@@ -31,10 +31,10 @@ Clarity is one language and a designer-first IDE whose projects are transpiled t
 
 - After a change, run the tests of the module changed (`--test <file> <filter>`), not whole crate suites. When a check fails, run only what failed.
 - Whole suites, packing NuGets, release builds of the libraries and installers are what GitHub Actions does: don't redo them locally.
-- A slice is done only when every example builds on its own stack (`crates/clarity-gen/tests/examples_build.rs`, one at a time).
+- A slice is done only when every example builds on its own stack (`crates/clarity-gen/tests/gen/examples_build.rs`, one at a time).
 - An example joins `EXAMPLES` in `examples_build.rs` and the checks' example list only once it checks clean and builds on its own stack; a half-built example stays out of both.
 - A test known to fail is named in the reply to the user when the work stops, with why. A note in the ledger or in memory alone is not enough.
-- Windows and views (`.cxaml`) are written through Clarity's tools; one written by hand passes `cargo test -p clarity-spec --test cxaml` before it counts as done.
+- Windows and views (`.cxaml`) are written through Clarity's tools; one written by hand passes `cargo test -p clarity-spec --test spec cxaml::` before it counts as done.
 - A test that reads an example sees it as a fresh checkout does: what git ignores (an example's `data/` and `out/`) is not there in the checks, so a test passing only because a local database exists does not count.
 - Say a thing is ready only when it is built and checked.
 - The machine has 7.5 GB of memory: `CARGO_BUILD_JOBS=2`, one heavy build at a time, no builds in `/tmp`, check free memory first.
@@ -46,17 +46,22 @@ Clarity checks generated files against their source in tests that fail when a fi
 
 | Writes | Command |
 | --- | --- |
-| `editors/vscode/syntaxes/clarity.tmLanguage.json` | `CLARITY_WRITE_GRAMMAR=1 cargo test -p clarity-spec --test highlight` |
-| `runtimes/rust-ui/catalog/*.json` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test web_windows` |
+| `editors/vscode/syntaxes/clarity.tmLanguage.json` | `CLARITY_WRITE_GRAMMAR=1 cargo test -p clarity-spec --test spec highlight::` |
+| `runtimes/rust-ui/catalog/*.json` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test gen web_windows::` |
 | `runtimes/web/src/generated/*.ts` | `cargo test -p clarity-spec --lib` (ts-rs writes them) |
-| the examples' diagrams | `CLARITY_WRITE_DIAGRAMS=1 cargo test -p clarity-spec --test diagram_views` |
-| `conformance/migrations.json` | `CLARITY_WRITE_CONFORMANCE=1 cargo test -p clarity-gen --test servers` |
-| `runtimes/rust-ui/themes/` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test clarity_ui_theme` |
+| the examples' diagrams | `CLARITY_WRITE_DIAGRAMS=1 cargo test -p clarity-spec --test spec diagram_views::` |
+| `conformance/migrations.json` | `CLARITY_WRITE_CONFORMANCE=1 cargo test -p clarity-gen --test gen servers::` |
+| `runtimes/rust-ui/themes/` | `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test spec clarity_ui_theme::` |
 | the picture cases | `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image --test pictures` |
-| the parts pages' catalog tables (`manual/parts.*.md`) | `CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test manual_catalog` |
-| `runtimes/carried/` (what the installer carries for builds with no internet) | `CLARITY_WRITE_CARRIED=1 cargo test -p clarity-gen --test carried` |
+| the parts pages' catalog tables (`manual/parts.*.md`) | `CLARITY_WRITE_MANUAL=1 cargo test -p clarity-spec --test spec manual_catalog::` |
+| `runtimes/carried/` (what the installer carries for builds with no internet) | `CLARITY_WRITE_CARRIED=1 cargo test -p clarity-gen --test gen carried::` |
+| the IDE's TypeScript types (`runtimes/web/src/generated/*.ts`) | `cargo test -p clarity-preview --lib` (ts-rs writes them) |
+| the project's TypeScript types | `cargo test -p clarity-project --lib` (ts-rs writes them) |
+| the agent's TypeScript types | `cargo test -p clarity-agent --lib` (ts-rs writes them) |
+| the engine the renderers are tested with (`conformance/engines/sky*.wasm`) | `CLARITY_WRITE_SKY=1 cargo test -p clarity-wasm --test sky` |
+| the Go runtime's modules (`crates/clarity-gen-go/src/modules.txt`; needs the internet) | `CLARITY_WRITE_GO_MODULES=1 cargo test -p clarity-gen-go --test go -- --ignored --exact build::the_modules_of_each_package_group_are_recorded` |
 
-A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runtimes --include=*.rs -o | sort -u`.
+Every guard is in `release::GUARDS` and in this table: `crates/clarity-devtools/tests/devtools/devtools.rs` fails on one missing from either.
 
 ## Releasing
 
@@ -70,6 +75,6 @@ A guard added later is found with `grep -rhn "CLARITY_WRITE_[A-Z_]*" crates runt
 
 ## The IDE while it runs
 
-**BUILD CLARITY'S OWN PIECES ONLY THROUGH DEVTOOLS.** Builds and the preview use the release; a Clarity run from the repository has Clarity settings > DevTools, the Disk and Release planning tabs, then a tab per piece (clarityUi, clarityUiBrowser, rustCrates, nugetPackages, goModule, clarityAudio, clarityVideo, clarityImage, clarityFormats, clarityAuth, clarityAppMcp) shown by itself while its own build is behind its source, else added by the cDdev choosing the release or the cDdev's own build, each with a Build button (`crates/clarity-gen/src/tools/devtools/`). After changing a piece, press its Build with `build_piece` of the `clarity-cdev` MCP server (this repository's build, `.mcp.json`; the installed Clarity is `clarity`); never run its cargo build or build.sh yourself and never copy libraries. DevTools > Release planning is the person's review (the checks with one button, what a release would start, what changed); before writing a release plan, read how the releases and their checks stand with `release_state` of `clarity-cdev`, and write the plan from that, never from memory.
+**Build Clarity's own pieces yourself, with the command DevTools names.** Builds and the preview use the release; a Clarity run from the repository has Clarity settings > DevTools, the Disk and Release planning tabs, then a tab per piece (clarityUi, clarityUiBrowser, rustCrates, nugetPackages, goModule, clarityAudio, clarityVideo, clarityImage, clarityFormats, clarityAuth, clarityAppMcp) shown by itself while its own build is behind its source, else added by the cDdev choosing the release or the cDdev's own build, each with a Build button for the person (`crates/clarity-gen/src/tools/devtools/`). After changing a piece, run its build yourself (`CARGO_BUILD_JOBS=2 cargo build --release -p clarity-ui-ffi` for clarityUi, without `--release` for its debug build), one at a time, telling the person first; not through `build_piece`, which waits for a person to press Build. Never copy libraries. DevTools > Release planning is the person's review (the checks with one button, what a release would start, what changed); before writing a release plan, read how the releases and their checks stand with `release_state` of `clarity-cdev`, and write the plan from that, never from memory.
 
 The user runs the IDE with `./dev.sh`. Editing `app/src/*` reloads its page; editing `app/src-tauri/*` or a crate it uses restarts it and clears the agent chat. While it runs, make no Rust edits and run no cargo builds without asking; gather IDE changes and apply them in one go.

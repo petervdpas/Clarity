@@ -1,0 +1,246 @@
+module music
+
+// What an album came out on.
+enum Format
+    Vinyl label @formatVinyl
+    Single label @formatSingle
+    Cd label @formatCd
+    Cassette label @formatCassette
+    Digital label @formatDigital
+
+// Genres form a tree: Bebop belongs to Jazz.
+entity Genre
+    name: text(40), required, unique, label @genreNameLabel
+    parent: ref Genre, help @genreParentHelp, label @genreParentLabel
+    children: list<Genre>, label @genreChildrenLabel
+
+entity Artist
+    name: text(80), required, unique, search, label @artistNameLabel
+    country: text(40), search, label @artistCountryLabel
+    formed: integer, format plain, label @artistFormedLabel
+    website: url, label @artistWebsiteLabel
+    photo: image, store photos, label @artistPhotoLabel
+
+entity Album
+    title: text(120), required, search, label @albumTitleLabel
+    artist: ref Artist, required, label @albumArtistLabel
+    genre: ref Genre, label @albumGenreLabel
+    year: integer, format plain, min 1900, max 2100, label @albumYearLabel
+    format: Format, default Cd, label @albumFormatLabel
+    recordLabel: text(60), search, label @albumRecordLabelLabel
+    boughtOn: date, label @albumBoughtOnLabel
+    price: money, min 0, label @albumPriceLabel
+    rating: integer, min 0, max 5, help @albumRatingHelp, label @albumRatingLabel
+    cover: image, help @albumCoverHelp, label @albumCoverLabel
+    notes: text, search, label @albumNotesLabel
+    tags: list<text>, search, label @albumTagsLabel
+    booklet: blob, label @albumBookletLabel
+
+// A track of an album; the album form lists them in order.
+entity Track
+    album: ref Album, required, label @trackAlbumLabel
+    number: integer, min 1, label @trackNumberLabel
+    title: text(120), required, label @trackTitleLabel
+    length: duration, min 0, label @trackLengthLabel
+
+// The length of a set of tracks.
+function totalLength(tracks: list<Track>) -> duration
+    ensure result >= 0
+    let total: duration = 0
+    for track in tracks
+        total = total + track.length
+    return total
+
+// Reads the size of a picture from the first bytes of its file; its
+// source is in engines/images.
+engine Images from "images.wasm"
+    function width(picture: bytes) -> integer
+    function height(picture: bytes) -> integer
+
+// Photos dropped in the photos folder, named after the artist
+// (Miles Davis.jpg), become the photos of artists that have none, when
+// they are at least 200 pixels on each side.
+action findArtistPhotos()
+    effects db.write, files.read
+    let found = files f in photos where f.extension == "jpg" or f.extension == "png"
+    let artists = find a in Artist where a.photo == none
+    for artist in artists
+        for f in found
+            if f.name == artist.name + "." + f.extension
+                let picture = read bytes of f
+                if Images.width(picture) >= 200 and Images.height(picture) >= 200
+                    artist.photo = f
+                    save artist
+
+// A copy of every photo in the exports folder, byte for byte.
+action backUpPhotos()
+    effects files.read, files.write
+    let found = files f in photos
+    for f in found
+        let content: bytes = read bytes of f
+        write content to exports "photos/" + f.path
+
+// The collection as a text file in the exports folder.
+action exportCollection()
+    effects files.write
+    let albums = find a in Album order by a.artist.name, a.title
+    let lines = ""
+    for album in albums
+        lines = lines + album.title + "\n"
+    write lines to exports "collection.txt"
+
+code AlbumBrowse
+    // Back from a track's dialog: the album's tracks again too.
+    handler windowReturned
+        filterChanged()
+        showTracks()
+
+    handler filterChanged
+        // Words of the title, label, notes or tags, or part of the artist's name.
+        albums = find a in Album where a matches searchBox.text or a.artist.name contains searchBox.text order by a.artist.name, a.title
+
+code AlbumBrowseView
+    handler openClicked
+        album = grid.selected
+        showTracks()
+        albumSlide.visible = true
+
+    handler newClicked
+        album = new Album
+        showTracks()
+        albumSlide.visible = true
+
+    // Its tracks go with it; an album lent out stays, and says so.
+    handler removeClicked
+        let gone = grid.selected
+        for t in find x in Track where x.album == gone
+            delete t
+        delete gone
+        albumSlide.visible = false
+        filterChanged()
+
+    handler showTracks
+        tracks = find t in Track where t.album == album order by t.number
+        let total = totalLength(tracks)
+        let count = count(tracks)
+        length.caption = @countTracksTotal(count = count, total = total)
+
+    handler exportClicked
+        exportCollection()
+        message @savedTheListInCollection
+
+code AlbumEditor
+    handler trackOpened
+        open TrackDialog with album = album, track = trackGrid.selected
+
+    // The cover, kept in the database, copied as the artist's photo, which the photos folder keeps.
+    handler useAsArtistPhotoClicked
+        if album.cover == none
+            message warning @theAlbumHasNoCover
+            return
+        let player = album.artist
+        player.photo = album.cover
+        save player
+        message @theCoverIsNowThePhoto(name = player.name)
+
+    handler addTrackClicked
+        if album.title == ""
+            message warning @saveTheAlbumBeforeAdding
+            return
+        save album
+        tell saved()
+        open TrackDialog with album = album
+
+    handler removeTrackClicked
+        delete trackGrid.selected
+        tracks = find t in Track where t.album == album order by t.number
+
+    handler saveClicked
+        title.error = ""
+        if album.title == ""
+            title.error = @anAlbumNeedsATitle
+            return
+        save album
+        tell saved()
+        message @savedTitle(title = album.title)
+
+code TrackDialog
+    handler saveClicked
+        title.error = ""
+        if track.title == ""
+            title.error = @aTrackNeedsATitle
+            return
+        track.album = album
+        save track
+        close
+
+code ArtistBrowse
+    handler filterChanged
+        artists = find a in Artist where a matches artistSearch.text order by a.name
+
+code ArtistBrowseView
+    handler openClicked
+        artist = artistList.selected
+        artistSlide.visible = true
+
+    handler newClicked
+        artist = new Artist
+        artistSlide.visible = true
+
+    handler photosClicked
+        findArtistPhotos()
+        filterChanged()
+
+    handler backupClicked
+        backUpPhotos()
+        message @copiedThePhotosToThe
+
+code ArtistEditor
+    handler saveClicked
+        name.error = ""
+        if artist.name == ""
+            name.error = @anArtistNeedsAName
+            return
+        save artist
+        tell saved()
+        message @savedName(name = artist.name)
+
+code GenreBrowse
+    handler windowReturned
+        reload genres
+
+code GenreBrowseView
+    handler openClicked
+        open GenreDialog with genre = genreTree.selected
+
+    handler newClicked
+        open GenreDialog
+
+    // A genre with genres below it stays, and says so.
+    handler removeClicked
+        delete genreTree.selected
+        reload genres
+
+code CollectionOverview
+    handler overviewOpened
+        albums = find a in Album
+
+code GenreDialog
+    handler saveClicked
+        name.error = ""
+        if genre.name == ""
+            name.error = @aGenreNeedsAName
+            return
+        save genre
+        close
+
+code Track
+    before save
+        if track.length > 7200
+            refuse @trackNumberIsLongerThan(number = track.number)
+
+code Genre
+    before delete
+        let below = find g in Genre where g.parent == genre
+        if count(below) > 0
+            refuse @nameStillHasGenresBelow(name = genre.name)

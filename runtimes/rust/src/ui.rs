@@ -383,11 +383,6 @@ pub struct WindowState {
     pub parts: BTreeMap<String, PartState>,
     #[serde(default)]
     pub selected: BTreeMap<String, usize>,
-    /// What the screen shows of the list of each table, tree and chart, by
-    /// the part's name (manual/start.how-it-works.md): the screen sends how, the runtime fills
-    /// in what shows after every reply (`views::replied`).
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub views: BTreeMap<String, Map<String, Value>>,
 }
 
 /// The number the next window that opens gets.
@@ -550,7 +545,6 @@ pub struct Ui {
     instance: u64,
     parts: BTreeMap<String, PartState>,
     selected: BTreeMap<String, usize>,
-    views: BTreeMap<String, Map<String, Value>>,
     messages: Vec<Message>,
     shown: BTreeMap<String, Text>,
     open: Vec<OpenRequest>,
@@ -576,7 +570,6 @@ impl Ui {
             instance: state.instance,
             parts: state.parts.clone(),
             selected: state.selected.clone(),
-            views: state.views.clone(),
             ..Ui::default()
         }
     }
@@ -963,7 +956,6 @@ impl Ui {
                 data,
                 parts: self.parts,
                 selected: self.selected,
-                views: self.views,
             },
             messages: self.messages,
             shown: self.shown,

@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "clarity/picture.h"
-#include "clarity/views.h"
+#include "clarity/ui.h"
 
 static const int default_units[2] = {1000, 1000};
 

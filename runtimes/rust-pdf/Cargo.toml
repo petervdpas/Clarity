@@ -2,7 +2,7 @@
 name = "clarity-pdf"
 description = "Clarity.Pdf: Markdown and Clarity content laid out by Typst into PDF files, for the programs Clarity generates"
 # Released on its own (tag runtimes/rust-pdf/vX.Y.Z).
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -13,7 +13,7 @@ include = ["src/**", "fonts/**", "mitex/**", "README.md", "LICENSE"]
 
 [dependencies]
 # Markdown read into blocks the same way every Clarity renderer reads it.
-clarity-runtime = { path = "../rust", version = "0.63.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.64.0", default-features = false }
 # Typst lays out the pages and writes the PDF (docs/ledger/reports-pdf.md);
 # its fonts are carried, so making a PDF needs no internet.
 typst = "0.15.1"

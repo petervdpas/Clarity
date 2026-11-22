@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A book on the desk: an accordion of the parts of the book, Chapters and
+     Research. -->
+<Window class="writing.Desk" title="@deskTitle" width="1400" height="860" onopen="deskOpened">
+  <Data name="book" type="Book" />
+  <Data name="chapter" type="Chapter" />
+  <Label name="deskHeading" at="1,1" span="10" caption="@deskTitle" />
+  <Button name="backButton" at="11,1" span="2" caption="@backCaption" opens="close" icon="arrow-left" cancel="true" />
+  <Accordion name="parts" at="1,2" span="12" rows="15" orientation="horizontal">
+    <Section title="@chaptersSection" color="#3b6ea8">
+      <Content name="chaptersContent" at="1,1" span="12" rows="15">
+        <View name="ChaptersPart" onchosen="chapterChosen" ontoResearch="toResearch" ontoCharacter="toCharacter" ontoFragment="toFragment" ontoDialogue="toDialogue" />
+      </Content>
+    </Section>
+    <Section title="@researchSection" color="#4f7d5b">
+      <Content name="researchContent" at="1,1" span="12" rows="15">
+        <View name="ResearchPart" onjumpTo="jumpTo" />
+      </Content>
+    </Section>
+    <Section title="@charactersSection" color="#8a4f7d">
+      <Content name="charactersContent" at="1,1" span="12" rows="15">
+        <View name="CharactersPart" onjumpTo="jumpTo" />
+      </Content>
+    </Section>
+    <Section title="@fragmentsSection" color="#b07d2b">
+      <Content name="fragmentsContent" at="1,1" span="12" rows="15">
+        <View name="FragmentsPart" onjumpTo="jumpTo" />
+      </Content>
+    </Section>
+    <Section title="@dialoguesSection" color="#a8503b">
+      <Content name="dialoguesContent" at="1,1" span="12" rows="15">
+        <View name="DialoguesPart" onjumpTo="jumpTo" />
+      </Content>
+    </Section>
+  </Accordion>
+</Window>

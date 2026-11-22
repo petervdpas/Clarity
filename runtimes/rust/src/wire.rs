@@ -124,24 +124,6 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
             let (state, scope, back): (WindowState, String, bool) = (arg(&args, "state")?, arg(&args, "scope")?, arg(&args, "back")?);
             app.undo_edit(state, &scope, back)
         })()),
-        "reorder_event" => given((|| {
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let reorder = program::Reorder { part: arg(&args, "part")?, scope: arg(&args, "scope")?, list: arg(&args, "list")?, by: arg(&args, "by")?, parent: arg(&args, "parent")?, moved: arg(&args, "move")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() };
-            app.reorder_event(arg(&args, "state")?, reorder)
-        })()),
-        "item_event" => given((|| {
-            let values: Option<Vec<String>> = arg(&args, "values")?;
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let item = program::ItemEdit { part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, item: arg(&args, "item")?, values: values.unwrap_or_default(), typed: arg(&args, "typed")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() };
-            app.item_event(arg(&args, "state")?, item)
-        })()),
-        "range_event" => given((|| {
-            let range = crate::ranges::Range { min: arg(&args, "min")?, max: arg(&args, "max")?, step: arg(&args, "step")? };
-            let moved = crate::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Text::plain(err.to_string()))?;
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let range = program::RangeEdit { part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, range, whole: arg(&args, "whole")?, moved, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() };
-            app.range_event(arg(&args, "state")?, range)
-        })()),
         "canvas_event" => given((|| {
             let (list, path, grid, snap): (Option<String>, Option<String>, Option<i64>, Option<bool>) = (arg(&args, "list")?, arg(&args, "path")?, arg(&args, "grid")?, arg(&args, "snap")?);
             let canvas = crate::canvas::CanvasArgs { part: arg(&args, "part")?, mode: arg(&args, "mode")?, list: list.unwrap_or_default(), at: arg(&args, "at")?, path: path.unwrap_or_default(), units: arg(&args, "units")?, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false };
@@ -153,10 +135,6 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
             let step = program::StepPress { part: arg(&args, "part")?, button: arg(&args, "button")?, steps: arg(&args, "steps")?, next: arg(&args, "next")?, finish: arg(&args, "finish")? };
             app.step_event(arg(&args, "state")?, step)
         })()),
-        "view_event" => given((|| {
-            let (state, part, action): (WindowState, String, Map<String, Value>) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "action")?);
-            app.view_event(state, &part, action)
-        })()),
         "answer_event" => watched(app, &args, || {
             let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);
             app.answer_event(state, &handler, values)
@@ -167,9 +145,8 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
             app.field_values(&entity, &field)
         })()),
         "find_options" => given((|| {
-            let (kind, entity, field, show, typed): (String, String, Option<String>, Option<Vec<String>>, String) =
-                (arg(&args, "kind")?, arg(&args, "entity")?, arg(&args, "field")?, arg(&args, "show")?, arg(&args, "typed")?);
-            app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)
+            let (entity, show): (String, Option<Vec<String>>) = (arg(&args, "entity")?, arg(&args, "show")?);
+            app.find_options(&entity, &show.unwrap_or_default())
         })()),
         // A record's file or picture, and a store's file, as base64.
         "field_bytes" => given((|| {

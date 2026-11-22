@@ -7,6 +7,7 @@
 #include "check.h"
 #include "clarity/code.h"
 #include "clarity/disk.h"
+#include "apply_steps.h"
 #include "tests.h"
 
 static ClarityBytes hex(const char* text) {
@@ -62,7 +63,7 @@ static const char* scratch(const char* name) {
 static bool albums(const char* store, ClarityDb** out) {
     static const char* const create[] = {"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"};
     ClarityStep step = {create, 1};
-    return clarity_db_memory(out) && clarity_migrate(*out, "", &step, 1, NULL) && clarity_add_store(*out, "photos", store);
+    return clarity_db_memory(out) && apply_steps(*out, "", &step, 1, NULL) && clarity_add_store(*out, "photos", store);
 }
 
 static bool same(ClarityBytes a, ClarityBytes b) { return a.size == b.size && a.data && memcmp(a.data, b.data, a.size) == 0; }

@@ -17,7 +17,7 @@ Progress: 100%
 - `conformance/themes.json`: run by rust-ui, `runtimes/web` and the spec
 - spec `themes.rs`, `clarity_ui_theme.rs`, `colors.rs`, `section_colors.rs`, `decl_lines.rs`; gen `themes.rs`; IDE `app/src/lib/themeLines.test.ts`
 - rust-ui `tests/screen/theme_look.rs`, `looks_contrast.rs`; `tests/windows/core_system_theme.rs`, `looks_system_theme_follow.rs`, `looks_system_theme_watch.rs`; `tests/data/looks_gallery.rs`
-- Guard: `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test clarity_ui_theme` writes `runtimes/rust-ui/themes/`
+- Guard: `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-spec --test spec clarity_ui_theme::` writes `runtimes/rust-ui/themes/`
 
 ## Open
 - none

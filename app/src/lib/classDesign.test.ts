@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { ClassDesign } from "@clarity/ui/generated/ClassDesign.ts";
-import { addBox, classEdit, classLinks, classShapes, connectBoxes, removeBox, renameBox } from "./classDesign.ts";
+import { MULTIPLICITY, STEREOTYPES, addBox, classEdit, classLinks, classShapes, connectBoxes, removeBox, renameBox } from "./classDesign.ts";
 
 const design = (): ClassDesign => ({
   boxes: [
@@ -87,4 +88,13 @@ test("a uses arrow is dashed with an open head and no counts", () => {
     label: null,
     via: [],
   });
+});
+
+test("the counts and stereotypes are written as the spec writes a class diagram (diagrams/class_model.rs)", () => {
+  const rust = readFileSync(new URL("../../../crates/clarity-spec/src/diagrams/class_model.rs", import.meta.url), "utf8");
+  const lower = (name: string) => name[0].toLowerCase() + name.slice(1);
+  const counts = Object.fromEntries([...rust.matchAll(/Cardinality::(\w+) => "([^"]+)"/g)].map((m) => [lower(m[1]), m[2]]));
+  assert.deepEqual(MULTIPLICITY, counts);
+  const stereotypes = Object.fromEntries([...rust.matchAll(/ClassBoxKind::(\w+) => (?:Some\("([a-z]+)"\)|None)/g)].map((m) => [lower(m[1]), m[2] ?? null]));
+  assert.deepEqual(STEREOTYPES, stereotypes);
 });

@@ -19,7 +19,7 @@ Progress: 95%
 ## Tests
 - Runtime tests: `runtimes/rust/tests/` (51 files: undo.rs, versions.rs, signin.rs, queries.rs, ...)
 - Conformance run by R: every runtime file except `migrations` (no runtime test reads it) and `formats` (display formats; CONFLICTING 3); `picture-functions` only in `runtimes/rust-image`
-- Generator: `crates/clarity-gen/tests/rust.rs`, rust_clarity.rs, rust_clarity_parts.rs, rust_ui_library.rs, rust_window_model.rs, rust_local_crates.rs, versions_rust.rs, signin_rust.rs
+- Generator: the crate `crates/clarity-gen-rust`, its tests one program `cargo test -p clarity-gen-rust --test rust` (`tests/rust/`: generate, clarity_parts, clarity_build, ui_library, window_model, signin, versions) and `--test local_crates`, a program of its own since it sets CLARITY_RUNTIME; build and the every-part project: `tests/rust/build.rs` (ignored), `tests/rust/clarity.rs`
 - Builds (ignored, need cargo): build.rs, rust_clarity_build.rs, loop_items_build.rs, examples_build.rs
 - Examples on this stack: dashboard, maintenance, modelling, network, shop (all `rust desktop`); no example uses rust web
 
@@ -32,7 +32,7 @@ Progress: 95%
 - Decimal division keeps up to 28 digits (binary arithmetic at `rust/logic.rs:1562`); Go, C, C++ keep 16 (CONFLICTING 2)
 - Dividing a decimal by zero panics; C and C++ give a value error (`runtimes/c/clarity/decimal.c:114`)
 - `runtimes/rust/README.md:26` shows `clarity-runtime = "0.10.0"`; the crate is 0.59.0
-- `crates/clarity-gen/tests/build.rs:3` says it compiles Tauri; there is no Tauri in generated programs
+- `crates/clarity-gen-rust/tests/rust/build.rs:3` says it compiles Tauri; there is no Tauri in generated programs
 
 ## Decisions
 - 2026-11-02: Tauri desktop dropped; a desktop is Clarity.UI drawing natively. User: "to me desktop is nothing web, get it?"

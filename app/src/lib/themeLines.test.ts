@@ -1,7 +1,8 @@
 // The lines the theme form writes, as the spec reads them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EMPTY_LOOK, colorLine, fontLine, longHex, lookText, partLine, radiusLine, settingLine, sizeLine, statesOf, styleLine, titleLine } from "./themeLines.ts";
+import { readFileSync } from "node:fs";
+import { EMPTY_LOOK, colorLine, fontLine, isHex, longHex, lookText, partLine, radiusLine, settingLine, sizeLine, statesOf, styleLine, titleLine } from "./themeLines.ts";
 
 test("a color is written with its dark value only when it differs", () => {
   assert.deepEqual(colorLine("accent", "#2f6fdf", "#5b8cff"), { key: "color accent", line: 'color accent "#2f6fdf" dark "#5b8cff"' });
@@ -36,4 +37,12 @@ test("only the parts with rows to choose have a selected look", () => {
   assert.deepEqual(statesOf("tab", states, ["list", "tab"]), [null, "hover", "pressed", "focus", "selected"]);
   assert.equal(longHex("#abc"), "#aabbcc");
   assert.equal(longHex("#aabbcc"), "#aabbcc");
+});
+
+test("a color written out reads as the cases the spec runs say (conformance/colors.json, written)", () => {
+  const cases = JSON.parse(readFileSync(new URL("../../../conformance/colors.json", import.meta.url), "utf8"));
+  for (const c of cases.written) {
+    assert.equal(isHex(c.text), c.isHex, c.text);
+    if (c.long) assert.equal(longHex(c.text), c.long, c.text);
+  }
 });

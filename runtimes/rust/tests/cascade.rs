@@ -7,6 +7,10 @@ use std::cell::RefCell;
 use clarity_runtime::query::{Cond, Op, Query};
 use clarity_runtime::{Db, Error, Id, Record, Result, SqlValue, sql};
 
+#[path = "support/apply_steps.rs"]
+mod apply_steps;
+use apply_steps::apply_steps;
+
 thread_local! {
     /// What the delete events of the tasks saw, in order.
     static DELETED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
@@ -101,8 +105,8 @@ impl Record for Step {
 }
 
 fn plan() -> (Db, Project) {
-    let mut db = Db::memory().unwrap();
-    db.migrate(&[&[
+    let db = Db::memory().unwrap();
+    apply_steps(&db, "", &[&[
         "CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
         "CREATE TABLE task (id INTEGER PRIMARY KEY, project INTEGER REFERENCES project(id), title TEXT NOT NULL)",
         "CREATE TABLE step (id INTEGER PRIMARY KEY, task INTEGER REFERENCES task(id), note TEXT NOT NULL)",

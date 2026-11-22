@@ -20,6 +20,11 @@ std::string quote(Dialect d, const std::string& name);
 std::string mark(Dialect d, int n);
 /// A decimal as a comparison reads it: SQLite stores decimals as text.
 std::string number(Dialect d, const std::string& expr);
+/// `expr` as a key of ORDER BY with an empty value first either way
+/// (conformance/queries.json): NULLS FIRST on SQLite and PostgreSQL; on
+/// MySQL and SQL Server, which put an empty value first going up, a key
+/// going down gets a key before it that is 0 for empty.
+std::string order_key(Dialect d, const std::string& expr, bool descending);
 /// `column` containing the LIKE pattern `mark`, ignoring case; wildcards are escaped with !.
 std::string contains(Dialect d, const std::string& column, const std::string& mark);
 /// Whether the JSON list kept in `column` holds the item `mark` (a list field).

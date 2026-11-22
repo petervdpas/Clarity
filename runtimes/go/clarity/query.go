@@ -264,16 +264,12 @@ type orderKey struct {
 	descending, numeric bool
 }
 
-// sql is the key as SQL. Through references, each step is a subquery on its
+// sql is the key as SQL, an empty value first. Through references, each step is a subquery on its
 // own alias (t1, t2, ...) that finds the referred record by the column of
 // the step before.
 func (o orderKey) sql(d Dialect, table string) string {
-	direction := ""
-	if o.descending {
-		direction = " DESC"
-	}
 	if len(o.through) == 0 {
-		return columnSQL(d, o.column, o.numeric) + direction
+		return d.orderKey(columnSQL(d, o.column, o.numeric), o.descending)
 	}
 	var step func(outer string, at int) string
 	step = func(outer string, at int) string {
@@ -289,7 +285,7 @@ func (o orderKey) sql(d Dialect, table string) string {
 		return "(SELECT " + step(alias, at+1) + " FROM " + d.Quote(hop.Table) + " " + alias +
 			" WHERE " + alias + "." + d.Quote(hop.Key) + " = " + outer + "." + d.Quote(hop.Column) + ")"
 	}
-	return step(d.Quote(table), 0) + direction
+	return d.orderKey(step(d.Quote(table), 0), o.descending)
 }
 
 // Query is the records to read: a condition and an order. Without an order,

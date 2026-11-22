@@ -124,31 +124,26 @@ func (db *Db) SchemaVersion() (int, error) {
 	return schemaVersion(s.driver)
 }
 
-// Migrate is MigrateSource for the default database.
-func (db *Db) Migrate(steps [][]string) (int, error) { return db.MigrateSource("", steps) }
-
-// MigrateSource applies the steps of source its database has not had yet, each on its own.
-func (db *Db) MigrateSource(source string, steps [][]string) (int, error) {
+// CheckSteps says whether the database of source has the steps migration steps
+// the app was made with: behind or ahead, the app stops with the line its
+// StepsError says (docs/ledger/migrations.md, conformance/migrate-check.json).
+// The app does not migrate; clarity-migrate does.
+func (db *Db) CheckSteps(source string, steps int) error {
 	s, err := db.source(source)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	done, err := schemaVersion(s.driver)
+	had, err := schemaVersion(s.driver)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	// A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-	if done > 0 && done < len(steps) {
-		if err := backupBeforeMigration(s.driver, done+1); err != nil {
-			return 0, err
-		}
+	switch {
+	case had < steps:
+		return &StepsError{Line: "The database " + s.name + " needs migrating: run clarity-migrate"}
+	case had > steps:
+		return &StepsError{Line: "The database " + s.name + " belongs to a newer version of this app"}
 	}
-	for i := done; i < len(steps); i++ {
-		if err := s.driver.apply(i+1, steps[i]); err != nil {
-			return i - done, err
-		}
-	}
-	return max(0, len(steps)-done), nil
+	return nil
 }
 
 func schemaVersion(d driver) (int, error) {
@@ -549,11 +544,69 @@ type HoldsLists interface {
 	LoadLists(db *Db) error
 }
 
-// withLists loads the stored lists of each record found.
+// HoldsListsOf is a record with stored lists that loads them for many
+// records at once, each list with one read for all of them (FindByOwners).
+type HoldsListsOf[T any] interface {
+	LoadListsOf(db *Db, records []T) error
+}
+
+// OwnersPerRead is how many owners one read of a stored list asks for
+// (FindByOwners), well below the fewest parameters a database takes in one
+// statement (SQL Server's 2100).
+const OwnersPerRead = 500
+
+// FindByOwners is the records whose reference column points at one of
+// owners, in the order they were stored, without their own lists: a stored
+// list of many records at once, read OwnersPerRead owners at a time.
+func FindByOwners[T any, P interface {
+	*T
+	Record
+}](db *Db, column string, owners []int64) ([]T, error) {
+	var probe T
+	key := keyOf(P(&probe))
+	found := []T{}
+	for start := 0; start < len(owners); start += OwnersPerRead {
+		end := min(start+OwnersPerRead, len(owners))
+		ids := make([]any, 0, end-start)
+		for _, id := range owners[start:end] {
+			ids = append(ids, id)
+		}
+		some, err := FindAlone[T, P](db, Query{}.Filter(OneOf(column, ids)).Order(key, false))
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, some...)
+	}
+	return found, nil
+}
+
+// ByOwner groups the records of a stored list by the record each refers
+// back to (owner), each group in the order given.
+func ByOwner[T any](found []T, owner func(*T) *int64) map[int64][]T {
+	groups := map[int64][]T{}
+	for i := range found {
+		if id := owner(&found[i]); id != nil {
+			groups[*id] = append(groups[*id], found[i])
+		}
+	}
+	return groups
+}
+
+// withLists loads the stored lists of the records found, each list once for
+// all of them when the record can (HoldsListsOf), else record by record.
 func withLists[T any, P interface {
 	*T
 	Record
 }](db *Db, found []T) ([]T, error) {
+	if len(found) == 0 {
+		return found, nil
+	}
+	if all, ok := any(P(&found[0])).(HoldsListsOf[T]); ok {
+		if err := all.LoadListsOf(db, found); err != nil {
+			return nil, err
+		}
+		return found, nil
+	}
 	for i := range found {
 		if held, ok := any(P(&found[i])).(HoldsLists); ok {
 			if err := held.LoadLists(db); err != nil {

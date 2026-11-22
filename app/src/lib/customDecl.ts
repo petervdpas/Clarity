@@ -7,6 +7,7 @@
 import type { Backend } from "@clarity/ui/generated/Backend.ts";
 import type { LibrarySource } from "@clarity/ui/generated/LibrarySource.ts";
 import type { PartLibrary } from "@clarity/ui/generated/PartLibrary.ts";
+import { PLAIN_TYPES } from "@clarity/ui/screen/windowData.ts";
 
 /** One line of a declaration set by its key; a null line takes it away. */
 export type DeclLine = { key: string; line: string | null };
@@ -166,5 +167,5 @@ export function sliceOf(declText: string, item: number, span: { start: number; e
 
 /** The types a property, a value or a result can have, then the project's enums. */
 export function typeChoices(enums: string[]): string[] {
-  return ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", ...enums];
+  return [...PLAIN_TYPES, ...enums];
 }

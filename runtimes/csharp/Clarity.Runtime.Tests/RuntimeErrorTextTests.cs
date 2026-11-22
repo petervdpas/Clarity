@@ -23,7 +23,7 @@ public class RuntimeErrorTextTests
     [Fact]
     public void Whole_numbers_divide_toward_zero_and_by_zero_is_said_by_its_key()
     {
-        Assert.Equal((-3L, -1L, long.MinValue), (Lists.WholeDiv(-7, 2), Lists.WholeMod(-7, 3), Lists.WholeDiv(long.MinValue, -1)));
+        Assert.Equal((-3L, -1L, long.MaxValue), (Lists.WholeDiv(-7, 2), Lists.WholeMod(-7, 3), Lists.WholeDiv(-long.MaxValue, -1)));
         var failed = Assert.Throws<ValueException>(() => Lists.WholeDiv(1, 0));
         Assert.Equal("division by zero", failed.Message);
         Assert.Equal("divisionByZero", failed.Said.Key);
@@ -48,17 +48,17 @@ public class RuntimeErrorTextTests
 
     /// <summary>
     /// The generator steps around every member a window's view model has
-    /// (names.rs VIEW_MODEL_MEMBERS), so a part, data or a handler's command
+    /// (clarity-gen-core csharp_names.rs VIEW_MODEL_MEMBERS), so a part, data or a handler's command
     /// never hides one (CS0108) or clashes with it: the list holds them all.
     /// </summary>
     [Fact]
     public void The_generator_knows_every_member_of_a_window_view_model()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "crates", "clarity-gen", "src", "csharp", "names.rs")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "crates", "clarity-gen-core", "src", "csharp_names.rs")))
             dir = dir.Parent;
         Assert.NotNull(dir);
-        var source = File.ReadAllText(Path.Combine(dir!.FullName, "crates", "clarity-gen", "src", "csharp", "names.rs"));
+        var source = File.ReadAllText(Path.Combine(dir!.FullName, "crates", "clarity-gen-core", "src", "csharp_names.rs"));
         var list = Regex.Match(source, @"VIEW_MODEL_MEMBERS: \[&str; \d+\] = \[(?<names>[^\]]*)\]").Groups["names"].Value;
         var known = Regex.Matches(list, "\"(\\w+)\"").Select(m => m.Groups[1].Value).ToHashSet();
         const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;

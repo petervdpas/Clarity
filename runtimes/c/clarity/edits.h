@@ -20,6 +20,9 @@
 #include "cjson/cJSON.h"
 #include "clarity/ui.h"
 
+/// How many edits a window keeps; the oldest go first (conformance/defaults.json).
+#define CLARITY_EDIT_BUS_KEEPS 500
+
 /// The record of one window's edits.
 typedef struct ClarityEdits ClarityEdits;
 

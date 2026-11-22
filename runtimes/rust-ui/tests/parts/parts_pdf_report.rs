@@ -97,3 +97,19 @@ fn without_data_it_shows_the_sample_data_the_preview_serves() {
     let view = view(&screen, "invoicePdf");
     assert_eq!((view.why(), view.pages()), (None, 1), "laid out from the sample");
 }
+
+#[test]
+fn a_report_s_data_is_written_as_clarity_data_writes_every_value() {
+    // What each Data is, as the generator writes it beside the report (reports/<Name>.data.json).
+    let kinds = r#"{"order":{"kind":"record","entity":"Order","fields":[{"name":"number","kind":"text"},{"name":"kind","kind":"enum","values":["Person","Business"]},{"name":"total","kind":"decimal"},{"name":"placed","kind":"datetime"},{"name":"lines","kind":"records","entity":"Line","fields":[{"name":"product","kind":"text"},{"name":"count","kind":"integer"}],"base":{}}],"base":{}}}"#;
+    // As a stack's own JSON code may write it: fields out of order, a decimal as a
+    // number with zeros at the end, an enum in another case, a space in a date and time.
+    let data = json!({ "order": { "total": 1250.50, "placed": "2026-01-02 09:30:00", "kind": "business", "number": "A-1", "lines": [{ "count": 2.0, "product": "Pen" }] } });
+    let written = clarity_ui::parts::pdf_report::normal_data(Some(kinds), data.as_object().unwrap());
+    assert_eq!(
+        serde_json::Value::Object(written),
+        json!({ "order": { "number": "A-1", "kind": "Business", "total": "1250.5", "placed": "2026-01-02T09:30:00", "lines": [{ "product": "Pen", "count": 2 }] } })
+    );
+    // Without the file (a program generated before it), the data stays as it came.
+    assert_eq!(clarity_ui::parts::pdf_report::normal_data(None, data.as_object().unwrap()), *data.as_object().unwrap());
+}

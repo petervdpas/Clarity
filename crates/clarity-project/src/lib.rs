@@ -26,7 +26,7 @@ use clarity_spec::widgets::is_identifier;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use file::{paging_line, parse, write};
+pub use file::{is_version, paging_line, parse, write};
 /// How a web API pages lives with the data sources the checker knows.
 pub use clarity_spec::{Paging, PagingKind};
 pub use folders::{out_dir_in, Folders};
@@ -315,6 +315,11 @@ pub struct Settings {
     /// themselves, in Clarity's keys window (manual/app.keys.md): `keys editable`.
     #[serde(default)]
     pub keys_editable: bool,
+    /// Whether the output folder holds Clarity's data migration tools, `clarity-migrate`
+    /// and its `clarity-migrate.json`, so whoever installs the app migrates its databases
+    /// without Clarity (docs/ledger/migrations.md): `include migrate`.
+    #[serde(default)]
+    pub include_migrate: bool,
     /// Who is using the program (docs/ledger/signin.md):
     /// `signin Member on desktop web` with its strategies; none without it.
     #[serde(default)]
@@ -495,6 +500,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         out: DEFAULT_OUT.to_string(),
         keeps: Vec::new(),
         keys_editable: false,
+        include_migrate: false,
         signin: None,
         engines_interpreted: false,
         agents_read_closed: false,
@@ -1314,6 +1320,20 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
     found
 }
 
+/// The stacks a custom part's library of each kind is written for, by the kind its line names
+/// (manual/design.custom-parts.md); the IDE offers the kinds of the project's stack from it.
+pub const PART_KIND_BACKENDS: [(&str, &[Backend]); 5] =
+    [("native", &[Backend::C, Backend::Cpp]), ("crate", &[Backend::Rust]), ("go", &[Backend::Go]), ("nuget", &[Backend::Csharp]), ("dll", &[Backend::Csharp])];
+
+/// The stacks a library's package of each kind is written for (manual/code.libraries.md).
+pub const LIBRARY_KIND_BACKENDS: [(&str, &[Backend]); 5] =
+    [("cmake", &[Backend::C, Backend::Cpp]), ("crate", &[Backend::Rust]), ("go", &[Backend::Go]), ("nuget", &[Backend::Csharp]), ("dll", &[Backend::Csharp])];
+
+/// Whether a kind of `kinds` is written for `backend`.
+fn kind_fits(kinds: &[(&str, &[Backend])], kind: &str, backend: Backend) -> bool {
+    kinds.iter().any(|(k, backends)| *k == kind && backends.contains(&backend))
+}
+
 /// A custom part is written in the project's own language (manual/design.custom-parts.md): each
 /// part whose library line is another language's.
 fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) -> Vec<clarity_spec::Diagnostic> {
@@ -1329,10 +1349,11 @@ fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) 
     for f in &project.files {
         for part in &f.parts {
             let (written, ok) = match &part.library {
-                Some(PartLibrary::Native { .. }) => ("C or C++ (native)", matches!(settings.stack.backend, Backend::C | Backend::Cpp)),
-                Some(PartLibrary::Crate { .. }) => ("Rust (crate)", settings.stack.backend == Backend::Rust),
-                Some(PartLibrary::Go { .. }) => ("Go (go)", settings.stack.backend == Backend::Go),
-                Some(PartLibrary::Nuget { .. } | PartLibrary::Dll { .. }) => (".NET", settings.stack.backend == Backend::Csharp),
+                Some(PartLibrary::Native { .. }) => ("C or C++ (native)", kind_fits(&PART_KIND_BACKENDS, "native", settings.stack.backend)),
+                Some(PartLibrary::Crate { .. }) => ("Rust (crate)", kind_fits(&PART_KIND_BACKENDS, "crate", settings.stack.backend)),
+                Some(PartLibrary::Go { .. }) => ("Go (go)", kind_fits(&PART_KIND_BACKENDS, "go", settings.stack.backend)),
+                Some(PartLibrary::Nuget { .. }) => (".NET", kind_fits(&PART_KIND_BACKENDS, "nuget", settings.stack.backend)),
+                Some(PartLibrary::Dll { .. }) => (".NET", kind_fits(&PART_KIND_BACKENDS, "dll", settings.stack.backend)),
                 None => continue,
             };
             if !ok {
@@ -1346,10 +1367,11 @@ fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) 
         for library in &f.libraries {
             use clarity_spec::code::LibrarySource;
             let (written, ok) = match &library.source {
-                Some(LibrarySource::Cmake { .. }) => ("C or C++ (cmake)", matches!(settings.stack.backend, Backend::C | Backend::Cpp)),
-                Some(LibrarySource::Crate { .. }) => ("a Rust crate", settings.stack.backend == Backend::Rust),
-                Some(LibrarySource::Go { .. }) => ("a Go module", settings.stack.backend == Backend::Go),
-                Some(LibrarySource::Nuget { .. } | LibrarySource::Dll { .. }) => (".NET", settings.stack.backend == Backend::Csharp),
+                Some(LibrarySource::Cmake { .. }) => ("C or C++ (cmake)", kind_fits(&LIBRARY_KIND_BACKENDS, "cmake", settings.stack.backend)),
+                Some(LibrarySource::Crate { .. }) => ("a Rust crate", kind_fits(&LIBRARY_KIND_BACKENDS, "crate", settings.stack.backend)),
+                Some(LibrarySource::Go { .. }) => ("a Go module", kind_fits(&LIBRARY_KIND_BACKENDS, "go", settings.stack.backend)),
+                Some(LibrarySource::Nuget { .. }) => (".NET", kind_fits(&LIBRARY_KIND_BACKENDS, "nuget", settings.stack.backend)),
+                Some(LibrarySource::Dll { .. }) => (".NET", kind_fits(&LIBRARY_KIND_BACKENDS, "dll", settings.stack.backend)),
                 None => continue,
             };
             if !ok {

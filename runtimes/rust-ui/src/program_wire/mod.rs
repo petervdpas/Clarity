@@ -9,7 +9,7 @@
 pub mod args;
 
 use base64::Engine as _;
-use clarity_runtime::program::{Answer, CanvasEdit, Edit, ItemEdit, Program, RangeEdit, Reorder, StepPress, Started};
+use clarity_runtime::program::{Answer, CanvasEdit, Edit, Program, StepPress, Started};
 use clarity_runtime::screen::{Drawn, Hears, ScreenInput};
 use clarity_runtime::ui::{RefOption, Reply, Text, WindowState};
 use serde::de::DeserializeOwned;
@@ -168,28 +168,12 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
         self.answer("undo_edit", args(json!({ "state": state, "scope": scope, "back": back })))
     }
 
-    fn reorder_event(&self, state: WindowState, reorder: Reorder) -> Answer<Reply> {
-        self.answer("reorder_event", args::reorder(&state, &reorder))
-    }
-
-    fn item_event(&self, state: WindowState, item: ItemEdit) -> Answer<Reply> {
-        self.answer("item_event", args::item(&state, &item))
-    }
-
-    fn range_event(&self, state: WindowState, range: RangeEdit) -> Answer<Reply> {
-        self.answer("range_event", args::range(&state, &range))
-    }
-
     fn canvas_event(&self, state: WindowState, canvas: CanvasEdit) -> Answer<Reply> {
         self.answer("canvas_event", args::canvas(&state, &canvas))
     }
 
     fn step_event(&self, state: WindowState, step: StepPress) -> Answer<Reply> {
         self.answer("step_event", args::step(&state, &step))
-    }
-
-    fn view_event(&self, state: WindowState, part: &str, action: Map<String, Value>) -> Answer<Reply> {
-        self.answer("view_event", args(json!({ "state": state, "part": part, "action": action })))
     }
 
     fn answer_event(&self, state: WindowState, handler: &str, values: Vec<Value>) -> Answer<Reply> {
@@ -204,8 +188,8 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
         self.answer("field_values", args(json!({ "entity": entity, "field": field })))
     }
 
-    fn find_options(&self, kind: &str, entity: &str, field: Option<&str>, show: &[String], typed: &str) -> Answer<Value> {
-        self.answer("find_options", args(json!({ "kind": kind, "entity": entity, "field": field, "show": show, "typed": typed })))
+    fn find_options(&self, entity: &str, show: &[String]) -> Answer<Value> {
+        self.answer("find_options", args(json!({ "entity": entity, "show": show })))
     }
 
     fn field_bytes(&self, entity: &str, id: i64, field: &str) -> Answer<Option<Vec<u8>>> {

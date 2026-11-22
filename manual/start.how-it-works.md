@@ -54,4 +54,27 @@ flowchart LR
   program -. "commands with an agent line" .-> agents["AI agents, through the program's own MCP service"]
 ```
 
+## Where each decision is made
+
+A program is generated code on its stack, its stack's runtime, and Clarity's shared libraries. Each decides its own share:
+
+- **The checker** decides what a project may say, before anything is generated: every rule a generator would refuse, the checker says first, with where it is.
+- **The generator** of each stack writes the program in that stack's language: its records, windows, code and build files. It decides nothing about values or drawing that the program does not carry out the same way on every stack.
+- **The stack's runtime** (the Rust crate, the Go module, the C# packages, the C and C++ sources a program carries) reads and writes the program's databases and files, and calls the shared libraries.
+- **Clarity's shared libraries**, written once in Rust and called by every stack through a C interface: Clarity.UI draws every window and decides what a person does in it (a table's order and pages, a tree's rows, a chart's groups, a row moved, a slider stepped), so the program gets only the result, as an edit; Clarity.Data and Clarity.Formats read and write data and its formats, Clarity.Auth signs people in, Clarity.Pdf makes PDFs and reports, and Clarity.Image, Clarity.Audio and Clarity.Video handle pictures, songs and videos.
+
+What every stack must do alike is written down as cases in Clarity's conformance files, which each stack's runtime is tested against.
+
+```mermaid
+flowchart TB
+  checker["Checker<br/>(what a project may say)"] --> gen["Generator, one per stack<br/>(the program's code)"]
+  gen --> runtime["The stack's runtime<br/>(databases, files)"]
+  runtime --> shared["Clarity's shared libraries, once in Rust<br/>(Clarity.UI, Clarity.Data, Clarity.Formats,<br/>Clarity.Auth, Clarity.Pdf, ...)"]
+  cases["Conformance cases"] -. "each runtime is tested against" .-> runtime
+```
+
+## The preview and the canvases
+
+The IDE's own window is a web view, so the Preview and Design canvases draw with Clarity.UI's browser files: the same Rust code a desktop program draws with, compiled for the browser, the same files a web program serves. A window looks the same in the preview as in the program, whatever stack the project is on. The built program itself draws on the desktop with Clarity.UI's library, without a browser.
+
 See [Run and Build](project.run-build.md) for Generate, Build and Run, and [Clarity in your own agent](ai.mcp.md) for agents.

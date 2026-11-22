@@ -6,10 +6,7 @@
 use std::sync::{Arc, Mutex};
 
 use clarity_runtime::canvas::CanvasArgs;
-use clarity_runtime::list_fields::ItemKind;
-use clarity_runtime::program::{Answer, CanvasEdit, Edit, ItemEdit, Program, RangeEdit, Reorder, StepPress, Started, Unconnected};
-use clarity_runtime::ranges::{Range, RangeKey, RangeMove};
-use clarity_runtime::reorder::{DropAt, Move};
+use clarity_runtime::program::{Answer, CanvasEdit, Edit, Program, StepPress, Started, Unconnected};
 use clarity_runtime::screen::{Drawn, Hears, ScreenInput, ScreenTell};
 use clarity_runtime::steps::StepButton;
 use clarity_runtime::ui::{RefOption, Reply, Text, WindowState};
@@ -56,23 +53,11 @@ impl Program for Noted {
     fn undo_edit(&self, state: WindowState, scope: &str, back: bool) -> Answer<Reply> {
         self.note(format!("undo_edit {state:?} {scope} {back}"))
     }
-    fn reorder_event(&self, state: WindowState, reorder: Reorder) -> Answer<Reply> {
-        self.note(format!("reorder_event {state:?} {reorder:?}"))
-    }
-    fn item_event(&self, state: WindowState, item: ItemEdit) -> Answer<Reply> {
-        self.note(format!("item_event {state:?} {item:?}"))
-    }
-    fn range_event(&self, state: WindowState, range: RangeEdit) -> Answer<Reply> {
-        self.note(format!("range_event {state:?} {range:?}"))
-    }
     fn canvas_event(&self, state: WindowState, canvas: CanvasEdit) -> Answer<Reply> {
         self.note(format!("canvas_event {state:?} {canvas:?}"))
     }
     fn step_event(&self, state: WindowState, step: StepPress) -> Answer<Reply> {
         self.note(format!("step_event {state:?} {step:?}"))
-    }
-    fn view_event(&self, state: WindowState, part: &str, action: Map<String, Value>) -> Answer<Reply> {
-        self.note(format!("view_event {state:?} {part} {action:?}"))
     }
     fn answer_event(&self, state: WindowState, handler: &str, values: Vec<Value>) -> Answer<Reply> {
         self.note(format!("answer_event {state:?} {handler} {values:?}"))
@@ -83,8 +68,8 @@ impl Program for Noted {
     fn field_values(&self, entity: &str, field: &str) -> Answer<Vec<String>> {
         Ok(vec![entity.into(), field.into()])
     }
-    fn find_options(&self, kind: &str, entity: &str, field: Option<&str>, show: &[String], typed: &str) -> Answer<Value> {
-        Ok(json!([kind, entity, field, show, typed]))
+    fn find_options(&self, entity: &str, show: &[String]) -> Answer<Value> {
+        Ok(json!([entity, show]))
     }
     fn field_bytes(&self, _entity: &str, id: i64, _field: &str) -> Answer<Option<Vec<u8>>> {
         Ok((id > 0).then(|| vec![0, 1, 2, 255]))
@@ -191,20 +176,6 @@ fn every_call_crosses_the_wire_and_arrives_as_it_was_made() {
     wire.undo_edit(at.clone(), "form", true).unwrap();
     assert_eq!(noted.last(), format!("undo_edit {at:?} form true"));
 
-    let reorder = Reorder { part: "list".into(), scope: Some("s".into()), list: "rows".into(), by: "rank".into(), parent: None, moved: Move::Drag { row: 2, at: DropAt::Before, target: 0 }, handler: None, readonly: false };
-    wire.reorder_event(at.clone(), reorder.clone()).unwrap();
-    assert_eq!(noted.last(), format!("reorder_event {at:?} {reorder:?}"));
-
-    let item = ItemEdit { part: "tags".into(), scope: None, path: "tags".into(), item: ItemKind::Enum, values: vec!["a".into(), "b".into()], typed: "a".into(), handler: None, readonly: false };
-    wire.item_event(at.clone(), item.clone()).unwrap();
-    assert_eq!(noted.last(), format!("item_event {at:?} {item:?}"));
-
-    for moved in [RangeMove::Key(RangeKey::PageUp), RangeMove::At("3.5".into()), RangeMove::Typed("7".into())] {
-        let range = RangeEdit { part: "volume".into(), scope: None, path: "volume".into(), range: Range { min: Some("0".into()), max: None, step: "0.5".into() }, whole: false, moved, handler: Some("louder".into()), readonly: false };
-        wire.range_event(at.clone(), range.clone()).unwrap();
-        assert_eq!(noted.last(), format!("range_event {at:?} {range:?}"));
-    }
-
     let mut action = Map::new();
     action.insert("kind".into(), json!("drop"));
     let canvas = CanvasEdit {
@@ -220,15 +191,13 @@ fn every_call_crosses_the_wire_and_arrives_as_it_was_made() {
     let step = StepPress { part: "wizard".into(), button: StepButton::Next, steps: 3, next: Some("check".into()), finish: None };
     wire.step_event(at.clone(), step.clone()).unwrap();
     assert_eq!(noted.last(), format!("step_event {at:?} {step:?}"));
-    wire.view_event(at.clone(), "table", action.clone()).unwrap();
-    assert_eq!(noted.last(), format!("view_event {at:?} table {action:?}"));
     wire.answer_event(at.clone(), "asked", vec![json!(1), json!("yes")]).unwrap();
     assert_eq!(noted.last(), format!("answer_event {at:?} asked {:?}", vec![json!(1), json!("yes")]));
 
     // Answers read back as the program gave them, errors as their text.
     assert_eq!(wire.ref_options("Friend").unwrap_err(), Text::plain("no Friend"));
     assert_eq!(wire.field_values("Album", "title").unwrap(), ["Album", "title"]);
-    assert_eq!(wire.find_options("search", "Album", None, &["title".into()], "ab").unwrap(), json!(["search", "Album", null, ["title"], "ab"]));
+    assert_eq!(wire.find_options("Album", &["title".into()]).unwrap(), json!(["Album", ["title"]]));
     assert_eq!(wire.field_bytes("Album", 1, "cover").unwrap(), Some(vec![0, 1, 2, 255]));
     assert_eq!(wire.field_bytes("Album", 0, "cover").unwrap(), None);
     assert_eq!(wire.store_file("pictures", "a.png").unwrap(), b"PNG");
@@ -280,22 +249,10 @@ fn an_unknown_command_and_a_panic_are_errors() {
         fn undo_edit(&self, _: WindowState, _: &str, _: bool) -> Answer<Reply> {
             unreachable!()
         }
-        fn reorder_event(&self, _: WindowState, _: Reorder) -> Answer<Reply> {
-            unreachable!()
-        }
-        fn item_event(&self, _: WindowState, _: ItemEdit) -> Answer<Reply> {
-            unreachable!()
-        }
-        fn range_event(&self, _: WindowState, _: RangeEdit) -> Answer<Reply> {
-            unreachable!()
-        }
         fn canvas_event(&self, _: WindowState, _: CanvasEdit) -> Answer<Reply> {
             unreachable!()
         }
         fn step_event(&self, _: WindowState, _: StepPress) -> Answer<Reply> {
-            unreachable!()
-        }
-        fn view_event(&self, _: WindowState, _: &str, _: Map<String, Value>) -> Answer<Reply> {
             unreachable!()
         }
         fn answer_event(&self, _: WindowState, _: &str, _: Vec<Value>) -> Answer<Reply> {
@@ -307,7 +264,7 @@ fn an_unknown_command_and_a_panic_are_errors() {
         fn field_values(&self, _: &str, _: &str) -> Answer<Vec<String>> {
             unreachable!()
         }
-        fn find_options(&self, _: &str, _: &str, _: Option<&str>, _: &[String], _: &str) -> Answer<Value> {
+        fn find_options(&self, _: &str, _: &[String]) -> Answer<Value> {
             unreachable!()
         }
         fn field_bytes(&self, _: &str, _: i64, _: &str) -> Answer<Option<Vec<u8>>> {

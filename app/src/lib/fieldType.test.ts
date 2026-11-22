@@ -2,6 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ofChoices, typeParts, typeText, withKind } from "./fieldType.ts";
 
 const names = { enums: ["Status"], records: ["Address"] };
@@ -31,4 +32,9 @@ test("a new kind starts where the tools' examples do, and offers what it can hol
   assert.deepEqual(ofChoices("list", all), ["Customer", "Address", "text", "integer"]);
   assert.equal(typeText(withKind("ref", ofChoices("ref", all))), "ref Customer");
   assert.deepEqual(ofChoices("money", all), []);
+});
+
+test("a type reads back as the cases the spec runs say (conformance/type-text.json)", () => {
+  const cases = JSON.parse(readFileSync(new URL("../../../conformance/type-text.json", import.meta.url), "utf8"));
+  for (const c of cases.cases) assert.equal(typeText(typeParts(c.written, { enums: cases.enums, records: [] })), c.text, c.written);
 });

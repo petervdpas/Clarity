@@ -92,9 +92,6 @@ typedef struct {
     size_t part_count;
     ClaritySelected* selected;
     size_t selected_count;
-    /// What the window's tables, lists, trees and charts show, by part name
-    /// (manual/start.how-it-works.md, clarity/views.h): an object, NULL when it has none.
-    cJSON* views;
 } ClarityWindowState;
 
 /// How a message shows: info goes away by itself.
@@ -356,3 +353,7 @@ cJSON* clarity_reply_json(const ClarityReply* reply);
 cJSON* clarity_add_option(cJSON* options, int64_t id, const char* text);
 /// An object of `count` pairs of name and value, such as the `with` of `open`.
 cJSON* clarity_json_object(int count, ...);
+
+/// The value at `path` of a window's data: `album.tags` is the field `tags`
+/// of the record `album`, `readings` a plain value. NULL when it is not there.
+cJSON* clarity_data_at(const cJSON* data, const char* path);

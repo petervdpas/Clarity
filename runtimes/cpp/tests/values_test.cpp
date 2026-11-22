@@ -3,6 +3,7 @@
 
 #include "check.hpp"
 #include "conformance.hpp"
+#include "clarity/code.hpp"
 #include "clarity/errors.hpp"
 #include "clarity/text.hpp"
 
@@ -22,9 +23,9 @@ TEST(decimals_add_multiply_divide_and_compare_by_value) {
     CHECK_EQ((Decimal::parse("1.25") - Decimal(2)).str(), "-0.75");
     CHECK_EQ((Decimal::parse("19.99") * Decimal(3)).str(), "59.97");
     CHECK_EQ((Decimal(10) / Decimal(4)).str(), "2.5");
-    CHECK_EQ((Decimal(1) / Decimal(3)).str(), "0.3333333333333333");
-    CHECK_EQ((Decimal(2) / Decimal(3)).str(), "0.6666666666666667");
-    CHECK_THROWS(InvalidError, Decimal(1) / Decimal(0));
+    CHECK_EQ((Decimal(1) / Decimal(3)).str(), "0.3333333333333333333333333333");
+    CHECK_EQ((Decimal(2) / Decimal(3)).str(), "0.6666666666666666666666666667");
+    CHECK_THROWS(ValueError, Decimal(1) / Decimal(0));
     CHECK(Decimal::parse("1.50") == Decimal::parse("1.5"));
     CHECK(Decimal::parse("99.5") < Decimal::parse("1250.50"));
     CHECK_EQ(Decimal::parse("2.345").rescaled(2).str(), "2.35");

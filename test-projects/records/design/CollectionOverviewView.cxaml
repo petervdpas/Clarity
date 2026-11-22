@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window CollectionOverview shows: its parts, data and code. -->
+<View class="music.CollectionOverviewView">
+  <Data name="albums" type="list&lt;Album&gt;" />
+  <Heading name="albumsPerFormatHeading" at="1,1" span="6" caption="@albumsPerFormatHeading" />
+  <Heading name="albumsPerYearHeading" at="7,1" span="6" caption="@albumsPerYearHeading" />
+  <Chart name="formatChart" at="1,2" span="6" rows="6" bind="albums" by="format" />
+  <Chart name="yearChart" at="7,2" span="6" rows="6" bind="albums" chart="line" by="year" />
+  <Heading name="spentPerGenreHeading" at="1,8" span="12" caption="@spentPerGenreHeading" />
+  <Chart name="genreChart" at="1,9" span="12" rows="6" bind="albums" chart="pie" by="genre" measure="{&quot;field&quot;:&quot;price&quot;,&quot;kind&quot;:&quot;sum&quot;}" />
+</View>

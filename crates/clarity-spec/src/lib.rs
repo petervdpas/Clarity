@@ -7,6 +7,7 @@ pub mod cxaml;
 pub mod design_edit;
 pub mod design_keys;
 pub mod decl_lines;
+pub mod defaults;
 pub mod dates;
 pub mod code;
 pub mod diagnostic;
@@ -15,6 +16,7 @@ pub mod dictionary;
 pub mod edit;
 pub mod formats;
 pub mod engines;
+pub mod report_design;
 pub mod reports;
 pub mod resources;
 pub mod sound;
@@ -901,7 +903,7 @@ pub const APIS_DIR: &str = "apis";
 
 /// Every folder of a project whose files Clarity reads, beside its modules:
 /// whatever watches or copies a project goes by this one list.
-pub const PROJECT_FOLDERS: [&str; 8] = [
+pub const PROJECT_FOLDERS: [&str; 9] = [
     MIGRATIONS_DIR,
     APIS_DIR,
     cxaml::DESIGN_DIR,
@@ -910,6 +912,7 @@ pub const PROJECT_FOLDERS: [&str; 8] = [
     resources::RESOURCES_DIR,
     diagrams::DIAGRAMS_DIR,
     guidance::DIR,
+    reports::REPORTS_DIR,
 ];
 
 /// The module files of the project folder `dir`: its own, then those Clarity

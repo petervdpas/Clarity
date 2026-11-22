@@ -91,11 +91,10 @@ public class WindowRowsTests
             KeptSettings.Keep("keys-test", new JsonObject { ["pageSize"] = 20 });
             PersonKeys.Start("keys-test");
             Assert.Empty(PersonKeys.Choices);
-            PersonKeys.Set(new Dictionary<string, IReadOnlyList<string>> { ["Card.saveButton"] = ["Ctrl+K"] });
-            var kept = KeptSettings.Read("keys-test");
-            Assert.Equal(20, kept["pageSize"]!.GetValue<int>());
-            Assert.Equal("Ctrl+K", kept["keys"]!["Card.saveButton"]![0]!.GetValue<string>());
+            // Clarity.UI's keys window keeps them in the settings file; the program takes them back.
+            KeptSettings.Keep("keys-test", new JsonObject { ["pageSize"] = 20, ["keys"] = new JsonObject { ["Card.saveButton"] = new JsonArray("Ctrl+K") } });
             PersonKeys.Start("keys-test");
+            Assert.Equal(PersonKeys.Json().ToJsonString(), KeptSettings.Read("keys-test")["keys"]!.ToJsonString());
             Assert.Equal(["Ctrl+K"], PersonKeys.Of("Card.saveButton", "Ctrl+S"));
             Assert.Equal(["Ctrl+Q"], PersonKeys.Of("quitItem", "Ctrl+Q"));
         }

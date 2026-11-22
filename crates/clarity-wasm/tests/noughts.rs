@@ -1,4 +1,4 @@
-//! The noughts example's Board, written in Clarity, compiled and played
+//! The noughts test project's (test-projects/noughts) Board, written in Clarity, compiled and played
 //! through the Rust runtime's engine host.
 
 use clarity_runtime::engine::{Declaration, Engine, Limits, Services, State};
@@ -6,7 +6,7 @@ use serde_json::json;
 
 #[test]
 fn the_noughts_board_compiles_and_plays() {
-    let source = include_str!("../../../examples/noughts/noughts.clarity");
+    let source = include_str!("../../../test-projects/noughts/noughts.clarity");
     let project = clarity_spec::load_sources([("noughts.clarity", source)]);
     for mode in [clarity_wasm::Mode::Compiled, clarity_wasm::Mode::Interpreted] {
         plays(&project, clarity_wasm::build(&project, "Board", mode).unwrap_or_else(|e| panic!("{mode:?} {e:#?}")));

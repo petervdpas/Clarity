@@ -1,5 +1,5 @@
 //! The dropdown's options (U1c) against the cases every runtime shares
-//! (conformance/dropdown-options.json): what `find_options` answers.
+//! (conformance/dropdown-options.json), as Clarity.UI offers them with these.
 
 use clarity_runtime::dropdown_options;
 use clarity_runtime::ui::RefOption;
@@ -38,12 +38,8 @@ fn a_search_looks_only_in_the_fields_it_shows() {
 }
 
 #[test]
-fn find_answers_the_list_of_its_kind() {
-    let values = || Ok(vec!["Gent".to_string(), "Utrecht".to_string()]);
-    let options = || Ok(vec![RefOption { id: 4, text: "Jansen".into(), ..RefOption::default() }]);
-    let typed = dropdown_options::find("typed", &[], "ut", values, options).unwrap();
-    assert_eq!(typed, json!(["Utrecht"]));
-    let search = dropdown_options::find("search", &[], "jan", values, options).unwrap();
-    assert_eq!(search, json!([{ "id": 4, "text": "Jansen" }]));
-    assert!(dropdown_options::find("other", &[], "", values, options).is_err());
+fn a_program_offers_every_record_with_the_fields_shown() {
+    let options = vec![RefOption { id: 4, text: "Jansen".into(), fields: [("city".to_string(), json!("Gent")), ("age".to_string(), json!(40))].into_iter().collect() }];
+    let offered = dropdown_options::offered(options, &["city".to_string()]).unwrap();
+    assert_eq!(offered, json!([{ "id": 4, "text": "Jansen", "fields": { "city": "Gent" } }]));
 }

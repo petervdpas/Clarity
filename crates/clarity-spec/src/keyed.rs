@@ -15,7 +15,7 @@ use crate::design_edit::Designed;
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
 use crate::model::{App, Command, CommandKind, Frame, Literal, Page, Widget, WidgetProps};
 use crate::widgets::WidgetKind;
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FILE_TYPE_KEYS, FOLDER_KEYS, TAB_KEYS, ZOOM_KEYS, REPORT_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, AGENT_KEYS, AGENT_GRANT_KEYS, AGENT_SETTING_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FILE_TYPE_KEYS, FOLDER_KEYS, TAB_KEYS, ZOOM_KEYS, REPORT_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -170,9 +170,7 @@ pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], t
             if diagrams && paints { &DIAGRAM_TOOL_KEYS[..1] } else if diagrams { DIAGRAM_TOOL_KEYS.as_slice() } else { &[] }
         })
         .chain(if pages { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
-        // Code that divides whole numbers can say a division by zero failed.
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| !l.trim_start().starts_with("//") && (l.contains(" div ") || l.contains(" mod ")))) { DIVISION_KEYS.as_slice() } else { &[] });
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }

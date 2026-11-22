@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="ideas.IdeasView">
+  <Data name="ideas" type="list&lt;Idea&gt;" />
+  <Data name="tasksText" type="text" />
+  <Table name="table" at="1,1" span="12" rows="6" bind="ideas" columns="title, note" edit="title, note" resizable="true" add="true" remove="true" confirm="true" onadd="addClicked" onremove="deleteClicked" onchange="ideaChanged" />
+  <Button name="showTasks" at="1,7" span="3" caption="@showTasksCaption" onclick="showTasksClicked" />
+  <Memo name="tasksBox" at="1,8" span="12" rows="4" bind="tasksText" code="yaml" copy="true" readonly="true" />
+</View>

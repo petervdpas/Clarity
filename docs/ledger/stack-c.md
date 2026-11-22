@@ -18,7 +18,7 @@ Progress: 85%
 ## Tests
 - Runtime tests: `runtimes/c/tests/*_test.c` (main.c, scenario_test.c, service_test.c, desktop_test.c, agents_test.c, ...)
 - Conformance run by C: every runtime file except `shortcut-keys`, `secret-store` (C writes the keychains itself), `formats` (display formats), `picture-functions` (CONFLICTING 3)
-- Generator: `crates/clarity-gen/tests/c.rs`, versions_c.rs, signin_c.rs; build: c_build.rs (ignored)
+- Generator: the crate `crates/clarity-gen-c`, its tests one program `cargo test -p clarity-gen-c --test c` (`tests/c/`: generate, signin, versions); build: `tests/c/build.rs` of the same program (ignored)
 - Examples on this stack: kitchen (`c desktop`); no example uses c web
 
 ## Open

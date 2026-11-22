@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Main shows: its parts, data and code. -->
+<View class="todo.MainView">
+  <Data name="tasks" type="list&lt;Task&gt;" />
+  <Label name="searchLabel" at="1,1" span="2" caption="@searchLabel" for="searchBox" />
+  <Textbox name="searchBox" at="3,1" span="10" placeholder="@searchPlaceholder" onchange="showTasks" />
+  <Table name="grid" at="1,2" span="12" rows="9" bind="tasks" columns="title, done, finishedBy" edit="title, done, finishedBy" switches="done" resizable="true" add="true" remove="true" confirm="true" onadd="addClicked" onremove="deleteClicked" onchange="taskChanged" />
+  <Button name="usersButton" at="1,12" span="2" caption="@usersButtonCaption" opens="Users" />
+</View>

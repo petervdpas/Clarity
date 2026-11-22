@@ -1,0 +1,105 @@
+module todo
+
+use ideas
+
+entity Person
+    name: text(80), required, unique, label @personNameLabel
+    color: color, default "#3b82f6", label @personColorLabel
+    passwordHash: text, hashed, label @personPasswordHashLabel
+
+entity Task
+    title: text(120), required, search, label @taskTitleLabel
+    done: bool, default false, label @taskDoneLabel
+    finishedBy: ref Person, label @taskFinishedByLabel
+
+// What each person sets for themselves, kept on their machine.
+settings
+    language
+    theme
+    showDone: bool, default true, label @settingsShowDoneLabel
+
+code Main
+    handler windowOpened
+        showTasks()
+
+    handler windowReturned
+        // Users may have been added, changed or removed, and the settings changed.
+        showTasks()
+
+code MainView
+    handler showTasks
+        // Done tasks show while the person's settings say so; the search
+        // box keeps the tasks with every word typed in their title.
+        if settings.showDone
+            tasks = find t in Task where t matches searchBox.text
+        else
+            tasks = find t in Task where t.done == false and t matches searchBox.text
+
+    // A new task gets a title the person types over in its row.
+    handler addClicked
+        let task = new Task
+        task.title = @newTaskTitle
+        save task
+        showTasks()
+
+    // A task ticked done is finished by who signed in.
+    handler taskChanged
+        let task = grid.selected
+        if task.done and task.finishedBy == none
+            task.finishedBy = me
+        save task
+
+    handler deleteClicked
+        let task = grid.selected
+        delete task
+        showTasks()
+
+code Users
+    handler usersOpened
+        reload people
+
+    // What the editor saved shows in the table once it slides away.
+    handler personPanelClosed
+        reload people
+
+code UsersView
+    handler personSelected
+        person = peopleGrid.selected
+        name.error = ""
+        personPanel.visible = true
+
+    handler newClicked
+        person = new Person
+        name.error = ""
+        personPanel.visible = true
+
+    // A person who finished tasks stays; any other is removed after the question, asked here in code.
+    handler deletePersonClicked
+        let gone = peopleGrid.selected
+        let tasks = find t in Task where t.finishedBy == gone
+        if count(tasks) > 0
+            message error @nameHasFinishedTasksAnd(name = gone.name)
+            return
+        ask @deletePerson(name = gone.name) yes @deletePersonYes no @keepPerson then deleteConfirmed
+
+    handler deleteConfirmed
+        delete peopleGrid.selected
+        reload people
+        person = new Person
+        personPanel.visible = false
+
+    handler closeClicked
+        close
+
+code PersonEditor
+    handler saveClicked
+        name.error = ""
+        if person.name == ""
+            name.error = @nameIsRequired
+            return
+        save person
+        message @savedName(name = person.name)
+
+code Todo
+    handler loading
+        splash.status = @welcomeLoading

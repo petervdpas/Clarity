@@ -18,7 +18,7 @@ Progress: 90%
 ## Tests
 - Runtime tests: `runtimes/cpp/tests/*_test.cpp` (main.cpp, scenario_test.cpp, shell_test.cpp, serve_test.cpp, agents_test.cpp, ...)
 - Conformance run by C++: every runtime file except `shortcut-keys`, `secret-store`, `formats` (display formats), `picture-functions` (CONFLICTING 3)
-- Generator: `crates/clarity-gen/tests/cpp.rs`, versions_cpp.rs, signin_cpp.rs; build: cpp_build.rs (ignored)
+- Generator: the crate `crates/clarity-gen-cpp`, its tests one program `cargo test -p clarity-gen-cpp --test cpp` (`tests/cpp/`: generate, signin, versions); build: `tests/cpp/build.rs` of the same program (ignored)
 - Examples on this stack: novel, orbs (`cpp desktop`); no example uses cpp web
 
 ## Open

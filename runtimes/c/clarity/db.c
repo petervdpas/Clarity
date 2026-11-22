@@ -107,15 +107,12 @@ bool clarity_schema_version(ClarityDb* db, int* out) {
     return clarity_source(db, "", &s) && version_of(s->driver, out);
 }
 
-bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps, size_t count, int* applied) {
+bool clarity_check_steps(ClarityDb* db, const char* source, int steps) {
     ClaritySourceDb* s = NULL;
-    int done;
-    if (!clarity_source(db, source, &s) || !version_of(s->driver, &done)) return false;
-    // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-    if (done > 0 && done < (int)count && !clarity_backup_before_migration(s->driver, done + 1)) return false;
-    for (int i = done; i < (int)count; ++i)
-        if (!s->driver->apply(s->driver, i + 1, &steps[i])) return false;
-    if (applied) *applied = (int)count > done ? (int)count - done : 0;
+    int had;
+    if (!clarity_source(db, source, &s) || !version_of(s->driver, &had)) return false;
+    if (had < steps) return clarity_fail(CLARITY_STEPS, "The database %s needs migrating: run clarity-migrate", s->name);
+    if (had > steps) return clarity_fail(CLARITY_STEPS, "The database %s belongs to a newer version of this app", s->name);
     return true;
 }
 
@@ -500,9 +497,8 @@ static bool remove_record(ClarityDb* db, const ClarityEntity* entity, int64_t id
 }
 
 /// Makes a row so: gone (`there` false), or with these values and its own
-/// id. A versioned row put back gets a version past both its current one
-/// and `version`, the one of the state it returns to, so a copy read before
-/// is refused.
+/// id. A versioned row put back gets `version`, the one of the state it
+/// returns to, exactly, so a window holding that state can save it again.
 static bool put_row(ClarityDb* db, const ClarityChange* c, bool there, const ClarityValue* values, int64_t version) {
     const ClarityEntity* entity = c->entity;
     bool now = false;
@@ -510,7 +506,7 @@ static bool put_row(ClarityDb* db, const ClarityChange* c, bool there, const Cla
     int64_t current_version = 0;
     ClaritySourceDb* s = NULL;
     if (!read_row(db, entity, c->id, &now, &current, &current_version) || !clarity_source(db, entity->source, &s)) return false;
-    int64_t next = (current_version > version ? current_version : version) + 1;
+    int64_t next = version > 0 ? version : current_version + 1;
     ClarityDriver* d = s->driver;
     ClarityDialect dialect = d->dialect;
     const char* table = clarity_quote(dialect, entity->table);
@@ -810,6 +806,50 @@ bool clarity_find(ClarityDb* db, const ClarityEntity* entity, const ClarityQuery
     ClarityValues params = {0};
     const char* sql = clarity_query_sql(query, d, entity->table, entity->key, select_columns(d, entity), &params);
     return records(db, entity, sql, &params, items, count);
+}
+
+bool clarity_find_by_owners(ClarityDb* db, const ClarityEntity* entity, const char* column, size_t owner_count, const int64_t* owners, void** items,
+                            size_t* count) {
+    size_t held = 16, found = 0;
+    char* all = clarity_alloc(entity->size * held);
+    for (size_t start = 0; start < owner_count; start += CLARITY_OWNERS_PER_READ) {
+        size_t n = owner_count - start < CLARITY_OWNERS_PER_READ ? owner_count - start : CLARITY_OWNERS_PER_READ;
+        ClarityValue* ids = CLARITY_NEW(ClarityValue, n);
+        for (size_t i = 0; i < n; i++) ids[i] = clarity_integer_value(owners[start + i]);
+        void* some = NULL;
+        size_t got = 0;
+        if (!clarity_find(db, entity, clarity_order_by(clarity_where(clarity_query(), clarity_one_of(column, n, ids)), entity->key, false), &some, &got))
+            return false;
+        if (found + got > held) {
+            while (found + got > held) held *= 2;
+            char* bigger = clarity_alloc(entity->size * held);
+            memcpy(bigger, all, entity->size * found);
+            all = bigger;
+        }
+        memcpy(all + entity->size * found, some, entity->size * got);
+        found += got;
+    }
+    *items = all;
+    *count = found;
+    return true;
+}
+
+size_t clarity_owned(const void* items, size_t count, size_t size, size_t reference_at, int64_t owner, void** out) {
+    size_t n = 0;
+    for (size_t i = 0; i < count; i++) {
+        int64_t reference;
+        memcpy(&reference, (const char*)items + i * size + reference_at, sizeof reference);
+        if (reference == owner) n++;
+    }
+    char* mine = clarity_alloc(size * (n ? n : 1));
+    size_t at = 0;
+    for (size_t i = 0; i < count; i++) {
+        int64_t reference;
+        memcpy(&reference, (const char*)items + i * size + reference_at, sizeof reference);
+        if (reference == owner) memcpy(mine + size * at++, (const char*)items + i * size, size);
+    }
+    *out = n ? mine : NULL;
+    return n;
 }
 
 bool clarity_get(ClarityDb* db, const ClarityEntity* entity, int64_t id, void* record) {

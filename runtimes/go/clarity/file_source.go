@@ -502,4 +502,3 @@ func (d *fileDriver) batch(query string) error {
 }
 
 // apply does nothing: a file source is external, Clarity writes no steps for it.
-func (*fileDriver) apply(int, []string) error { return nil }

@@ -58,6 +58,8 @@ export async function openBrowser(url, { width = 1400, height = 1000, folder }) 
   let next = 1;
   const waiting = new Map();
   const logs = [];
+  // The files the page's next file chooser gets, as a person picks them (`answerFiles`).
+  let chosen = null;
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
     if (msg.id && waiting.has(msg.id)) {
@@ -68,6 +70,10 @@ export async function openBrowser(url, { width = 1400, height = 1000, folder }) 
       // Where it was said, for a warning that names no place itself.
       const where = (msg.params.stackTrace?.callFrames ?? []).slice(0, 40).map((f) => `${f.functionName || "?"}:${f.lineNumber + 1}:${f.columnNumber + 1}`).join(" < ");
       logs.push(`${msg.params.type}: ${msg.params.args.map((a) => a.value ?? a.description).join(" ")}${where ? `\n         at ${where}` : ""}`);
+    } else if (msg.method === "Page.fileChooserOpened") {
+      const files = chosen ?? [];
+      chosen = null;
+      send("DOM.setFileInputFiles", { files, backendNodeId: msg.params.backendNodeId }).catch((e) => logs.push(`error: the file chooser: ${e.message}`));
     } else if (msg.method === "Runtime.exceptionThrown") {
       logs.push(`exception: ${msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text}`);
     }
@@ -81,6 +87,7 @@ export async function openBrowser(url, { width = 1400, height = 1000, folder }) 
   await send("Runtime.enable");
   await send("Page.enable");
   await send("DOM.enable");
+  await send("Page.setInterceptFileChooserDialog", { enabled: true });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
   await send("Page.navigate", { url });
 
@@ -89,7 +96,8 @@ export async function openBrowser(url, { width = 1400, height = 1000, folder }) 
     logs,
     /** The value of a JavaScript expression in the page. */
     async eval(expression) {
-      const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+      // As a person's gesture: a step stands for what a person does, and the page opens the browser's file chooser only after one.
+      const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, userGesture: true });
       if (r.exceptionDetails) throw new Error(`${expression}: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
       return r.result.value;
     },
@@ -165,6 +173,10 @@ export async function openBrowser(url, { width = 1400, height = 1000, folder }) 
       if (!nodeId) throw new Error(`no file input at ${selector}`);
       await send("DOM.setFileInputFiles", { nodeId, files: paths });
       await b.settle(300);
+    },
+    /** The files the page's next file chooser gets, as a person picks them. */
+    answerFiles(paths) {
+      chosen = paths;
     },
     async screenshot(path) {
       const { data } = await send("Page.captureScreenshot", { format: "png" });

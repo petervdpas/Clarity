@@ -28,7 +28,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
 }
 
 #[cfg(feature = "pdf")]
-pub use shown::{PdfReportView, laid, pdf_of};
+pub use shown::{PdfReportView, laid, normal_data, pdf_of};
 
 /// A PDF of a report of the running program; a program built without PDF reports makes none.
 #[cfg(not(feature = "pdf"))]
@@ -280,12 +280,30 @@ mod shown {
         let images: std::collections::BTreeMap<String, Vec<u8>> = sources(&report).into_iter().filter_map(|s| resource(&s).map(|b| (s, b))).collect();
         let types: std::collections::BTreeMap<String, String> = text(&format!("reports/{report_name}.formats.json")).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         let extras = clarity_pdf::ReportExtras { images, language, currency, types };
-        let data = Value::Object(data.clone()).to_string();
+        let data = Value::Object(normal_data(text(&format!("reports/{report_name}.data.json")).as_deref(), data)).to_string();
         let texts = Value::Object(texts).to_string();
         // A layout that panics is said in the part's place; the window goes on.
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| clarity_pdf::report_layout_with(&report, &data, &texts, &stylesheet, "", &extras)))
             .map_err(|panic| format!("the report stopped while it was laid out: {}", panic.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| panic.downcast_ref::<String>().cloned()).unwrap_or_default()))?
             .map_err(|p| p.to_string())
+    }
+
+    /// A report's data as Clarity writes every value (Clarity.Data's `normal`,
+    /// as `json of` on every stack): each Data by what `kinds` says it is
+    /// (`reports/<Name>.data.json`, written by the generator), whatever JSON
+    /// code of a stack wrote it. A Data the file does not name, or no file,
+    /// stays as it came.
+    pub fn normal_data(kinds: Option<&str>, data: &Map<String, Value>) -> Map<String, Value> {
+        let kinds = kinds.and_then(|k| clarity_data::tree::parse(k));
+        data.iter()
+            .map(|(name, value)| {
+                let kind = kinds.as_ref().and_then(|k| k.get(name)).and_then(|k| clarity_data::kind::Kind::from_tree(k).ok());
+                let written = kind
+                    .and_then(|kind| clarity_data::tree::parse(&value.to_string()).map(|tree| clarity_data::normal::normal(&tree, &kind)))
+                    .and_then(|tree| serde_json::from_str(&clarity_data::tree::write(&tree)).ok());
+                (name.clone(), written.unwrap_or_else(|| value.clone()))
+            })
+            .collect()
     }
 
     /// A PDF of a report of the running program (`pdf of Invoice with order = current`),

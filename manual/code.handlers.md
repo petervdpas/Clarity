@@ -196,7 +196,7 @@ Every part the person edits takes back its own edits with Ctrl+Z, and does them 
 - **A menu item or a button** reaches it with the built-in targets `undo` and `redo` (`opens="undo"` on a menu item with `key="Ctrl+Z"`). They act on the part that had the focus last; see [The app and its frame](design.frame.md).
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
 - **`noUndo="true"`** on a part switches its undo off.
-- **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing. It compares the record's version where its entity has one (see [Entities](data.entities.md)), the whole row where it has none.
+- **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing. It compares the record's version where its entity has one (see [Entities](data.entities.md)), the whole row where it has none. A record put back gets the version it had then, so a window still holding it as it was can save it again.
 
 ## Data events
 

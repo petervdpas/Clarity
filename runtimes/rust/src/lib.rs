@@ -58,7 +58,6 @@ mod store;
 pub mod tables;
 pub mod trees;
 pub mod ui;
-pub mod views;
 pub mod wire;
 
 #[cfg(feature = "mssql")]
@@ -112,11 +111,63 @@ pub fn round(value: Decimal, places: i64) -> Decimal {
     value.round_dp_with_strategy(places, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
 }
 
-/// `snapped(value, step)`: the multiple of `step` nearest to `value`, a half
-/// rounding up; a step of 0 gives the value (conformance/drawing.json, grids).
+/// `a + b`, `a - b`, `a * b` and `-a` of whole numbers in code
+/// (conformance/overflow.json): a value error when the result does not fit in 64 bits.
+pub fn whole_add(a: i64, b: i64) -> Result<i64> {
+    a.checked_add(b).ok_or(Error::TooLarge)
+}
+
+pub fn whole_sub(a: i64, b: i64) -> Result<i64> {
+    a.checked_sub(b).ok_or(Error::TooLarge)
+}
+
+pub fn whole_mul(a: i64, b: i64) -> Result<i64> {
+    a.checked_mul(b).ok_or(Error::TooLarge)
+}
+
+pub fn whole_neg(a: i64) -> Result<i64> {
+    a.checked_neg().ok_or(Error::TooLarge)
+}
+
+/// `a + b`, `a - b` and `a * b` of decimals in code (conformance/overflow.json):
+/// rounded to the places that fit; a value error when the result does not fit
+/// with no places.
+pub fn decimal_add(a: Decimal, b: Decimal) -> Result<Decimal> {
+    a.checked_add(b).ok_or(Error::TooLarge)
+}
+
+pub fn decimal_sub(a: Decimal, b: Decimal) -> Result<Decimal> {
+    a.checked_sub(b).ok_or(Error::TooLarge)
+}
+
+pub fn decimal_mul(a: Decimal, b: Decimal) -> Result<Decimal> {
+    a.checked_mul(b).ok_or(Error::TooLarge)
+}
+
 /// `a div b` in code: the quotient of two whole numbers, rounded toward zero.
 pub fn whole_div(a: i64, b: i64) -> Result<i64> {
-    if b == 0 { Err(Error::DividedByZero) } else { Ok(a.wrapping_div(b)) }
+    if b == 0 { Err(Error::DividedByZero) } else { a.checked_div(b).ok_or(Error::TooLarge) }
+}
+
+/// `a / b` of decimals in code, as every stack divides them
+/// (conformance/decimal-division.json): up to 28 places in 96 bits, an exact
+/// quotient with only the places it needs; dividing by zero is a value error.
+pub fn decimal_div(a: Decimal, b: Decimal) -> Result<Decimal> {
+    if b.is_zero() {
+        return Err(Error::DividedByZero);
+    }
+    Ok(a.checked_div(b).ok_or(Error::TooLarge)?.normalize_exact(a, b))
+}
+
+/// A quotient that is exact with fewer places keeps only those (`6.0 / 3` is 2).
+trait NormalizeExact {
+    fn normalize_exact(self, a: Decimal, b: Decimal) -> Decimal;
+}
+
+impl NormalizeExact for Decimal {
+    fn normalize_exact(self, a: Decimal, b: Decimal) -> Decimal {
+        if self.checked_mul(b) == Some(a) { self.normalize() } else { self }
+    }
 }
 
 /// `a mod b` in code: what is left of `a div b`, with the sign of `a`.
@@ -124,6 +175,8 @@ pub fn whole_mod(a: i64, b: i64) -> Result<i64> {
     if b == 0 { Err(Error::DividedByZero) } else { Ok(a.wrapping_rem(b)) }
 }
 
+/// `snapped(value, step)`: the multiple of `step` nearest to `value`, a half
+/// rounding up; a step of 0 gives the value (conformance/drawing.json, grids).
 pub fn snapped(value: i64, step: i64) -> i64 {
     if step > 0 { (2 * value + step).div_euclid(2 * step) * step } else { value }
 }
@@ -197,12 +250,18 @@ pub enum Error {
     Value(String),
     /// `xs[i]` with no item `position` in a list of `count` (conformance/lists.json).
     Outside { position: i64, count: usize },
-    /// `a div 0` or `a mod 0` in code.
+    /// `a div 0`, `a mod 0` or `a / 0` in code.
     DividedByZero,
+    /// A whole number or decimal in code that does not fit (conformance/overflow.json).
+    TooLarge,
     /// A save refused a record whose required field is empty: the record's
     /// table and id, the field's column, and why in Clarity's own words. A
     /// window shows it at the input bound to that field (crate::required).
     Required { table: &'static str, id: Id, column: String, text: ui::Text },
+    /// A database whose migration steps are not the ones the app was made with
+    /// (docs/ledger/migrations.md): the app stops with this line, in English
+    /// (conformance/migrate-check.json).
+    Steps(String),
 }
 
 /// Why an undo is refused: what it would take back was changed since, in
@@ -279,6 +338,8 @@ impl fmt::Display for Error {
             Error::Engine(what) | Error::Value(what) => f.write_str(what),
             Error::Outside { position, count } => write!(f, "there is no item {position} in a list of {count}"),
             Error::DividedByZero => f.write_str("division by zero"),
+            Error::TooLarge => f.write_str("a number too large"),
+            Error::Steps(line) => f.write_str(line),
         }
     }
 }
@@ -345,6 +406,18 @@ pub trait Record: Sized + Clone {
     /// by its one reference back (docs/ledger/runtime-data.md); a record
     /// without stored lists has none to load.
     fn load_lists(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
+    /// Loads the stored lists of every record of `records` at once, each
+    /// list with one read for all of them (`Db::find_by_owners`); by default
+    /// each record loads its own.
+    fn load_lists_of(records: &mut [Self], db: &Db) -> Result<()>
+    where
+        Self: Sized,
+    {
+        for record in records {
+            record.load_lists(db)?;
+        }
         Ok(())
     }
     /// Why a save or delete of this record is refused when someone saved it
@@ -431,9 +504,6 @@ impl Show for Option<NaiveDateTime> {
         self.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default()
     }
 }
-
-/// One migration step: its statements, run in order.
-pub type Step<'a> = &'a [&'a str];
 
 /// The database of one data source.
 struct Source {
@@ -791,24 +861,18 @@ impl Db {
         schema_version(&mut **self.conn("")?)
     }
 
-    /// `migrate_source` for the default database.
-    pub fn migrate(&mut self, steps: &[Step]) -> Result<usize> {
-        self.migrate_source("", steps)
-    }
-
-    /// Applies the steps of `source` that its database has not had yet,
-    /// each on its own.
-    pub fn migrate_source(&mut self, source: &str, steps: &[Step]) -> Result<usize> {
-        let mut conn = self.conn(source)?;
-        let done = schema_version(&mut **conn)?;
-        // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-        if done > 0 && done < steps.len() {
-            backup::before_migration(&mut **conn, done + 1)?;
+    /// Whether the database of `source` has the `steps` migration steps the app
+    /// was made with: behind or ahead, the app stops with the line this error
+    /// says (docs/ledger/migrations.md, conformance/migrate-check.json). The app
+    /// does not migrate; clarity-migrate does.
+    pub fn check_steps(&self, source: &str, steps: usize) -> Result<()> {
+        let had = schema_version(&mut **self.conn(source)?)?;
+        let name = if source.is_empty() { self.sources.first().map_or("", |s| s.name.as_str()) } else { source };
+        match had.cmp(&steps) {
+            std::cmp::Ordering::Less => Err(Error::Steps(format!("The database {name} needs migrating: run clarity-migrate"))),
+            std::cmp::Ordering::Greater => Err(Error::Steps(format!("The database {name} belongs to a newer version of this app"))),
+            std::cmp::Ordering::Equal => Ok(()),
         }
-        for (i, step) in steps.iter().enumerate().skip(done) {
-            conn.apply(i + 1, step)?;
-        }
-        Ok(steps.len().saturating_sub(done))
     }
 
     /// Inserts a new record (and gives it its id) or updates a stored one,
@@ -1253,13 +1317,12 @@ impl Db {
     }
 
     /// Makes a row so: gone, or with these values and its own id.
-    /// A versioned row put back gets a version past both its current one
-    /// and `version`, the one of the state it returns to, so a copy read
-    /// before is refused.
+    /// A versioned row put back gets `version`, the one of the state it
+    /// returns to, exactly, so a window holding that state can save it again.
     fn put(&self, change: &Change, values: Option<&[SqlValue]>, version: Option<i64>) -> Result<()> {
         let (row, current) = self.state(&change.source, change.table, change.key, change.columns, change.version, change.id)?;
         let there = row.is_some();
-        let next = current.max(version).unwrap_or(0) + 1;
+        let next = version.unwrap_or(current.unwrap_or(0) + 1);
         let mut conn = self.conn(&change.source)?;
         let d = conn.dialect();
         let table = d.quote(change.table);
@@ -1320,10 +1383,23 @@ impl Db {
         records(&mut **conn, &sql, &params)
     }
 
-    /// Loads the stored lists of each record found.
+    /// Loads the stored lists of the records found, each list once for all of them.
     fn with_lists<R: Record>(&self, mut found: Vec<R>) -> Result<Vec<R>> {
-        for record in &mut found {
-            record.load_lists(self)?;
+        if !found.is_empty() {
+            R::load_lists_of(&mut found, self)?;
+        }
+        Ok(found)
+    }
+
+    /// The records of `L` whose reference `column` points at one of
+    /// `owners`, in the order they were stored, without their own lists: a
+    /// stored list of many records at once (`Record::load_lists_of`), read
+    /// `OWNERS_PER_READ` owners at a time.
+    pub fn find_by_owners<L: Record>(&self, column: &'static str, owners: &[Id]) -> Result<Vec<L>> {
+        let mut found = Vec::new();
+        for some in owners.chunks(OWNERS_PER_READ) {
+            let ids = some.iter().map(|id| SqlValue::Integer(*id)).collect();
+            found.extend(self.find_alone::<L>(&Query::new().filter(query::Cond::one_of(column, ids)).order(L::KEY, false))?);
         }
         Ok(found)
     }
@@ -1359,6 +1435,23 @@ impl Db {
             None => Err(Error::NotFound { table: R::TABLE, id: None }),
         }
     }
+}
+
+/// How many owners one read of a stored list asks for (`Db::find_by_owners`),
+/// well below the fewest parameters a database takes in one statement
+/// (SQL Server's 2100).
+pub const OWNERS_PER_READ: usize = 500;
+
+/// Records of a stored list grouped by the record each refers back to
+/// (`owner`), each group in the order given.
+pub fn by_owner<L>(found: Vec<L>, owner: impl Fn(&L) -> Option<Id>) -> std::collections::HashMap<Id, Vec<L>> {
+    let mut groups: std::collections::HashMap<Id, Vec<L>> = std::collections::HashMap::new();
+    for item in found {
+        if let Some(id) = owner(&item) {
+            groups.entry(id).or_default().push(item);
+        }
+    }
+    groups
 }
 
 /// A failed save: a reference to a record that is not there reads better

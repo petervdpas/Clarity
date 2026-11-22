@@ -52,6 +52,20 @@ public static class DialectSql
         dialect == Dialect.Sqlite ? $"CAST({expr} AS REAL)" : expr;
 
     /// <summary>
+    /// <paramref name="expr"/> as a key of ORDER BY with an empty value first
+    /// either way (conformance/queries.json): NULLS FIRST on SQLite and
+    /// PostgreSQL; on MySQL and SQL Server, which put an empty value first
+    /// going up, a key going down gets a key before it that is 0 for empty.
+    /// </summary>
+    internal static string OrderKey(this Dialect dialect, string expr, bool descending) => (dialect, descending) switch
+    {
+        (Dialect.Sqlite or Dialect.Postgres, _) => expr + (descending ? " DESC" : "") + " NULLS FIRST",
+        (_, false) => expr,
+        (Dialect.Mysql, true) => $"{expr} IS NULL DESC, {expr} DESC",
+        _ => $"CASE WHEN {expr} IS NULL THEN 0 ELSE 1 END, {expr} DESC",
+    };
+
+    /// <summary>
     /// <paramref name="column"/> contains the LIKE pattern <paramref name="mark"/>,
     /// ignoring case. The pattern escapes its wildcards with <c>!</c>.
     /// </summary>

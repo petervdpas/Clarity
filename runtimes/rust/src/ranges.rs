@@ -4,10 +4,8 @@
 //! whole numbers scaled by ten as often as needed. Every runtime moves alike
 //! (conformance/ranges.json).
 
-use crate::ui::{Reply, WindowState};
-use crate::{Db, Error, Result};
+use crate::{Error, Result};
 use serde::Deserialize;
-use serde_json::Value;
 
 /// A range: null is no end.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -157,41 +155,4 @@ pub fn typed_in(value: &str, range: &Range) -> Option<String> {
     let value = exact(value)?;
     let (s, _) = scaled(range, &[value], false)?;
     Some(text(within(at(value, s.scale)?, s.low, s.high), s.scale))
-}
-
-/// `range_event` (manual/start.how-it-works.md): the value at `path` in the window's data
-/// after `mv`, written as a number when the field is `whole`, else as text.
-/// A changed value runs `run`, the handler, as an edit ends
-/// (`edits::ended`); one that stays, or text that is no number, answers
-/// the window as it is (`draw`).
-#[allow(clippy::too_many_arguments)]
-pub fn event(
-    db: &Db,
-    mut state: WindowState,
-    part: &str,
-    path: &str,
-    range: &Range,
-    whole: bool,
-    mv: &RangeMove,
-    scope: Option<&str>,
-    run: impl FnOnce(WindowState) -> Result<Reply>,
-    draw: impl FnOnce(WindowState) -> Result<Reply>,
-) -> Result<Reply> {
-    let now = match crate::ui::data_at(&state.data, path) {
-        Some(Value::String(s)) => Some(s.clone()),
-        Some(Value::Number(n)) => Some(n.to_string()),
-        _ => None,
-    };
-    let after = match mv {
-        RangeMove::Key(key) => keyed(now.as_deref(), range, *key),
-        RangeMove::At(place) => dragged(place, range),
-        RangeMove::Typed(typed) => typed_in(typed, range),
-    };
-    let Some(after) = after else { return draw(state) };
-    let value = if whole { after.parse::<i64>().map(Value::from).unwrap_or(Value::String(after)) } else { Value::String(after) };
-    if crate::ui::data_at(&state.data, path) == Some(&value) {
-        return draw(state);
-    }
-    crate::ui::set_data_at(&mut state.data, path, value)?;
-    crate::edits::ended(db, state, part, scope, run)
 }

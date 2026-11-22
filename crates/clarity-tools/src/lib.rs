@@ -459,6 +459,12 @@ impl ProjectTools {
         if path.trim().trim_start_matches("./") == clarity_spec::guidance::FILE {
             return Err(format!("{path} is the app's guidance for agents: write it a section at a time with set_guidance, and read it with guidance"));
         }
+        // Reports and their stylesheets change only through the report tools, as the Reports tab changes them.
+        let trimmed = path.trim().trim_start_matches("./");
+        if trimmed.starts_with(&format!("{}/", clarity_spec::reports::REPORTS_DIR)) && (trimmed.ends_with(".report") || trimmed.ends_with(".css")) {
+            let names: Vec<String> = crate::structural::reports::definitions().into_iter().map(|t| t.name).collect();
+            return Err(format!("{path} is a report or its stylesheet: change it with the report tools, which check every change: {}", names.join(", ")));
+        }
         // Windows, views and the app change only through the structural tools (docs/ledger/mcp-tools.md).
         if clarity_spec::cxaml::is_page_file(path.trim()) {
             let names: Vec<String> = crate::structural::windows::definitions().into_iter().chain(crate::structural::frame::definitions()).map(|t| t.name).collect();
@@ -809,7 +815,7 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "migrate",
-                "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet.",
+                "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet. The app does not migrate its databases itself: it stops when one is behind, and clarity-migrate brings it up to date (Run in Clarity does it first; `include migrate` in the project file puts the tool in the output folder for whoever installs the app).",
                 schema(json!({ "title": { "type": "string", "description": "What the step does, like \"Tasks\"." }, "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
             ),
             tool(
@@ -845,7 +851,7 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "generate",
-                "Generates the application's source tree for the project's stack into its output folder, as `clarity gen` does: each program in its folder (desktop, cli, web). It writes code and builds nothing; the person builds and runs. The project must check without errors. Read the result with read_generated.",
+                "Generates the application's source tree for the project's stack into its output folder, as `clarity gen` does: each program in its folder (desktop, cli, web). It writes code and builds nothing; the person builds and runs. With `include migrate` in the project file it also puts Clarity's data migration tools in the output folder: clarity-migrate and its clarity-migrate.json. The project must check without errors. Read the result with read_generated.",
                 schema(json!({}), &[]),
             ),
             tool(
@@ -1524,6 +1530,34 @@ mod tests {
         assert!(!tools.call("write_file", &json!({"path": "broken.clarity", "text": "module broken\n\nentity Task\n    title: nonsense\n"})).is_error);
         let refused = tools.call("generate", &json!({}));
         assert!(refused.is_error && refused.text.contains("broken.clarity"), "{}", refused.text);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// With `include migrate` the agent's generate puts Clarity's data
+    /// migration tools in the output folder, as the IDE's Generate does,
+    /// and says so; without the tool beside Clarity it says why not.
+    #[test]
+    fn the_agent_generates_the_data_migration_tools_when_the_project_includes_them() {
+        let (root, file, dir) = project("generate-migrate");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let read = tools.call("read_file", &json!({"path": "project"}));
+        assert!(!read.is_error, "{}", read.text);
+        let text = std::fs::read_to_string(&file).unwrap() + "    include migrate\n";
+        let wrote = tools.call("write_file", &json!({"path": "project", "text": text}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+
+        let clarity = clarity_gen::clarity_programs_folder();
+        let tool = clarity.join(clarity_gen::migrate_program_name());
+        let made_here = !tool.exists();
+        if made_here {
+            std::fs::write(&tool, "the tool").unwrap();
+        }
+        let made = tools.call("generate", &json!({}));
+        if made_here {
+            std::fs::remove_file(&tool).unwrap();
+        }
+        assert!(!made.is_error, "{}", made.text);
+        assert!(made.text.contains(clarity_gen::MIGRATE_FILE) && made.text.contains(&clarity_gen::migrate_program_name()), "{}", made.text);
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

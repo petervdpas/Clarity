@@ -1,12 +1,12 @@
 //! DevTools' Disk tab: the folders Clarity's builds and checks fill in its
-//! repository (clarity_gen::tools::devtools::disk), how big each is, what
+//! repository (clarity_devtools::disk), how big each is, what
 //! removing it costs, and the free space of the disk the repository is on,
 //! with a warning below 40 GB. Removing waits until no build runs. A folder
 //! the running IDE holds (on Windows its own files) is marked for the next
 //! start instead, which dev.sh and dev.bat remove before anything builds.
 
-use clarity_gen::tools::devtools::disk;
-use clarity_gen::tools::devtools::jobs::JobState;
+use clarity_devtools::disk;
+use clarity_devtools::jobs::JobState;
 use clarity_project::dev_asks;
 use serde::Serialize;
 use tauri::State;

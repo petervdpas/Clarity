@@ -15,7 +15,7 @@ mod error;
 mod secrets;
 mod vault;
 
-pub use connections::{Connection, ConnectionField, Connections, VaultRef};
+pub use connections::{Connection, ConnectionField, Connections, VaultRef, connection_problems};
 pub use error::{Result, VaultError};
 pub use secrets::{SecretEntry, Secrets};
 pub use vault::{DEFAULT_PARAMS, Params, Vault};

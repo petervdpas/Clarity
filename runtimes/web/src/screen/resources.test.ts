@@ -4,17 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keyResource, resourceChoices, resourceKind, resourceUses } from "./resources.ts";
+import { resourceChoices, resourceKind, resourceUses } from "./resources.ts";
 import type { ResourceKindInfo } from "../generated/ResourceKindInfo";
-
-test("a key gives the resource of the language shown, else the default's", () => {
-  const keys = { en: { gameRules: "rules-en.md" }, nl: { gameRules: "rules-nl.md" }, de: {} };
-  assert.equal(keyResource(keys, "@gameRules", "nl", "en"), "rules-nl.md");
-  assert.equal(keyResource(keys, "@gameRules", "de", "en"), "rules-en.md");
-  assert.equal(keyResource(keys, "@saveCaption", "nl", "en"), undefined);
-  assert.equal(keyResource(keys, "not a key", "nl", "en"), undefined);
-  assert.equal(keyResource(undefined, "@gameRules", "nl", "en"), undefined);
-});
 
 /** The types as the backend gives them (clarity_spec::resources::kinds). */
 const KINDS: ResourceKindInfo[] = [

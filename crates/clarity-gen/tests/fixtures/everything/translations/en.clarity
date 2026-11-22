@@ -23,6 +23,8 @@ translation en
     howManyCopies "How many copies?"
     keep "Keep"
     lend "Lend"
+    rate "Rate"
+    ratedStars "Rated {stars}"
     lendItTo "Lend it to"
     lending "Lending..."
     length345 "3:45"

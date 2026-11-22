@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="music.GenreDialog" title="@genreDialogTitle">
+  <Data name="genre" type="Genre" />
+  <Label name="nameLabel" at="1,1" span="3" caption="@nameLabel" for="name" />
+  <Textbox name="name" at="4,1" span="9" bind="genre.name" />
+  <Label name="parentLabel" at="1,2" span="3" caption="@parentLabel" for="parent" />
+  <Dropdown name="parent" at="4,2" span="9" bind="genre.parent" />
+  <Help name="parentHelp" at="4,3" span="9" for="parent" />
+  <Button name="saveGenre" at="9,5" span="2" caption="@saveCaption" style="primary" default="true" onclick="saveClicked" />
+  <Button name="cancelGenre" at="11,5" span="2" caption="@cancelCaption" opens="close" cancel="true" />
+</Dialog>

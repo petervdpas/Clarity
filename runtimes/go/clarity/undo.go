@@ -332,20 +332,18 @@ func (db *Db) state(c change, id int64) ([]any, *int64, error) {
 }
 
 // put makes a row so: gone, or with these values and its own id. A
-// versioned row put back gets a version past both its current one and
-// version, the one of the state it returns to, so a copy read before is
-// refused.
+// versioned row put back gets version, the one of the state it returns to,
+// exactly, so a window holding that state can save it again.
 func (db *Db) put(c change, values []any, version *int64) error {
 	now, current, err := db.state(c, c.id)
 	if err != nil {
 		return err
 	}
 	var next int64 = 1
-	if current != nil && *current+1 > next {
+	if version != nil {
+		next = *version
+	} else if current != nil {
 		next = *current + 1
-	}
-	if version != nil && *version+1 > next {
-		next = *version + 1
 	}
 	s, err := db.source(c.source)
 	if err != nil {

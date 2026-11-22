@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Field shows: its parts, data and code. -->
+<View class="walker.FieldView">
+  <Data name="x" type="integer" default="10" />
+  <Data name="step" type="integer" default="1" />
+  <Data name="heading" type="integer" default="1" />
+  <Canvas name="field" at="1,1" span="12" rows="8" units="{&quot;height&quot;:100,&quot;width&quot;:200}" none="surface" ondraw="drawField" />
+  <Button name="walkButton" at="1,9" span="2" caption="@walkCaption" onclick="walkClicked" />
+  <Button name="stopButton" at="3,9" span="2" caption="@stopCaption" onclick="stopClicked" />
+  <Label name="speedLabel" at="5,9" span="2" caption="@speedLabel" for="speedSlider" />
+  <Slider name="speedSlider" at="7,9" span="6" bind="settings.speed" max="6" min="1" step="1" />
+  <Label name="walkerNameLabel" at="1,10" span="2" caption="@walkerNameLabel" for="walkerNameBox" />
+  <Textbox name="walkerNameBox" at="3,10" span="10" bind="settings.walkerName" placeholder="@walkerNamePlaceholder" />
+  <Timer name="clock" at="1,1" span="1" every="0.1" ontick="stepped" />
+</View>

@@ -1,0 +1,924 @@
+//! The windows of a web stack as markup (manual/start.how-it-works.md): each part an element
+//! with what differs from its kind's defaults, written in Clarity's own
+//! words, in an XML file the screen Clarity ships reads.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+fn calculator() -> clarity_spec::Project {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/calculator");
+    clarity_project::load_modules(&dir).unwrap()
+}
+
+#[test]
+fn the_calculator_s_window_is_markup_in_clarity_s_words() {
+    // The window shows its keypad in its content: placed, the view's parts are the window's.
+    let project = clarity_spec::views::placed(&calculator());
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    for line in [
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<Window class=\"Main\" title=\"@mainTitle\" width=\"320\" height=\"370\" columns=\"4\">",
+        "  <Content name=\"main\" at=\"1,1\" span=\"4\" rows=\"7\">",
+        "      <Display name=\"screen\" at=\"1,1\" span=\"4\" rows=\"2\" bind=\"shown\" digits=\"12\" style=\"display\" />",
+        "      <Button name=\"clearKey\" at=\"1,3\" span=\"1\" caption=\"@clearKeyCaption\" key=\"Escape\" onclick=\"clear\" />",
+        "      <Button name=\"digit7\" at=\"1,4\" span=\"1\" caption=\"7\" key=\"7\" onclick=\"digit(7)\" />",
+        "      <Button name=\"equalsKey\" at=\"4,7\" span=\"1\" caption=\"=\" style=\"equals\" key=\"=\" default=\"true\" onclick=\"equals\" />",
+        "</Window>",
+    ] {
+        assert!(markup.contains(line), "{line}\nin\n{markup}");
+    }
+}
+
+#[test]
+fn every_window_of_the_calculator_is_written() {
+    let files = clarity_gen::web_windows::window_files(&calculator());
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, ["ui/windows/Main.cxaml", "ui/windows/Preferences.cxaml"]);
+}
+
+/// Text that XML gives a meaning, and line ends, survive in an attribute.
+#[test]
+fn text_is_escaped_for_xml() {
+    let source = "module m\n\npage Main: window\n    label \"Fish & <chips> \\\"now\\\"\" name fish at 1,1 span 4\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(markup.contains("caption=\"Fish &amp; &lt;chips&gt; &quot;now&quot;\""), "{markup}");
+}
+
+/// A field its kind gives a value and the part has none of is listed in
+/// `none`, so it is never taken for the text "null".
+#[test]
+fn a_field_with_no_value_is_listed_as_none() {
+    let source = "module m\n\npage Main: window\n    data shown: integer\n    display name screen at 1,1 span 4 bind shown\n";
+    let (mut file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    file.pages[0].widgets[0].props.caption = None;
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(!markup.contains("\"null\""), "{markup}");
+}
+
+/// Clarity.UI's markup reader takes each kind's defaults, a new menu item's,
+/// and how to read each field, from files this writes (runtimes/rust-ui/catalog),
+/// so Rust's catalog and the model's types (ts-rs) stay the one source of them.
+/// `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test gen web_windows::` writes them again.
+#[test]
+fn the_screen_reads_the_catalog_s_defaults_and_the_fields_types() {
+    let types = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/web/src/generated");
+    let generated = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust-ui/catalog");
+    let read_type = |name: &str| std::fs::read_to_string(types.join(name)).unwrap_or_default();
+    let read = |name: &str| std::fs::read_to_string(generated.join(name)).unwrap_or_default();
+    let wanted = [
+        ("part-defaults.json", clarity_gen::web_windows::part_defaults()),
+        ("command-defaults.json", clarity_gen::web_windows::command_defaults()),
+        ("part-fields.json", clarity_gen::web_windows::field_kinds(&read_type("WidgetProps.ts"))),
+        ("command-fields.json", clarity_gen::web_windows::field_kinds(&read_type("CommandProps.ts"))),
+        ("sidebar-defaults.json", clarity_gen::web_windows::sidebar_defaults()),
+        ("sidebar-fields.json", clarity_gen::web_windows::field_kinds(&read_type("SidebarProps.ts"))),
+    ];
+    for (name, text) in &wanted {
+        if std::env::var("CLARITY_WRITE_DEFAULTS").is_ok() {
+            crate::write_changed(generated.join(name), text);
+        }
+        assert!(read(name) == *text, "{name} is behind; write it with CLARITY_WRITE_DEFAULTS=1");
+    }
+    let fields: serde_json::Value = serde_json::from_str(&wanted[2].1).unwrap();
+    assert_eq!((fields["caption"].as_str(), fields["digits"].as_str(), fields["cards"].as_str(), fields["order"].as_str()), (Some("text"), Some("number"), Some("bool"), Some("json")));
+}
+
+/// Where each part's edits are undone (manual/code.handlers.md), as the project works it
+/// out, goes into the markup, so a screen that reads the markup alone (C# on
+/// Clarity.UI) has it: a field in a panel undoes with the panel, a part outside
+/// one with itself, and a part with `no undo` has none.
+#[test]
+fn a_part_s_undo_scope_is_in_the_markup() {
+    let source = "module m\n\nentity Note\n    title: text\n\npage Main: window\n    data note: Note\n    panel name notePanel at 1,1 span 12 rows 3\n        textbox name titleInput at 1,1 span 6 bind note.title\n    textbox name loose at 1,4 span 6 bind note.title\n    textbox name plain at 1,5 span 6 bind note.title no undo\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::diagnostic::Severity::Error), "{:#?}", project.diagnostics);
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    for line in [
+        "<Textbox name=\"titleInput\" at=\"1,1\" span=\"6\" bind=\"note.title\" undoScope=\"notePanel\" />",
+        "<Textbox name=\"loose\" at=\"1,4\" span=\"6\" bind=\"note.title\" undoScope=\"loose\" />",
+        "<Textbox name=\"plain\" at=\"1,5\" span=\"6\" bind=\"note.title\" noUndo=\"true\" />",
+    ] {
+        assert!(markup.contains(line), "{line}\nin\n{markup}");
+    }
+}
+
+/// A window's grid has its columns on the root element when they are not
+/// the twelve every window starts with.
+#[test]
+fn a_window_s_columns_are_on_its_root_when_not_twelve() {
+    let source = "module m\n\npage Main: window\n    grid 6 columns\n    label \"Hello\" name hello at 1,1 span 6\n\npage Other: window\n    label \"Hello\" name hello at 1,1 span 6\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let six = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(six.contains("<Window class=\"Main\" columns=\"6\">"), "{six}");
+    let twelve = clarity_gen::web_windows::window_markup(&file.pages[1]);
+    assert!(twelve.contains("<Window class=\"Other\">"), "{twelve}");
+}
+
+/// The project's row height (`row height 30`) is on every window's root,
+/// where Clarity.UI reads it, and in the preview's and designer's files;
+/// the standard 36 writes nothing, so a project without the line keeps its markup.
+#[test]
+fn a_project_s_row_height_is_on_every_window_s_root() {
+    let (_, mut project) = todo();
+    assert_eq!(project.row_height, 36);
+    for file in clarity_gen::web_windows::window_files(&project) {
+        assert!(!file.text.contains("rowHeight"), "{}", file.text);
+    }
+    project.row_height = 30;
+    let files_written = clarity_gen::web_windows::window_files(&project);
+    assert!(!files_written.is_empty());
+    for file in &files_written {
+        let root = file.text.lines().find(|l| l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!--")).unwrap();
+        // A page with its own exact grid (the splash) says its cells instead.
+        assert!(root.contains(" rowHeight=\"30\"") || root.contains(" cell=\""), "{root}");
+    }
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
+    let main = designed["windows"]["Main"].as_str().unwrap();
+    assert!(main.lines().any(|l| l.starts_with("<Window class=\"todo.Main\"") && l.contains(" rowHeight=\"30\" designItem=")), "{designed}");
+    let app = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
+    assert!(app["windows"]["Todo"].as_str().unwrap().starts_with("<Window name=\"Todo\" rowHeight=\"30\" designItem="), "{app}");
+}
+
+/// A custom part declared with `grows` (manual/design.custom-parts.md) says so in the markup,
+/// so every Clarity.UI lays it out as a growing part; one without it keeps
+/// its rows and writes nothing.
+#[test]
+fn a_custom_part_that_grows_says_so_in_the_markup() {
+    let source = "module m\n\npart Board\n    crate \"parts/Board\"\n    size 6 x 4\n    grows\n\npart Dial\n    crate \"parts/Dial\"\n\npage Main: window\n    Board name board at 1,1 span 6 rows 4\n    Dial name dial at 7,1 span 6 rows 2\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    assert!(markup.contains("<Custom name=\"board\" at=\"1,1\" span=\"6\" rows=\"4\" undoScope=\"board\" part=\"Board\" grows=\"true\" />"), "{markup}");
+    assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" undoScope=\"dial\" part=\"Dial\" />"), "{markup}");
+}
+
+/// A custom part's declared description (manual/start.how-it-works.md) is in its
+/// markup, so every Clarity.UI gives it to screen readers.
+#[test]
+fn a_custom_part_s_description_is_in_the_markup() {
+    let source = "module m\n\npart Dial\n    crate \"parts/Dial\"\n    description @dialAbout\n\npage Main: window\n    Dial name dial at 1,1 span 6 rows 2\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    assert!(markup.contains("part=\"Dial\" description=\"@dialAbout\""), "{markup}");
+}
+
+/// A web program's browser files (round B, manual/start.how-it-works.md): the page, titled as
+/// the app, and files.json with what the library draws from, the same as a
+/// desktop program carries, in the project's order.
+#[test]
+fn a_web_program_s_browser_files_carry_the_page_and_what_the_library_draws_from() {
+    let project = calculator();
+    let mut settings = clarity_project::starter("Calc", "calc");
+    settings.title = Some("Calc <one>".into());
+    let files = clarity_gen::web_browser::site(&project, &settings);
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths[..2], ["browser/index.html", "browser/clarity/files.json"]);
+    let page = &files[0].text;
+    assert!(page.contains("<title>Calc &lt;one&gt;</title>"), "{page}");
+    assert!(page.contains("<canvas id=\"clarity-ui\"></canvas>") && page.contains("<script src=\"clarity-ui-page.js\"></script>"), "{page}");
+    let json: serde_json::Value = serde_json::from_str(&files[1].text).unwrap();
+    assert_eq!(json["title"], "Calc <one>");
+    let windows: Vec<&String> = json["windows"].as_object().unwrap().keys().collect();
+    assert_eq!(windows, ["Main", "Preferences"]);
+    assert!(json["windows"]["Main"].as_str().unwrap().contains("<Window class=\"calculator.Main\" title=\"@mainTitle\" width=\"320\" height=\"370\" columns=\"4\">"));
+    assert!(json["model"].is_object(), "the model is JSON: {}", json["model"]);
+    assert!(json["width"].as_u64().unwrap() > 0 && json["height"].as_u64().unwrap() > 0);
+    // The light theme before the dark, as the desktop programs carry them.
+    let text = &files[1].text;
+    let first_light = text.find(".light\":").unwrap();
+    let first_dark = text.find(".dark\":").unwrap();
+    assert!(first_light < first_dark, "{}", &text[..text.len().min(400)]);
+    assert!(json["themes"].as_object().unwrap().values().all(serde_json::Value::is_object));
+    assert_eq!(json["resources"], serde_json::json!([]));
+}
+
+/// The resources are named in files.json and served beside it; the
+/// library's four files are added to a program that is served, from the
+/// browser folder, and to no other.
+#[test]
+fn the_library_s_browser_files_join_the_programs_served_to_a_browser() {
+    let mut project = calculator();
+    project.resources = Some(clarity_spec::resources::Resources { files: vec![clarity_spec::resources::ResourceFile { name: "logo.png".into(), bytes: vec![1, 2, 3] }], ..Default::default() });
+    let settings = clarity_project::starter("Calc", "calc");
+    let site = clarity_gen::web_browser::site(&project, &settings);
+    let json: serde_json::Value = serde_json::from_str(&site.iter().find(|f| f.path == "browser/clarity/files.json").unwrap().text).unwrap();
+    assert_eq!(json["resources"], serde_json::json!(["logo.png"]));
+    let logo = site.iter().find(|f| f.path == "browser/clarity/resources/logo.png").expect("the resource is served");
+    assert_eq!(logo.bytes.as_deref(), Some(&[1u8, 2, 3][..]));
+
+    let folder = std::env::temp_dir().join(format!("clarity-browser-files-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    for name in clarity_gen::clarity_ui::BROWSER_FILES {
+        std::fs::write(folder.join(name), name.as_bytes()).unwrap();
+    }
+    let mut programs = vec![
+        clarity_gen::Program { target: clarity_project::Target::Web, files: site.clone() },
+        clarity_gen::Program { target: clarity_project::Target::Cli, files: vec![] },
+    ];
+    assert!(clarity_gen::web_browser::needs_library(&programs));
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    // Twice is the same as once.
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    for name in clarity_gen::clarity_ui::BROWSER_FILES {
+        let copied: Vec<_> = programs[0].files.iter().filter(|f| f.path == format!("browser/{name}")).collect();
+        assert_eq!(copied.len(), 1, "{name}");
+        assert_eq!(copied[0].bytes.as_deref(), Some(name.as_bytes()));
+    }
+    assert!(programs[1].files.is_empty());
+    let all = clarity_gen::web_browser::files(&project, &settings, &folder).unwrap();
+    assert_eq!(all.len(), site.len() + 4);
+    std::fs::remove_dir_all(&folder).unwrap();
+    let missing = clarity_gen::web_browser::library(&folder).unwrap_err();
+    assert!(missing.contains("clarity-ui.js"), "{missing}");
+}
+
+/// The browser files come in two sets: a web program that carries a report
+/// takes the set with reports (the folder's `reports/`), one without the
+/// smaller set; with no set with reports, a program with reports is refused.
+#[test]
+fn a_web_program_with_a_report_takes_the_browser_files_with_reports() {
+    let folder = std::env::current_dir().unwrap().join("../../target/tmp").join(format!("clarity-browser-sets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    for (set, word) in [(folder.clone(), "plain"), (folder.join(clarity_gen::web_browser::REPORTS_SET), "reports")] {
+        std::fs::create_dir_all(&set).unwrap();
+        for name in clarity_gen::clarity_ui::BROWSER_FILES {
+            std::fs::write(set.join(name), word.as_bytes()).unwrap();
+        }
+    }
+    let page = clarity_gen::OutFile { path: clarity_gen::web_browser::PAGE.into(), text: String::new(), bytes: None };
+    let report = clarity_gen::OutFile { path: format!("{}/reports/Invoice.report", clarity_gen::web_browser::RESOURCES), text: "<Report />".into(), bytes: None };
+    let mut programs = vec![
+        clarity_gen::Program { target: clarity_project::Target::Web, files: vec![page.clone(), report] },
+        clarity_gen::Program { target: clarity_project::Target::Web, files: vec![page] },
+    ];
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    let wasm = |p: &clarity_gen::Program| p.files.iter().find(|f| f.path == "browser/clarity-ui.wasm").and_then(|f| f.bytes.as_deref().map(<[u8]>::to_vec));
+    assert_eq!(wasm(&programs[0]).as_deref(), Some(&b"reports"[..]), "the program with a report");
+    assert_eq!(wasm(&programs[1]).as_deref(), Some(&b"plain"[..]), "the program without");
+    std::fs::remove_dir_all(folder.join(clarity_gen::web_browser::REPORTS_SET)).unwrap();
+    let why = clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap_err();
+    assert!(why.contains("reports"), "{why}");
+    std::fs::remove_dir_all(&folder).unwrap();
+}
+
+// The IDE's preview and design canvas on Clarity.UI (manual/design.parts.md, clarity_gen::preview).
+
+use clarity_gen::preview::{self, PreviewProgram, Shown};
+use serde_json::{json, Value};
+
+fn todo() -> (std::path::PathBuf, clarity_spec::Project) {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/todo");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    (dir, project)
+}
+
+fn files(text: &str) -> Value {
+    serde_json::from_str(text).unwrap()
+}
+
+#[test]
+fn the_designer_draws_markup_that_says_where_each_part_is_written() {
+    let (_, project) = todo();
+    // The task table stands in the view the window's content shows; the designer draws that view.
+    let main = project.pages().find(|p| p.name.name == "MainView").unwrap();
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("MainView".into()), true, &Default::default()));
+    let markup = designed["windows"]["MainView"].as_str().unwrap();
+    // Each thing by its file and name, not by where it is written.
+    assert!(markup.contains("<View class=\"todo.MainView\" designItem=\"design/MainView.cxaml#MainView\">"), "{markup}");
+    let line = markup.lines().find(|l| l.contains("<Table name=\"grid\"")).expect("the task table");
+    assert!(line.contains("onadd=\"addClicked\"") && line.contains("designItem=\"design/MainView.cxaml#MainView/grid\""), "{line}");
+    // The window shows the view in its content: the view's parts keep their own file's keys.
+    let window = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
+    let window = window["windows"]["Main"].as_str().unwrap();
+    assert!(window.contains("designItem=\"design/Main.cxaml#Main/main\""), "{window}");
+    assert!(window.lines().any(|l| l.contains("<Table name=\"grid\"") && l.contains("designItem=\"design/MainView.cxaml#MainView/grid\"")), "{window}");
+    assert!(!main.widgets.is_empty());
+    // The app's menu items too.
+    assert!(designed["apps"]["Todo"].as_str().unwrap().contains("designItem="));
+    // The preview's markup is the program's own: no design items.
+    let shown = files(&preview::files_json(&project, "Todo", &Shown::Window("Users".into()), false, &Default::default()));
+    assert!(!shown["windows"].to_string().contains("designItem"));
+    assert_eq!(shown["title"], json!("Todo"));
+    assert_eq!((shown["width"].clone(), shown["height"].clone()), (json!(1100), json!(760)));
+    // A program's own markup never carries them either.
+    assert!(!clarity_gen::web_windows::window_markup(main).contains("designItem"));
+}
+
+#[test]
+fn an_app_is_designed_as_an_empty_window_in_its_frame() {
+    let (_, project) = todo();
+    assert!(project.apps().next().is_some());
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
+    assert_eq!(designed["windows"]["Todo"], json!("<Window name=\"Todo\" designItem=\"design/Todo.cxaml#Todo\" />\n"));
+    let program = PreviewProgram::new(project, "Todo");
+    assert_eq!(program.answer("started", &json!({})), json!({ "value": { "main": "Todo" } }));
+    assert!(program.answer("open_window", &json!({ "window": "Todo", "with": {} }))["value"]["state"]["window"] == json!("Todo"));
+}
+
+#[test]
+fn the_preview_program_opens_windows_with_sample_data_and_runs_no_handler() {
+    let (_, project) = todo();
+    let program = PreviewProgram::new(project, "Main");
+    assert_eq!(program.answer("started", &json!({})), json!({ "value": { "main": "Main" } }));
+    assert_eq!(program.answer("start_app", &json!({}))["value"]["state"]["window"], json!(""));
+    let opened = program.answer("open_window", &json!({ "window": "Users", "with": { "extra": 1 } }));
+    let data = &opened["value"]["state"]["data"];
+    // A list every sample record, a record the first, each with its number; what `with` gives is kept.
+    assert_eq!(data["people"].as_array().unwrap().len(), clarity_spec::sample::ROWS_PER_ENTITY);
+    assert_eq!(data["person"], data["people"][0]);
+    assert_eq!(data["people"][1]["id"], json!(2));
+    assert_eq!(data["extra"], json!(1));
+    // A reference names its record by number, as a program holds it; the dropdown's choices by the same numbers.
+    let tasks = program.answer("open_window", &json!({ "window": "Main", "with": {} }))["value"]["state"]["data"]["tasks"].clone();
+    assert!(tasks.as_array().unwrap().iter().any(|t| t["finishedBy"].is_number()), "{tasks}");
+    let options = program.answer("ref_options", &json!({ "entity": "Person" }))["value"].clone();
+    assert_eq!(options[0]["id"], json!(1));
+    // A handler is not run: the window stays as it was and says where it runs.
+    let state = opened["value"]["state"].clone();
+    let clicked = program.answer("dispatch_event", &json!({ "state": state, "handler": "personSelected" }));
+    assert_eq!(clicked["value"]["state"], state);
+    // In Clarity's own words, by their key, the handler in its slot.
+    let said = &clicked["value"]["messages"][0]["text"];
+    assert_eq!(said["key"], json!("previewRunsNoHandler"));
+    assert_eq!(said["text"], json!(clarity_spec::translations::PREVIEW_KEYS[0].1));
+    assert_eq!(said["values"]["handler"]["value"], json!("personSelected"));
+    // What the person changes stays as the screen sent it.
+    assert_eq!(program.answer("edit_event", &json!({ "state": state, "part": "name" }))["value"]["state"], state);
+    assert!(program.answer("open_window", &json!({ "window": "Nowhere" }))["error"].is_string());
+    assert!(program.answer("facts", &json!({}))["value"].is_object());
+}
+
+/// A dropdown's options come from the sample data: a typed one's the field's
+/// values, a search one's the records with the fields it shows, which the
+/// screen then searches as the person types (clarity_runtime::dropdown_options).
+#[test]
+fn the_preview_program_finds_a_dropdown_s_options_in_the_sample_data() {
+    let (_, project) = todo();
+    let program = PreviewProgram::new(project, "Main");
+    let all = program.answer("field_values", &json!({ "entity": "Person", "field": "name" }))["value"].clone();
+    assert!(all.as_array().is_some_and(|v| !v.is_empty()), "{all}");
+    let search = program.answer("find_options", &json!({ "entity": "Person", "show": ["name"] }));
+    let found = search["value"].as_array().unwrap_or_else(|| panic!("{search}"));
+    assert_eq!(found.len(), clarity_spec::sample::ROWS_PER_ENTITY, "every record");
+    assert_eq!(found[0]["id"], json!(1));
+    assert!(found[0]["fields"]["name"].is_string(), "the fields it shows: {search}");
+}
+
+/// A request to the preview server: its status line and body.
+fn ask(address: &str, method: &str, path: &str, body: &str) -> (String, Vec<u8>) {
+    use std::io::{Read, Write};
+    let rest = address.strip_prefix("http://").unwrap();
+    let (host, _) = rest.split_once('/').unwrap();
+    let mut stream = std::net::TcpStream::connect(host).unwrap();
+    write!(stream, "{method} {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let mut answer = Vec::new();
+    stream.read_to_end(&mut answer).unwrap();
+    let split = answer.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let head = String::from_utf8_lossy(&answer[..split]).to_string();
+    (head, answer[split + 4..].to_vec())
+}
+
+#[test]
+fn the_preview_server_serves_the_library_the_windows_and_the_wire_below_its_secret() {
+    let (dir, _) = todo();
+    let file = dir.with_extension("clarity");
+    let library = Path::new(env!("CARGO_TARGET_TMPDIR")).join("preview-library");
+    std::fs::create_dir_all(&library).unwrap();
+    std::fs::write(library.join("clarity-ui-page.js"), "// page").unwrap();
+    let (loaded_file, loaded_dir) = (file.clone(), dir.clone());
+    let server = preview::Server::start(
+        std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)),
+        std::sync::Arc::new(move || Ok(library.clone())),
+        "s3cret",
+    )
+    .unwrap();
+    let address = server.address().to_string();
+    assert!(address.starts_with("http://127.0.0.1:") && address.ends_with("/s3cret/"), "{address}");
+    let path = |rest: &str| format!("/s3cret/{rest}");
+    let (head, body) = ask(&address, "GET", &path("clarity-ui-page.js"), "");
+    assert!(head.starts_with("HTTP/1.1 200") && head.contains("text/javascript") && head.contains("Access-Control-Allow-Origin: *"), "{head}");
+    assert_eq!(body, b"// page");
+    // The wire answers once the drawing read the project.
+    let (_, body) = ask(&address, "POST", &path("invoke"), r#"{"command":"started","args":{}}"#);
+    assert!(String::from_utf8_lossy(&body).contains("error"));
+    let (head, body) = ask(&address, "GET", &path("files.json?window=Users&design=1&revision=3"), "");
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(files(&String::from_utf8_lossy(&body))["windows"]["Users"].as_str().unwrap().contains("designItem"));
+    let (_, body) = ask(&address, "POST", &path("invoke"), r#"{"command":"started","args":{},"browser":"x","settings":{}}"#);
+    assert_eq!(files(&String::from_utf8_lossy(&body)), json!({ "value": { "main": "Users" } }));
+    // The unsaved Design text's project is drawn when asked for.
+    let mut draft = clarity_project::load_modules(&dir).unwrap();
+    draft.files.iter_mut().flat_map(|f| &mut f.pages).find(|p| p.name.name == "Users").unwrap().title = Some("Drafted".into());
+    server.set_draft(Some(draft));
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Users&design=1&draft=1"), "");
+    assert!(files(&String::from_utf8_lossy(&body))["model"].to_string().contains("Drafted"));
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Users&design=1"), "");
+    assert!(!files(&String::from_utf8_lossy(&body))["model"].to_string().contains("Drafted"));
+    // A page's preflight, and nothing outside the secret or the resources folder.
+    let (head, _) = ask(&address, "OPTIONS", &path("invoke"), "");
+    assert!(head.starts_with("HTTP/1.1 204") && head.contains("Access-Control-Allow-Headers: Content-Type"), "{head}");
+    assert!(ask(&address, "GET", "/other/clarity-ui-page.js", "").0.starts_with("HTTP/1.1 404"));
+    assert!(ask(&address, "GET", &path("resources/../todo.clarity"), "").0.starts_with("HTTP/1.1 404"));
+    assert!(ask(&address, "GET", &path("files.json"), "").0.starts_with("HTTP/1.1 400"));
+    assert_eq!(preview::query_of("window=Ma%20in&design=1"), [("design".to_string(), "1".to_string()), ("window".to_string(), "Ma in".to_string())].into_iter().collect());
+}
+
+/// A copy of a project's file and folder, without what was built or kept.
+fn copy_project(from_file: &Path, to: &Path) -> std::path::PathBuf {
+    fn copy(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for entry in std::fs::read_dir(from).unwrap().flatten() {
+            let name = entry.file_name();
+            if name == "out" || name == "data" {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                copy(&path, &to.join(&name));
+            } else {
+                std::fs::copy(&path, to.join(&name)).unwrap();
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(to);
+    std::fs::create_dir_all(to).unwrap();
+    let file = to.join(from_file.file_name().unwrap());
+    std::fs::copy(from_file, &file).unwrap();
+    copy(&from_file.with_extension(""), &file.with_extension(""));
+    file
+}
+
+/// The IDE's own backend as far as its preview and designer use it, for a
+/// page of the IDE run by Vite in a browser without Tauri: each command of
+/// the page's `invoke` posted as `{cmd, args}`, answered `{value}` or `{error}`.
+fn ide_backend(file: std::path::PathBuf, preview_address: String) -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = format!("http://{}/", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            let mut length = 0;
+            loop {
+                let mut header = String::new();
+                if reader.read_line(&mut header).unwrap_or(0) == 0 || header.trim().is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = header.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0; length];
+            let _ = reader.read_exact(&mut body);
+            let asked: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+            let dir = clarity_project::module_dir(&file);
+            let load = || clarity_spec::Preview::new(clarity_project::load_modules(&dir).unwrap());
+            let args = &asked["args"];
+            let answer = match asked["cmd"].as_str().unwrap_or_default() {
+                "initial_project" => json!({ "value": file.display().to_string() }),
+                "resource_kinds" => json!({ "value": clarity_spec::resources::kinds() }),
+                "open_project" | "check_project" => json!({ "value": load() }),
+                "project_file" => json!({ "value": clarity_project::load(&file) }),
+                "preview_server_address" => json!({ "value": preview_address }),
+                "history_counts" => json!({ "value": { "undo": 0, "redo": 0 } }),
+                "apply_edit" => {
+                    // The file as the IDE names it: a module, or a window's file in design/.
+                    let named = Path::new(args["path"].as_str().unwrap_or_default());
+                    let path = if named.is_absolute() { named.to_path_buf() } else { dir.join(named) };
+                    let source = std::fs::read_to_string(&path).unwrap_or_default();
+                    let edit: Result<clarity_spec::edit::Edit, _> = serde_json::from_value(args["edit"].clone());
+                    let project = load().project;
+                    let designed = path.extension().is_some_and(|e| e == "cxaml");
+                    let applied = edit.map_err(|e| e.to_string()).and_then(|edit| {
+                        if designed {
+                            clarity_spec::cxaml::apply(Some(&project), &source, &edit).map_err(|e| e.to_string())
+                        } else {
+                            clarity_spec::edit::apply_in(&project, &source, &edit).map_err(|e| e.to_string())
+                        }
+                    });
+                    match applied {
+                        Ok(outcome) => {
+                            std::fs::write(&path, &outcome.text).unwrap();
+                            json!({ "value": { "preview": load(), "focus": outcome.focus } })
+                        }
+                        Err(why) => json!({ "error": why }),
+                    }
+                }
+                // The report tab's designer, on the spec's model as the IDE's backend answers it (app/src-tauri/src/reports.rs).
+                "report_read" => match clarity_spec::report_design::read(args["text"].as_str().unwrap_or_default()) {
+                    Ok(design) => json!({ "value": clarity_spec::report_design::to_json(&design) }),
+                    Err(why) => json!({ "error": why }),
+                },
+                "report_write" => match clarity_spec::report_design::from_json(args["design"].as_str().unwrap_or_default()) {
+                    Ok(design) => json!({ "value": clarity_spec::report_design::write(&design) }),
+                    Err(why) => json!({ "error": why }),
+                },
+                "report_new_part" => {
+                    let at = (args["at"][0].as_f64().unwrap_or(0.0), args["at"][1].as_f64().unwrap_or(0.0));
+                    match clarity_spec::report_design::new_part(args["kind"].as_str().unwrap_or_default(), at) {
+                        Some(part) => json!({ "value": clarity_spec::report_design::to_json(&part) }),
+                        None => json!({ "error": "no such part" }),
+                    }
+                }
+                "report_with_declaration" => {
+                    let word = |name: &str| args[name].as_str().unwrap_or_default().to_string();
+                    json!({ "value": clarity_spec::report_design::with_declaration(&word("css"), &word("selector"), &word("property"), &word("value")) })
+                }
+                "report_rules" => json!({ "value": clarity_spec::report_design::rules(args["css"].as_str().unwrap_or_default()) }),
+                "save_report" => {
+                    let path = dir.join("reports").join(format!("{}.report", args["name"].as_str().unwrap_or_default()));
+                    std::fs::write(&path, args["text"].as_str().unwrap_or_default()).unwrap();
+                    json!({ "value": load() })
+                }
+                "save_report_stylesheet" => {
+                    std::fs::write(dir.join("reports").join(args["file"].as_str().unwrap_or_default()), args["text"].as_str().unwrap_or_default()).unwrap();
+                    json!({ "value": load() })
+                }
+                _ => json!({ "value": null }),
+            };
+            let text = answer.to_string();
+            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{text}", text.len());
+        }
+    });
+    address
+}
+
+/// Stops a program the test started, however the test ends.
+struct Started(std::process::Child);
+
+impl Drop for Started {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// The IDE's preview and design canvas in a real browser (manual/design.parts.md): the
+/// IDE's page run by Vite, its backend answered by this test, the window
+/// drawn by Clarity.UI's browser files (target/clarity-ui-browser, or
+/// CLARITY_UI_BROWSER) from the preview server. In the preview a click on a
+/// drawn button reaches the preview's program; on the design canvas a click
+/// on a part picks it and a drag moves it in the project's file.
+///
+/// Ignored: it needs Node with the IDE's packages (app/node_modules),
+/// Chromium and the browser files. Run with `cargo test -p clarity-gen --test gen
+/// web_windows::the_ide -- --ignored`; CLARITY_IDE_SHOTS names the folder for
+/// the browser's profile and the screenshots.
+#[test]
+#[ignore]
+fn the_ide_previews_and_designs_on_clarity_ui_in_a_browser() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let shots = std::env::var_os("CLARITY_IDE_SHOTS").map(std::path::PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_TARGET_TMPDIR")).join("ide-live"));
+    std::fs::create_dir_all(&shots).unwrap();
+    let file = copy_project(&repo.join("test-projects/todo.clarity"), &shots.join("project"));
+    let library = match std::env::var_os("CLARITY_UI_BROWSER") {
+        Some(folder) => std::path::PathBuf::from(folder),
+        None => repo.join("target/clarity-ui-browser"),
+    };
+    let (loaded_file, loaded_dir) = (file.clone(), clarity_project::module_dir(&file));
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), &preview::secret()).unwrap();
+    let backend = ide_backend(file.clone(), server.address().to_string());
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let app = repo.join("app");
+    let _vite = Started(std::process::Command::new("node").args(["node_modules/vite/bin/vite.js", "--port", &port.to_string(), "--strictPort", "--host", "127.0.0.1"]).current_dir(&app).stdout(std::process::Stdio::null()).spawn().unwrap());
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(std::time::Instant::now() < end, "Vite did not serve");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let driven = std::process::Command::new("node")
+        .arg(repo.join("crates/clarity-gen/tests/live/ide.mjs"))
+        .args([format!("http://127.0.0.1:{port}/"), backend, shots.display().to_string()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&driven.stdout).to_string();
+    let result: Value = serde_json::from_str(said.lines().last().unwrap_or("null")).unwrap_or_else(|_| panic!("{said}\n{}", String::from_utf8_lossy(&driven.stderr)));
+    assert!(result["error"].is_null(), "{result:#}");
+    // The preview: drawn by Clarity.UI, and a click on a drawn button opens the window it names.
+    assert_eq!(result["preview"]["window"], json!("Main"), "{result:#}");
+    assert_eq!(result["preview"]["opened"], json!("Users"), "{result:#}");
+    // The designer: the layer has a box for each part, a click picks one, a drag moves it in its view's file.
+    assert!(result["design"]["parts"].as_u64().unwrap() >= 3, "{result:#}");
+    assert_eq!(result["design"]["picked"], json!(true), "{result:#}");
+    let text = std::fs::read_to_string(clarity_project::module_dir(&file).join("design/MainView.cxaml")).unwrap();
+    assert!(text.contains(r#"name="usersButton" at="5,12" span="2""#), "the drag moved the button:\n{text}");
+    assert_eq!(result["design"]["follows"], json!(true), "{result:#}");
+    // A column's width dragged on the canvas, and a ribbon button picked there.
+    assert!(result["design"]["column"].as_str().is_some_and(|line| line.contains("title")), "{result:#}");
+    assert_eq!(result["design"]["command"], json!(true), "{result:#}");
+}
+
+/// What you see is what you get: the design canvas and the preview draw a
+/// window with the same library at the same size, so every named part has
+/// the same place on both, the parts that grow included (user, 2026-11-13:
+/// "that isnt wysiwyg... memo in design is not the same height as in
+/// preview!"). Needs Chromium and the browser files, as the test above. Run
+/// with `cargo test -p clarity-gen --test gen web_windows::wysiwyg -- --ignored`.
+#[test]
+#[ignore]
+fn the_design_canvas_lays_out_a_window_as_the_preview_does_wysiwyg() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let shots = std::env::var_os("CLARITY_IDE_SHOTS").map(std::path::PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_TARGET_TMPDIR")).join("ide-wysiwyg"));
+    std::fs::create_dir_all(&shots).unwrap();
+    let file = copy_project(&repo.join("test-projects/novel.clarity"), &shots.join("project"));
+    let library = match std::env::var_os("CLARITY_UI_BROWSER") {
+        Some(folder) => std::path::PathBuf::from(folder),
+        None => repo.join("target/clarity-ui-browser"),
+    };
+    let (loaded_file, loaded_dir) = (file.clone(), clarity_project::module_dir(&file));
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), &preview::secret()).unwrap();
+    let backend = ide_backend(file.clone(), server.address().to_string());
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let app = repo.join("app");
+    let _vite = Started(std::process::Command::new("node").args(["node_modules/vite/bin/vite.js", "--port", &port.to_string(), "--strictPort", "--host", "127.0.0.1"]).current_dir(&app).stdout(std::process::Stdio::null()).spawn().unwrap());
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(std::time::Instant::now() < end, "Vite did not serve");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let driven = std::process::Command::new("node")
+        .arg(repo.join("crates/clarity-gen/tests/live/wysiwyg.mjs"))
+        .args([format!("http://127.0.0.1:{port}/"), backend, shots.display().to_string(), "Bookcase".to_string()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&driven.stdout).to_string();
+    let result: Value = serde_json::from_str(said.lines().last().unwrap_or("null")).unwrap_or_else(|_| panic!("{said}\n{}", String::from_utf8_lossy(&driven.stderr)));
+    assert!(result["error"].is_null(), "{result:#}");
+    let preview_places = result["preview"]["shown"].as_object().unwrap_or_else(|| panic!("{result:#}"));
+    let design_places = result["design"]["shown"].as_object().unwrap_or_else(|| panic!("{result:#}"));
+    let differing: Vec<String> = preview_places
+        .iter()
+        .filter(|(name, place)| design_places.get(*name).is_some_and(|d| d != *place))
+        .map(|(name, place)| format!("{name}: preview {place}, design {}", design_places[name]))
+        .collect();
+    assert!(differing.is_empty(), "parts placed apart on the two canvases:\n{}\nsizes {}", differing.join("\n"), result["sizes"]);
+    for name in ["bookTable", "bookTitleBox", "caseSplitter"] {
+        assert!(design_places.contains_key(name) && preview_places.contains_key(name), "{name} on both canvases: {result:#}");
+    }
+}
+
+#[test]
+fn the_designer_shows_the_page_it_switched_to_and_opens_the_popover_picked() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/records");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    // A container with pages, wherever the test project has one.
+    let page = project.pages().find(|p| p.widgets.iter().any(|w| !w.pages.is_empty())).expect("a window with tabs, steps or sections");
+    let container = page.widgets.iter().find(|w| !w.pages.is_empty()).unwrap();
+    let file = project.files.iter().find(|f| f.pages.iter().any(|p| std::ptr::eq(p, page))).unwrap();
+    let key = clarity_spec::design_keys::project_keys(&project)[&file.path][&container.span.start].clone();
+    assert!(key.starts_with(&format!("design/{}.cxaml#{}/", page.name.name, page.name.name)), "{key}");
+    // The IDE names the container by its key, encoded as a query's value.
+    let encoded = key.replace('#', "%23").replace('/', "%2F");
+    let query = preview::query_of(&format!("window={}&pages={encoded}.1,bad", page.name.name));
+    let showing = preview::showing_of(&query);
+    assert_eq!(showing, [(key.clone(), 1)].into_iter().collect());
+    let designed = files(&preview::files_json(&project, "Records", &Shown::Window(page.name.name.clone()), true, &showing));
+    let markup = designed["windows"][&page.name.name].as_str().unwrap();
+    assert!(markup.contains(&format!("designItem=\"{key}\" designShown=\"2\"")), "{markup}");
+    // A popover picked shows open: its state says so when its window opens.
+    let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec!["nowhere".into()]);
+    let opened = program.answer("open_window", &json!({ "window": page.name.name }));
+    assert_eq!(opened["value"]["state"]["parts"], json!({}), "a name the window has not opens nothing");
+    let named = container.props.name.clone().unwrap();
+    let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec![named.clone()]);
+    assert_eq!(program.answer("open_window", &json!({ "window": page.name.name }))["value"]["state"]["parts"][&named], json!({ "visible": true }));
+}
+
+/// A part stuck to the bottom of its grid says so in the markup, which
+/// Clarity.UI lays out by (conformance/grid-layout.json).
+#[test]
+fn a_part_stuck_to_the_bottom_says_so_in_the_markup() {
+    let source = "module m\n\npage Main: window\n    button \"Save\" name save at 1,11 span 2 bottom\n    label \"Note\" name note at 3,11 span 2\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(markup.contains("<Button name=\"save\" at=\"1,11\" span=\"2\" caption=\"Save\" bottom=\"true\" />"), "{markup}");
+    assert!(!markup.contains("<Label name=\"note\" at=\"3,11\" span=\"2\" caption=\"Note\" bottom"), "{markup}");
+}
+
+/// A striped table says so in the markup, which Clarity.UI draws its rows by;
+/// a table without it says nothing.
+#[test]
+fn a_striped_table_says_so_in_the_markup() {
+    let source = "module m\n\nentity Order\n    number: text(20)\n\npage Main: window\n    data orders: list<Order>\n    table name orders at 1,1 span 12 rows 8 bind orders columns number striped\n    table name plain at 1,9 span 12 rows 3 bind orders columns number\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    let line = |name: &str| markup.lines().find(|l| l.contains(&format!("<Table name=\"{name}\""))).unwrap_or_default().to_string();
+    assert!(line("orders").contains(" striped=\"true\""), "{markup}");
+    assert!(!line("plain").contains("striped"), "{markup}");
+}
+
+/// A timer's tick is no action of the person's: the preview runs no handler
+/// for it and says nothing, so a timer of every tenth of a second does not
+/// pile up notes (the walker test project).
+#[test]
+fn the_preview_says_nothing_for_a_timer_s_tick() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/walker");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let program = PreviewProgram::new(project, "Field");
+    let opened = program.answer("open_window", &json!({ "window": "Field", "with": {} }));
+    let state = opened["value"]["state"].clone();
+    let ticked = program.answer("dispatch_event", &json!({ "state": state, "handler": "stepped" }));
+    assert_eq!(ticked["value"]["messages"], json!([]), "{ticked:#}");
+    assert_eq!(ticked["value"]["state"], state);
+    // A click still says where its handler runs.
+    let clicked = program.answer("dispatch_event", &json!({ "state": state, "handler": "walkClicked" }));
+    assert_eq!(clicked["value"]["messages"][0]["text"]["key"], json!("previewRunsNoHandler"));
+}
+
+/// The designer and the preview show the window picked, not the app's start:
+/// their files name no splash, so it never stands in for the window asked
+/// for; the splash page itself still shows when it is the one picked.
+#[test]
+fn the_preview_shows_the_window_picked_not_the_splash() {
+    let (_, project) = todo();
+    assert!(project.apps().any(|a| a.splash.is_some()), "the todo test project has a splash");
+    for design in [false, true] {
+        let shown = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), design, &Default::default()));
+        let app = shown["apps"].as_object().and_then(|a| a.values().next()).and_then(Value::as_str).unwrap_or_default().to_string();
+        assert!(app.starts_with("<?xml") || app.contains("<App "), "{app}");
+        assert!(!app.contains("splash="), "{app}");
+        let welcome = files(&preview::files_json(&project, "Todo", &Shown::Window("Welcome".into()), design, &Default::default()));
+        assert!(welcome["windows"]["Welcome"].as_str().unwrap().contains("frame=\"none\""));
+    }
+}
+
+/// The sign-in window is a desktop window of its own, as the splash is: at
+/// its size, centred, fixed and with none of the app's frame (no menu, no
+/// toolbar), but with the system's title bar and in the taskbar. The
+/// designer draws it so too; a window that names no size takes the sign-in size.
+#[test]
+fn the_sign_in_window_is_a_window_of_its_own_without_the_app_s_frame() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/shop");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let page = project.pages().find(|p| p.name.name == "SignIn").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    let root = markup.lines().find(|l| l.starts_with("<SignIn")).unwrap_or_else(|| panic!("{markup}"));
+    let size = page.size.expect("the sign-in window names its size");
+    assert!(root.contains(&format!(r#"width="{}" height="{}" startup="centerScreen" resizable="false" frame="none""#, size.width, size.height)), "{root}");
+    assert!(!root.contains("decorations=") && !root.contains("taskbar=") && !root.contains("topmost="), "{root}");
+    let designed = files(&preview::files_json(&project, "Shop", &Shown::Window("SignIn".into()), true, &Default::default()));
+    assert!(designed["windows"]["SignIn"].as_str().unwrap().contains(r#"frame="none""#));
+    let source = "module m\n\npage Enter: signin\n    signin name signIn at 1,1 span 12\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let (width, height) = clarity_spec::layout::SIGNIN_SIZE;
+    assert!(clarity_gen::web_windows::window_markup(&file.pages[0]).contains(&format!(r#"width="{width}" height="{height}" startup="centerScreen""#)));
+}
+
+/// A slide-out picked in a view the designer shows on its own (novel's
+/// ChaptersPart, its Properties beside the chapter list in a splitter's
+/// pane) shows open, as one in a window does.
+#[test]
+fn the_designer_opens_the_slideout_picked_in_a_view() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/novel");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let program = PreviewProgram::new(project.clone(), "ChaptersPart").opening(vec!["properties".into()]);
+    let opened = program.answer("open_window", &json!({ "window": "ChaptersPart" }));
+    assert_eq!(opened["value"]["state"]["parts"]["properties"], json!({ "visible": true }), "{opened}");
+}
+
+/// A slide-out designed on a canvas of its own (Views, marked slideout):
+/// its parts as a window of their own, on its grid and as wide as it slides
+/// out, each keeping its key in the window's file, so picking and changing
+/// one changes the window's file; nothing else of the window shows.
+#[test]
+fn the_designer_draws_a_slideout_as_a_window_of_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/novel");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let shown = Shown::Window("ChaptersPart".into());
+    let whole = files(&preview::files_json(&project, "Novel", &shown, true, &BTreeMap::new()));
+    let alone = files(&preview::files_json_own_canvas(&project, "Novel", &shown, "properties", &BTreeMap::new()).unwrap());
+    let markup = alone["windows"]["ChaptersPart"].as_str().unwrap();
+    let window = whole["windows"]["ChaptersPart"].as_str().unwrap();
+    assert!(markup.contains("name=\"linkTabs\"") && markup.contains("name=\"titleBox\""), "its parts: {markup}");
+    assert!(!markup.contains("name=\"chapterList\"") && !markup.contains("name=\"manuscriptBox\""), "nothing else of the window: {markup}");
+    assert!(!markup.contains("<Slideout"), "its parts stand on its own grid, not in a slide-out: {markup}");
+    // Each part keeps the key it has in the window's markup.
+    let key_of = |text: &str, name: &str| text.split(&format!("name=\"{name}\"")).nth(1).and_then(|rest| rest.split("designItem=\"").nth(1)).and_then(|k| k.split('"').next()).map(str::to_string);
+    for name in ["linkTabs", "titleBox", "researchTable"] {
+        assert_eq!(key_of(markup, name), key_of(window, name), "{name} keeps its key");
+        assert!(key_of(markup, name).is_some(), "{name} has a key");
+    }
+    assert_eq!(alone["width"], json!(420), "as wide as it slides out");
+    assert!(preview::files_json_own_canvas(&project, "Novel", &shown, "chapterList", &BTreeMap::new()).is_err(), "only a slide-out or popover");
+}
+
+/// A popover designed on a canvas of its own, as a slide-out is (a double
+/// click on it in the designer): its parts on its own grid, as big as it
+/// opens (its columns and rows), keeping their keys in the window's file.
+#[test]
+fn the_designer_draws_a_popover_as_a_window_of_its_own() {
+    let source = "module m\n\npage Albums: window\n    data onlyVinyl: bool\n    button \"Filter\" name filterButton at 1,1 span 2 on click -> filters\n    popover name filters for filterButton span 4 rows 2\n        checkbox \"Only vinyl\" name vinylBox at 1,1 span 4 bind onlyVinyl\n";
+    let project = clarity_spec::load_sources([("m.clarity", source)]);
+    // Written in the module (a window has a .cxaml of its own in a project), which only the checks mind.
+    let shown = Shown::Window("Albums".into());
+    let alone = files(&preview::files_json_own_canvas(&project, "Albums", &shown, "filters", &BTreeMap::new()).unwrap());
+    let markup = alone["windows"]["Albums"].as_str().unwrap();
+    assert!(markup.contains("name=\"vinylBox\""), "its parts: {markup}");
+    assert!(!markup.contains("name=\"filterButton\"") && !markup.contains("<Popover"), "nothing else of the window: {markup}");
+    // Four columns of 80 with three gaps of 8; two rows of the project's height with one gap.
+    assert_eq!(alone["width"], json!(4 * 80 + 3 * 8), "as wide as it opens");
+    let rows = clarity_spec::layout::ROW_HEIGHT;
+    assert_eq!(alone["height"], json!(2 * rows + 8), "as high as it opens");
+}
+
+/// The preview tells the page whether the project is a desktop one, so its
+/// parts take the desktop shape (docs/ledger/files-pictures.md, step 6).
+#[test]
+fn the_preview_s_files_say_whether_the_project_is_a_desktop_one() {
+    let files: serde_json::Value = serde_json::from_str(&preview::with_desktop("{\"windows\":{}}\n", true)).unwrap();
+    assert_eq!(files["desktop"], true);
+    let files: serde_json::Value = serde_json::from_str(&preview::with_desktop("{\"windows\":{}}\n", false)).unwrap();
+    assert_eq!(files["desktop"], false);
+}
+
+/// The preview serves what a program carries among its resources (a
+/// report among them) and each report's sample data, which its pdfReport
+/// part shows while no code gives it data; files.json names them all.
+#[test]
+fn the_preview_serves_the_reports_and_their_sample_data() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects/invoices.clarity");
+    let dir = clarity_project::module_dir(&file);
+    let library = Path::new(env!("CARGO_TARGET_TMPDIR")).join("preview-library-reports");
+    std::fs::create_dir_all(&library).unwrap();
+    let (loaded_file, loaded_dir) = (file.clone(), dir.clone());
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), "s3cret").unwrap();
+    let address = server.address().to_string();
+    let path = |rest: &str| format!("/s3cret/{rest}");
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Orders&design=0"), "");
+    let read: Value = serde_json::from_slice(&body).unwrap();
+    let named: Vec<&str> = read["resources"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+    assert!(named.contains(&"reports/Invoice.report") && named.contains(&"reports/Invoice.sample.json"), "{named:?}");
+    let (head, body) = ask(&address, "GET", &path("resources/reports/Invoice.sample.json"), "");
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    let sample: Value = serde_json::from_slice(&body).unwrap();
+    assert!(sample["order"]["lines"].as_array().is_some_and(|l| !l.is_empty()), "{sample}");
+    assert!(ask(&address, "GET", &path("resources/reports/Invoice.report"), "").0.starts_with("HTTP/1.1 200"));
+}
+
+/// The report tab's designer reads and writes its report through the backend,
+/// on the spec's model (docs/ledger/reports-pdf.md, Model in Rust): a report
+/// opens with its bands and parts, a part dragged, a look set, a part added,
+/// undo and redo each reach the report's file. Needs Chromium; run with
+/// `cargo test -p clarity-gen --test gen web_windows::report_designer -- --ignored`.
+#[test]
+#[ignore]
+fn the_report_designer_reads_and_writes_through_the_backend() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let shots = std::env::var_os("CLARITY_IDE_SHOTS").map(std::path::PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_TARGET_TMPDIR")).join("ide-report"));
+    let _ = std::fs::remove_dir_all(&shots);
+    std::fs::create_dir_all(&shots).unwrap();
+    let file = copy_project(&repo.join("test-projects/todo.clarity"), &shots.join("project"));
+    let reports = clarity_project::module_dir(&file).join("reports");
+    std::fs::create_dir_all(&reports).unwrap();
+    let report = reports.join("Tasks.report");
+    let start = "<Report name=\"Tasks\" paper=\"A4\" margin=\"20mm\" stylesheet=\"tasks.css\">\n  <ReportHeader height=\"30mm\">\n    <Text at=\"0,0\" size=\"80,10\" key=\"tasksTitle\" class=\"title\" />\n    <Text at=\"100,0\" size=\"40,6\" key=\"tasksDate\" />\n  </ReportHeader>\n</Report>\n";
+    std::fs::write(&report, start).unwrap();
+    std::fs::write(reports.join("tasks.css"), ".title { font-size: 18pt }\n").unwrap();
+    let library = match std::env::var_os("CLARITY_UI_BROWSER") {
+        Some(folder) => std::path::PathBuf::from(folder),
+        None => repo.join("target/clarity-ui-browser"),
+    };
+    let (loaded_file, loaded_dir) = (file.clone(), clarity_project::module_dir(&file));
+    let server = preview::Server::start(std::sync::Arc::new(move || preview::load(&loaded_file, &loaded_dir)), std::sync::Arc::new(move || Ok(library.clone())), &preview::secret()).unwrap();
+    let backend = ide_backend(file.clone(), server.address().to_string());
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let app = repo.join("app");
+    let _vite = Started(std::process::Command::new("node").args(["node_modules/vite/bin/vite.js", "--port", &port.to_string(), "--strictPort", "--host", "127.0.0.1"]).current_dir(&app).stdout(std::process::Stdio::null()).spawn().unwrap());
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(std::time::Instant::now() < end, "Vite did not serve");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let driven = std::process::Command::new("node")
+        .arg(repo.join("crates/clarity-gen/tests/live/report.mjs"))
+        .args([format!("http://127.0.0.1:{port}/"), backend, shots.display().to_string(), reports.display().to_string()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&driven.stdout).to_string();
+    let result: Value = serde_json::from_str(said.lines().last().unwrap_or("null")).unwrap_or_else(|_| panic!("{said}\n{}", String::from_utf8_lossy(&driven.stderr)));
+    assert!(result["error"].is_null(), "{result:#}");
+    assert_eq!(result["opened"]["parts"], json!(2), "{result:#}");
+    assert_eq!(result["opened"]["unchanged"], json!(true), "a report just opened is not written again: {result:#}");
+    assert!(result["moved"].as_str().is_some_and(|t| t.contains("<Text at=\"20,0\" size=\"80,10\" key=\"tasksTitle\" class=\"title\" />")), "{result:#}");
+    assert_eq!(result["undone"], json!(start), "{result:#}");
+    assert_eq!(result["redone"], result["moved"], "{result:#}");
+    assert!(result["styled"]["css"].as_str().is_some_and(|c| c.contains("font-weight: bold")), "{result:#}");
+    assert_eq!(result["styled"]["drawn"], json!("700"), "{result:#}");
+    assert!(result["added"].as_str().is_some_and(|t| t.matches("<Text ").count() == 3), "{result:#}");
+}

@@ -165,8 +165,9 @@ internal static class WireJson
 
     /// <summary>
     /// A part's state as the library reads it: what code may have set. A
-    /// caption without text and a tab, step or section at 0 are left out,
-    /// so the design's show.
+    /// caption without text and a tab or step at 0 are left out, so the
+    /// design's show; an accordion's section goes always, 0 being none open
+    /// (conformance/accordions.json).
     /// </summary>
     public static JsonObject Part(PartState part, IReadOnlyDictionary<string, object?>? values)
     {
@@ -189,8 +190,7 @@ internal static class WireJson
             state["tab"] = part.Tab;
         if (part.Step > 0)
             state["step"] = part.Step;
-        if (part.OpenSection > 0)
-            state["open"] = part.OpenSection;
+        state["open"] = part.OpenSection;
         if (part.Grid != 0)
             state["grid"] = part.Grid;
         if (part.Snap)

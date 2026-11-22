@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="walker.Field" title="@fieldTitle" width="820" height="520" onopen="fieldOpened">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="FieldView" />
+  </Content>
+</Window>

@@ -30,6 +30,8 @@ pub enum Action {
     /// Press a piece's Build.
     #[default]
     Build,
+    /// Press a native piece's Build debug.
+    BuildDebug,
     /// Remove a build folder of the Disk tab.
     Remove,
     /// Pick a piece's own build (`mine`) or the release, as its tab's Swap does.

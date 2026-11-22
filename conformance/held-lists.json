@@ -1,0 +1,20 @@
+{
+  "about": "A stored record's list (order.lines) loads with the record, one level deep, by the one reference of each listed record back to it (docs/ledger/runtime-data.md, step 2). A find loads each list with one read for all the records it found, `ownersPerRead` owners at a time (well below the fewest parameters a database takes in one statement, SQL Server's 2100), and gives each record exactly its own items, in the order they were stored; never one read per record. A case saves `orders` orders (ids 1 to `orders`), then its `lines` in their order, each `[order, product]` (an order beyond `orders` was not asked for), finds the orders, and expects each order named in `expect` to hold the products given, and the lines to be read `reads` times.",
+  "ownersPerRead": 500,
+  "cases": [
+    {
+      "name": "three orders, one read",
+      "orders": 3,
+      "lines": [[3, "c1"], [1, "a1"], [3, "c2"], [1, "a2"]],
+      "expect": { "1": ["a1", "a2"], "2": [], "3": ["c1", "c2"] },
+      "reads": 1
+    },
+    {
+      "name": "1200 orders, read 500 at a time",
+      "orders": 1200,
+      "lines": [[3, "c1"], [1, "a1"], [3, "c2"], [1, "a2"], [1200, "z1"], [1300, "other"]],
+      "expect": { "1": ["a1", "a2"], "2": [], "3": ["c1", "c2"], "1199": [], "1200": ["z1"] },
+      "reads": 3
+    }
+  ]
+}

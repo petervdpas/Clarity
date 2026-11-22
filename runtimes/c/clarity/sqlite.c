@@ -113,30 +113,6 @@ static bool batch(ClarityDriver* driver, const char* sql) {
     return sqlite3_exec(db, sql, NULL, NULL, NULL) == SQLITE_OK || failed(db);
 }
 
-// A step runs with references unchecked, since it may build a table again
-// that others refer to; they are checked before the step is kept.
-static bool steps(ClarityDriver* driver, int version, const ClarityStep* step) {
-    if (!batch(driver, "BEGIN")) return false;
-    for (size_t i = 0; i < step->count; ++i)
-        if (!batch(driver, step->statements[i])) return false;
-    ClarityRows broken = {0};
-    if (!rows(driver, "SELECT 1 FROM pragma_foreign_key_check", NULL, &broken)) return false;
-    if (broken.count) return clarity_fail(CLARITY_STORAGE, "migration step leaves references to records that do not exist");
-    return batch(driver, clarity_applied_sql(version)) && batch(driver, "COMMIT");
-}
-
-static bool apply(ClarityDriver* driver, int version, const ClarityStep* step) {
-    sqlite3* db = db_of(driver);
-    if (!batch(driver, "PRAGMA foreign_keys = OFF")) return false;
-    if (!steps(driver, version, step)) {
-        // Straight to SQLite, so the error that stopped the step stays the one reported.
-        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-        sqlite3_exec(db, "PRAGMA foreign_keys = ON", NULL, NULL, NULL);
-        return false;
-    }
-    return batch(driver, "PRAGMA foreign_keys = ON");
-}
-
 static void close_driver(ClarityDriver* driver) {
     sqlite3_close(db_of(driver));
     free(driver);
@@ -151,12 +127,14 @@ bool clarity_open_sqlite(const char* path, ClarityDriver** out) {
         return result;
     }
     sqlite3_extended_result_codes(db, 1);
+    // A write waits up to five seconds while another program holds the database, as on every stack.
+    sqlite3_busy_timeout(db, 5000);
     Sqlite* s = calloc(1, sizeof *s);
     if (!s) {
         sqlite3_close(db);
         return clarity_fail(CLARITY_STORAGE, "out of memory");
     }
-    s->driver = (ClarityDriver){CLARITY_SQLITE, execute, insert, rows, batch, apply, close_driver};
+    s->driver = (ClarityDriver){CLARITY_SQLITE, execute, insert, rows, batch, close_driver};
     s->db = db;
     if (!batch(&s->driver, "PRAGMA foreign_keys = ON")) {
         close_driver(&s->driver);

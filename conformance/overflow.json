@@ -1,0 +1,30 @@
+{
+  "about": "Whole numbers and decimals that do not fit, on every stack (the user, 2026-11-21: \"Value error, handler stops\"). A whole number is 64 bits; a decimal holds up to 28 places with a whole number of units that fits in 96 bits, as Rust and C# keep it. A result with more places than fit is rounded to the places that do (a tie to the even digit); a result that does not fit even with no places is a value error: the handler stops and the window says it. Each case gives the `kind` (whole or decimal), the `op` (+, -, *, div, mod or neg, which takes only `a`), `a`, `b` and the `result` as text, or `error` true.",
+  "cases": [
+    { "kind": "whole", "op": "+", "a": "2", "b": "3", "result": "5" },
+    { "kind": "whole", "op": "+", "a": "9223372036854775807", "b": "-1", "result": "9223372036854775806" },
+    { "kind": "whole", "op": "+", "a": "9223372036854775807", "b": "1", "error": true },
+    { "kind": "whole", "op": "-", "a": "-9223372036854775808", "b": "1", "error": true },
+    { "kind": "whole", "op": "-", "a": "0", "b": "-9223372036854775808", "error": true },
+    { "kind": "whole", "op": "*", "a": "-4611686018427387904", "b": "2", "result": "-9223372036854775808" },
+    { "kind": "whole", "op": "*", "a": "4611686018427387904", "b": "2", "error": true },
+    { "kind": "whole", "op": "*", "a": "3037000500", "b": "3037000500", "error": true },
+    { "kind": "whole", "op": "div", "a": "-9223372036854775808", "b": "-1", "error": true },
+    { "kind": "whole", "op": "mod", "a": "-9223372036854775808", "b": "-1", "result": "0" },
+    { "kind": "whole", "op": "neg", "a": "-9223372036854775807", "result": "9223372036854775807" },
+    { "kind": "whole", "op": "neg", "a": "-9223372036854775808", "error": true },
+    { "kind": "decimal", "op": "+", "a": "1.5", "b": "1.25", "result": "2.75" },
+    { "kind": "decimal", "op": "*", "a": "1250.50", "b": "2", "result": "2501.00" },
+    { "kind": "decimal", "op": "*", "a": "0.5", "b": "0.5", "result": "0.25" },
+    { "kind": "decimal", "op": "-", "a": "79228162514264337593543950335", "b": "79228162514264337593543950335", "result": "0" },
+    { "kind": "decimal", "op": "+", "a": "79228162514264337593543950335", "b": "1", "error": true },
+    { "kind": "decimal", "op": "-", "a": "-79228162514264337593543950335", "b": "1", "error": true },
+    { "kind": "decimal", "op": "*", "a": "39614081257132168796771975167", "b": "2", "result": "79228162514264337593543950334" },
+    { "kind": "decimal", "op": "*", "a": "39614081257132168796771975168", "b": "2", "error": true },
+    { "kind": "decimal", "op": "*", "a": "100000000000000000000", "b": "100000000000000000000", "error": true },
+    { "kind": "decimal", "op": "+", "a": "79228162514264337593543950334", "b": "0.4", "result": "79228162514264337593543950334" },
+    { "kind": "decimal", "op": "*", "a": "1.0000000000000000000000000001", "b": "1.0000000000000000000000000001", "result": "1.0000000000000000000000000002" },
+    { "kind": "decimal", "op": "*", "a": "0.00000000000001", "b": "0.00000000000001", "result": "0.0000000000000000000000000001" },
+    { "kind": "decimal", "op": "neg", "a": "-79228162514264337593543950335", "result": "79228162514264337593543950335" }
+  ]
+}

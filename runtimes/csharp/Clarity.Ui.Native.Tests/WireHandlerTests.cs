@@ -53,6 +53,13 @@ public sealed class InkViewModel() : WindowViewModel(Db.Empty())
 
     public bool Run_RefuseWith1() => Handle(() => throw new RefusedException(Text.Plain("not with that")), command: "RefuseWith1");
 
+    protected internal override Func<bool>? CallOf(string written) => written switch
+    {
+        "digit(7)" => Run_Digit7,
+        "refuseWith(1)" => Run_RefuseWith1,
+        _ => null,
+    };
+
     void OnRedInk() => Inked++;
 
     void OnNameChanged()

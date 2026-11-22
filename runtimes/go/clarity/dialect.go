@@ -72,6 +72,26 @@ func (d Dialect) number(expr string) string {
 	return expr
 }
 
+// orderKey is expr as a key of ORDER BY with an empty value first either
+// way (conformance/queries.json). SQLite and PostgreSQL say NULLS FIRST;
+// MySQL and SQL Server put an empty value first going up, so a key going
+// down gets a key before it that is 0 for empty.
+func (d Dialect) orderKey(expr string, descending bool) string {
+	switch {
+	case d == Sqlite || d == Postgres:
+		if descending {
+			return expr + " DESC NULLS FIRST"
+		}
+		return expr + " NULLS FIRST"
+	case !descending:
+		return expr
+	case d == Mysql:
+		return expr + " IS NULL DESC, " + expr + " DESC"
+	default:
+		return "CASE WHEN " + expr + " IS NULL THEN 0 ELSE 1 END, " + expr + " DESC"
+	}
+}
+
 // contains is column containing the LIKE pattern mark, ignoring case. The
 // pattern escapes its wildcards with !.
 func (d Dialect) contains(column, mark string) string {

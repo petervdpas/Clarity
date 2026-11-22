@@ -20,7 +20,3 @@ const char* clarity_backup_file_name(const char* database, int64_t seconds, int 
 /// Removes the automatic backups of the database file `database` beyond the
 /// newest ten; manual ones, other databases' and other files stay.
 void clarity_prune_backups(const char* database);
-/// Backs up the SQLite database `driver` has open before step `step` is
-/// applied to it; nothing for another kind of database or one in memory.
-/// False (the error set) when it could not, which stops the migration.
-bool clarity_backup_before_migration(ClarityDriver* driver, int step);

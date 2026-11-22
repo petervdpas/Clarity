@@ -18,8 +18,8 @@ Clarity writes a Go module into the output folder (`out` by default), all in pac
 
 - `go.mod` and `go.sum`: the module, its requirements and their sums, as `go mod tidy` would write them.
 - `<module>_module.go`: one file per Clarity module, with its enums, records, functions, actions, data events, windows and handlers.
-- `schema.go`: the migration steps of every database Clarity owns.
-- `main.go`: opens and migrates the databases and runs the windows on Clarity.UI (or serves them, for the web target).
+- `schema.go`: how many migration steps each database Clarity owns has, which the program checks at start.
+- `main.go`: opens and checks the databases and runs the windows on Clarity.UI (or serves them, for the web target).
 - `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
 - `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources.
 - `browser/`, with the `web` target: the files the server serves. `index.html` is the page; `clarity/files.json` holds what Clarity.UI draws from in the browser (the windows and app frames, the themes, the data dictionary, the title and size) and `clarity/resources/` the resources; `clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js` and `clarity-ui-page.js` are Clarity.UI for the browser, which Clarity copies in when it writes the program (from the folder `CLARITY_UI_BROWSER` names, else the ones Clarity carries, else the release's archive, fetched once). The server answers the browser at `/clarity/invoke`, requests side by side, so a long call shows its bar and Stop there too. It listens at `--address host:port`, else `CLARITY_ADDRESS`, else the project's port. A web program alone needs no cgo and no native library, unless its code reads or writes a [data format](code.formats.md).
@@ -35,7 +35,7 @@ The program embeds all of it. Do not edit these files. Change the project in Cla
 
 The generated module carries no runtime sources. It requires the Go module `github.com/petervdpas/Clarity/runtimes/go`, which has these packages:
 
-- `clarity`: records, storage (SQLite included), queries, migrations and the binding to the screen.
+- `clarity`: records, storage (SQLite included), queries and the binding to the screen.
 - `shell`: the commands of the screen, the program Clarity.UI asks (on the desktop and over the web), and the web server.
 - `ui`: the desktop on Clarity.UI, calling its library through cgo.
 - `postgresql`, `mysql` and `sqlserver`: one per server database. A generated module imports only the ones its data sources use, and its go.mod leaves out the others' dependencies.

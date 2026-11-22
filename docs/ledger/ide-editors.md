@@ -19,7 +19,7 @@ Progress: 85%
 
 ## Tests
 - `app/src/lib/highlight.test.ts`, codeLanguages.test.ts, codeParts.test.ts, engines.test.ts, markdown.test.ts, customDecl.test.ts
-- `crates/clarity-spec/tests/highlight.rs` (grammar kept equal to the highlighter; `CLARITY_WRITE_GRAMMAR=1`), editor_snippets.rs, decl_lines.rs
+- `crates/clarity-spec/tests/spec/highlight.rs` (grammar kept equal to the highlighter; `CLARITY_WRITE_GRAMMAR=1`), editor_snippets.rs, decl_lines.rs
 - `crates/clarity-project/tests/engines.rs`, part_stacks.rs
 
 ## Open

@@ -269,15 +269,16 @@ struct OrderKey {
 }
 
 impl OrderKey {
-    /// The key as SQL. Through references, each step is a subquery on its
-    /// own alias (t1, t2, ...) that finds the referred record by the column
-    /// of the step before.
+    /// The key as SQL, an empty value first. Through references, each step
+    /// is a subquery on its own alias (t1, t2, ...) that finds the referred
+    /// record by the column of the step before.
     fn sql(&self, dialect: Dialect, table: &str) -> String {
-        let direction = if self.descending { " DESC" } else { "" };
-        if self.through.is_empty() {
-            return format!("{}{direction}", column_sql(dialect, self.column, self.numeric));
-        }
-        format!("{}{direction}", self.step(dialect, &dialect.quote(table), 0))
+        let expr = if self.through.is_empty() {
+            column_sql(dialect, self.column, self.numeric)
+        } else {
+            self.step(dialect, &dialect.quote(table), 0)
+        };
+        dialect.order_key(expr, self.descending)
     }
 
     fn step(&self, dialect: Dialect, outer: &str, at: usize) -> String {

@@ -94,7 +94,7 @@ fn fields_json(project: &Project, entity: &Entity, lines: &[clarity_spec::code::
     for field in &entity.fields {
         let name = &field.name.name;
         let kind = match &field.ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::File | FieldType::Language | FieldType::Theme | FieldType::Secret => json!({ "kind": "text" }),
+            clarity_spec::kept_as_text!() => json!({ "kind": "text" }),
             FieldType::Integer | FieldType::Duration | FieldType::Id => json!({ "kind": "integer" }),
             FieldType::Decimal { .. } | FieldType::Money => json!({ "kind": "decimal" }),
             FieldType::Bool => json!({ "kind": "bool" }),

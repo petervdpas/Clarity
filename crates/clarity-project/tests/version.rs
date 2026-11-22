@@ -89,3 +89,12 @@ fn the_project_s_title_takes_no_slots() {
     let file = load(&dir.parent().unwrap().join("shop.clarity"));
     assert!(file.problems.iter().any(|p| p.contains("the project's title is plain text") && p.contains("{app.version}")), "{:?}", file.problems);
 }
+
+#[test]
+fn a_version_is_written_as_the_cases_say() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/app-version.json");
+    let cases: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    for c in cases["cases"].as_array().unwrap() {
+        assert_eq!(clarity_project::is_version(c["text"].as_str().unwrap()), c["is"].as_bool().unwrap(), "{c}");
+    }
+}

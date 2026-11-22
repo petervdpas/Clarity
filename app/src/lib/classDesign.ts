@@ -29,7 +29,7 @@ const BOX_KINDS: Record<string, ClassBoxKind> = { entity: "entity", enum: "enum"
 const BASE_NAMES: Record<ClassBoxKind, string> = { entity: "Entity", enum: "Enum", engine: "Engine", module: "module" };
 
 /** The stereotype a kind is written with. */
-const STEREOTYPES: Record<ClassBoxKind, string | null> = { entity: null, enum: "enumeration", engine: "engine", module: "module" };
+export const STEREOTYPES: Record<ClassBoxKind, string | null> = { entity: null, enum: "enumeration", engine: "engine", module: "module" };
 
 /** The kinds of line the palette draws, by tool. */
 const LINKS: Record<string, ClassLink> = { association: "association", composition: "composition", aggregation: "aggregation" };

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The artists as cards, with the one opened in the editor that slides out from the right. -->
+<Window class="music.ArtistBrowse" title="@artistBrowseTitle" onopen="filterChanged" onreturn="filterChanged">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="ArtistBrowseView" />
+  </Content>
+  <Slideout name="artistSlide" at="1,1" span="12" rows="6" caption="@artistSlideout" resizable="true" slideWidth="760" pinnable="true" max="1100" min="520">
+    <Content name="artistSlideContent" at="1,1" span="12" rows="6">
+      <View name="ArtistEditor" onsaved="filterChanged" />
+    </Content>
+  </Slideout>
+</Window>

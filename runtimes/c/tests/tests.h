@@ -39,19 +39,11 @@
     X(a_file_in_a_store_is_kept_under_its_name_in_a_folder_of_its_contents) \
     X(a_copy_goes_to_the_downloads_folder_under_a_free_name)     \
     X(a_file_is_kept_with_its_name_in_the_database_or_its_store) \
+    X(a_write_waits_while_another_program_holds_the_database) \
     X(a_list_is_kept_as_compact_json)                             \
-    X(a_typed_item_is_added_as_every_runtime_adds_it)             \
-    X(every_reorder_case_moves_as_every_runtime_does)             \
-    X(every_range_case_moves_as_every_runtime_does)               \
     X(a_drawing_is_svg_text_as_every_runtime_writes_it)           \
     X(a_canvas_acts_as_every_runtime_does)                        \
     X(a_wizard_walks_its_steps_as_every_runtime_does)             \
-    X(a_dropdown_offers_what_every_runtime_offers)                \
-    X(a_table_shows_its_rows_in_the_order_every_runtime_does)     \
-    X(a_table_pages_its_rows_as_every_runtime_does)               \
-    X(a_tree_shows_its_rows_as_every_runtime_does)                \
-    X(a_chart_groups_its_rows_as_every_runtime_does)              \
-    X(a_chart_of_numbers_takes_its_last_points)                   \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \
     X(every_query_case_gives_its_sql_on_every_database)           \
@@ -61,6 +53,16 @@
     X(a_picture_in_a_file_store_is_a_file_named_by_its_bytes)     \
     X(a_picture_is_copied_from_another_record)                     \
     X(a_store_lists_its_files_as_every_runtime_does)              \
+    X(a_list_is_read_once_for_all_its_owners)                     \
+    X(every_value_is_written_as_every_stack_writes_it)            \
+    X(text_contains_a_part_case_ignored_as_every_stack_does)      \
+    X(the_bus_keeps_as_many_edits_as_every_runtime_keeps)         \
+    X(an_empty_date_is_smallest_as_every_stack_compares_it)       \
+    X(decimals_divide_as_every_stack_divides_them)                \
+    X(numbers_that_do_not_fit_are_a_value_error)                  \
+    X(runtime_errors_are_said_by_their_keys)                      \
+    X(the_defaults_are_the_spec_s)                                \
+    X(a_database_is_checked_as_the_cases_say)                     \
     X(events_run_around_a_save)                                   \
     X(required_fields_are_checked_as_every_runtime_does)          \
     X(a_save_refuses_a_record_with_an_empty_required_field)       \
@@ -95,14 +97,9 @@
     X(a_window_starts_from_the_kept_settings_and_a_handlers_change_is_kept) \
     X(a_command_inside_a_parts_callback_keeps_its_values)         \
     X(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back)  \
-    X(the_runtime_reorders_a_list_and_ctrl_z_puts_it_back)     \
-    X(the_runtime_adds_a_typed_item_or_refuses_it)             \
-    X(the_runtime_moves_a_value_within_its_range)              \
     X(the_runtime_moves_an_object_and_edits_a_drawing)         \
     X(the_runtime_walks_a_wizard)                              \
     X(the_runtime_finds_a_dropdowns_options)                   \
-    X(a_reply_fills_the_shown_rows_of_its_views)               \
-    X(a_view_event_sorts_pages_opens_and_closes)               \
     X(a_readonly_part_takes_back_what_the_screen_changed)      \
     X(a_table_takes_back_a_change_to_a_column_it_does_not_edit) \
     X(the_edit_bus_keeps_the_record_as_every_runtime_does)     \
@@ -151,6 +148,7 @@
     X(a_file_source_holds_the_records_inside_its_records_in_their_own_table) \
     X(a_secret_is_kept_read_and_forgotten)                       \
     X(settings_keep_their_secrets_out_of_the_file) \
+    X(a_secrets_windows_target_is_every_stacks) \
     X(a_database_connects_with_a_secret_setting) \
     X(a_secret_connection_not_kept_says_so) \
     X(any_other_failure_says_the_runtimes_message) \
@@ -163,7 +161,6 @@
     X(an_open_says_new_window_only_when_asked) \
     X(code_quits_and_opens_the_keys_window_through_the_layer) \
     X(backups_are_named_and_pruned_as_every_stack_does) \
-    X(a_database_with_a_schema_is_backed_up_before_new_steps) \
     X(signing_in_is_as_every_runtime_does) \
     X(allow_readable_and_hashed_say_clarity_words) \
     X(a_command_line_signs_in_before_its_command) \

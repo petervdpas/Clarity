@@ -6,15 +6,14 @@ import type { EnumDecl } from "../generated/EnumDecl";
 import type { Field } from "../generated/Field";
 import type { Preview } from "../generated/Preview";
 import type { JsonValue } from "../generated/serde_json/JsonValue";
-import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
+import { formatValue, userLocale, type FieldFormat, type Formats } from "./format";
 import { languageChoice } from "./i18n.svelte.ts";
-import { keyValue, pickLanguage, translate, translateText, type Texts } from "./translate";
+import { keyValue, pickLanguage, translate, type Texts } from "./translate";
 import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "../generated/ThemeDecl";
 import { shownList, type Item } from "./listFields";
 import { scheme, themeChoice } from "./scheme.svelte.ts";
 import { keepsItsDigits } from "./windowData";
-import { keyResource } from "./resources";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -24,10 +23,6 @@ export function findEntity(preview: Preview, name: string): Entity | undefined {
 
 export function findEnum(preview: Preview, name: string): EnumDecl | undefined {
   return preview.project.files.flatMap((f) => f.enums).find((e) => e.name.name === name);
-}
-
-export function findField(entity: Entity, name: string): Field | undefined {
-  return entity.fields.find((f) => f.name.name === name);
 }
 
 /** Where values are shown: the locale of the person looking, and the
@@ -51,17 +46,6 @@ export function languageOf(preview: Preview): string | null {
 /** The values to look keys up in, in the language texts show in. */
 export function textsOf(preview: Preview): Texts {
   return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en", version: preview.project.version };
-}
-
-/** The text of Markdown file `name` of the project's resources. */
-export function markdownOf(preview: Preview, name: string): string {
-  return preview.project.resources?.markdown[name] ?? "";
-}
-
-/** The resource file a key (`@gameRules`) points at in the language texts show in, if it points at one. */
-export function keyFile(preview: Preview, caption: string): string | undefined {
-  const texts = textsOf(preview);
-  return keyResource(preview.project.resource_keys, caption, texts.picked ?? texts.fallback, texts.fallback);
 }
 
 /** A text of the project as the person reads it: a key's value, or as written. */
@@ -187,15 +171,11 @@ export function itemText(preview: Preview, field: Field, item: Item): string {
   return String(item);
 }
 
-/** The field types a table cell can edit, as the language allows them in `edit`. */
-const CELL_EDIT_KINDS = ["text", "email", "url", "color", "folder", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
+/** The field types a table cell can edit, as the language allows them in `edit` (clarity_spec::widgets::cell_edits). */
+export const CELL_EDIT_KINDS = ["text", "email", "url", "color", "folder", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
 
 export function cellEdits(field: Field): boolean {
   return CELL_EDIT_KINDS.includes(field.type.kind);
-}
-
-export function isNumeric(field: Field): boolean {
-  return ["integer", "decimal", "money", "id", "duration"].includes(field.type.kind);
 }
 
 /** Compares two cell values for sorting: numbers numerically, the rest as text. */
@@ -219,28 +199,11 @@ export function describeType(field: Field): string {
   }
 }
 
-/** Text from the backend as shown: its slots filled in the person's
- *  format, an enum value by its label. */
-export function shownText(preview: Preview, text: ShownText): string {
-  const texts = textsOf(preview);
-  const label = (enumName: string, value: string) => {
-    const variant = findEnum(preview, enumName)?.variants.find((v) => v.name.name === value);
-    return variant ? translate(variant.label, texts) : value;
-  };
-  return fillText(translateText(text, texts), formatsOf(preview), label, (word) => ownWord(preview, word));
-}
-
 /** The theme shown: the one chosen among those the application offers, or
  *  the one it starts with; null when the project file names none. */
 export function themeOf(preview: Preview): ThemeDecl | null {
   const name = pickTheme(preview.project.themes, themeChoice.theme);
   return (name && preview.project.files.flatMap((f) => f.themes).find((t) => t.name.name === name)) || null;
-}
-
-/** The themes the application offers, as declared, in its order. */
-export function offeredThemes(preview: Preview): ThemeDecl[] {
-  const all = preview.project.files.flatMap((f) => f.themes);
-  return preview.project.themes.map((name) => all.find((t) => t.name.name === name)).filter((t): t is ThemeDecl => !!t);
 }
 
 /** What puts a theme on an area (a running window, the designer's canvas):

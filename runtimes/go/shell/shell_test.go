@@ -52,6 +52,9 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 		return clarity.Reply{}, clarity.Refuse(clarity.NewText("{name} is taken").With("name", clarity.SlotText("Ada")))
 	case "fail":
 		return clarity.Reply{}, &clarity.StorageError{What: "locked"}
+	case "divide":
+		_, err := clarity.WholeDiv(1, 0)
+		return clarity.Reply{}, err
 	case "remember":
 		if err := clarity.Save(db, &memo{Text: "kept"}); err != nil {
 			return clarity.Reply{}, err
@@ -148,7 +151,7 @@ func service(t *testing.T) (*Service, *cards) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Migrate([][]string{{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); err != nil {
+	if err := db.Batch("", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"); err != nil {
 		t.Fatal(err)
 	}
 	windows := &cards{}
@@ -579,51 +582,6 @@ func dataOf(reply map[string]any) map[string]any {
 	return reply["state"].(map[string]any)["data"].(map[string]any)
 }
 
-// Reordering (manual/start.how-it-works.md, manual/parts.data.md): the screen sends the move, the runtime gives
-// the list its order and numbers, chooses the moved row and runs the handler,
-// as one edit that Ctrl+Z takes back.
-func TestTheRuntimeReordersAMovedRow(t *testing.T) {
-	c, windows := service(t)
-	db := c.options.Db
-	songs := []any{map[string]any{"id": 1, "place": 1}, map[string]any{"id": 2, "place": 2}, map[string]any{"id": 3, "place": 3}}
-	state := map[string]any{"window": "Card", "instance": 21, "data": map[string]any{"songs": songs}}
-	call(t, c, "dispatch_event", wire(t, map[string]any{"state": state, "handler": "noop"}))
-	move := map[string]any{"state": state, "part": "songsTable", "scope": "form", "list": "songs", "by": "place", "parent": nil,
-		"move": map[string]any{"row": 2, "where": "before", "target": 0}, "handler": "remember"}
-	reply := asked(t, c, "reorder_event", move)
-	if got := wire(t, dataOf(reply)["songs"]); got != `[{"id":3,"place":1},{"id":1,"place":2},{"id":2,"place":3}]` {
-		t.Fatal("the new order and numbers:", got)
-	}
-	if got := wire(t, reply["state"].(map[string]any)["selected"]); got != `{"songsTable":0}` {
-		t.Fatal("the moved row is chosen:", got)
-	}
-	if memos, _ := clarity.All[memo](db); len(memos) != 1 || reply["step"] == nil {
-		t.Fatal("the handler ran as a step", memos, reply["step"])
-	}
-	moved := map[string]any{"window": "Card", "instance": 21, "data": dataOf(reply)}
-	back := asked(t, c, "undo_edit", map[string]any{"state": moved, "scope": "form", "back": true})
-	if got := wire(t, dataOf(back)["songs"]); got != wire(t, songs) {
-		t.Fatal("Ctrl+Z takes the move back:", got)
-	}
-	if memos, _ := clarity.All[memo](db); len(memos) != 0 {
-		t.Fatal("and what its handler saved", memos)
-	}
-	// A refused move answers the window as it is, running nothing.
-	ran := len(windows.log)
-	move["move"] = map[string]any{"row": 0, "key": "up"}
-	refused := asked(t, c, "reorder_event", move)
-	if wire(t, dataOf(refused)["songs"]) != wire(t, songs) || len(windows.log) != ran {
-		t.Fatal("a refused move changed the list or ran its handler", wire(t, refused), windows.log[ran:])
-	}
-	// In a tree, a row's parent goes along: right makes it the last under the row before it.
-	tree := []any{map[string]any{"id": 1, "up": nil, "place": 1}, map[string]any{"id": 2, "up": nil, "place": 2}}
-	branch := asked(t, c, "reorder_event", map[string]any{"state": map[string]any{"window": "Card", "data": map[string]any{"tree": tree}},
-		"part": "treeView", "list": "tree", "by": "place", "parent": "up", "move": map[string]any{"row": 1, "key": "right"}})
-	if got := wire(t, dataOf(branch)["tree"]); got != `[{"id":1,"place":1,"up":null},{"id":2,"place":1,"up":1}]` {
-		t.Fatal("the tree:", got)
-	}
-}
-
 // Canvas modes (manual/parts.graphics.md): the screen sends where the person dropped an
 // object, the runtime snaps it, chooses it and runs on change, as one edit
 // Ctrl+Z takes back; a vector canvas keeps its drawing as SVG.
@@ -662,63 +620,6 @@ func TestTheRuntimeMovesAnObjectAndEditsADrawing(t *testing.T) {
 	want := "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" fill=\"#ff0000\"/>\n</svg>\n"
 	if got := dataOf(drawn)["note"].(map[string]any)["drawing"]; got != want {
 		t.Fatal("the drawing:", got)
-	}
-}
-
-// A typed item for a list field (U1c): the runtime adds it, or refuses it
-// and the list stays.
-func TestTheRuntimeAddsATypedItemOrRefusesIt(t *testing.T) {
-	c, windows := service(t)
-	state := map[string]any{"window": "Card", "instance": 22, "data": map[string]any{"album": map[string]any{"tags": []any{"jazz"}, "years": []any{1999}}}}
-	call(t, c, "dispatch_event", wire(t, map[string]any{"state": state, "handler": "noop"}))
-	added := asked(t, c, "item_event", map[string]any{"state": state, "part": "tagsBox", "scope": "form", "path": "album.tags", "item": "text", "typed": "  live "})
-	if got := wire(t, dataOf(added)["album"]); got != `{"tags":["jazz","live"],"years":[1999]}` || added["refused"] != nil {
-		t.Fatal(got, added["refused"])
-	}
-	back := asked(t, c, "undo_edit", map[string]any{"state": map[string]any{"window": "Card", "instance": 22, "data": dataOf(added)}, "scope": "form", "back": true})
-	if got := wire(t, dataOf(back)["album"]); got != `{"tags":["jazz"],"years":[1999]}` {
-		t.Fatal("Ctrl+Z takes the item back:", got)
-	}
-	ran := len(windows.log)
-	refused := asked(t, c, "item_event", map[string]any{"state": state, "part": "yearsBox", "path": "album.years", "item": "integer", "typed": "twelve", "handler": "remember"})
-	if refused["refused"] != true || wire(t, dataOf(refused)["album"]) != `{"tags":["jazz"],"years":[1999]}` || len(windows.log) != ran {
-		t.Fatal("twelve is no integer", wire(t, refused))
-	}
-	// An enum takes only its values.
-	enum := asked(t, c, "item_event", map[string]any{"state": state, "part": "tagsBox", "path": "album.tags", "item": "enum", "values": []string{"Jazz"}, "typed": "Polka"})
-	if enum["refused"] != true {
-		t.Fatal("Polka is no value of the enum", wire(t, enum))
-	}
-}
-
-// A slider's or spin box's value after a key, a drag or typed text: within
-// its range, in its steps, as the runtime decides.
-func TestTheRuntimeMovesARangedValue(t *testing.T) {
-	c, _ := service(t)
-	state := map[string]any{"window": "Card", "data": map[string]any{"volume": 5, "price": "0.2"}}
-	volume := map[string]any{"state": state, "part": "volumeSlider", "path": "volume", "min": "0", "max": "10", "step": "1", "whole": true}
-	for _, at := range []struct {
-		name, value string
-		want        string
-	}{{"key", "up", "6"}, {"at", "7.6", "8"}, {"typed", "120", "10"}, {"key", "home", "0"}} {
-		args := map[string]any{}
-		for k, v := range volume {
-			args[k] = v
-		}
-		args[at.name] = at.value
-		if got := wire(t, dataOf(asked(t, c, "range_event", args))["volume"]); got != at.want {
-			t.Errorf("%s %s: %s, want %s", at.name, at.value, got, at.want)
-		}
-	}
-	// A decimal stays exact, as text.
-	price := asked(t, c, "range_event", map[string]any{"state": state, "part": "priceBox", "path": "price", "min": nil, "max": "1", "step": "0.1", "whole": false, "key": "up"})
-	if got := wire(t, dataOf(price)["price"]); got != `"0.3"` {
-		t.Fatal(got)
-	}
-	// Typed text that is no number is refused, the value as it was.
-	bad := asked(t, c, "range_event", map[string]any{"state": state, "part": "priceBox", "path": "price", "step": "0.1", "typed": "lots"})
-	if bad["refused"] != true || dataOf(bad)["price"] != "0.2" {
-		t.Fatal(wire(t, bad))
 	}
 }
 
@@ -767,110 +668,9 @@ func TestTheRuntimeWalksAWizard(t *testing.T) {
 // What a dropdown offers for typed text (U1c), as the runtime finds it.
 func TestTheRuntimeFindsADropdownsOptions(t *testing.T) {
 	c, _ := service(t)
-	if got := wire(t, call(t, c, "find_options", `{"kind":"typed","entity":"Customer","field":"city","typed":" ut"}`)); got != `{"value":["Utrecht"]}` {
+	// The records of the entity; the screen searches them as the person types.
+	if got := wire(t, call(t, c, "find_options", `{"entity":"Customer","show":["name"]}`)); got != `{"value":[{"id":1,"text":"Ada"}]}` {
 		t.Error(got)
-	}
-	if got := wire(t, call(t, c, "find_options", `{"kind":"search","entity":"Customer","show":["name"],"typed":"AD"}`)); got != `{"value":[{"id":1,"text":"Ada"}]}` {
-		t.Error(got)
-	}
-	if got := wire(t, call(t, c, "find_options", `{"kind":"search","entity":"Customer","typed":"rome"}`)); got != `{"value":[]}` {
-		t.Error(got)
-	}
-}
-
-// tasksWindow is a window with a table of tasks shown two to a page, a tree
-// of them and a chart of their hours.
-func tasksWindow() map[string]any {
-	tasks := []any{
-		map[string]any{"id": 1, "title": "Milk", "hours": 9, "up": nil},
-		map[string]any{"id": 2, "title": "bread", "hours": 10, "up": 1},
-		map[string]any{"id": 3, "title": "Apples", "hours": 9, "up": 2},
-	}
-	views := map[string]any{
-		"tasksTable": map[string]any{"kind": "table", "sortable": true, "list": "tasks", "columns": []any{map[string]any{"field": "title", "kind": "text"}, map[string]any{"field": "hours", "kind": "number"}}, "order": nil, "page": 2, "at": 1},
-		"tasksTree":  map[string]any{"kind": "tree", "list": "tasks", "parent": "up", "key": "id", "open": []any{}},
-		"hoursChart": map[string]any{"kind": "chart", "list": "tasks", "by": "hours", "byKind": "number", "measure": "count", "of": "", "values": []any{}},
-	}
-	return map[string]any{"window": "Card", "data": map[string]any{"tasks": tasks}, "views": views, "selected": map[string]any{}}
-}
-
-func viewOf(reply map[string]any, part string) string {
-	views, _ := reply["state"].(map[string]any)["views"].(map[string]any)
-	view, _ := views[part].(map[string]any)
-	shown := map[string]any{}
-	for _, name := range []string{"shown", "pages", "at", "order", "open", "groups"} {
-		if v, ok := view[name]; ok {
-			shown[name] = v
-		}
-	}
-	text, _ := json.Marshal(shown)
-	return string(text)
-}
-
-// The shown rows (manual/start.how-it-works.md): after every reply the runtime fills in what
-// each table, tree and chart shows, so a handler's new row shows at once.
-func TestEveryReplyFillsTheShownRows(t *testing.T) {
-	c, _ := service(t)
-	reply := asked(t, c, "dispatch_event", map[string]any{"state": tasksWindow(), "handler": "noop"})
-	if got := viewOf(reply, "tasksTable"); got != `{"at":1,"order":null,"pages":{"count":3,"from":1,"page":1,"pages":2,"to":2},"shown":[0,1]}` {
-		t.Error("table:", got)
-	}
-	if got := viewOf(reply, "tasksTree"); got != `{"open":[],"shown":[[0,0,true]]}` {
-		t.Error("tree:", got)
-	}
-	if got := viewOf(reply, "hoursChart"); got != `{"groups":[{"key":9,"value":2},{"key":10,"value":1}]}` {
-		t.Error("chart:", got)
-	}
-	// A handler adds a task and chooses it: the table turns to its page, the tree opens above it.
-	state := tasksWindow()
-	state["data"].(map[string]any)["tasks"] = append(state["data"].(map[string]any)["tasks"].([]any), map[string]any{"id": 4, "title": "Tea", "hours": 2, "up": 3})
-	added := asked(t, c, "dispatch_event", map[string]any{"state": state, "handler": "addTask"})
-	if got := viewOf(added, "tasksTable"); got != `{"at":3,"order":null,"pages":{"count":5,"from":5,"page":3,"pages":3,"to":5},"shown":[4]}` {
-		t.Error("table after the handler:", got)
-	}
-	picked := asked(t, c, "dispatch_event", map[string]any{"state": tasksWindow(), "handler": "chooseApples"})
-	if got := viewOf(picked, "tasksTree"); got != `{"open":[1,2],"shown":[[0,0,true],[1,1,true],[2,2,false]]}` {
-		t.Error("the tree opens above its chosen row:", got)
-	}
-}
-
-// view_event: the person sorted, turned a page, or opened or closed a tree
-// row; the runtime changes that view, runs nothing and makes no edit.
-func TestAViewEventChangesHowAPartShowsItsRows(t *testing.T) {
-	c, windows := service(t)
-	state := tasksWindow()
-	state["instance"] = 31
-	event := func(part string, action map[string]any) map[string]any {
-		reply := asked(t, c, "view_event", map[string]any{"state": state, "part": part, "action": action})
-		state = reply["state"].(map[string]any)
-		return reply
-	}
-	ran := len(windows.log)
-	if got := viewOf(event("tasksTable", map[string]any{"page": 2}), "tasksTable"); got != `{"at":2,"order":null,"pages":{"count":3,"from":3,"page":2,"pages":2,"to":3},"shown":[2]}` {
-		t.Error("page 2:", got)
-	}
-	// Sorting goes back to the first page; the same header again sorts the other way.
-	if got := viewOf(event("tasksTable", map[string]any{"sort": "title"}), "tasksTable"); got != `{"at":1,"order":{"desc":false,"field":"title"},"pages":{"count":3,"from":1,"page":1,"pages":2,"to":2},"shown":[2,1]}` {
-		t.Error("sorted:", got)
-	}
-	if got := viewOf(event("tasksTable", map[string]any{"sort": "title"}), "tasksTable"); got != `{"at":1,"order":{"desc":true,"field":"title"},"pages":{"count":3,"from":1,"page":1,"pages":2,"to":2},"shown":[0,1]}` {
-		t.Error("the other way:", got)
-	}
-	if got := viewOf(event("tasksTree", map[string]any{"open": 1}), "tasksTree"); got != `{"open":[1],"shown":[[0,0,true],[1,1,true]]}` {
-		t.Error("opened:", got)
-	}
-	if got := viewOf(event("tasksTree", map[string]any{"close": 1}), "tasksTree"); got != `{"open":[],"shown":[[0,0,true]]}` {
-		t.Error("closed:", got)
-	}
-	if len(windows.log) != ran {
-		t.Error("a view event ran a handler", windows.log[ran:])
-	}
-	// Never an edit: Ctrl+Z has nothing to take back.
-	if got := wire(t, call(t, c, "undo_edit", wire(t, map[string]any{"state": state, "scope": "tasksTable", "back": true}))); strings.Contains(got, `"desc":false`) {
-		t.Error("a view event was an edit:", got)
-	}
-	if got := wire(t, call(t, c, "view_event", wire(t, map[string]any{"state": state, "part": "nope", "action": map[string]any{"page": 1}}))); !strings.Contains(got, "error") {
-		t.Error("a part without a view:", got)
 	}
 }
 
@@ -889,9 +689,6 @@ func TestAReadonlyPartsChangeIsTakenBack(t *testing.T) {
 		args    map[string]any
 	}{
 		{"edit_event", map[string]any{"ends": true}},
-		{"reorder_event", map[string]any{"list": "songs", "by": "place", "move": map[string]any{"row": 1, "key": "up"}}},
-		{"item_event", map[string]any{"path": "tags", "item": "text", "typed": "live"}},
-		{"range_event", map[string]any{"path": "volume", "min": "0", "max": "10", "step": "1", "whole": true, "key": "up"}},
 	} {
 		args := map[string]any{"state": changed, "part": "box", "scope": "form", "handler": "remember", "readonly": true}
 		for k, v := range ask.args {
@@ -928,32 +725,11 @@ func TestATablesEditKeepsToItsEditableColumns(t *testing.T) {
 	}
 }
 
-// sortable (manual/start.how-it-works.md): a header click on a table that is not sortable changes nothing.
-func TestATableThatIsNotSortableKeepsItsOrder(t *testing.T) {
+// A value error is said in Clarity's own words by its key, which the screen translates.
+func TestAValueErrorIsSaidByItsKey(t *testing.T) {
 	c, _ := service(t)
-	state := tasksWindow()
-	state["views"].(map[string]any)["tasksTable"].(map[string]any)["sortable"] = false
-	reply := asked(t, c, "view_event", map[string]any{"state": state, "part": "tasksTable", "action": map[string]any{"sort": "title"}})
-	if got := viewOf(reply, "tasksTable"); !strings.Contains(got, `"order":null`) || !strings.Contains(got, `"shown":[0,1]`) {
-		t.Error(got)
-	}
-}
-
-// A chart of a list of numbers (manual/start.how-it-works.md, points): its last points
-// numbers, decimals as their value; what is no number is left out.
-func TestANumbersViewShowsTheLastPoints(t *testing.T) {
-	c, _ := service(t)
-	views := map[string]any{
-		"last": map[string]any{"kind": "numbers", "list": "readings", "points": 2},
-		"all":  map[string]any{"kind": "numbers", "list": "readings", "points": nil},
-	}
-	state := map[string]any{"window": "Card", "data": map[string]any{"readings": []any{1, "2.5", "", nil, "x", 4}}, "views": views}
-	reply := asked(t, c, "dispatch_event", map[string]any{"state": state, "handler": "noop"})
-	shown := reply["state"].(map[string]any)["views"].(map[string]any)
-	if got := wire(t, shown["last"].(map[string]any)["numbers"]); got != `[2.5,4]` {
-		t.Error("last:", got)
-	}
-	if got := wire(t, shown["all"].(map[string]any)["numbers"]); got != `[1,2.5,4]` {
-		t.Error("all:", got)
+	state := `{"state":{"window":"Card","data":{}},"handler":"divide"}`
+	if got := wire(t, call(t, c, "dispatch_event", state)); got != `{"error":{"key":"divisionByZero","text":"Division by zero"}}` {
+		t.Fatal(got)
 	}
 }

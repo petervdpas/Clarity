@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A person: their name and the color their tasks show in. -->
+<View class="todo.PersonEditor">
+  <Data name="person" type="Person" />
+  <Form name="personForm" at="1,1" span="6" rows="2" bind="person">
+    <Label name="nameLabel" at="1,1" span="2" caption="@nameLabel" for="name" />
+    <Textbox name="name" at="3,1" span="4" bind="person.name" placeholder="@namePlaceholder" />
+    <Label name="colorLabel" at="1,2" span="2" caption="@colorLabel" for="colorBox" />
+    <Color name="colorBox" at="3,2" span="3" bind="person.color" />
+  </Form>
+  <Help name="nameHelp" at="3,3" span="4" for="name" />
+  <Button name="saveButton" at="5,4" span="2" caption="@saveButtonCaption" key="Ctrl+S" default="true" onclick="saveClicked" />
+</View>

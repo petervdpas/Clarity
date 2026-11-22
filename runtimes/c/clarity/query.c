@@ -318,8 +318,7 @@ ClarityQuery* clarity_order_by_number(ClarityQuery* query, const char* column, b
 // Through references, each step is a subquery on its own alias (t1, t2, ...)
 // that finds the referred record by the column of the step before.
 static const char* key_sql(ClarityDialect d, const char* table, const Key* key) {
-    const char* direction = key->descending ? " DESC" : "";
-    if (key->hops == 0) return clarity_format("%s%s", column_sql(d, key->column, key->numeric), direction);
+    if (key->hops == 0) return clarity_order_key_sql(d, column_sql(d, key->column, key->numeric), key->descending);
     const char** aliases = CLARITY_NEW(const char*, key->hops);
     for (size_t i = 0; i < key->hops; ++i) aliases[i] = clarity_quote(d, clarity_format("t%zu", i + 1));
     const char* column = clarity_format("%s.%s", aliases[key->hops - 1], clarity_quote(d, key->column));
@@ -330,7 +329,7 @@ static const char* key_sql(ClarityDialect d, const char* table, const Key* key) 
         inner = clarity_format("(SELECT %s FROM %s %s WHERE %s.%s = %s.%s)", inner, clarity_quote(d, hop->table), aliases[i], aliases[i],
                                clarity_quote(d, hop->key), before, clarity_quote(d, hop->column));
     }
-    return clarity_format("%s%s", inner, direction);
+    return clarity_order_key_sql(d, inner, key->descending);
 }
 
 const char* clarity_query_sql(const ClarityQuery* query, ClarityDialect d, const char* table, const char* key, const char* columns, ClarityValues* params) {
@@ -343,13 +342,63 @@ const char* clarity_query_sql(const ClarityQuery* query, ClarityDialect d, const
     return clarity_buffer_text(&sql);
 }
 
-bool clarity_text_contains(const char* text, const char* part) {
-    size_t n = strlen(text ? text : ""), m = strlen(part ? part : "");
-    if (m == 0) return true;
-    for (size_t i = 0; i + m <= n; ++i) {
-        size_t k = 0;
-        while (k < m && tolower((unsigned char)text[i + k]) == tolower((unsigned char)part[k])) ++k;
-        if (k == m) return true;
+/// A letter's simple lower-case form, as every stack takes it for `contains`
+/// (conformance/contains.json): Latin with its accents (Latin-1 and Latin
+/// Extended-A), Greek and Cyrillic; any other character as it is.
+static uint32_t lower_of(uint32_t c) {
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 32;
+    if ((c >= 0x100 && c <= 0x137) || (c >= 0x14A && c <= 0x177)) return c % 2 == 0 ? c + 1 : c;
+    if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) return c % 2 == 1 ? c + 1 : c;
+    if (c == 0x178) return 0xFF;
+    if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) return c + 32;
+    if (c == 0x386) return 0x3AC;
+    if (c >= 0x388 && c <= 0x38A) return c + 37;
+    if (c == 0x38C) return 0x3CC;
+    if (c == 0x38E || c == 0x38F) return c + 63;
+    if (c >= 0x410 && c <= 0x42F) return c + 32;
+    if (c >= 0x400 && c <= 0x40F) return c + 80;
+    return c;
+}
+
+/// `text` with every letter in its lower-case form (lower_of), as UTF-8 in the scratch arena.
+static char* lowered(const char* text) {
+    const unsigned char* in = (const unsigned char*)(text ? text : "");
+    size_t n = strlen((const char*)in);
+    char* out = clarity_alloc(n * 2 + 1);
+    size_t at = 0;
+    for (size_t i = 0; i < n;) {
+        uint32_t c = in[i];
+        size_t len = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 1;
+        if (len > 1 && i + len <= n) {
+            c &= len == 2 ? 0x1F : len == 3 ? 0x0F : 0x07;
+            for (size_t k = 1; k < len; ++k) c = (c << 6) | (in[i + k] & 0x3F);
+        } else {
+            len = 1;
+        }
+        c = lower_of(c);
+        if (c < 0x80) {
+            out[at++] = (char)c;
+        } else if (c < 0x800) {
+            out[at++] = (char)(0xC0 | (c >> 6));
+            out[at++] = (char)(0x80 | (c & 0x3F));
+        } else if (c < 0x10000) {
+            out[at++] = (char)(0xE0 | (c >> 12));
+            out[at++] = (char)(0x80 | ((c >> 6) & 0x3F));
+            out[at++] = (char)(0x80 | (c & 0x3F));
+        } else {
+            out[at++] = (char)(0xF0 | (c >> 18));
+            out[at++] = (char)(0x80 | ((c >> 12) & 0x3F));
+            out[at++] = (char)(0x80 | ((c >> 6) & 0x3F));
+            out[at++] = (char)(0x80 | (c & 0x3F));
+        }
+        i += len;
     }
-    return false;
+    out[at] = '\0';
+    return out;
+}
+
+bool clarity_text_contains(const char* text, const char* part) {
+    if (!part || !*part) return true;
+    return strstr(lowered(text), lowered(part)) != NULL;
 }

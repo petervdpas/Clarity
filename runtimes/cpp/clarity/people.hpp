@@ -54,6 +54,12 @@ struct SigninStrategy {
 /// The project's `signin` block as the program uses it: where its people
 /// are kept, how they sign in, how long a sign-in lasts and how many failed
 /// tries are allowed.
+/// Clarity's sign-in defaults (conformance/defaults.json), for a source that
+/// leaves them as they are (the generators always pass what the project says).
+inline constexpr int64_t signin_session_seconds = 8 * 3600;
+inline constexpr int64_t signin_tries = 5;
+inline constexpr int64_t signin_tries_seconds = 15 * 60;
+
 struct SigninSource {
     /// The data source of the entity of people; empty for the first.
     std::string source;
@@ -66,10 +72,10 @@ struct SigninSource {
     std::vector<std::string> targets{"desktop"};
     std::vector<SigninStrategy> strategies;
     /// How long a served session lasts.
-    int64_t session_seconds = 8 * 3600;
+    int64_t session_seconds = signin_session_seconds;
     /// Failed tries per key allowed within `tries_seconds`.
-    int64_t tries = 5;
-    int64_t tries_seconds = 15 * 60;
+    int64_t tries = signin_tries;
+    int64_t tries_seconds = signin_tries_seconds;
     /// The program's name, under which its secrets are kept (the remembered sign-in).
     std::string program;
     /// How long the desktop program keeps a sign-in between runs (`remember

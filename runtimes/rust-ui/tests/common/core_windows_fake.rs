@@ -271,24 +271,12 @@ impl Program for Fake {
         self.said(format!("undo {scope} {back}"));
         Ok(reply(state))
     }
-    fn reorder_event(&self, state: WindowState, _reorder: program::Reorder) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn item_event(&self, state: WindowState, _item: program::ItemEdit) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn range_event(&self, state: WindowState, _range: program::RangeEdit) -> Answer<Reply> {
-        Ok(reply(state))
-    }
     fn canvas_event(&self, state: WindowState, edit: program::CanvasEdit) -> Answer<Reply> {
         let c = &edit.canvas;
         self.said(format!("canvas {} {} path={} list={} at={:?} units={:?} handler={:?} action={}", c.part, c.mode, c.path, c.list, c.at, c.units, edit.handler, Value::Object(edit.action.clone())));
         Ok(reply(state))
     }
     fn step_event(&self, state: WindowState, _step: program::StepPress) -> Answer<Reply> {
-        Ok(reply(state))
-    }
-    fn view_event(&self, state: WindowState, _part: &str, _action: Map<String, Value>) -> Answer<Reply> {
         Ok(reply(state))
     }
     fn answer_event(&self, state: WindowState, handler: &str, values: Vec<Value>) -> Answer<Reply> {
@@ -306,8 +294,8 @@ impl Program for Fake {
         self.said(format!("values {entity}.{field}"));
         Ok(self.values.clone())
     }
-    fn find_options(&self, kind: &str, entity: &str, _field: Option<&str>, show: &[String], _typed: &str) -> Answer<Value> {
-        self.said(format!("find {kind} {entity} {}", show.join(",")));
+    fn find_options(&self, entity: &str, show: &[String]) -> Answer<Value> {
+        self.said(format!("find {entity} {}", show.join(",")));
         Ok(self.found.clone())
     }
     fn field_bytes(&self, entity: &str, id: i64, field: &str) -> Answer<Option<Vec<u8>>> {

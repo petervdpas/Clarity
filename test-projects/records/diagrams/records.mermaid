@@ -1,0 +1,76 @@
+classDiagram
+    class Format {
+        <<enumeration>>
+        Vinyl
+        Single
+        Cd
+        Cassette
+        Digital
+    }
+    class Friend {
+        +name: text(80), required, unique
+        +phone: text(20)
+        +email: email
+    }
+    class Genre {
+        +name: text(40), required, unique
+    }
+    class Artist {
+        +name: text(80), required, unique
+        +country: text(40)
+        +formed: integer
+        +website: url
+        +photo: image
+    }
+    class Album {
+        +title: text(120), required
+        +artist: Artist, required
+        +year: integer
+        +format: Format
+        +record_label: text(60)
+        +bought_on: date
+        +price: money
+        +rating: integer
+        +cover: image
+        +notes: text
+    }
+    class Track {
+        +album: Album, required
+        +number: integer
+        +title: text(120), required
+        +length: duration
+    }
+    class Loan {
+        +album: Album, required
+        +friend: Friend, required
+        +lent_on: date, required
+        +returned_on: date
+    }
+    class Images {
+        <<engine>>
+        +width(picture: bytes) integer
+        +height(picture: bytes) integer
+    }
+    class music {
+        <<module>>
+        +total_length(tracks: list<Track>) duration
+        +find_artist_photos()
+        +back_up_photos()
+        +export_collection()
+    }
+    Genre "*" --> "0..1" Genre : parent
+    Album "*" --> "1" Artist : artist
+    Album "*" --> "0..1" Genre : genre
+    Album "*" --> "1" Format : format
+    Track "*" --> "1" Album : album
+    Loan "*" --> "1" Album : album
+    Loan "*" --> "1" Friend : friend
+    %% clarity: Format at -185,284
+    %% clarity: Friend at 514,-73
+    %% clarity: Genre at 489,440
+    %% clarity: Artist at 522,197
+    %% clarity: Album at 127,206
+    %% clarity: Track at 138,574
+    %% clarity: Loan at 162,-64
+    %% clarity: Images at 708,68
+    %% clarity: music at 423,567

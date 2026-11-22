@@ -98,6 +98,10 @@ typedef enum {
     /// A database connects with a secret setting (manual/data.settings.md) the person
     /// has not kept yet; its message reads as a storage error's.
     CLARITY_NOT_KEPT,
+    /// A database whose migration steps are not the ones the program was made
+    /// with (docs/ledger/migrations.md): its message is the English line the
+    /// program stops with (conformance/migrate-check.json).
+    CLARITY_STEPS,
 } ClarityErrorKind;
 
 typedef struct ClarityText ClarityText;
@@ -125,5 +129,12 @@ bool clarity_not_found(const char* table, int64_t id);
 bool clarity_in_use(const char* table, int64_t id);
 /// `refuse text`. Always false.
 bool clarity_refuse(const ClarityText* text);
+/// A value error (CLARITY_VALUE) with Clarity's own words for it, which a
+/// window shows (clarity_said); its message as printf writes it. Always false.
+bool clarity_value_error(const ClarityText* text, const char* format, ...) CLARITY_PRINTF(2, 3);
+/// A number that does not fit (conformance/overflow.json), a value error. Always false.
+bool clarity_too_large(void);
+/// a / 0, a div 0 or a mod 0 (conformance/decimal-division.json), a value error. Always false.
+bool clarity_division_by_zero(void);
 /// A `require` or `ensure` line: false when it does not hold.
 bool clarity_require(bool holds, const char* what);

@@ -1,0 +1,8 @@
+<Report name="Test" paper="A4" margin="20mm" stylesheet="test.css">
+  <ReportHeader height="20mm">
+    <Text at="0,5" size="170,8" align="center" key="myTitle" class="myTitle" />
+  </ReportHeader>
+  <PageFooter height="8mm">
+    <PageNumber at="80,0" size="10,5" align="center" />
+  </PageFooter>
+</Report>

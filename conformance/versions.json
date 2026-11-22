@@ -1,5 +1,5 @@
 {
-  "about": "A save never overwrites someone else's change (docs/ledger/row-versions.md). Every record of a versioned entity carries a version, a whole number in its own column; find reads it, a save of a stored record writes only when it is still the one read, and adds one. A save or a delete of a record someone changed since is refused with Clarity's savedSince and changes nothing; a save anyway writes regardless; reload reads the record as it is stored now. Undo compares the version instead of the whole row. A file source refuses a save when its file changed on disk since it was read. Each case is run on its own, on a fresh database: the table item (id, name, row_version) for the database cases, the CSV file below for the file case. Steps work on named copies of records: two copies of one record are what two windows hold. Every step expects ok unless it says otherwise; a refusal is the error with the key and English of refusal (or of undoRefusal for undo).",
+  "about": "A save never overwrites someone else's change (docs/ledger/row-versions.md). Every record of a versioned entity carries a version, a whole number in its own column; find reads it, a save of a stored record writes only when it is still the one read, and adds one. A save or a delete of a record someone changed since is refused with Clarity's savedSince and changes nothing; a save anyway writes regardless; reload reads the record as it is stored now. Undo compares the version instead of the whole row, and puts a record back exactly as it was, version included, so a window holding it as it was can save it again. A file source refuses a save when its file changed on disk since it was read. Each case is run on its own, on a fresh database: the table item (id, name, row_version) for the database cases, the CSV file below for the file case. Steps work on named copies of records: two copies of one record are what two windows hold. Every step expects ok unless it says otherwise; a refusal is the error with the key and English of refusal (or of undoRefusal for undo).",
   "refusal": { "key": "savedSince", "english": "Someone else changed this record since you opened it. Reload it to see their change." },
   "undoRefusal": { "key": "undoChangedSince", "english": "This was changed since, so it cannot be taken back" },
   "column": "row_version",
@@ -109,18 +109,18 @@
       ]
     },
     {
-      "name": "undo and redo add one each, so a copy read before them is refused",
+      "name": "undo and redo put the record back exactly, version included, so a copy read in between is refused",
       "steps": [
         { "do": "insert", "copy": "a", "name": "first" },
         { "do": "set", "copy": "a", "name": "Anna" },
         { "do": "stepSave", "copy": "a" },
         { "do": "read", "copy": "b", "of": "a" },
         { "do": "undo" },
-        { "do": "stored", "copy": "a", "name": "first", "version": 3 },
+        { "do": "stored", "copy": "a", "name": "first", "version": 1 },
         { "do": "redo" },
-        { "do": "stored", "copy": "a", "name": "Anna", "version": 4 },
+        { "do": "stored", "copy": "a", "name": "Anna", "version": 2 },
         { "do": "undo" },
-        { "do": "stored", "copy": "a", "name": "first", "version": 5 },
+        { "do": "stored", "copy": "a", "name": "first", "version": 1 },
         { "do": "set", "copy": "b", "name": "Ben" },
         { "do": "save", "copy": "b", "expect": "refused" }
       ]

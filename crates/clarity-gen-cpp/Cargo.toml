@@ -1,0 +1,41 @@
+[package]
+name = "clarity-gen-cpp"
+description = "Clarity's generator of cpp programs"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-gen-core = { path = "../clarity-gen-core" }
+clarity-gen-c = { path = "../clarity-gen-c" }
+# The free space of the disk the repository is on (DevTools' Disk tab); the IDE uses the same version.
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-wasm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# The catalog of formats, for data sources that are files (file_sources).
+clarity-formats = { path = "../../runtimes/rust-formats", version = "0.4.0" }
+# What the IDE's preview answers as a program does (preview.rs): a dropdown's options, matched as every runtime matches them.
+clarity-runtime = { path = "../../runtimes/rust", features = ["postgres", "mysql", "mssql"] }
+base64 = "0.22"
+# Clarity.UI's library for Go, C and C++, fetched from its release (clarity_ui.rs).
+sha2 = "0.10"
+tar = "0.4"
+flate2 = "1"
+# Cisco serves openh264 compressed with bzip2 (docs/ledger/video-camera.md); pure Rust.
+bzip2 = "0.6"
+# The runtimes the installed Clarity carries, packed with zstd (carried.rs); pure Rust.
+ruzstd = "0.8"
+# The program file's icon on Windows, drawn from the project's picture at every size (windows_icon.rs).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+resvg = "0.49"
+
+
+[dev-dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-gen-testing = { path = "../clarity-gen-testing" }
+clarity-runtime = { path = "../../runtimes/rust", features = ["postgres", "mysql", "mssql"] }
+serde_json.workspace = true

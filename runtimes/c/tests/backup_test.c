@@ -63,35 +63,3 @@ void backups_are_named_and_pruned_as_every_stack_does(void) {
     cJSON_Delete(cases);
 }
 
-void a_database_with_a_schema_is_backed_up_before_new_steps(void) {
-    const char* dir = clarity_format("%s/clarity-c-backup", temp_folder());
-    remove_tree(dir);
-    REQUIRE_OK(clarity_make_folders(dir));
-    const char* file = clarity_format("%s/shop.db", dir);
-    const char* first_sql[] = {"CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')"};
-    const char* second_sql[] = {"ALTER TABLE item ADD COLUMN price INTEGER NOT NULL DEFAULT 0"};
-    ClarityStep steps[2] = {{first_sql, 1}, {second_sql, 1}};
-    ClaritySource source = {"main", CLARITY_SQLITE, file};
-    ClarityDb* db;
-    int applied = 0;
-    REQUIRE_OK(clarity_db_open(&source, 1, &db));
-    CHECK_OK(clarity_migrate(db, "", steps, 1, &applied));
-    clarity_db_close(db);
-    CHECK(!clarity_exists(clarity_format("%s/backups", dir)));
-    REQUIRE_OK(clarity_db_open(&source, 1, &db));
-    CHECK_OK(clarity_migrate(db, "", steps, 2, &applied));
-    CHECK_INT(applied, 1);
-    clarity_db_close(db);
-    size_t count = 0;
-    const char** backups = files_in(clarity_format("%s/backups", dir), &count);
-    REQUIRE(count == 1);
-    CHECK(strncmp(backups[0], "shop-", 5) == 0);
-    CHECK(strstr(backups[0], "-before-migration-0002.db") != NULL);
-    ClaritySource copy = {"main", CLARITY_SQLITE, clarity_format("%s/backups/%s", dir, backups[0])};
-    REQUIRE_OK(clarity_db_open(&copy, 1, &db));
-    int version = 0;
-    CHECK_OK(clarity_schema_version(db, &version));
-    CHECK_INT(version, 1);
-    clarity_db_close(db);
-    remove_tree(dir);
-}

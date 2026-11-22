@@ -1,0 +1,13 @@
+[package]
+name = "clarity-gen-testing"
+description = "What the generators' slow tests share"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-runtime = { path = "../../runtimes/rust" }
+serde_json.workspace = true

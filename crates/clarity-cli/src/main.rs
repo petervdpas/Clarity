@@ -223,14 +223,15 @@ enum DataCommand {
         #[arg(long)]
         source: Option<String>,
     },
-    /// Create the database or bring it up to date
+    /// Create the databases or bring them up to date
     ///
-    /// As the program does when it starts (a database that changes is backed up first), without
-    /// opening a window. See manual/data.migrations.md.
+    /// With Clarity's migration tool (clarity-migrate): every database the project owns, SQLite,
+    /// PostgreSQL, MySQL or SQL Server, gets the steps it lacks (a database that changes is backed
+    /// up first); one ahead of the project's steps is refused. See manual/data.migrations.md.
     Migrate {
         /// The project file, like shop.clarity.
         project: PathBuf,
-        /// The data source; the first SQLite one the project owns by default.
+        /// Only this data source; every one the project owns by default.
         #[arg(long)]
         source: Option<String>,
     },
@@ -396,13 +397,13 @@ fn main() -> ExitCode {
                 eprintln!("clarity: {} is not inside Clarity's repository: run `clarity release` there", here.display());
                 return ExitCode::from(2);
             };
-            let dir = clarity_gen::tools::devtools::release::fresh_checkout_dir(&repo);
+            let dir = clarity_devtools::release::fresh_checkout_dir(&repo);
             let done = match command {
-                ReleaseCommand::FreshCheckout => clarity_gen::tools::devtools::release::fresh_checkout(&repo, &dir).map(|()| format!("a fresh checkout in {}", dir.display())),
-                ReleaseCommand::CleanTree => clarity_gen::tools::devtools::release::clean_tree(&repo, &dir).map(|()| "the checks left the tree clean".to_string()),
-                ReleaseCommand::BuildTests => clarity_gen::tools::devtools::release::build_tests(&repo),
+                ReleaseCommand::FreshCheckout => clarity_devtools::release::fresh_checkout(&repo, &dir).map(|()| format!("a fresh checkout in {}", dir.display())),
+                ReleaseCommand::CleanTree => clarity_devtools::release::clean_tree(&repo, &dir).map(|()| "the checks left the tree clean".to_string()),
+                ReleaseCommand::BuildTests => clarity_devtools::release::build_tests(&repo),
                 ReleaseCommand::RunTest { key, args } => {
-                    return match clarity_gen::tools::devtools::release::run_test(&repo, &key, &args) {
+                    return match clarity_devtools::release::run_test(&repo, &key, &args) {
                         Ok(code) => ExitCode::from(code.clamp(0, 255) as u8),
                         Err(e) => {
                             eprintln!("clarity: {e}");
@@ -850,15 +851,13 @@ fn own(project_file: &std::path::Path, source: &str) -> ExitCode {
 }
 
 /// Backups of a project's databases: take one, list them, restore one.
-/// `clarity data migrate`: the project's SQLite database created or brought up to date, as its program does when it starts.
+/// `clarity data migrate`: the databases the project owns created or brought up to date with
+/// Clarity's migration tool (clarity-migrate), each SQLite one where Clarity runs the project.
 fn migrate_data(project_file: &std::path::Path, source: Option<&str>) -> ExitCode {
     let dir = clarity_project::module_dir(project_file);
-    let (name, database) = match clarity_project::database_to_back_up(&dir, source) {
-        Ok(found) => found,
-        Err(err) => {
-            eprintln!("clarity: {err}");
-            return ExitCode::FAILURE;
-        }
+    let Some(settings) = clarity_project::load(project_file).settings else {
+        eprintln!("clarity: {} cannot be read", project_file.display());
+        return ExitCode::FAILURE;
     };
     let project = match clarity_project::load_modules(&dir) {
         Ok(project) if !project.has_errors() => project,
@@ -874,28 +873,39 @@ fn migrate_data(project_file: &std::path::Path, source: Option<&str>) -> ExitCod
             return ExitCode::FAILURE;
         }
     };
-    let migrated = clarity_gen::sqlite_steps(&project, &name).and_then(|steps| {
-        let statements: Vec<Vec<&str>> = steps.iter().map(|(_, sql)| sql.iter().map(String::as_str).collect()).collect();
-        let steps: Vec<&[&str]> = statements.iter().map(Vec::as_slice).collect();
-        let mut db = clarity_runtime::Db::open(&database).map_err(|e| vec![e.to_string()])?;
-        db.migrate(&steps).map_err(|e| vec![e.to_string()])
-    });
-    match migrated {
-        Ok(0) => {
-            eprintln!("{name} is up to date: {}", database.display());
-            ExitCode::SUCCESS
-        }
-        Ok(applied) => {
-            eprintln!("Migrated {name} by {applied} step{}: {}", if applied == 1 { "" } else { "s" }, database.display());
-            ExitCode::SUCCESS
-        }
+    let databases = match clarity_gen::migrated_databases(&project, &settings) {
+        Ok(databases) => databases,
         Err(errors) => {
             for e in errors {
                 eprintln!("clarity: {e}");
             }
-            ExitCode::FAILURE
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(name) = source
+        && !databases.iter().any(|d| d.source == name)
+    {
+        eprintln!("clarity: the project owns no database of data source {name}");
+        return ExitCode::FAILURE;
+    }
+    let mut failed = false;
+    for found in databases.into_iter().filter(|d| source.is_none_or(|name| d.source == name)) {
+        // A SQLite database is the one where Clarity runs the project; a server's as the app connects to it.
+        let location = match settings.datasources.iter().find(|s| s.name == found.source) {
+            Some(data_source) if found.dialect == "sqlite" => clarity_project::sqlite_path(&dir, data_source).display().to_string(),
+            _ => found.location,
+        };
+        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location, steps: found.steps };
+        match clarity_migrate::migrate(&database) {
+            Ok(clarity_migrate::Outcome::UpToDate) => eprintln!("{} is up to date: {}", database.source, database.location),
+            Ok(clarity_migrate::Outcome::Migrated(n)) => eprintln!("Migrated {} by {n} step{}: {}", database.source, if n == 1 { "" } else { "s" }, database.location),
+            Err(why) => {
+                eprintln!("clarity: {why}");
+                failed = true;
+            }
         }
     }
+    if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
 }
 
 fn data(command: DataCommand) -> ExitCode {

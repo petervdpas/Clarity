@@ -4,4 +4,4 @@ module carried
 
 go 1.25.0
 
-require github.com/petervdpas/Clarity/runtimes/go v0.66.0
+require github.com/petervdpas/Clarity/runtimes/go v0.67.0

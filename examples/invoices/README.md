@@ -9,7 +9,7 @@ same invoice as a PDF file.
 
 - Orders: a table of orders (number and notes) and, below it, the lines of the order picked (product and price), both edited in place. Add makes a new one to type over; the trash removes one.
 - Beside them, the invoice of the order picked as it prints, with Save, Print, zoom and the page count of the pdfReport part.
-- **Save PDF** writes the same invoice into `data/exports/invoice-<number>.pdf`, made by code.
+- **Save PDF** writes the same invoice as `invoice-<number>.pdf`, made by code, into the exports folder: the setting `exportsFolder`, which File > Settings sets (by default `exports` in the app's settings folder).
 
 ## Stack
 

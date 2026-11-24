@@ -148,7 +148,7 @@ fn the_records_example_builds_and_runs_on_the_published_runtime() {
 /// The sums of the published runtime version, as the Go checksum database
 /// knows them, are the ones the generator writes into go.sum. With
 /// CLARITY_RECORD_GO_SUMS=1 they are recorded in
-/// crates/clarity-gen/src/go/runtime.sum (once, after tagging a version).
+/// crates/clarity-gen-go/src/runtime.sum (once, after tagging a version).
 #[test]
 #[ignore]
 fn the_published_runtime_sums_are_recorded() {
@@ -169,7 +169,7 @@ fn the_published_runtime_sums_are_recorded() {
         said[at..at + said[at..].find('"').unwrap()].to_string()
     };
     let lines = format!("{RUNTIME} {version} {}\n{RUNTIME} {version}/go.mod {}\n", field("Sum"), field("GoModSum"));
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/go/runtime.sum");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/runtime.sum");
     let recorded = std::fs::read_to_string(&path).unwrap();
     if std::env::var("CLARITY_RECORD_GO_SUMS").is_ok() && !recorded.contains(&lines) {
         std::fs::write(&path, format!("{recorded}{lines}")).unwrap();

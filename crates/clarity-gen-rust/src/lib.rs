@@ -712,7 +712,8 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     let (app_struct, open_db, app_new, started_unconnected, connect_fn) = match clarity_gen_core::unconnected(project) {
         None => (
             "/// The program: its databases, which every call shares.\nstruct App(Mutex<Db>);\n".to_string(),
-            "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
+            // Why they did not open (an environment variable not set, conformance/data-folder.json) in Clarity's own words, not a crash.
+            "    let db = match open_databases() {\n        Ok(db) => db,\n        Err(err) => {\n            eprintln!(\"{}\", clarity_runtime::program::said(&err).show());\n            std::process::exit(1);\n        }\n    };\n".to_string(),
             "    let app = App(Mutex::new(db));\n",
             "None".to_string(),
             String::new(),

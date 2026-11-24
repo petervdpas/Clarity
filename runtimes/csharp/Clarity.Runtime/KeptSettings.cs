@@ -43,10 +43,10 @@ public static partial class KeptSettings
     /// The folder of file store <paramref name="store"/> when a folder setting names it, on
     /// system <paramref name="os"/>: the kept value when it is text that is not empty, else
     /// <paramref name="fallback"/> (the setting's default), else a folder named after the
-    /// store; a relative folder is in <paramref name="settingsFolder"/>, the folder of the
-    /// settings file.
+    /// store; a relative folder is in <paramref name="dataFolder"/>, the program's data folder
+    /// (<see cref="DataFolder.Folder"/>), or where the program runs when that is "".
     /// </summary>
-    public static string StoreFolderIn(string os, string settingsFolder, string store, JsonNode? kept, string fallback)
+    public static string StoreFolderIn(string os, string dataFolder, string store, JsonNode? kept, string fallback)
     {
         var chosen = kept is JsonValue v && v.TryGetValue<string>(out var text) && text.Length > 0 ? text : fallback;
         if (chosen.Length == 0)
@@ -55,7 +55,7 @@ public static partial class KeptSettings
             ? chosen.StartsWith(@"\\", StringComparison.Ordinal) || chosen.StartsWith("//", StringComparison.Ordinal)
                 || (chosen.Length > 2 && char.IsAsciiLetter(chosen[0]) && chosen[1] == ':' && chosen[2] is '/' or '\\')
             : chosen.StartsWith('/');
-        return absolute ? chosen : $"{settingsFolder}/{chosen}";
+        return absolute ? chosen : DataFolder.InFolder(dataFolder, chosen);
     }
 
     /// <summary>

@@ -21,6 +21,8 @@ Progress: 70%
 - Examples: todo (`signin Person on desktop`, password, account, remember), shop (Clerk, guided window)
 
 ## Open
+- Entra ID single sign-on on desktop and web, with Entra groups: NOT BUILT, FIRST in line; see Design "Entra ID single sign-on".
+- Provider tests on every stack (a conformance case against a fake Entra, a generated app signing in per stack): NOT BUILT; see Design "Entra ID single sign-on".
 - Providers `github`, `microsoft`, `openid` (register off by default, desktop and web targets): PARTIAL: built on the desktop (released 0.41.0): the catalog (`runtimes/rust-auth/src/catalog.rs:43-45`), spec, project file (`client`, `secret`, `tenant`, `issuer`, `register` lines), the IDE setup, every generator passing a provider's settings (C `crates/clarity-gen/src/c/mod.rs:707`, C++ `cpp/mod.rs:201`, R, Go, C#) and every runtime reading them (C `runtimes/c/auth/auth.h` `clarity_signin_options`, C++ `runtimes/cpp/auth/auth.cpp`, Go `signin.go:43`, C# `Signins.cs:28`), and the browser sign-in run by Clarity.UI (`runtimes/rust-ui/src/window/signin.rs:146`, called at :121, `providers::through_browser`; rust-ui turns on feature `openid`, `runtimes/rust-ui/Cargo.toml:54`). Not on: clarity-runtime's `auth` feature (`runtimes/rust/Cargo.toml:36`) and `rust-auth-ffi` (`Cargo.toml:19`) build without `openid`, so a provider decided there says "built without the feature openid" (`runtimes/rust-auth/src/lib.rs:84`). Web flow, command-line flow and a register part: NOT BUILT; see Design "Providers on the web and the command line".
 - `maillink` and mail resets: NOT BUILT (needs [mail](mail.md)); see Design "maillink".
 - TOTP: NOT BUILT; see Design "A second factor".
@@ -39,6 +41,24 @@ Each new strategy is one more entry of Clarity.Auth's catalog (`runtimes/rust-au
 - Command line: the device code flow.
 - Both need the feature `openid` in clarity-runtime's `auth` and in `rust-auth-ffi`.
 - A register part: optional, on a sign-in view, for a provider with `register`.
+
+### Entra ID single sign-on
+
+Asked 2026-11-23. User: "I noticed that authentication might also need more tests (strategies)?! I have an urgent need for SSO", then "Entra ID, both desktop and web, groups yes", "first entra, then scim".
+
+Where it stands: the `microsoft` provider signs in on the desktop only, through Clarity.UI's browser sign-in; clarity-runtime's `auth` and `rust-auth-ffi` build without `openid`. The person is found through the userinfo endpoint with the access token: the ID token is not read, its signature not checked, no `nonce`. No groups.
+
+What it needs:
+- Desktop and web: the web flow through the served program (Design "Providers on the web and the command line"), the feature `openid` on in clarity-runtime's `auth` and in `rust-auth-ffi`, so every stack has it.
+- The ID token checked: signature against Entra's published keys (discovery's `jwks_uri`), `nonce`, issuer (the tenant), audience (the client), expiry.
+- Entra groups with the person, usable in `allow when`.
+- Tests: a conformance case of the provider flow against a fake Entra (discovery, keys, token, a refused, expired or wrongly signed token, a wrong `state`, another tenant) run by every stack, and a generated app per stack signing in through it.
+
+Open questions (names and choices for the user, none used yet):
+- How groups reach the program: Entra's `groups` claim (object ids; over 200 groups Entra sends an overage pointer to Graph instead), or app roles (`roles` claim, names the app registration defines). Which one, or both.
+- How `allow when` names a group: by Entra's object id, or by a name the project maps to an id. The word for it in Clarity (for example `me.groups`): to ask.
+- Whether a person met for the first time through Entra is added to the sign-in entity by itself (`register` exists for providers, off by default) or must exist first (as SCIM will make them).
+- The command line (device code flow): not asked for now ("both desktop and web").
 
 ### maillink
 
@@ -70,6 +90,7 @@ Each new strategy is one more entry of Clarity.Auth's catalog (`runtimes/rust-au
 - Sign-in defaults (8 h, 5 tries, 15 min) are written in `crates/clarity-spec/src/signin.rs:145-147`, `runtimes/rust-auth/src/attempt.rs:157`, `runtimes/rust/src/signin.rs:78`, `runtimes/go/clarity/signin.go:225-231`, `runtimes/cpp/clarity/people.hpp:69-72` (equal today).
 
 ## Decisions
+- 2026-11-23: Entra ID single sign-on first, on desktop and web, with groups. User: "Entra ID, both desktop and web, groups yes", "first entra, then scim".
 - 2026-11-12: strategies from one catalog, several per project, each naming its fields. User: "are you going to use authentication strategies?"
 - 2026-11-12: steps 4, 5, 6 as one slice, built 4 first. User: "think it kinda combines with multi user app... so 4 too then?", then "yes, build it"
 - 2026-11-12: `allow when` per case, no fixed roles; rows never filtered by magic (`readable when` is a check).

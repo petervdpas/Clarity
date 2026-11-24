@@ -14,7 +14,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-clarity-engine = { path = "../../../../runtimes/rust-engine" }
+clarity-engine = "0.4"
 serde = { version = "1", features = ["derive"] }
 
 [profile.release]

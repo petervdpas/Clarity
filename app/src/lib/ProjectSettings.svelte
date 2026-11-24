@@ -318,6 +318,16 @@
           <span class="form-label">Migration</span>
           <label><input type="checkbox" checked={settings.include_migrate} onchange={(e) => save({ include_migrate: e.currentTarget.checked })} /> Include data migration tools</label>
           <p class="form-help">On (<code>include migrate</code>), Generate puts <code>clarity-migrate</code> and its <code>clarity-migrate.json</code> in the app folder, so whoever installs the app brings its databases up to date without Clarity.</p>
+          <label class="form-label" for="backups-folder">Backups folder</label>
+          <input
+            id="backups-folder"
+            class="mono"
+            placeholder="data/backups"
+            spellcheck="false"
+            value={settings.backups ?? ""}
+            onchange={(e) => save({ backups: e.currentTarget.value.trim() || null })}
+          />
+          <p class="form-help">Where the backups of the project's databases go (<code>backups</code>): a folder under the project's folder, each data source's backups in a folder of its name inside it. Empty, the project takes no backups, and data migration runs without one first.</p>
           <span class="form-label">Codecs</span>
           <div class="codecs">
             {#each settings.codecs as codec, i (i)}

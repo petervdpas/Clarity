@@ -78,3 +78,40 @@ void a_database_opens_where_every_runtime_opens_it(void) {
                    cJSON_GetObjectItem(item, "file")->valuestring);
     }
 }
+
+// Every runtime finds a program's data folder alike (conformance/data-folder.json, folders).
+void the_data_folder_is_where_every_runtime_finds_it(void) {
+    cJSON* cases = conformance("data-folder.json");
+    REQUIRE(cases);
+    const cJSON* item;
+    cJSON_ArrayForEach(item, cJSON_GetObjectItem(cases, "folders")) {
+        case_env = cJSON_GetObjectItem(item, "env");
+        CHECK_TEXT(clarity_data_folder_on(cJSON_GetObjectItem(item, "os")->valuestring, cJSON_GetObjectItem(item, "program")->valuestring, case_env_get),
+                   cJSON_GetObjectItem(item, "folder")->valuestring);
+    }
+}
+
+// Every runtime places a file store alike, and an unset variable is said in
+// Clarity's own words (conformance/data-folder.json, stores).
+void a_file_store_is_where_every_runtime_places_it(void) {
+    cJSON* cases = conformance("data-folder.json");
+    REQUIRE(cases);
+    const cJSON* item;
+    cJSON_ArrayForEach(item, cJSON_GetObjectItem(cases, "stores")) {
+        case_env = cJSON_GetObjectItem(item, "env");
+        const char* folder = NULL;
+        bool found = clarity_data_folder_store_on(cJSON_GetObjectItem(item, "os")->valuestring, cJSON_GetObjectItem(item, "location")->valuestring, case_env_get, &folder);
+        const cJSON* unset = cJSON_GetObjectItem(item, "unset");
+        if (cJSON_IsString(unset)) {
+            CHECK(!found);
+            CHECK(clarity_error()->kind == CLARITY_NOT_SET);
+            const ClarityText* said = clarity_said(clarity_error());
+            REQUIRE(said);
+            CHECK_TEXT(said->key, "variableNotSet");
+            CHECK_TEXT(clarity_text_show(said), clarity_format("The environment variable %s must be set", unset->valuestring));
+        } else {
+            CHECK(found);
+            if (found) CHECK_TEXT(folder, cJSON_GetObjectItem(item, "folder")->valuestring);
+        }
+    }
+}

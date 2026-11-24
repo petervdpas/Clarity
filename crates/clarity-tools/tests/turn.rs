@@ -117,3 +117,19 @@ fn a_line_that_cannot_be_read_is_skipped() {
     std::fs::write(&file, "{\"show_window\":\"Main\"}\nhalf a li\n{\"other\":1}\n").unwrap();
     assert_eq!(turn::shown(&file), vec![Shown::Window("Main".into())]);
 }
+
+/// Showing a window is checked one way for the IDE's agent and the agents
+/// over MCP: a window or a dialog the project has, never a view or a name
+/// it does not have.
+#[test]
+fn a_window_to_show_is_one_the_project_has() {
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("turn-window");
+    let _ = std::fs::remove_dir_all(&root);
+    let file = clarity_tools::new_project::write_new_project(&root.join("todo"), clarity_project::starter("Todo", "todo").stack).unwrap();
+    let dir = clarity_project::module_dir(&file);
+    assert_eq!(turn::window(&dir, " Main ").unwrap(), Shown::Window("Main".into()));
+    let why = turn::window(&dir, "Elsewhere").unwrap_err();
+    assert!(why.contains("the project has no window 'Elsewhere'; its windows are: Main"), "{why}");
+    assert!(turn::window(&dir, "MainView").is_err(), "a view is shown in its window");
+    let _ = std::fs::remove_dir_all(&root);
+}

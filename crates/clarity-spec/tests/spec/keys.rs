@@ -56,6 +56,8 @@ const EN: &str = "translation en
     recordStillUsed \"This {table} is still used by other records\"
     divisionByZero \"Division by zero\"
     numberTooLarge \"The number is too large\"
+    variableNotSet \"The environment variable {variable} must be set\"
+    noFolderChosen \"No folder was chosen\"
 ";
 
 const NL: &str = "translation nl
@@ -85,6 +87,8 @@ const NL: &str = "translation nl
     recordStillUsed \"Deze {table} wordt nog door andere records gebruikt\"
     divisionByZero \"Deling door nul\"
     numberTooLarge \"Het getal is te groot\"
+    variableNotSet \"De omgevingsvariabele {variable} moet ingesteld zijn\"
+    noFolderChosen \"Er is geen map gekozen\"
 ";
 
 fn project(source: &str, files: &[(&str, &str)]) -> Project {

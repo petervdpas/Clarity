@@ -68,3 +68,75 @@ func DataFolderSqliteIn(goos, location string, env func(string) string) string {
 	}
 	return folder + "/" + kept
 }
+
+// DataFolder is the program's data folder (conformance/data-folder.json,
+// folders): the folder CLARITY_DATA names, else the person's folder for
+// application data under the program's name; "" when the environment names
+// neither, which is where the program runs. A relative file store and a
+// relative folder setting are in it, as a relative SQLite database is.
+func DataFolder(program string, env func(string) string) string {
+	return DataFolderIn(runtime.GOOS, program, env)
+}
+
+// DataFolderIn is DataFolder on system goos (windows, darwin or another).
+func DataFolderIn(goos, program string, env func(string) string) string {
+	if folder := env(DataVariable); folder != "" {
+		return folder
+	}
+	var folder string
+	switch goos {
+	case "windows":
+		folder = env("APPDATA")
+	case "darwin", "macos":
+		if home := env("HOME"); home != "" {
+			folder = home + "/Library/Application Support"
+		}
+	default:
+		folder = env("XDG_DATA_HOME")
+		if folder == "" {
+			if home := env("HOME"); home != "" {
+				folder = home + "/.local/share"
+			}
+		}
+	}
+	if folder == "" {
+		return ""
+	}
+	return folder + "/" + program
+}
+
+// DataFolderStore is the folder of a file store at location
+// (conformance/data-folder.json, stores): data:<program>/<name> (a relative
+// folder in the project file) is in the program's data folder under its own
+// name; env:NAME is that variable's value, a NotSetError while it is unset or
+// empty; anything else is as it is.
+func DataFolderStore(location string, env func(string) string) (string, error) {
+	return DataFolderStoreIn(runtime.GOOS, location, env)
+}
+
+// DataFolderStoreIn is DataFolderStore on system goos.
+func DataFolderStoreIn(goos, location string, env func(string) string) (string, error) {
+	if name, ok := strings.CutPrefix(location, "env:"); ok {
+		if value := env(name); value != "" {
+			return value, nil
+		}
+		return "", &NotSetError{Variable: name}
+	}
+	kept, ok := strings.CutPrefix(location, "data:")
+	if !ok {
+		return location, nil
+	}
+	program, name, found := strings.Cut(kept, "/")
+	if !found {
+		program, name = "", kept
+	}
+	return InFolder(DataFolderIn(goos, program, env), name), nil
+}
+
+// InFolder is name in folder; just name when there is no folder.
+func InFolder(folder, name string) string {
+	if folder == "" {
+		return name
+	}
+	return folder + "/" + name
+}

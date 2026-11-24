@@ -4,13 +4,18 @@
   // builds write to, and the computer's load as three meters (cpu, mem,
   // io) that open Clarity settings, System. While an outside agent (Claude
   // Code, Codex) works through `clarity mcp`, its last call shows, green when
-  // it went through and red when refused, and opens the agent activity. Each
-  // part that leads somewhere is a button.
+  // it went through and red when refused, and opens the agent activity. The
+  // MCP item shows whether each of Clarity's MCP servers (clarity,
+  // clarity-cdev) may answer an agent, and opens a switch for each; a server
+  // reads its switch on every call (docs/ledger/mcp-tools.md). Each part that
+  // leads somewhere is a button.
 
   import type { Selected } from "./selection";
   import type { AgentActivity } from "@clarity/ui/generated/AgentActivity.ts";
+  import type { McpServer } from "@clarity/ui/generated/McpServer.ts";
   import { invoke } from "@clarity/ui/host/backend.ts";
-  import { agentCall, buildStatus, counted, openLabel } from "./statusBar";
+  import { agentCall, buildStatus, counted, mcpStatus, openLabel } from "./statusBar";
+  import Switch from "./ui/Switch.svelte";
   import { bytes, ioLevel, percent } from "./systemLoad";
   import { systemLoad } from "./systemLoad.svelte";
 
@@ -74,6 +79,58 @@
     return () => clearInterval(timer);
   });
 
+  /** Clarity's MCP servers with their switches, read when the bar starts and when the switches open. */
+  let servers = $state<McpServer[]>([]);
+  let mcpOpen = $state(false);
+  let mcpError = $state<string | null>(null);
+  let mcpItem = $state<HTMLElement | null>(null);
+  const mcp = $derived(mcpStatus(servers));
+
+  async function readServers() {
+    try {
+      servers = await invoke<McpServer[]>("mcp_servers");
+      mcpError = null;
+    } catch (err) {
+      mcpError = String(err);
+    }
+  }
+
+  async function turn(name: string, on: boolean) {
+    try {
+      servers = await invoke<McpServer[]>("set_mcp_server", { name, on });
+      mcpError = null;
+    } catch (err) {
+      mcpError = String(err);
+    }
+  }
+
+  function toggleMcp() {
+    mcpOpen = !mcpOpen;
+    if (mcpOpen) void readServers();
+  }
+
+  $effect(() => {
+    void readServers();
+  });
+
+  // The switches close on a press outside them or on Escape.
+  $effect(() => {
+    if (!mcpOpen) return;
+    const outside = (e: PointerEvent) => {
+      if (mcpItem && !mcpItem.contains(e.target as Node)) mcpOpen = false;
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") mcpOpen = false;
+    };
+    window.addEventListener("pointerdown", outside);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("pointerdown", outside);
+      window.removeEventListener("keydown", escape);
+    };
+  });
+
+
   const build = $derived(buildStatus({ building, commandRunning, running, done }));
 
   /** The three meters, from the last reading: how full each is, and what it says on hover. */
@@ -112,6 +169,23 @@
     <span class="item">No project open</span>
     <span class="spacer"></span>
   {/if}
+  <span class="item mcp" bind:this={mcpItem}>
+    <button class="mcp-button" class:off={mcp.off} title={mcp.title} aria-expanded={mcpOpen} onclick={toggleMcp}>
+      {mcp.text}
+      {#each servers as s (s.name)}
+        <span class="dot" class:off={!s.on} aria-hidden="true"></span>
+      {/each}
+    </button>
+    {#if mcpOpen}
+      <div class="mcp-switches" role="group" aria-label="Clarity's MCP servers">
+        {#each servers as s (s.name)}
+          <Switch label={s.name} checked={s.on} onchange={(on) => void turn(s.name, on)} />
+        {/each}
+        <p class="muted">Turned off, the server refuses every call of an agent until it is turned on again; holds from the agent's next call.</p>
+        {#if mcpError}<p class="refused" role="alert">{mcpError}</p>{/if}
+      </div>
+    {/if}
+  </span>
   {#if meters}
     <button class="item meters" title="The computer's load; opens Clarity settings, System" onclick={onsystem}>
       {#each meters as m (m.label)}
@@ -204,6 +278,68 @@
   }
   .agent.refused .dot {
     background: var(--error);
+  }
+  .mcp {
+    position: relative;
+    padding: 0;
+    overflow: visible;
+  }
+  .mcp-button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .mcp-button:hover {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+  .mcp-button.off {
+    color: var(--text);
+  }
+  .mcp .dot {
+    background: var(--success);
+  }
+  .mcp .dot.off {
+    background: var(--error);
+  }
+  .mcp-switches {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 4px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 260px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    color: var(--text);
+    font-family: var(--mono);
+    line-height: 1.6;
+    white-space: normal;
+    cursor: default;
+  }
+  .mcp-switches p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .muted {
+    color: var(--text-muted);
+  }
+  .refused {
+    color: var(--error);
   }
   .meters {
     display: flex;

@@ -41,6 +41,7 @@ What each stack writes:
 - Port 8080 is written twice: `crates/clarity-project/src/lib.rs:349`, `app/src/lib/ProjectSettings.svelte:416`, :422 (equal).
 
 ## Decisions
+- 2026-11-23: the program Run started ends with Clarity (user: "it opens a port but doesnt kill it on app close or ide close (ie. invaders"): stopped when the window closes and when Clarity exits (`app/src-tauri/src/lib.rs`), and remembered while it runs in `<clarity home>/running.txt` (`app/src-tauri/src/left_running.rs`), so one left running by a crash or a restart is ended when Clarity starts, only while that process is still the same program. A web program served alone stays running when its browser tab closes: Stop or closing Clarity ends it.
 - 2026-10-27: the web target serves the application at the project's port; each tab runs its own application against the server's database (W1).
 - 2026-10-28: C# keeps live view models on the server (W2); its `.NET` browser program was replaced (B2, 2026-11-03) by Clarity.UI's browser files answered through `ProgramWire`.
 - 2026-11-01: no web tools (npm, Vite) in an application; windows are markup read at run time. User: "npm tends to get blocked on windows very often!!!"

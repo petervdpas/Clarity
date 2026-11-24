@@ -8,4 +8,4 @@ project Invoices
     language "en"
     currency EUR
     datasource main sqlite "data/invoices.db"
-    filestore exports "data/exports"
+    filestore exports "setting:exportsFolder"

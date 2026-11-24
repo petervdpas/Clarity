@@ -90,7 +90,7 @@ public class SettingsCaseTests
     {
         foreach (var c in File["folders"]!.AsArray())
         {
-            var found = KeptSettings.StoreFolderIn(c!["os"]!.GetValue<string>(), c["settingsFolder"]!.GetValue<string>(), c["store"]!.GetValue<string>(), c["kept"], c["default"]!.GetValue<string>());
+            var found = KeptSettings.StoreFolderIn(c!["os"]!.GetValue<string>(), c["dataFolder"]!.GetValue<string>(), c["store"]!.GetValue<string>(), c["kept"], c["default"]!.GetValue<string>());
             Assert.True(found == c["folder"]!.GetValue<string>(), $"{c.ToJsonString()}: {found}");
         }
     }
@@ -105,14 +105,17 @@ public class SettingsCaseTests
     {
         var home = Path.Combine(Path.GetTempPath(), $"clarity-folder-setting-{Environment.ProcessId}");
         Environment.SetEnvironmentVariable(OperatingSystem.IsWindows() ? "APPDATA" : "XDG_CONFIG_HOME", home);
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", home);
         Environment.SetEnvironmentVariable("HOME", OperatingSystem.IsMacOS() ? home : Environment.GetEnvironmentVariable("HOME"));
         const string program = "clarity-folder-test";
-        var settingsFolder = Path.GetDirectoryName(KeptSettings.File(program))!;
+        // Not chosen yet: the default, in the program's data folder (conformance/data-folder.json).
+        var dataFolder = DataFolder.Folder(program);
+        Assert.Equal(Path.Combine(home, program).Replace('\\', '/'), dataFolder.Replace('\\', '/'));
         using (var db = Sqlite.Memory())
         {
             db.AddStoreSetting("photos", program, "photosFolder", "photos");
             db.WriteText("photos", "first.txt", "first");
-            Assert.Equal("first", System.IO.File.ReadAllText(Path.Combine(settingsFolder, "photos", "first.txt")));
+            Assert.Equal("first", System.IO.File.ReadAllText(Path.Combine(dataFolder, "photos", "first.txt")));
             // Chosen while the program runs: the next file goes there.
             var chosen = Path.Combine(home, "chosen");
             KeptSettings.Keep(program, new JsonObject { ["photosFolder"] = chosen });

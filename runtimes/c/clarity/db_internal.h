@@ -22,6 +22,8 @@ typedef struct {
     char* program;
     char* setting;
     char* fallback;
+    /// The environment variable of a store at `env:NAME` while it is unset: each use says so.
+    char* not_set;
 } ClarityStore;
 
 /// A row of a table as it was before a change and as the change left it

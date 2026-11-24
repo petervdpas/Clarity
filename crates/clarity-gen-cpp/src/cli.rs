@@ -380,7 +380,9 @@ clarity::cli::Program program() {{
         }});
 {keep}        return code;
     }} catch (const std::exception& e) {{
-        std::cerr << e.what() << \"\\n\";
+        // In Clarity's own words where it has them (an environment variable not set, conformance/data-folder.json).
+        auto said = clarity::said(e);
+        std::cerr << (said ? said->show() : std::string(e.what())) << \"\\n\";
         return 1;
     }}
 }}

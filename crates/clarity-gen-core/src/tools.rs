@@ -27,12 +27,27 @@ pub trait Probe {
     fn clarity_ui(&self) -> crate::clarity_ui::Library {
         crate::clarity_ui::library()
     }
+    /// Visual Studio's own linker, which Rust's MSVC toolchain links with on
+    /// Windows; none without its C++ build tools. Not any program named link:
+    /// MSYS2's and Git's coreutils have one that links nothing.
+    fn msvc_linker(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// The machine Clarity runs on.
 pub struct System;
 
 impl Probe for System {
+    fn msvc_linker(&self) -> Option<PathBuf> {
+        if !cfg!(windows) {
+            return None;
+        }
+        let program_files: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)"].iter().filter_map(std::env::var_os).map(PathBuf::from).collect();
+        let installations = visual_studio_installations(&program_files).into_iter().chain(vswhere_installations());
+        installations.filter_map(|i| visual_studio_folders(&i).into_iter().next()).map(|bin| bin.join("link.exe")).find(|link| link.is_file())
+    }
+
     fn find(&self, program: &str) -> Option<PathBuf> {
         environment::find(program, &environment::Environment::current(), &tool_path())
     }
@@ -331,6 +346,8 @@ pub fn guide_headings() -> Vec<&'static str> {
 /// What to install for each tool, with where to get it: the words of
 /// `check`, `clarity tools`, the app and every generated README.md.
 const RUST: &str = "Rust with cargo, from https://rustup.rs";
+/// What Rust's MSVC toolchain links with on Windows.
+const VISUAL_STUDIO_BUILD_TOOLS: &str = "Visual Studio's C++ build tools (the Visual Studio Build Tools with Desktop development with C++), from https://visualstudio.microsoft.com/visual-cpp-build-tools/, which Rust links with on Windows";
 const GO: &str = "Go, from https://go.dev/dl";
 /// A Go desktop program calls Clarity.UI's library through cgo.
 const CGO: &str = "a C compiler for cgo, as the desktop program calls Clarity.UI's library: GCC or Clang (on Windows, MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-gcc)";
@@ -382,6 +399,11 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
             match probe.run("cargo", &["--version"]) {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push((RUST.to_string(), RUST_GUIDE)),
+            }
+            // Rust's MSVC toolchain links with Visual Studio's; without it, it takes whatever is named link and fails.
+            let msvc = probe.run("rustc", &["-vV"]).is_some_and(|said| said.lines().any(|l| l.trim_start().starts_with("host:") && l.contains("-pc-windows-msvc")));
+            if msvc && probe.msvc_linker().is_none() {
+                missing.push((VISUAL_STUDIO_BUILD_TOOLS.to_string(), RUST_GUIDE));
             }
             // The desktop program links Clarity.UI's ready-made library (feature native-ui): no Skia to build, no webview.
             clarity_ui_library(probe, &mut found, &mut missing);

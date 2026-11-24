@@ -49,11 +49,15 @@ A table that has no version column yet is proposed `add version Entity`, one lin
 
 Open **Settings** on the Project tab. Below the data sources and file stores is a **Migrations** section for each SQL data source Clarity owns. It lists the pending changes as the step will say them, and marks the ones that **can lose data**: removing an entity or a field, and changing a type.
 
-Type a title and click **Create step**. When a change can lose data, you first tick **I checked the changes that can lose data**. While the project has errors, the section says so and writes no step. Undo removes a step you just wrote.
+Type a title (it is "Step N" when you leave it empty) and click **Create step**. When a change can lose data, you first tick **I checked the changes that can lose data**. While the project has errors, the section says so and writes no step. Undo removes a step you just wrote.
 
-## Proposed renames
+The section, the agents' migrate tool and `clarity migrate` write a step the same way: the same data sources (the SQL databases Clarity owns; a web API, a file and an external database have no steps), the same refusal while the project has errors or a change can lose data that nobody allowed, and the same answer when there is nothing to migrate.
 
-When a field disappears and a field of the same type appears in the same entity, Clarity proposes a rename. It does the same when an entity disappears and one with mostly the same fields appears. The proposals show under **Renames** with a tick each. Kept as a rename, the data stays; untick it and the step removes the old one and adds the new one.
+## Renames
+
+A rename gets into a step only when someone asked for it; Clarity never guesses one. Renaming an entity, a field or a value of an enum in Clarity (the rename in the project tree, the name cell of the entity and enum editors, or an agent's rename tool) writes the rename into the migration step at once, so the data stays.
+
+When a field disappears and a field of the same type appears in the same entity, Clarity suggests a rename. It does the same when an entity disappears and one with mostly the same fields appears. The suggestions show under **Renames**, unticked. Tick one to keep it as a rename, so the data stays; left unticked, the step removes the old one and adds the new one.
 
 ## From the command line
 
@@ -61,7 +65,7 @@ When a field disappears and a field of the same type appears in the same entity,
 clarity migrate shop.clarity
 ```
 
-This writes the pending changes of every SQL data source as its next step, titled "Step N" unless you give `--title`. `--check` only lists the changes. `--no-renames` takes proposed renames as a removal and an addition. When a change can lose data, the command stops until you run it again with `--allow-data-loss`.
+This writes the pending changes of every SQL data source as its next step, titled "Step N" unless you give `--title`. `--check` only lists the changes. A field or entity that went while another came is a removal and an addition; the command lists the renames it could be, and takes one only when you name it with `--rename`: `--rename Customer=Client` for an entity, `--rename Customer.vatNumber=vat` for a field, `--rename Kind.Private=Personal` for a value of an enum. Repeat it for more. When a change can lose data, the command stops until you run it again with `--allow-data-loss`.
 
 ## Applying the steps
 

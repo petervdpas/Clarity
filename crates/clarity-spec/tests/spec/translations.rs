@@ -49,6 +49,8 @@ translation en
     recordStillUsed \"This {table} is still used by other records\"
     divisionByZero \"Division by zero\"
     numberTooLarge \"The number is too large\"
+    variableNotSet \"The environment variable {variable} must be set\"
+    noFolderChosen \"No folder was chosen\"
 ";
 
 const NL: &str = "// Dutch.
@@ -76,6 +78,8 @@ translation nl
     recordStillUsed \"Deze {table} wordt nog door andere records gebruikt\"
     divisionByZero \"Deling door nul\"
     numberTooLarge \"Het getal is te groot\"
+    variableNotSet \"De omgevingsvariabele {variable} moet ingesteld zijn\"
+    noFolderChosen \"Er is geen map gekozen\"
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
@@ -183,9 +187,9 @@ fn the_languages_table_has_a_column_per_language_the_default_first() {
     let card = table.rows.iter().find(|r| r.key == "cardTitle").unwrap();
     assert_eq!(card.places, ["window Card"]);
     assert_eq!(card.values, [Some("Customer card".to_string()), Some("Kundenkarte".to_string()), Some("Klantkaart".to_string())]);
-    // What each language leaves to translate: empty, or still the default's text
-    // (de is a copy of en but for cardTitle; nl leaves saveCaption empty and says "OK" as en does).
-    assert_eq!(table.missing, [0, 22, 2]);
+    // What each language leaves to translate: a key it lacks or leaves empty
+    // (de is a copy of en but for cardTitle, which is no gap; nl leaves saveCaption empty).
+    assert_eq!(table.missing, [0, 0, 1]);
 }
 
 /// A key a markdown or an image shows points each language at a file of
@@ -207,8 +211,8 @@ fn the_languages_table_knows_the_keys_that_point_at_resources() {
     assert_eq!(row("gameRules").resources, [Some("rules-en.md".to_string()), Some("rules-nl.md".to_string())]);
     assert_eq!(row("gameRules").values, [None, None]);
     assert_eq!(row("cardTitle").resources, [None, None]);
-    // A key that points at a file has its value; one left empty, or the same as the default's ("OK"), is missing.
-    assert_eq!(table.missing, [0, 3]);
+    // A key that points at a file has its value; one left empty is missing.
+    assert_eq!(table.missing, [0, 2]);
 }
 
 /// A text without letters, such as a calculator's `7` or `+`, reads the same
@@ -222,7 +226,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
     let mut project = load_converted([("calc.clarity", calc)]);
-    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    undoTooOld \"This was done too long ago to take back\"\n    savedSince \"Someone else changed this record since you opened it. Reload it to see their change.\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n    divisionByZero \"Division by zero\"\n    numberTooLarge \"The number is too large\"\n")]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    undoTooOld \"This was done too long ago to take back\"\n    savedSince \"Someone else changed this record since you opened it. Reload it to see their change.\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n    divisionByZero \"Division by zero\"\n    numberTooLarge \"The number is too large\"\n    variableNotSet \"The environment variable {variable} must be set\"\n    noFolderChosen \"No folder was chosen\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 
@@ -275,23 +279,31 @@ fn sidebars_windows_and_engines_bring_their_own_words() {
     assert!(translations::own_words().any(|(k, _)| *k == "sidebarGiveBack"));
 }
 
-/// A text still the same as the default's is left to translate, as the
-/// agents' missing_translations counts it: the table and the tool share one
-/// rule, so the IDE counts what the tool lists.
+/// A translation is missing only when its key is absent from a language's
+/// file or its text is empty; a text the same as the default's is a
+/// translation (a language may say it the same way). One rule, in one
+/// function: the IDE's languages table counts what `translations::missing`
+/// lists for the CLI and the agents, the default language too.
 #[test]
-fn a_text_the_same_as_the_default_is_left_to_translate() {
-    let nl = NL.replace("\"Klantkaart\"", "\"Customer card\"");
+fn a_translation_is_missing_only_when_its_key_is_absent_or_empty() {
+    let nl = NL.replace("\"Klantkaart\"", "\"Customer card\"").replace("    quitItem \"Afsluiten\"\n", "");
     let project = project_with(&[("translations/en.clarity", EN), ("translations/nl.clarity", &nl)]);
+    let missing = translations::missing(&project);
+    let languages: Vec<&str> = missing.iter().map(|(language, _)| language.as_str()).collect();
+    assert_eq!(languages, ["en", "nl"], "the default first, and every language");
+    let nl_missing: Vec<&str> = missing[1].1.iter().map(|m| m.key.as_str()).collect();
+    assert!(nl_missing.contains(&"saveCaption"), "empty is missing: {nl_missing:?}");
+    assert!(nl_missing.contains(&"quitItem"), "absent is missing: {nl_missing:?}");
+    assert!(!nl_missing.contains(&"cardTitle"), "the same as the default is no gap: {nl_missing:?}");
+    let save = missing[1].1.iter().find(|m| m.key == "saveCaption").unwrap();
+    assert_eq!((save.default_text.as_deref(), save.places.clone()), (Some("Save"), vec!["window Card".to_string()]));
+    assert!(missing[0].1.is_empty(), "{:?}", missing[0].1);
     let table = translations::table(&project);
-    let card = table.rows.iter().find(|r| r.key == "cardTitle").unwrap();
-    assert_eq!(card.missing, [false, true]);
-    let save = table.rows.iter().find(|r| r.key == "saveCaption").unwrap();
-    assert_eq!(save.missing, [false, true], "empty is missing too");
-    let left = translations::left_to_translate(&project);
-    let nl_left: Vec<&str> = left["nl"].iter().map(|(key, _)| key.as_str()).collect();
-    for row in table.rows.iter().filter(|r| r.missing[1]) {
-        assert!(nl_left.contains(&row.key.as_str()) || row.values[0].is_none(), "{}", row.key);
+    for (i, (language, keys)) in missing.iter().enumerate() {
+        assert_eq!(table.languages[i], *language);
+        assert_eq!(table.missing[i], keys.len(), "{language}");
+        for row in &table.rows {
+            assert_eq!(row.missing[i], keys.iter().any(|m| m.key == row.key), "{} in {language}", row.key);
+        }
     }
-    assert!(nl_left.contains(&"cardTitle") && nl_left.contains(&"saveCaption"), "{nl_left:?}");
-    assert_eq!(table.missing[1], table.rows.iter().filter(|r| r.missing[1]).count());
 }

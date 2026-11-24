@@ -24,8 +24,9 @@ std::string settings_os();
 /// The folder of file store `store` when a folder setting names it, on
 /// system `os`: the `kept` value when it is text that is not empty, else
 /// `fallback` (the setting's default), else a folder named after the store;
-/// a relative folder is in `settings_folder`, the folder of the settings file.
-std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback);
+/// a relative folder is in `data_folder`, the program's data folder
+/// (clarity::data_folder), or where the program runs when that is "".
+std::string store_folder_in(const std::string& os, const std::string& data_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback);
 /// The settings `program` kept; an empty object when it kept none, or they cannot be read.
 nlohmann::json read_settings(const std::string& program);
 /// The value a file store reads for its folder setting `setting`: what the

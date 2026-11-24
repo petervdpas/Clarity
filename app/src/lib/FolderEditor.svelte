@@ -186,7 +186,7 @@
     const entry = selected;
     if (!entry || entry.own) return;
     const what = entry.folder ? `the folder ${entry.path} and everything in it` : entry.path;
-    if (!(await dialogs.confirm({ title: "Delete", text: `Delete ${what}? This cannot be undone.`, action: "Delete", danger: true }))) return;
+    if (!(await dialogs.confirm({ title: "Delete", text: `Delete ${what}? Undo brings back its text files.`, action: "Delete", danger: true }))) return;
     await act(() => invoke("delete_part_file", { name, path: entry.path }));
   }
 

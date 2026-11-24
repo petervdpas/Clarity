@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AGENT_CALL_SHOWN_SECONDS, agentCall, buildStatus, counted, openLabel } from "./statusBar.ts";
+import { AGENT_CALL_SHOWN_SECONDS, agentCall, buildStatus, counted, mcpStatus, openLabel } from "./statusBar.ts";
 
 test("what is open is named with its kind", () => {
   assert.equal(openLabel({ kind: "window", name: "Main" }), "Window Main");
@@ -42,4 +42,19 @@ test("an outside agent's last call shows for two minutes", () => {
   assert.equal(agentCall({ ...call, ok: false, path: null }, 1001)?.ok, false, "a refused call shows as refused");
   assert.equal(agentCall(null, 1001), null);
   assert.equal(agentCall({ ...call, client: "" }, 1001)?.text, "Agent: add_part", "a program that gave no name");
+});
+
+test("the MCP item says which of Clarity's MCP servers are on", () => {
+  const on = (name: string, isOn: boolean) => ({ name, on: isOn });
+  assert.deepEqual(mcpStatus([on("clarity", true), on("clarity-cdev", true)]), {
+    text: "MCP",
+    off: false,
+    title: "Clarity's MCP servers: clarity on, clarity-cdev on. Turns each on or off.",
+  });
+  assert.deepEqual(mcpStatus([on("clarity", true), on("clarity-cdev", false)]), {
+    text: "MCP",
+    off: true,
+    title: "Clarity's MCP servers: clarity on, clarity-cdev off. Turns each on or off.",
+  });
+  assert.deepEqual(mcpStatus([]), { text: "MCP", off: false, title: "Clarity's MCP servers. Turns each on or off." });
 });

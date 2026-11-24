@@ -52,7 +52,7 @@ const char* clarity_setting_now(const cJSON* held, const cJSON* kept, const char
     return "";
 }
 
-const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback) {
+const char* clarity_store_folder_in(const char* os, const char* data_folder, const char* store, const cJSON* kept, const char* fallback) {
     const char* chosen = cJSON_IsString(kept) && kept->valuestring[0] ? kept->valuestring : fallback;
     if (!chosen || !*chosen) chosen = store;
     bool absolute;
@@ -62,7 +62,7 @@ const char* clarity_store_folder_in(const char* os, const char* settings_folder,
     } else {
         absolute = chosen[0] == '/';
     }
-    return absolute ? clarity_format("%s", chosen) : clarity_format("%s/%s", settings_folder, chosen);
+    return absolute ? clarity_format("%s", chosen) : (data_folder && *data_folder ? clarity_format("%s/%s", data_folder, chosen) : clarity_format("%s", chosen));
 }
 
 cJSON* clarity_read_settings(const char* program) {

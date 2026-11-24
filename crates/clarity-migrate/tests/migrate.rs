@@ -23,7 +23,7 @@ fn fresh(test: &str) -> String {
 }
 
 fn sqlite(test: &str, steps: Vec<Vec<String>>) -> Database {
-    Database { source: "main".into(), dialect: "sqlite".into(), location: fresh(test), steps }
+    Database { source: "main".into(), dialect: "sqlite".into(), location: fresh(test), steps, backups: None }
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn a_database_kind_clarity_does_not_know_is_said() {
 fn a_server_database_gets_its_steps_where_a_test_server_is_named() {
     for (variable, kind) in [("CLARITY_TEST_POSTGRES", "postgres"), ("CLARITY_TEST_MYSQL", "mysql"), ("CLARITY_TEST_MSSQL", "mssql")] {
         let Some(at) = std::env::var(variable).ok().filter(|v| !v.is_empty()) else { continue };
-        let database = Database { source: "main".into(), dialect: kind.into(), location: at, steps: steps(kind) };
+        let database = Database { source: "main".into(), dialect: kind.into(), location: at, steps: steps(kind), backups: None };
         let (had, wanted) = state(&database).unwrap();
         assert!(had <= wanted, "{kind}: the test database is ahead of the cases");
         migrate(&database).unwrap();
@@ -117,10 +117,27 @@ fn the_program_migrates_the_app_s_databases_from_the_file_beside_it() {
     assert!(again.status.success() && String::from_utf8_lossy(&again.stdout).contains("main is up to date (1 steps)"), "{again:?}");
 }
 
+/// The installed app's `clarity-migrate.json` names each SQLite database's
+/// backups folder: the project's `backups` line with the data source's name,
+/// in the folder the database opens in; none without the line, so whoever
+/// installs the app migrates without a backup as the project does.
+#[test]
+fn the_file_beside_the_app_names_the_backups_folder_of_the_project() {
+    let project = clarity_spec::load_converted([("shop.clarity", "module shop\n\nentity Customer\n    name: text\n")]);
+    let folder = std::path::Path::new("/projects/shop");
+    let with = clarity_project::parse("project Shop\n    stack go desktop\n    backups \"data/backups\"\n    datasource main sqlite \"data/shop.db\"\n").unwrap();
+    let file = clarity_gen::migrate_file(&project, &clarity_project::build_settings(folder, &with)).unwrap();
+    let databases: Vec<Database> = serde_json::from_str(&file.text).unwrap();
+    assert_eq!(databases[0].backups.as_deref(), Some("data/backups/main"), "{}", file.text);
+    let without = clarity_project::parse("project Shop\n    stack go desktop\n    datasource main sqlite \"data/shop.db\"\n").unwrap();
+    let file = clarity_gen::migrate_file(&project, &clarity_project::build_settings(folder, &without)).unwrap();
+    assert!(!file.text.contains("backups"), "{}", file.text);
+}
+
 /// Run in Clarity: the database the app opens with CLARITY_DATA naming the project's data folder.
 #[test]
 fn a_database_is_found_in_the_data_folder_as_the_app_finds_it_there() {
-    let kept = Database { source: "main".into(), dialect: "sqlite".into(), location: "data:shop/shop.db".into(), steps: Vec::new() };
+    let kept = Database { source: "main".into(), dialect: "sqlite".into(), location: "data:shop/shop.db".into(), steps: Vec::new(), backups: None };
     let folder = std::path::Path::new("/projects/shop/data");
     assert_eq!(clarity_migrate::in_data_folder(&kept, folder).location, folder.join("shop.db").display().to_string());
     let server = Database { dialect: "postgres".into(), location: "host=db".into(), ..kept };
@@ -176,18 +193,26 @@ fn a_step_that_breaks_references_changes_nothing() {
     assert_eq!(sql(&dangling, "SELECT referred_by FROM customer"), vec![vec![clarity_runtime::SqlValue::Null]]);
 }
 
-#[test]
-fn a_database_with_a_schema_is_backed_up_before_new_steps_and_a_new_one_is_not() {
-    let first = Database { steps: vec![vec!["CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')".into()]], ..sqlite("backup", Vec::new()) };
+/// A database with a schema, then a second step to apply.
+fn behind(test: &str, backups: Option<&str>) -> (Database, std::path::PathBuf) {
+    let first = Database { steps: vec![vec!["CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')".into()]], backups: backups.map(String::from), ..sqlite(test, Vec::new()) };
     let dir = std::path::Path::new(&first.location).parent().unwrap().to_path_buf();
     migrate(&first).unwrap();
     clarity_runtime::Db::open(std::path::Path::new(&first.location)).unwrap().batch("", "INSERT INTO item (name) VALUES ('kept')").unwrap();
-    assert!(!dir.join("backups").exists(), "a new database needs no backup");
     let mut steps = first.steps.clone();
     steps.push(vec!["ALTER TABLE item ADD COLUMN price INTEGER NOT NULL DEFAULT 0".into()]);
-    let both = Database { steps, ..first.clone() };
+    (Database { steps, ..first }, dir)
+}
+
+/// The project's backups folder (`backups "data/backups"`) holds a folder per
+/// data source; clarity-migrate backs up into the one it is given, a relative
+/// one in the database's own folder (docs/ledger/backups.md).
+#[test]
+fn a_database_with_a_schema_is_backed_up_into_the_folder_given_before_new_steps_and_a_new_one_is_not() {
+    let (both, dir) = behind("backup", Some("backups/main"));
+    assert!(!dir.join("backups").exists(), "a new database needs no backup");
     assert_eq!(migrate(&both), Ok(Outcome::Migrated(1)));
-    let backups: Vec<_> = std::fs::read_dir(dir.join("backups")).unwrap().flatten().map(|e| e.path()).collect();
+    let backups: Vec<_> = std::fs::read_dir(dir.join("backups/main")).unwrap().flatten().map(|e| e.path()).collect();
     assert_eq!(1, backups.len());
     let name = backups[0].file_name().unwrap().to_string_lossy().to_string();
     assert!(name.starts_with("main-") && name.ends_with("-before-migration-0002.db"), "{name}");
@@ -198,5 +223,19 @@ fn a_database_with_a_schema_is_backed_up_before_new_steps_and_a_new_one_is_not()
     drop(copy);
     // Nothing to apply: no backup.
     assert_eq!(migrate(&both), Ok(Outcome::UpToDate));
-    assert_eq!(1, std::fs::read_dir(dir.join("backups")).unwrap().count());
+    assert_eq!(1, std::fs::read_dir(dir.join("backups/main")).unwrap().count());
+    // A folder written out in full is used as it is.
+    let elsewhere = dir.join("elsewhere");
+    let (full, _) = behind("backup_full", Some(&elsewhere.display().to_string()));
+    assert_eq!(migrate(&full), Ok(Outcome::Migrated(1)));
+    assert_eq!(1, std::fs::read_dir(&elsewhere).unwrap().count());
+}
+
+/// A project without a backups folder takes no backups: clarity-migrate migrates without one.
+#[test]
+fn a_database_without_a_backups_folder_is_migrated_without_a_backup() {
+    let (both, dir) = behind("no_backup", None);
+    assert_eq!(migrate(&both), Ok(Outcome::Migrated(1)));
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|f| f != "main.db").collect();
+    assert!(left.is_empty(), "nothing but the database: {left:?}");
 }

@@ -747,8 +747,15 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
 /// Whether Clarity owns the database of data source `source`: a SQL source
 /// that is not external, or the one source of a project loaded without its
 /// project file.
-pub(crate) fn owned(project: &Project, source: &str) -> bool {
+pub fn owned(project: &Project, source: &str) -> bool {
     project.sources.iter().find(|s| s.name == source).is_none_or(|s| s.sql && !s.external)
+}
+
+/// The data sources that have migration steps: the SQL databases Clarity
+/// owns. Every way of writing a step (the IDE, the agents, `clarity
+/// migrate`) takes its sources from here.
+pub fn owned_sources(project: &Project) -> Vec<&str> {
+    project.sources.iter().filter(|s| s.sql && !s.external).map(|s| s.name.as_str()).collect()
 }
 
 /// Renames worth proposing: an entity that went while one with mostly the
@@ -952,7 +959,7 @@ pub(crate) fn check(project: &mut Project) {
         found.push(Diagnostic::error(message, Span::default()).in_file(&path));
     }
     // The databases Clarity owns; external ones keep the schema they have.
-    let sql: Vec<&str> = project.sources.iter().filter(|s| s.sql && !s.external).map(|s| s.name.as_str()).collect();
+    let sql = owned_sources(project);
     for source in &sql {
         found.extend(replay(steps(project, source)).1);
         // With one database there is no need to say which.

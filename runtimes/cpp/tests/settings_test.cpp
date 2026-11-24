@@ -99,7 +99,7 @@ TEST(a_store_reads_the_folder_a_handler_set_as_on_every_stack) {
 TEST(a_folder_setting_is_where_every_runtime_puts_a_store) {
     json cases = conformance("settings.json");
     for (const auto& c : cases["folders"]) {
-        auto found = store_folder_in(c["os"].get<std::string>(), c["settingsFolder"].get<std::string>(), c["store"].get<std::string>(), c["kept"], c["default"].get<std::string>());
+        auto found = store_folder_in(c["os"].get<std::string>(), c["dataFolder"].get<std::string>(), c["store"].get<std::string>(), c["kept"], c["default"].get<std::string>());
         CHECK(found == c["folder"].get<std::string>());
     }
 }
@@ -119,15 +119,18 @@ TEST(a_store_keeps_its_files_in_a_folder_setting) {
     setenv("HOME", home.string().c_str(), 1);
 #else
     setenv("XDG_CONFIG_HOME", home.string().c_str(), 1);
+    setenv("XDG_DATA_HOME", home.string().c_str(), 1);
 #endif
     const std::string program = "clarity-folder-test";
-    auto settings_folder = std::filesystem::path(*settings_file(program)).parent_path();
+    // The default is in the program's data folder (conformance/data-folder.json).
+    auto data_folder = std::filesystem::path(clarity::data_folder(program));
+    CHECK(data_folder == home / program);
     {
         Db db = Db::memory();
         db.add_store_setting("photos", program, "photosFolder", "photos");
-        // Not chosen yet: the default, in the settings' folder.
+        // Not chosen yet: the default, in the program's data folder.
         db.write_text("photos", "first.txt", "first");
-        CHECK(std::filesystem::exists(settings_folder / "photos" / "first.txt"));
+        CHECK(std::filesystem::exists(data_folder / "photos" / "first.txt"));
         // Chosen while the program runs: the next file goes there.
         auto chosen = home / "chosen";
         keep_settings(program, json{{"photosFolder", chosen.string()}});

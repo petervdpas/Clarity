@@ -1,5 +1,5 @@
 {
-  "about": "Where a program's SQLite database opens (data-folder): a database the project keeps beside it is written data:<program>/<file> by the generator; it opens in the folder CLARITY_DATA names (Clarity's Run names the project's data folder), else in the person's folder for application data (Linux $XDG_DATA_HOME or ~/.local/share, macOS ~/Library/Application Support, Windows %APPDATA%) under the program's name, else under its own name where the program runs. CLARITY_DATA moves any SQLite file under its own name. env:, setting: and :memory: are as they say.",
+  "about": "Where a program keeps its data (data-folder), so a program built on one machine runs on another: nothing of the build machine is written into its code. `cases`: where an SQLite database opens. A database the project keeps beside it (a relative location) is written data:<program>/<file> by the generator; it opens in the program's data folder: the folder CLARITY_DATA names (Clarity's Run names the project's data folder), else the person's folder for application data (Linux $XDG_DATA_HOME or ~/.local/share, macOS ~/Library/Application Support, Windows %APPDATA%) under the program's name, else under its own name where the program runs. CLARITY_DATA moves any SQLite file under its own name. env:, setting: and :memory: are as they say. `folders`: the program's data folder itself, for `program` (\"\" when the environment names none: where the program runs); a relative folder setting (its default, or a relative folder the person typed) is in it (conformance/settings.json, `folders`). `stores`: the folder of a file store the project file names with a folder (`filestore photos \"data/photos\"`): a relative one is written data:<program>/<folder's name> by the generator and is in the data folder under its own name, as an SQLite file is; an absolute one is as it is; env:NAME is that environment variable's value, and with the variable unset or empty (`unset`) the place that uses the store says so in Clarity's own words, by the key variableNotSet with the variable's name in its slot {variable}, and the program does not stop.",
   "cases": [
     { "os": "linux", "env": { "HOME": "/home/ann" }, "location": "data:shop/shop.db", "file": "/home/ann/.local/share/shop/shop.db" },
     { "os": "linux", "env": { "HOME": "/home/ann", "XDG_DATA_HOME": "/data" }, "location": "data:shop/shop.db", "file": "/data/shop/shop.db" },
@@ -12,5 +12,24 @@
     { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "env:SHOP_DB", "file": "env:SHOP_DB" },
     { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "setting:shop/database", "file": "setting:shop/database" },
     { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": ":memory:", "file": ":memory:" }
+  ],
+  "folders": [
+    { "os": "linux", "env": { "HOME": "/home/ann" }, "program": "shop", "folder": "/home/ann/.local/share/shop" },
+    { "os": "linux", "env": { "HOME": "/home/ann", "XDG_DATA_HOME": "/data" }, "program": "shop", "folder": "/data/shop" },
+    { "os": "macos", "env": { "HOME": "/Users/ann" }, "program": "shop", "folder": "/Users/ann/Library/Application Support/shop" },
+    { "os": "windows", "env": { "APPDATA": "C:/Users/ann/AppData/Roaming" }, "program": "shop", "folder": "C:/Users/ann/AppData/Roaming/shop" },
+    { "os": "linux", "env": { "HOME": "/home/ann", "CLARITY_DATA": "/copy" }, "program": "shop", "folder": "/copy" },
+    { "os": "linux", "env": {}, "program": "shop", "folder": "" }
+  ],
+  "stores": [
+    { "os": "linux", "env": { "HOME": "/home/ann" }, "location": "data:shop/photos", "folder": "/home/ann/.local/share/shop/photos" },
+    { "os": "macos", "env": { "HOME": "/Users/ann" }, "location": "data:shop/photos", "folder": "/Users/ann/Library/Application Support/shop/photos" },
+    { "os": "windows", "env": { "APPDATA": "C:/Users/ann/AppData/Roaming" }, "location": "data:shop/photos", "folder": "C:/Users/ann/AppData/Roaming/shop/photos" },
+    { "os": "linux", "env": { "HOME": "/home/ann", "CLARITY_DATA": "/copy" }, "location": "data:shop/photos", "folder": "/copy/photos" },
+    { "os": "linux", "env": {}, "location": "data:shop/photos", "folder": "photos" },
+    { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "/srv/photos", "folder": "/srv/photos" },
+    { "os": "linux", "env": { "PHOTOS": "/mnt/photos" }, "location": "env:PHOTOS", "folder": "/mnt/photos" },
+    { "os": "linux", "env": {}, "location": "env:PHOTOS", "unset": "PHOTOS" },
+    { "os": "linux", "env": { "PHOTOS": "" }, "location": "env:PHOTOS", "unset": "PHOTOS" }
   ]
 }

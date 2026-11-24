@@ -154,13 +154,14 @@
     X(any_other_failure_says_the_runtimes_message) \
     X(clarity_data_moves_an_sqlite_file_into_its_folder) \
     X(a_database_opens_where_every_runtime_opens_it) \
+    X(the_data_folder_is_where_every_runtime_finds_it) \
+    X(a_file_store_is_where_every_runtime_places_it) \
     X(text_functions_read_as_every_runtime_reads_them) \
     X(a_zip_is_written_as_every_runtime_writes_it) \
     X(a_database_opens_in_the_folder_clarity_data_names) \
     X(a_reply_says_quit_and_keys_only_when_code_asks) \
     X(an_open_says_new_window_only_when_asked) \
     X(code_quits_and_opens_the_keys_window_through_the_layer) \
-    X(backups_are_named_and_pruned_as_every_stack_does) \
     X(signing_in_is_as_every_runtime_does) \
     X(allow_readable_and_hashed_say_clarity_words) \
     X(a_command_line_signs_in_before_its_command) \

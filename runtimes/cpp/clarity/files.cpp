@@ -17,8 +17,20 @@ namespace clarity {
 
 namespace fs = std::filesystem;
 
+// data:<program>/<name> is in the program's data folder, and with env:NAME
+// unset the store says so where it is used, so the program does not stop
+// (conformance/data-folder.json, stores).
 void Db::add_store(const std::string& name, const std::string& at) {
-    fs::path folder = location(at);
+    stores_not_set_.erase(name);
+    fs::path folder;
+    try {
+        folder = fs::path(data_folder_store(at));
+    } catch (const NotSetError& e) {
+        stores_.erase(name);
+        store_settings_.erase(name);
+        stores_not_set_[name] = e.variable;
+        return;
+    }
     std::error_code error;
     fs::create_directories(folder, error);
     if (error) throw StorageError("cannot make the file store " + folder.string() + ": " + error.message());
@@ -28,6 +40,7 @@ void Db::add_store(const std::string& name, const std::string& at) {
 
 void Db::add_store_setting(const std::string& name, const std::string& program, const std::string& setting, const std::string& fallback) {
     stores_.erase(name);
+    stores_not_set_.erase(name);
     store_settings_[name] = {program, setting, fallback};
     store_folder(name);
 }
@@ -40,15 +53,15 @@ fs::path Db::store_folder(const std::string& name) {
     // A folder that is no store, by its path: just a folder.
     if (name.starts_with(folder_store)) {
         std::string path = name.substr(folder_store.size());
-        if (path.empty()) throw StorageError("no folder was chosen");
+        if (path.empty()) throw no_folder_chosen();
         return fs::path(path);
     }
+    if (auto unset = stores_not_set_.find(name); unset != stores_not_set_.end()) throw NotSetError(unset->second);
     if (auto setting = store_settings_.find(name); setting != store_settings_.end()) {
-        auto file = settings_file(setting->second.program);
-        if (!file) throw StorageError("this system names no folder for application settings");
+        // A relative folder is in the program's data folder (conformance/settings.json, folders).
         nlohmann::json kept = read_settings(setting->second.program);
-        std::string settings_folder = fs::path(*file).parent_path().generic_string();
-        fs::path folder = store_folder_in(settings_os(), settings_folder, name, nlohmann::json(setting_now(held_settings_, kept, setting->second.setting)), setting->second.fallback);
+        std::string data = fs::path(data_folder(setting->second.program)).generic_string();
+        fs::path folder = store_folder_in(settings_os(), data, name, nlohmann::json(setting_now(held_settings_, kept, setting->second.setting)), setting->second.fallback);
         std::error_code error;
         fs::create_directories(folder, error);
         if (error) throw StorageError("cannot make the file store " + folder.string() + ": " + error.message());

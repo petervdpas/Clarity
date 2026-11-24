@@ -12,6 +12,12 @@ use crate::model::Project;
 /// The folder of engines in a project's folder.
 pub const ENGINES_DIR: &str = "engines";
 
+/// The engine library (`clarity-engine`, runtimes/rust-engine) this Clarity
+/// builds engines on, as an engine's Cargo.toml asks for it: a new engine's
+/// source names it, and the checker warns at an engine whose source asks for
+/// another.
+pub const ENGINE_LIBRARY_VERSION: &str = "0.4";
+
 /// The services of Clarity an engine may use (`uses clock, random, log,
 /// language, progress`): functions of module `clarity` its file may import.
 pub const SERVICES: [&str; 5] = ["clock", "random", "log", "language", "progress"];
@@ -96,6 +102,101 @@ pub fn engine_files(dir: &Path) -> std::io::Result<Option<Vec<EngineFile>>> {
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(Some(found))
+}
+
+/// The sources of the engines folder in `dir`: the name of each folder that
+/// holds a Cargo.toml (`engines/board/` for `board.wasm`) and that file.
+pub fn engine_sources(dir: &Path) -> std::io::Result<Vec<(String, String)>> {
+    let folder = dir.join(ENGINES_DIR);
+    let mut found = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&folder) else { return Ok(found) };
+    for entry in entries {
+        let path = entry?.path();
+        let cargo = path.join("Cargo.toml");
+        if path.is_dir() && cargo.is_file() {
+            found.push((path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), std::fs::read_to_string(&cargo)?));
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+/// Warns at each declared engine whose source (`sources`, as
+/// [`engine_sources`] reads them) builds only on this machine: a path to a
+/// folder outside the project, or another engine library than this Clarity's.
+pub fn check_sources(project: &mut Project, sources: &[(String, String)]) {
+    let mut found = Vec::new();
+    for file in &project.files {
+        for engine in file.engines.iter().filter(|e| e.body.is_none()) {
+            let stem = engine.file.strip_suffix(".wasm").unwrap_or(&engine.file);
+            let Some((_, cargo)) = sources.iter().find(|(name, _)| name == stem) else { continue };
+            let warn = |message: String| Diagnostic::warning(format!("engine {}: its source {message}", engine.name.name), engine.span).in_file(&file.path);
+            for line in cargo.lines().map(str::trim).filter(|l| !l.starts_with('#')) {
+                if let Some(path) = quoted_after(line, "path")
+                    && outside_the_project(&path)
+                {
+                    found.push(warn(format!("takes a crate from {path}, a folder outside the project, so it builds only where that folder is")));
+                }
+                let Some(rest) = line.strip_prefix("clarity-engine").map(str::trim_start).and_then(|r| r.strip_prefix('=')).map(str::trim) else { continue };
+                let asked = if rest.starts_with('{') { quoted_after(rest, "version") } else { quoted(rest) };
+                if let Some(asked) = asked
+                    && major_minor(&asked) != major_minor(ENGINE_LIBRARY_VERSION)
+                {
+                    found.push(warn(format!("asks for clarity-engine {asked}; this Clarity builds engines on clarity-engine {ENGINE_LIBRARY_VERSION}")));
+                }
+            }
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// The quoted text that starts `text` (`"0.4"` or `'0.4'`), without its quotes.
+fn quoted(text: &str) -> Option<String> {
+    let quote = text.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+    let rest = &text[1..];
+    Some(rest[..rest.find(quote)?].to_string())
+}
+
+/// The quoted value of `key = "..."` in a TOML line or inline table.
+fn quoted_after(line: &str, key: &str) -> Option<String> {
+    let mut from = 0;
+    while let Some(at) = line[from..].find(key).map(|i| i + from) {
+        from = at + key.len();
+        let before = line[..at].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            continue;
+        }
+        if let Some(value) = line[from..].trim_start().strip_prefix('=') {
+            return quoted(value.trim_start());
+        }
+    }
+    None
+}
+
+/// Whether a path in an engine's Cargo.toml (its folder is
+/// `engines/<name>/` of the project) leaves the project: an absolute path,
+/// or more steps up than the two folders it stands in.
+fn outside_the_project(path: &str) -> bool {
+    let absolute = path.starts_with('/') || path.starts_with('\\') || path.as_bytes().get(1) == Some(&b':');
+    if absolute {
+        return true;
+    }
+    let mut depth: i32 = 2;
+    for step in path.split(['/', '\\']).filter(|s| !s.is_empty() && *s != ".") {
+        depth += if step == ".." { -1 } else { 1 };
+        if depth < 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// What Cargo keeps a requirement compatible by: major and minor below 1.0,
+/// the major from 1.0 (`^0.4.0` and `0.4` give `0.4`).
+fn major_minor(requirement: &str) -> String {
+    let version = requirement.trim_start_matches(['^', '=', '~', ' ']);
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.first() == Some(&"0") { parts.iter().take(2).copied().collect::<Vec<_>>().join(".") } else { parts.first().copied().unwrap_or_default().to_string() }
 }
 
 /// What a WebAssembly module imports (`module.name`) and exports, by name.

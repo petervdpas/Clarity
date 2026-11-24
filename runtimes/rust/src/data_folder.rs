@@ -49,3 +49,51 @@ pub fn sqlite_in(os: &str, location: &str, env: impl Fn(&str) -> Option<String>)
 pub fn sqlite_here(location: &str) -> String {
     sqlite(location, |name| std::env::var(name).ok())
 }
+
+/// The program's data folder (conformance/data-folder.json, `folders`): the
+/// folder CLARITY_DATA names, else the person's folder for application data
+/// under the program's name; "" when the environment names neither, which is
+/// where the program runs. A relative file store and a relative folder
+/// setting are in it, as a relative SQLite database is.
+pub fn folder(program: &str, env: impl Fn(&str) -> Option<String>) -> String {
+    folder_in(std::env::consts::OS, program, env)
+}
+
+/// `folder` on system `os` (`windows`, `macos` or another).
+pub fn folder_in(os: &str, program: &str, env: impl Fn(&str) -> Option<String>) -> String {
+    let set = |name: &str| env(name).filter(|v| !v.is_empty());
+    if let Some(folder) = set(VARIABLE) {
+        return folder;
+    }
+    let folder = match os {
+        "windows" => set("APPDATA"),
+        "macos" => set("HOME").map(|home| format!("{home}/Library/Application Support")),
+        _ => set("XDG_DATA_HOME").or_else(|| set("HOME").map(|home| format!("{home}/.local/share"))),
+    };
+    folder.map(|folder| format!("{folder}/{program}")).unwrap_or_default()
+}
+
+/// The folder of a file store at `location` (conformance/data-folder.json,
+/// `stores`): `data:<program>/<name>` (a relative folder in the project
+/// file) is in the program's data folder under its own name; `env:NAME` is
+/// that variable's value, an error that says so in Clarity's own words while
+/// it is unset or empty; anything else is as it is.
+pub fn store(location: &str, env: impl Fn(&str) -> Option<String>) -> crate::Result<String> {
+    store_in(std::env::consts::OS, location, env)
+}
+
+/// `store` on system `os` (`windows`, `macos` or another).
+pub fn store_in(os: &str, location: &str, env: impl Fn(&str) -> Option<String>) -> crate::Result<String> {
+    if let Some(name) = location.strip_prefix("env:") {
+        return env(name).filter(|v| !v.is_empty()).ok_or_else(|| crate::Error::NotSet(name.to_string()));
+    }
+    let Some(kept) = location.strip_prefix("data:") else { return Ok(location.to_string()) };
+    let (program, name) = kept.split_once('/').unwrap_or(("", kept));
+    let folder = folder_in(os, program, env);
+    Ok(in_folder(&folder, name))
+}
+
+/// `name` in `folder`; just `name` when there is no folder.
+pub fn in_folder(folder: &str, name: &str) -> String {
+    if folder.is_empty() { name.to_string() } else { format!("{folder}/{name}") }
+}

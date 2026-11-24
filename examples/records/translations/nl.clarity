@@ -195,6 +195,8 @@ translation nl
     recordStillUsed "Deze {table} wordt nog door andere records gebruikt"
     divisionByZero "Deling door nul"
     numberTooLarge "Het getal is te groot"
+    variableNotSet "De omgevingsvariabele {variable} moet ingesteld zijn"
+    noFolderChosen "Er is geen map gekozen"
     engineTooLong "{engine} liep langer dan {seconds} seconden en is gestopt"
     engineStopped "{engine} is gestopt"
     engineBroke "{engine} werkt niet meer in {function}"

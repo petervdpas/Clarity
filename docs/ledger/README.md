@@ -131,3 +131,4 @@ Plain ASCII, no em-dashes, short lines.
 | [reports-pdf](reports-pdf.md) | not built | clarity-pdf on Typst |
 | [debugger](debugger.md) | not built | marks per statement in the Rust generator |
 | [network](network.md) | not built | node and identity: a `network` declaration on the app |
+- [servers](servers.md): servers beside a desktop app (SCIM, wiki, REST API, the project's own), beside each desktop or central

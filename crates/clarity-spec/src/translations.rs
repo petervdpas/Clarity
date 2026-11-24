@@ -274,9 +274,10 @@ pub const GRAPH_KEYS: [(&str, &str); 5] = [
 pub const MARKDOWN_MEMO_KEYS: [(&str, &str); 2] = [("markdownWrite", "Write"), ("markdownPreview", "Preview")];
 
 /// What a window says when code fails at a value or a record: an item
-/// outside its list, a record that is not there or still used. The
-/// runtimes fill the slots; every application with windows has them.
-pub const RUNTIME_ERROR_KEYS: [(&str, &str); 5] = [
+/// outside its list, a record that is not there or still used, a folder
+/// or database whose environment variable is not set. The runtimes fill
+/// the slots; every application with windows has them.
+pub const RUNTIME_ERROR_KEYS: [(&str, &str); 7] = [
     ("itemOutsideList", "There is no item {position} in a list of {count}"),
     ("recordNotThere", "There is no {table} with id {id}"),
     ("recordStillUsed", "This {table} is still used by other records"),
@@ -284,6 +285,10 @@ pub const RUNTIME_ERROR_KEYS: [(&str, &str); 5] = [
     ("divisionByZero", "Division by zero"),
     // A whole number or decimal that does not fit (conformance/overflow.json).
     ("numberTooLarge", "The number is too large"),
+    // A file store or database at `env:NAME` with the variable unset (conformance/data-folder.json, `stores`).
+    ("variableNotSet", "The environment variable {variable} must be set"),
+    // Code listing or writing a folder that is no store, with none chosen.
+    ("noFolderChosen", "No folder was chosen"),
 ];
 
 /// Why a call of an engine failed (manual/code.engines.md), in place of the
@@ -1146,7 +1151,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             if project.resource_keys.get(&default).is_some_and(|r| r.contains_key(&u.key)) {
                 continue;
             }
-            match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
+            match values.get(&u.key).filter(|v| !is_missing(Some(v))) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
                     let english = own_words().find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
@@ -1247,8 +1252,8 @@ pub struct TranslationRow {
     pub values: Vec<Option<String>>,
     /// The file of the resources each language points it at, if any.
     pub resources: Vec<Option<String>>,
-    /// Per language, whether it is left to translate (`untranslated`): the
-    /// default's when empty, another's when empty or the same as the default's.
+    /// Per language, whether it lacks the key (`is_missing`): absent or empty,
+    /// and no file of the resources.
     pub missing: Vec<bool>,
 }
 
@@ -1299,34 +1304,58 @@ pub struct TranslationTable {
     /// The languages the project has files for, the default first.
     pub languages: Vec<String>,
     pub rows: Vec<TranslationRow>,
-    /// How many keys each language leaves empty.
+    /// How many keys each language lacks (`is_missing`).
     pub missing: Vec<usize>,
 }
 
-/// Whether a language's text of a key is left to translate, given the
-/// default language's text: empty, or the same as the default's. The one
-/// rule the languages table and the agents' missing_translations share.
-pub fn untranslated(default: Option<&str>, own: Option<&str>) -> bool {
-    let own = own.unwrap_or("").trim();
-    own.is_empty() || default.is_some_and(|d| !d.trim().is_empty() && d == own)
+/// Whether a language's text of a key is missing: its key is absent from the
+/// language's file (`None`), or its text is empty. A text the same as the
+/// default's is a translation: a language may say it the same way. The one
+/// rule the languages table, the CLI, the agents' missing_translations and
+/// every check's count share.
+pub fn is_missing(text: Option<&str>) -> bool {
+    text.is_none_or(|t| t.trim().is_empty())
 }
 
-/// Per language other than the default, the keys of the default's file
-/// still left to translate (`untranslated`), with the default's text.
-pub fn left_to_translate(project: &Project) -> BTreeMap<String, Vec<(String, String)>> {
+/// Whether `language` lacks `key`: no file of the resources for it, and its
+/// text missing (`is_missing`).
+fn lacks(project: &Project, language: &str, key: &str) -> bool {
+    let resource = project.resource_keys.get(language).is_some_and(|r| r.contains_key(key));
+    !resource && is_missing(project.translations.get(language).and_then(|values| values.get(key)).map(String::as_str))
+}
+
+/// A key a language lacks, where the project uses it, and the default
+/// language's text of it (none when the default lacks it too).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Missing {
+    pub key: String,
+    pub places: Vec<String>,
+    pub default_text: Option<String>,
+}
+
+/// Per language the project has a file for, the default first, the keys the
+/// project uses that it lacks (`is_missing`): what is left to translate.
+pub fn missing(project: &Project) -> Vec<(String, Vec<Missing>)> {
     let default = default_language(project);
-    let Some(texts) = project.translations.get(&default) else { return BTreeMap::new() };
-    project
-        .translations
-        .iter()
-        .filter(|(l, _)| **l != default)
-        .map(|(language, own)| {
-            let left = texts
+    let used = keys(project);
+    let defaults = project.translations.get(&default);
+    let mut languages: Vec<&String> = project.translations.keys().filter(|l| **l != default).collect();
+    if project.translations.contains_key(&default) {
+        languages.insert(0, &default);
+    }
+    languages
+        .into_iter()
+        .map(|language| {
+            let lacking = used
                 .iter()
-                .filter(|(key, text)| !text.trim().is_empty() && untranslated(Some(text), own.get(*key).map(String::as_str)))
-                .map(|(key, text)| (key.clone(), text.clone()))
+                .filter(|u| lacks(project, language, &u.key))
+                .map(|u| Missing {
+                    key: u.key.clone(),
+                    places: u.places.clone(),
+                    default_text: defaults.and_then(|d| d.get(&u.key)).filter(|t| !is_missing(Some(t))).cloned(),
+                })
                 .collect();
-            (language.clone(), left)
+            (language.clone(), lacking)
         })
         .collect()
 }
@@ -1350,11 +1379,7 @@ pub fn table(project: &Project) -> TranslationTable {
             places: used.places,
         })
         .map(|mut row| {
-            // The default's own text is what another language must not still say.
-            let first = if languages.first() == Some(&default) { row.values[0].clone() } else { None };
-            row.missing = (0..languages.len())
-                .map(|i| row.resources[i].is_none() && untranslated(if languages[i] == default { None } else { first.as_deref() }, row.values[i].as_deref()))
-                .collect();
+            row.missing = languages.iter().map(|language| lacks(project, language, &row.key)).collect();
             row
         })
         .collect();

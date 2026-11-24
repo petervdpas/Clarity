@@ -3,7 +3,8 @@
 //! program started from a window program opens a console window of its own,
 //! which flashes up and closes, unless it is started with no window
 //! (CREATE_NO_WINDOW); its output still reaches Clarity through its pipes.
-//! Guarded by tests/background.rs: nothing else calls `Command::new`.
+//! A program the person runs in their own terminal starts with
+//! `terminal_command`. Guarded by tests/background.rs: nothing else calls `Command::new`.
 
 use std::ffi::OsStr;
 use std::process::Command;
@@ -19,6 +20,14 @@ pub fn background_command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     no_window(&mut command);
     command
+}
+
+/// A command for `program` that runs in the person's own terminal (`clarity
+/// run`): it shares the terminal's console, so what it writes and reads is the
+/// person's. The one start that is not a background one: on Windows a program
+/// started with no window could not write to the terminal it was run from.
+pub fn terminal_command(program: impl AsRef<OsStr>) -> Command {
+    Command::new(program)
 }
 
 /// Starts `command` with no console window on Windows.

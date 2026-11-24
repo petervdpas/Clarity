@@ -26,6 +26,9 @@ struct Seen {
     part_edit: Option<String>,
     clarity_tool: Option<String>,
     clarity_write: Option<Value>,
+    module_write: Option<Value>,
+    guidance_write: Option<Value>,
+    notes_write: Option<Value>,
     outside_edit: Option<String>,
     terminal: Option<bool>,
 }
@@ -139,7 +142,7 @@ fn fake_agent(read: ReadHalf<DuplexStream>, out: WriteHalf<DuplexStream>, seen: 
                     fake.say(&session, json!({ "sessionUpdate": "tool_call", "toolCallId": "t3", "title": "Update file", "kind": "edit", "status": "pending", "locations": [{ "path": main }] })).await;
                     let inside = fake.ask("session/request_permission", json!({ "sessionId": session, "toolCall": { "toolCallId": "t3", "title": "Update file" }, "options": options() })).await;
                     // An edit of a file of the project that is not Clarity's own: a custom part's code.
-                    let part = root.join("parts/dial.rs").display().to_string();
+                    let part = root.join("parts/Dial/src/lib.rs").display().to_string();
                     let part_edit = fake
                         .ask("session/request_permission", json!({ "sessionId": session, "toolCall": { "toolCallId": "t5", "title": "Update part", "kind": "edit", "locations": [{ "path": part }] }, "options": options() }))
                         .await;
@@ -161,7 +164,10 @@ fn fake_agent(read: ReadHalf<DuplexStream>, out: WriteHalf<DuplexStream>, seen: 
                     let run = fake.ask("session/request_permission", json!({ "sessionId": session, "toolCall": { "toolCallId": "t2", "title": "Run cargo build", "kind": "execute" }, "options": options() })).await;
                     let read = fake.ask("fs/read_text_file", json!({ "sessionId": session, "path": root.join("notes.md").display().to_string() })).await;
                     let clarity_write = fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("design/New.cxaml").display().to_string(), "content": "<Window />\n" })).await;
-                    fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("parts/dial.rs").display().to_string(), "content": "// dial\n" })).await;
+                    fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("parts/Dial/src/lib.rs").display().to_string(), "content": "// dial" })).await;
+                    let module_write = fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("todo.clarity").display().to_string(), "content": "module changed\n" })).await;
+                    let guidance_write = fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("agent/guidance.md").display().to_string(), "content": "x" })).await;
+                    let notes_write = fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("notes.md").display().to_string(), "content": "x" })).await;
                     let escape = fake.ask("fs/write_text_file", json!({ "sessionId": session, "path": root.join("../escape.txt").display().to_string(), "content": "x" })).await;
                     let terminal = fake.ask("terminal/create", json!({ "sessionId": session, "command": "ls" })).await;
                     assert_eq!(terminal["error"]["code"], -32601, "no terminal: {terminal}");
@@ -171,6 +177,9 @@ fn fake_agent(read: ReadHalf<DuplexStream>, out: WriteHalf<DuplexStream>, seen: 
                         s.part_edit = Some(chosen(&part_edit));
                         s.clarity_tool = Some(chosen(&clarity_tool));
                         s.clarity_write = Some(clarity_write);
+                        s.module_write = Some(module_write);
+                        s.guidance_write = Some(guidance_write);
+                        s.notes_write = Some(notes_write);
                         s.outside_edit = Some(chosen(&outside_edit));
                         s.decision = Some(chosen(&run));
                         s.read = read["result"]["content"].as_str().map(str::to_string);
@@ -194,9 +203,13 @@ struct Run {
 }
 
 async fn started(name: &str, decide: Decision) -> Run {
-    let root = std::env::temp_dir().join(format!("clarity-acp-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("design")).unwrap();
+    // A project with a custom part in Rust: the agent reaches its folder, `root`.
+    let base = std::env::temp_dir().join(format!("clarity-acp-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let file = clarity_tools::new_project::write_new_project(&base.join("todo"), clarity_project::starter("Todo", "todo").stack).unwrap();
+    let root = clarity_project::module_dir(&file);
+    std::fs::write(root.join("dial.clarity"), "module dial\n\npart Dial\n    crate \"parts/Dial\"\n    size 2 x 2\n").unwrap();
     std::fs::write(root.join("notes.md"), "line one\nline two\n").unwrap();
     let (client_end, agent_end) = tokio::io::duplex(1 << 16);
     let (agent_read, agent_write) = tokio::io::split(agent_end);
@@ -248,11 +261,17 @@ async fn a_turn_reaches_the_panel_with_clarity_s_tools() {
     assert_eq!(seen.cwd.as_deref(), Some(run.root.display().to_string().as_str()));
     // Allowed once, never always: the next command asks again.
     assert_eq!(seen.decision.as_deref(), Some("once"));
-    // Every AI changes Clarity's own files only through Clarity's tools: an edit of
-    // one is rejected without asking, a write of one refused, naming the tools.
+    // The agent writes what Clarity's tools write by their one rule (clarity_tools::files::writable):
+    // an edit of anything but a part's code is rejected without asking, a write refused, naming the tool.
     assert_eq!(seen.inside_edit.as_deref(), Some("no"), "design/Main.cxaml goes through Clarity's tools");
-    let refused = seen.clarity_write.clone().unwrap();
-    assert!(refused["error"]["message"].as_str().is_some_and(|m| m.contains("Clarity's tools")), "{refused}");
+    let says = |answer: &Option<Value>, words: &str| {
+        let answer = answer.clone().unwrap();
+        assert!(answer["error"]["message"].as_str().is_some_and(|m| m.contains(words)), "{words}: {answer}");
+    };
+    says(&seen.clarity_write, "structural tools");
+    says(&seen.module_write, "write_file");
+    says(&seen.guidance_write, "set_guidance");
+    says(&seen.notes_write, "is not a module of the project");
     // Another file of the project (a custom part's code) is the client's to allow (once): Undo takes it back.
     assert_eq!(seen.part_edit.as_deref(), Some("once"));
     assert_eq!(seen.outside_edit.as_deref(), Some("once"), "allowed by the person here");
@@ -264,14 +283,16 @@ async fn a_turn_reaches_the_panel_with_clarity_s_tools() {
     // A request without a title is asked by the title its tool call was told with.
     assert_eq!(*run.asked.lock().unwrap(), ["Update outside", "mcp.other.erase", "Run cargo build"], "the person is asked only for what is outside the project, another program's tool, or runs");
     assert!(!run.root.join("design/New.cxaml").exists(), "a window is made with Clarity's tools");
-    assert_eq!(std::fs::read_to_string(run.root.join("parts/dial.rs")).unwrap(), "// dial\n");
+    assert_eq!(std::fs::read_to_string(run.root.join("parts/Dial/src/lib.rs")).unwrap(), "// dial\n", "written as the tools write it");
+    assert!(!std::fs::read_to_string(run.root.join("todo.clarity")).unwrap().contains("changed"), "as it was");
+    assert_eq!(std::fs::read_to_string(run.root.join("notes.md")).unwrap(), "line one\nline two\n");
     assert!(!run.root.join("../escape.txt").exists());
 
     let events = drained(&mut run.events);
     assert!(events.contains(&Event::Text("Making the window.".into())), "{events:?}");
     assert!(events.contains(&Event::Tool { id: "t1".into(), title: "write_file design/Main.cxaml".into(), status: ToolStatus::Pending }), "{events:?}");
     assert!(events.contains(&Event::ToolUpdate { id: "t1".into(), title: None, status: Some(ToolStatus::Done) }), "{events:?}");
-    let _ = std::fs::remove_dir_all(&run.root);
+    let _ = std::fs::remove_dir_all(run.root.parent().unwrap());
 }
 
 /// The program's own choices for a chat (model, effort, mode), as ACP's
@@ -291,7 +312,7 @@ async fn a_session_tells_its_choices_and_one_changes() {
     assert_eq!(run.agent.choices(), [model.clone()]);
     run.agent.set_choice(&session, "model", "b").await.unwrap();
     assert_eq!(run.agent.choices(), [clarity_acp::Choice { current: "b".into(), ..model }]);
-    let _ = std::fs::remove_dir_all(&run.root);
+    let _ = std::fs::remove_dir_all(run.root.parent().unwrap());
 }
 
 #[tokio::test]
@@ -301,7 +322,7 @@ async fn denied_is_rejected_once() {
     let session = run.agent.new_session(Vec::new()).await.unwrap();
     run.agent.prompt(&session, "Build it").await.unwrap();
     assert_eq!(run.seen.lock().unwrap().decision.as_deref(), Some("no"));
-    let _ = std::fs::remove_dir_all(&run.root);
+    let _ = std::fs::remove_dir_all(run.root.parent().unwrap());
 }
 
 /// A program that is not signed in says so in ACP's own words, and the
@@ -312,20 +333,7 @@ async fn not_signed_in_is_told_apart() {
     assert_eq!(run.agent.new_session(Vec::new()).await, Err(Failure::NotSignedIn));
     run.agent.sign_in("chatgpt").await.unwrap();
     assert!(run.agent.new_session(Vec::new()).await.is_ok());
-    let _ = std::fs::remove_dir_all(&run.root);
-}
-
-/// Clarity's own files, which every AI changes only through Clarity's tools:
-/// modules and the project file, windows and views, the README and the resources' texts.
-#[test]
-fn clarity_s_own_files_are_told_exactly() {
-    let root = Path::new("/p/shop");
-    for own in ["customers.clarity", "translations/en.clarity", "design/Main.cxaml", "README.md", "resources/rules-en.md"] {
-        assert!(clarity_acp::clarity_s_own(root, &root.join(own)), "{own}");
-    }
-    for other in ["parts/dial.rs", "parts/Dial.cs", "notes.md", "parts/README.txt", "logo.png"] {
-        assert!(!clarity_acp::clarity_s_own(root, &root.join(other)), "{other}");
-    }
+    let _ = std::fs::remove_dir_all(run.root.parent().unwrap());
 }
 
 #[test]

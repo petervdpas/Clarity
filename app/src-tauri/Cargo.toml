@@ -27,6 +27,8 @@ tokio = { version = "1.53.3", features = ["sync"] }
 # The tools the agent designs and generates with, shared with the MCP server.
 clarity-tools.workspace = true
 clarity-gen = { path = "../../crates/clarity-gen" }
+# Generate, Build and Run, shared with the clarity command.
+clarity-build = { path = "../../crates/clarity-build" }
 clarity-devtools = { path = "../../crates/clarity-devtools" }
 clarity-migrate = { path = "../../crates/clarity-migrate" }
 serde.workspace = true

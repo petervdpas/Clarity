@@ -35,11 +35,23 @@ public:
     explicit NotKeptError(const std::string& setting) : StorageError("the secret setting " + setting + " is not kept yet: the settings name the connection") {}
 };
 
+/// A database or file store at `env:NAME` while that environment variable is
+/// unset or empty (conformance/data-folder.json): said in Clarity's own
+/// words, naming the variable.
+class NotSetError : public Error {
+public:
+    explicit NotSetError(const std::string& variable) : Error("the environment variable " + variable + " is not set"), variable(variable) {}
+    std::string variable;
+    Text words() const { return Text::keyed("variableNotSet", "The environment variable {variable} must be set").with("variable", slot_text(variable)); }
+};
+
 /// Why the databases did not open, as the person reads it (manual/data.settings.md,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.
 inline Text unconnected_reason(const std::exception& e) {
     if (dynamic_cast<const NotKeptError*>(&e)) return Text::key("unconnectedNotKept");
+    // A database at an unset environment variable says which (conformance/data-folder.json).
+    if (auto unset = dynamic_cast<const NotSetError*>(&e)) return unset->words();
     if (auto storage = dynamic_cast<const StorageError*>(&e)) return Text::key("unconnectedFailed").with("problem", slot_text(storage->problem()));
     return Text::key("unconnectedFailed").with("problem", slot_text(e.what()));
 }
@@ -98,6 +110,9 @@ public:
 /// A number that does not fit (conformance/overflow.json).
 inline ValueError too_large() { return ValueError("a number too large", Text::keyed("numberTooLarge", "The number is too large")); }
 
+/// Code listed or wrote a folder that is no store, with no folder chosen.
+inline ValueError no_folder_chosen() { return ValueError("no folder was chosen", Text::keyed("noFolderChosen", "No folder was chosen")); }
+
 /// a / 0, a div 0 or a mod 0 (conformance/decimal-division.json).
 inline ValueError division_by_zero() { return ValueError("division by zero", Text::keyed("divisionByZero", "Division by zero")); }
 
@@ -109,6 +124,7 @@ inline ValueError division_by_zero() { return ValueError("division by zero", Tex
 inline std::optional<Text> said(const std::exception& e) {
     if (auto refused = dynamic_cast<const RefusedError*>(&e)) return refused->text;
     if (auto value = dynamic_cast<const ValueError*>(&e)) return value->words;
+    if (auto unset = dynamic_cast<const NotSetError*>(&e)) return unset->words();
     if (auto missing = dynamic_cast<const NotFoundError*>(&e); missing && missing->id)
         return Text::keyed("recordNotThere", "There is no {table} with id {id}").with("table", slot_text(missing->table)).with("id", slot_integer(*missing->id));
     if (auto used = dynamic_cast<const InUseError*>(&e)) return Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", slot_text(used->table));

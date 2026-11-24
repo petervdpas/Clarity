@@ -19,6 +19,8 @@ public sealed record Unconnecting(string Reason, ObservableCollection<Message> S
     public static Text Why(Exception e) => e switch
     {
         NotKeptException => new Text("The database connection is not set yet") { Key = "unconnectedNotKept" },
+        // A database at an unset environment variable says which (conformance/data-folder.json).
+        NotSetException unset => unset.Said,
         StorageException storage => Failed().With("problem", Slot.OfText(storage.What)),
         _ => Failed().With("problem", Slot.OfText(e.Message)),
     };

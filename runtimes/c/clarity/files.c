@@ -22,15 +22,22 @@ static bool add(ClarityDb* db, ClarityStore store) {
     return true;
 }
 
+/* data:<program>/<name> is in the program's data folder, and with env:NAME
+ * unset the store says so where it is used, so the program does not stop
+ * (conformance/data-folder.json, stores). */
 bool clarity_add_store(ClarityDb* db, const char* name, const char* at) {
     const char* folder = NULL;
-    if (!clarity_location(at, &folder) || !clarity_make_folders(folder)) return false;
-    return add(db, (ClarityStore){clarity_lasting(name), clarity_lasting(folder), NULL, NULL, NULL});
+    if (!clarity_data_folder_store(at, NULL, &folder)) {
+        if (clarity_error()->kind != CLARITY_NOT_SET) return false;
+        return add(db, (ClarityStore){clarity_lasting(name), NULL, NULL, NULL, NULL, clarity_lasting(at + 4)});
+    }
+    if (!clarity_make_folders(folder)) return false;
+    return add(db, (ClarityStore){clarity_lasting(name), clarity_lasting(folder), NULL, NULL, NULL, NULL});
 }
 
 bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* program, const char* setting, const char* fallback) {
     const char* folder = NULL;
-    return add(db, (ClarityStore){clarity_lasting(name), NULL, clarity_lasting(program), clarity_lasting(setting), clarity_lasting(fallback)}) && clarity_store_folder(db, name, &folder);
+    return add(db, (ClarityStore){clarity_lasting(name), NULL, clarity_lasting(program), clarity_lasting(setting), clarity_lasting(fallback), NULL}) && clarity_store_folder(db, name, &folder);
 }
 
 /// Holds `settings` as text in plain memory; NULL holds none.
@@ -63,7 +70,7 @@ bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
     // A folder that is no store, by its path: just a folder.
     if (strncmp(name, CLARITY_FOLDER_STORE, strlen(CLARITY_FOLDER_STORE)) == 0) {
         const char* path = name + strlen(CLARITY_FOLDER_STORE);
-        if (!*path) return clarity_fail(CLARITY_STORAGE, "no folder was chosen");
+        if (!*path) return clarity_no_folder_chosen();
         *out = path;
         return true;
     }
@@ -75,11 +82,11 @@ bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
             *out = store->folder;
             return true;
         }
-        const char* file = clarity_settings_file(store->program);
-        if (!file) return clarity_fail(CLARITY_STORAGE, "this system names no folder for application settings");
+        if (store->not_set) return clarity_not_set(store->not_set);
+        // A relative folder is in the program's data folder (conformance/settings.json, folders).
         cJSON* kept = clarity_read_settings(store->program);
         cJSON* now = cJSON_CreateString(clarity_setting_now(held(db), kept, store->setting));
-        *out = clarity_store_folder_in(clarity_settings_os(), clarity_parent(file), name, now, store->fallback);
+        *out = clarity_store_folder_in(clarity_settings_os(), clarity_data_folder(store->program, NULL), name, now, store->fallback);
         cJSON_Delete(now);
         cJSON_Delete(kept);
         return clarity_make_folders(*out);

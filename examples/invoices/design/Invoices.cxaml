@@ -2,6 +2,7 @@
 <App class="invoices.Invoices" title="@invoicesTitle" main="Orders">
   <Menu name="mainMenu">
     <Item caption="@fileItem" name="fileItem">
+      <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
       <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
     </Item>
   </Menu>

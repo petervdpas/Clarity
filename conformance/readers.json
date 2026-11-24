@@ -4,7 +4,7 @@
     "accordions.json": { "readers": ["rust", "go", "csharp", "c", "cpp", "ui"] },
     "app-mcp.json": { "readers": ["rust", "go", "csharp", "c", "cpp", "ui"] },
     "app-version.json": { "readers": ["ui", "web"] },
-    "backups.json": { "readers": ["rust", "go", "csharp", "c", "cpp", "ui"] },
+    "backups.json": { "readers": ["rust", "ui"] },
     "calls.json": { "readers": ["ui"] },
     "canvas-modes.json": { "readers": ["rust", "go", "csharp", "c", "cpp", "ui"] },
     "charts.json": { "readers": ["rust", "ui"] },

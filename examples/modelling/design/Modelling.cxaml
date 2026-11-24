@@ -4,6 +4,7 @@
     <Item caption="@viewMenu" name="viewMenu">
       <Item caption="@languageCaption" name="languageItem" opens="language" />
       <Item caption="@themeCaption" name="themeItem" opens="theme" />
+      <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
     </Item>
   </Menu>
 </App>

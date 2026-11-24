@@ -5,11 +5,14 @@
 //! same format (`clarity_spec::guidance`), so what one writes the other
 //! reads back.
 
+use std::path::Path;
+
 use clarity_agent::ToolDef;
 use clarity_spec::guidance::{self, SECTIONS};
 use serde_json::{Value, json};
 
 use super::{schema, tool};
+use crate::files::FileChange;
 use crate::{ProjectTools, Written};
 
 pub fn definitions() -> Vec<ToolDef> {
@@ -41,7 +44,7 @@ pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Resul
 /// The project's name, its folder, and its model.
 fn project(tools: &ProjectTools) -> Result<(String, std::path::PathBuf, clarity_spec::Project), String> {
     let (file, dir) = tools.open()?.clone();
-    let name = clarity_project::load(&file).settings.map(|s| clarity_project::title(&s)).unwrap_or_else(|| "The app".into());
+    let name = app_title(&file);
     let model = super::places::model_project(&dir)?;
     Ok((name, dir, model))
 }
@@ -71,21 +74,38 @@ fn read(tools: &ProjectTools) -> Result<String, String> {
     Ok(out)
 }
 
+/// The app's name as the guidance's heading says it: the project's title.
+fn app_title(file: &Path) -> String {
+    clarity_project::load(file).settings.map(|s| clarity_project::title(&s)).unwrap_or_else(|| "The app".into())
+}
+
+/// Writes section `key` of the guidance of the project (`file`, its folder
+/// `dir`) with `text`, starting the file from its template, headed by the
+/// project's title, when there is none. One way for the IDE's Agents part
+/// and the agents' set_guidance. Gives the change for Undo, none when the
+/// section says that already.
+pub fn save_section(file: &Path, dir: &Path, key: &str, text: &str) -> Result<Option<FileChange>, String> {
+    let path = dir.join(guidance::FILE);
+    let before = std::fs::read_to_string(&path).ok();
+    let after = guidance::saved(before.as_deref(), &app_title(file), key.trim(), text)?;
+    if before.as_deref() == Some(after.as_str()) {
+        return Ok(None);
+    }
+    if let Some(folder) = path.parent() {
+        std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+    }
+    crate::files::write_atomically(&path, &after)?;
+    Ok(Some(FileChange { file: path, before, after: Some(after) }))
+}
+
 fn write(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
     let section = input.get("section").and_then(Value::as_str).ok_or("give section")?.trim().to_string();
     let text = input.get("text").and_then(Value::as_str).ok_or("give text")?;
-    let (name, dir, _) = project(tools)?;
-    let file = dir.join(guidance::FILE);
-    let before = std::fs::read_to_string(&file).ok();
-    let after = guidance::saved(before.as_deref(), &name, &section, text)?;
-    if before.as_deref() == Some(after.as_str()) {
+    let (file, dir) = tools.open()?.clone();
+    let Some(change) = save_section(&file, &dir, &section, text)? else {
         return Ok(format!("The section {section} of {} says that already.", guidance::FILE));
-    }
-    if let Some(folder) = file.parent() {
-        std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-    }
-    crate::files::write_atomically(&file, &after)?;
-    tools.written.push(Written { file, before, after: Some(after) });
+    };
+    tools.written.push(Written::from(change));
     // What the checker says of the names in backticks, as of every change.
     Ok(format!("Wrote the section {section} of {}. {}", guidance::FILE, tools.problems()?))
 }
@@ -127,6 +147,19 @@ mod tests {
         assert!(unknown.is_error && unknown.text.contains("purpose, words, flow, rules"), "{}", unknown.text);
         let stale = tools.call("set_guidance", &json!({"section": "words", "text": "A `Chore` is a task."}));
         assert!(stale.text.contains("`Chore`"), "the checker's word on a name the app does not have: {}", stale.text);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// The IDE and the agents write a section the one way: the file starts
+    /// from its template headed by the project's title, not its file name.
+    #[test]
+    fn a_section_is_saved_one_way_under_the_project_s_title() {
+        let (root, dir, tools) = project("one-way");
+        let (file, _) = tools.open().unwrap().clone();
+        let change = super::save_section(&file, &dir, "purpose", "Keeps a list of tasks.").unwrap().unwrap();
+        assert!(change.before.is_none());
+        assert!(change.after.as_deref().unwrap().starts_with("# Todo for agents\n"), "{:?}", change.after);
+        assert!(super::save_section(&file, &dir, "purpose", "Keeps a list of tasks.").unwrap().is_none(), "the same text changes nothing");
         let _ = std::fs::remove_dir_all(root);
     }
 

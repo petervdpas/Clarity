@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Window class="mp3player.Main" title="@mainTitle" width="971" height="647" columns="10" onopen="windowOpened">
-  <Content name="main" at="1,1" span="10" rows="14">
+  <Content name="main" at="1,1" span="10" rows="13">
     <View name="MainView" />
   </Content>
 </Window>

@@ -23,6 +23,7 @@ Progress: 90%
 - A failed build of a part library as a problem at its declaration: PARTIAL. Missing folders are problems; build failures are not.
 - Owned part files listed in a generated `AGENTS.md`/`CLAUDE.md` (DESIGN 6.5): see [generation](generation.md).
 - Whether Clarity's agent may write a part's C, C++ or C# adapter, or only the declaration: open (DESIGN 20 question 12).
+- Undo of a rename or delete in a part's folder brings back its text files only: a file that is not text (a picture) is moved or deleted with no Undo, and a folder left empty by an Undo stays. Open question: should such a file be kept for Undo too (FileChange holds text)?
 
 ## Conflicts
 - `crates/clarity-gen/src/csharp/logic.rs:588` says custom parts are refused "until CP1 builds them"; the code after it generates them.
@@ -35,6 +36,8 @@ Progress: 90%
 - 2026-11-02: `grows` is an option of the part, not of each place.
 - 2026-11-03: every desktop draws custom parts with Clarity.UI through a table of callbacks.
 - 2026-11-08: Rust parts go through the C interface too; `ui crate` removed.
+
+- 2026-11-23: one rule and one write for the files of a part's folder, the IDE's and the agents' alike: `clarity_tools::parts::part_path` (plain names split by `/`, none empty, `.`, `..` or hidden, no backslash, nothing in a build folder) and `parts::part_file` (never Clarity's own file), written by `clarity_tools::files::write_text` (atomic, a newline at the end) and kept for Undo in the IDE too (`save_part_file`, `new_part_file`, and `rename_part_file` and `delete_part_file` through `parts.rs` `rename_in` and `delete_in`: a delete keeps each text file's text, a rename removes each old file and writes the new one, one Undo each; Undo makes a folder deleted with its files again, `replay` in `app/src-tauri/src/lib.rs`). The IDE allowed hidden names, backslashes and build output before and wrote with no Undo. Test `a_path_in_a_part_s_folder_is_plain_and_outside_the_build`; the IDE's rename and delete in `app/src-tauri/src/parts.rs` tests (`deleting_a_file_keeps_its_text_for_undo`, `deleting_a_folder_keeps_the_text_of_every_file_in_it`, `renaming_removes_the_old_file_and_writes_the_new_in_one_change`, `renaming_and_deleting_keep_the_rule_of_part_files`). Test `a_path_in_a_part_s_folder_is_plain_and_outside_the_build`. User: "the must be only one way and 'ide/agents OR WHATEVER' can hook into it!!!", "that accounts for all tools... only ONE version should exist!!!"
 
 ## Was
 - DESIGN 5.19, 5.21, 6.5 (with "Windows (2026-10-24, done)"), 5.39 paragraph "Rust custom parts on the library; `ui crate` gone"; DESIGN 20 question 12

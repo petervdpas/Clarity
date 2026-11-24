@@ -231,8 +231,15 @@ func TestAStoreComesFromItsPlaceOrTheEnvironment(t *testing.T) {
 	db, err := Memory()
 	must(t, err)
 	defer db.Close()
-	if err := db.AddStore("photos", "env:CLARITY_NO_SUCH_STORE"); err == nil {
-		t.Fatal("a store from an unset variable")
+	// An unset variable does not stop the program: the place that uses the store says so.
+	must(t, db.AddStore("photos", "env:CLARITY_NO_SUCH_STORE"))
+	_, err = db.Files("photos")
+	if said, ok := Said(err); !ok || said.Key != "variableNotSet" || err.Error() != "the environment variable CLARITY_NO_SUCH_STORE is not set" {
+		t.Fatalf("a store from an unset variable: %v", err)
+	}
+	_, err = db.Files(FolderStore)
+	if said, ok := Said(err); !ok || said.Key != "noFolderChosen" || said.Show() != "No folder was chosen" {
+		t.Fatalf("no folder chosen: %v", err)
 	}
 	store := filepath.Join(t.TempDir(), "photos")
 	must(t, db.AddStore("photos", store))
@@ -253,11 +260,12 @@ func TestAPictureShowsAsADataURL(t *testing.T) {
 func TestAStoreKeepsItsFilesInAFolderSetting(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("XDG_DATA_HOME", home)
 	t.Setenv("APPDATA", home)
 	t.Setenv("HOME", home)
+	t.Setenv(DataVariable, "")
 	program := "clarity-folder-test"
-	file, _ := SettingsFile(program)
-	settingsFolder := filepath.Dir(file)
+	dataFolder := filepath.FromSlash(DataFolder(program, os.Getenv))
 	db, err := Memory()
 	must(t, err)
 	t.Cleanup(func() { db.Close() })
@@ -265,10 +273,10 @@ func TestAStoreKeepsItsFilesInAFolderSetting(t *testing.T) {
 	must(t, err)
 	must(t, db.AddStoreSetting("photos", program, "photosFolder", "photos"))
 
-	// Not chosen yet: the default, in the settings' folder.
+	// Not chosen yet: the default, in the program's data folder (conformance/data-folder.json).
 	must(t, Save(db, &album{Title: "First", Photo: NewPicture(jpgBytes)}))
 	name, _ := FileName(jpgBytes)
-	written, err := os.ReadFile(filepath.Join(settingsFolder, "photos", name))
+	written, err := os.ReadFile(filepath.Join(dataFolder, "photos", name))
 	must(t, err)
 	equal(t, written, jpgBytes)
 

@@ -5,12 +5,13 @@ Status: partial. Texts by key with named slots, one file per language, resources
 Progress: 85%
 
 ## Code
-- Spec: `crates/clarity-spec/src/translations.rs` (files, checks, Clarity's own words in English :35-365; `untranslated`/`left_to_translate` :1268, :1275: a key is left to translate when empty or still the default's text, one rule for the languages table and the agents' `missing_translations`, `crates/clarity-tools/src/lib.rs:55`, `app/src/lib/TranslationsPanel.svelte:58`), `keyed.rs`, `design_keys.rs`, `resources.rs`, `formats.rs` (named formats)
+- Spec: `crates/clarity-spec/src/translations.rs` (files, checks, Clarity's own words in English :35-365; `is_missing` and `missing`: a key is missing in a language when its file lacks it or leaves it empty, one rule for the languages table (`table`, `app/src/lib/TranslationsPanel.svelte`), `clarity spec texts`, the agents' `missing_translations` and every check's count (`crates/clarity-tools/src/lib.rs` `untranslated`), and the warning "Clarity's word ... is not in en yet"), `keyed.rs`, `design_keys.rs`, `resources.rs`, `formats.rs` (named formats)
 - Generators: languages go into each program's model and `files.json`; C# also writes `.resx` (`crates/clarity-gen/src/csharp/texts.rs`)
 - Runtimes: R `runtimes/rust/src/i18n.rs`; Go `runtimes/go/clarity/i18n.go`, `text.go`; C `runtimes/c/clarity/text.c`; C++ `runtimes/cpp/clarity/text.cpp`; C# `runtimes/csharp/Clarity.Runtime/Text.cs`, `Languages.cs`, `Locale.cs`, `ShownText.cs`, `Formats.cs`
 - Clarity.UI: `runtimes/rust-ui/src/locale.rs`, `parts/inputs/formats.rs`, `src/choices.rs` (language kept)
 - IDE: `app/src/lib/TranslationsPanel.svelte`, `NewLanguageDialog.svelte`, `ResourceView.svelte`; `app/src-tauri/src/translations.rs`, `resources.rs`
-- CLI: `clarity spec keys` (make texts keys), `clarity spec texts` (keys without a value)
+- Make texts keys: one function, `crates/clarity-tools/src/texts_keys.rs` `make_texts_keys`, for the IDE (`app/src-tauri/src/translations.rs`) and `clarity spec keys`: modules and every `.cxaml`, the keys the project has kept (`clarity_spec::cxaml::make_keys_with_pages_beside`, `keyed::with_keys`), only keys the checker uses written, only changed files written, before and after for Undo
+- CLI: `clarity spec keys` (make texts keys), `clarity spec texts` (keys missing per language, `translations::missing`)
 - Docs: manual `languages.md` (Texts and keys, Texts by key and their slots, Keys that point at resources, Formats), `code.expressions.md` (Text with slots)
 
 ## Tests
@@ -35,6 +36,8 @@ Progress: 85%
 - 2026-10-21: texts by key (`@saveCaption`), named slots given by name; a literal text people read is an error. Replaces texts found by what they say.
 - 2026-10-21: every text people read comes from the translations, in design, code and engines. User: "labels, texts, textareas(blocks), panel headings etc should always come from translates!"
 - 2026-10-22: a key may point at a resource file per language (`gameRules resource "rules-nl.md"`) (R1).
+- 2026-11-23: a translation is missing only when its key is absent from a language file or its text is empty; a text the same as the default's counts as translated. A key a change adds is empty in every language but the default (`keyed::plan_keys`), so it counts as missing there. User: "only when key missing or empty".
+- 2026-11-23: Make texts keys is one function for the IDE and `clarity spec keys`. Both versions wrote every language file again from the texts made keys in that run only, so a second run dropped every key made before; the CLI also skipped `.cxaml`. Now the keys a project has stay. User: "only ONE version should exist!!!".
 
 ## Was
 - DESIGN 1.5 (Formats I1a, Text with slots I1b, Translations I1c, Texts by key, the formats and translations rows of "Every stack"); DESIGN 6.7

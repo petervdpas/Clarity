@@ -168,7 +168,15 @@ void a_picture_in_a_file_store_is_a_file_named_by_its_bytes(void) {
     CHECK_FAILS(CLARITY_INVALID, clarity_picture(db, &album, a.id, "photo", &got));
     ClarityDb* other;
     REQUIRE_OK(clarity_db_memory(&other));
-    CHECK_FAILS(CLARITY_STORAGE, clarity_add_store(other, "photos", "env:CLARITY_NO_SUCH_STORE"));
+    // An unset variable does not stop the program: the place that uses the store says so.
+    CHECK_OK(clarity_add_store(other, "photos", "env:CLARITY_NO_SUCH_STORE"));
+    ClarityFileList listed;
+    CHECK_FAILS(CLARITY_NOT_SET, clarity_files(other, "photos", &listed));
+    CHECK_TEXT(clarity_error()->message, "the environment variable CLARITY_NO_SUCH_STORE is not set");
+    CHECK_TEXT(clarity_said(clarity_error())->key, "variableNotSet");
+    CHECK_FAILS(CLARITY_VALUE, clarity_files(other, CLARITY_FOLDER_STORE, &listed));
+    CHECK_TEXT(clarity_said(clarity_error())->key, "noFolderChosen");
+    CHECK_TEXT(clarity_text_show(clarity_said(clarity_error())), "No folder was chosen");
     clarity_db_close(other);
     clarity_db_close(db);
     remove_tree(store);

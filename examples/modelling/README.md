@@ -65,7 +65,7 @@ content: it shows the editor of what is picked in the tree, one at a time.
 - A class definition opens in the object editor: its properties, class, interface and the tables filled from it.
 - An event opens in the event editor, an enum in the enum editor.
 - A table opens in the table editor: its class, blueprint and columns, and its views with their names, roles, relations and enum columns; **Add view** puts it in an API version.
-- An API version (under API versions of its project) opens in the API editor: its views in order and its `FcdmApi-vN.json`, which **Write** puts into the adapter folder (setting `adapterFolder`) where the generator reads it. **New API version** starts as a copy of the newest.
+- An API version (under API versions of its project) opens in the API editor: its views in order and its `FcdmApi-vN.json`, which **Write** puts into the adapter folder (setting `adapterFolder`, chosen there or in View > Settings) where the generator reads it. Until the person chooses that folder, nothing points into another repository. **New API version** starts as a copy of the newest.
 
 The diagram view (slide-up, footer) shows the class diagram or the ERD of a
 domain version (a table per class definition a table is filled from); the

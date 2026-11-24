@@ -18,7 +18,7 @@ When a song ends the next one starts; after the last one the player stops.
 A song that cannot be played gives an error message with the reason. A
 folder without songs gives a message too.
 
-The folder is a setting, so each person keeps their own on their machine.
+The folder is a setting, so each person keeps their own on their machine; File > Settings shows it too.
 
 ## Stack
 

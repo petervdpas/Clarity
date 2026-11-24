@@ -2,7 +2,7 @@
 // what a release's changes come to.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DISK_TAB, RELEASE_TAB, askedTab, bytesText, changeText, checkState, cycle, reloadsBrowserFiles, stateText, tabOrder, verdict } from "./devtools.ts";
+import { DISK_TAB, RELEASE_TAB, askedTab, bytesText, building, changeText, checkState, cycle, reloadsBrowserFiles, stateText, tabOrder, verdict } from "./devtools.ts";
 
 const check = (title: string, last: boolean | null = null, current = true) => ({ job: `check:${title}`, title, last: last === null ? null : { passed: last, current } });
 
@@ -83,4 +83,15 @@ test("the canvases load the browser files again after they were swapped or built
   assert.ok(!reloadsBrowserFiles({ job: built, before: { ended: 2 } }), "the same build heard twice");
   assert.ok(!reloadsBrowserFiles({ job: { ...built, state: "failed" } }));
   assert.ok(!reloadsBrowserFiles({ job: { ...built, key: "piece:clarityUi" } }));
+});
+
+test("a piece whose build waits or runs keeps its tab, whoever started it", () => {
+  const jobs = {
+    "piece:clarityUi:debug": { state: "running" },
+    "piece:clarityAuth:debug": { state: "waiting" },
+    "piece:clarityPdf": { state: "passed" },
+    "check:guard": { state: "running" },
+  };
+  assert.deepEqual(building(jobs, ["clarityAuth"]), ["clarityUi"], "clarityAuth is shown already; a finished build and a check open none");
+  assert.deepEqual(building({}, []), []);
 });

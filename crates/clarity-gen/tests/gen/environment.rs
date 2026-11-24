@@ -93,3 +93,26 @@ fn the_environment_is_kept_in_a_file_for_every_project() {
     // The file sits in Clarity's own folder, beside the vault.
     assert!(environment::file().ends_with("environment.json"));
 }
+
+/// The program of an outside agent (Codex, Copilot) the person chose is kept
+/// with the tools' choices, by the agent's key, but apart from them: builds
+/// never see its folder (docs/ledger/acp.md, 2026-11-23).
+#[test]
+fn an_agent_s_chosen_program_is_kept_apart_from_the_build_tools() {
+    let dir = folder("agents", &[]);
+    let file = dir.join("environment.json");
+    let mut env = Environment::default();
+    assert_eq!(env.chosen_agent("codex"), None);
+    env.choose_agent("codex", Some(PathBuf::from("/opt/codex/codex-acp")));
+    assert_eq!(env.chosen_agent("codex"), Some(Path::new("/opt/codex/codex-acp")));
+    assert_eq!(env.chosen("codex"), None, "not a build tool");
+    let searched: Vec<PathBuf> = std::env::split_paths(&environment::search_path(&env, &path_of(&[&dir]))).collect();
+    assert_eq!(searched, [dir.clone()], "builds do not search the agent's folder");
+    env.save(&file).unwrap();
+    assert_eq!(Environment::load(&file), env);
+    env.choose_agent("codex", None);
+    assert_eq!(env.chosen_agent("codex"), None);
+    // A file written before agents were chosen still reads.
+    std::fs::write(&file, r#"{"tools":{"go":"/usr/local/go/bin/go"}}"#).unwrap();
+    assert_eq!(Environment::load(&file).chosen("go"), Some(Path::new("/usr/local/go/bin/go")));
+}

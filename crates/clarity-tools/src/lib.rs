@@ -8,12 +8,15 @@
 pub mod diagrams;
 pub mod edits;
 pub mod files;
-pub mod generate;
 pub mod manual;
+pub mod naming;
 pub mod new_project;
+pub mod pages_out;
 pub mod parts;
+pub mod renames;
 pub mod steps;
 pub mod structural;
+pub mod texts_keys;
 pub mod turn;
 
 use std::path::{Path, PathBuf};
@@ -23,32 +26,19 @@ use clarity_project::Stack;
 use clarity_spec::Severity;
 use serde_json::{Value, json};
 
-use files::{is_spec_file, write_atomically};
+use files::is_spec_file;
 
 
 
-/// How many texts each language other than the default still lacks (empty,
-/// or the default's own text), as `nl 3, de 1`; none when every one has its own.
+/// How many keys each language lacks (absent or empty,
+/// clarity_spec::translations::missing), as `nl 3, de 1`; none when every one has them all.
 fn untranslated(project: &clarity_spec::Project) -> Option<String> {
-    let counts: Vec<String> = clarity_spec::translations::left_to_translate(project)
+    let counts: Vec<String> = clarity_spec::translations::missing(project)
         .into_iter()
-        .filter(|(_, left)| !left.is_empty())
-        .map(|(language, left)| format!("{language} {}", left.len()))
+        .filter(|(_, lacking)| !lacking.is_empty())
+        .map(|(language, lacking)| format!("{language} {}", lacking.len()))
         .collect();
     (!counts.is_empty()).then(|| counts.join(", "))
-}
-
-/// The first class a class diagram names as `module.Class` (on a `class`
-/// line or in a relation), which Mermaid and Clarity take as no class.
-fn dotted_class(text: &str) -> Option<String> {
-    let relation = |line: &str| ["--", ".."].iter().any(|arrow| line.contains(arrow));
-    text.lines().map(str::trim).filter(|l| !l.starts_with("%%") && (l.starts_with("class ") || relation(l))).find_map(|line| {
-        line.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.')).find_map(|word| {
-            let (module, class) = word.split_once('.')?;
-            let ident = |w: &str| w.chars().next().is_some_and(|c| c.is_alphabetic());
-            (ident(module) && class.chars().next().is_some_and(char::is_uppercase)).then(|| word.to_string())
-        })
-    })
 }
 
 /// The manual tool: a topic's page, or the list of topics.
@@ -175,50 +165,10 @@ impl ProjectTools {
         self.project.as_ref().ok_or_else(|| "no project is open; make one with new_project".to_string())
     }
 
-    /// The file a tool's path names: `project`, or a `.clarity` file in the project's folder.
+    /// The file a tool's path names for reading (crate::files::project_file).
     fn file_of(&self, path: &str) -> Result<PathBuf, String> {
         let (file, dir) = self.open()?;
-        let path = path.trim();
-        if path == "project" {
-            return Ok(file.clone());
-        }
-        // The project's description: its design goal and guide.
-        if path == clarity_spec::README_FILE {
-            return Ok(dir.join(clarity_spec::README_FILE));
-        }
-        // A Markdown file of the resources: `resources/rules-en.md`, a plain name.
-        if let Some(name) = path.strip_prefix("resources/") {
-            let plain = !name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']);
-            if plain && clarity_spec::resources::is_markdown(name) {
-                return Ok(dir.join(clarity_spec::resources::RESOURCES_DIR).join(name));
-            }
-            return Err(format!("'{path}' is not a Markdown file of the resources: write one like resources/rules-en.md; pictures are added in Clarity"));
-        }
-        // A window or view: `design/Main.cxaml`, a plain name.
-        if let Some(name) = path.strip_prefix(&format!("{}/", clarity_spec::cxaml::DESIGN_DIR)) {
-            let plain = !name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']);
-            if plain && clarity_spec::cxaml::is_page_file(name) {
-                return Ok(clarity_spec::cxaml::design_folder(dir).join(name));
-            }
-            return Err(format!("'{path}' is not a window or view: write one like design/Main.cxaml"));
-        }
-        // A written diagram: `diagrams/orders.mermaid`.
-        if let Some(name) = path.strip_prefix("diagrams/") {
-            return crate::diagrams::diagram_file(dir, name);
-        }
-        // A file of a custom part's or a library's folder: `parts/Arena/src/lib.rs`.
-        if let Some(found) = self.part_file(path)? {
-            return Ok(found);
-        }
-        let relative = Path::new(path);
-        let fine = !path.is_empty()
-            && relative.is_relative()
-            && relative.components().all(|c| matches!(c, std::path::Component::Normal(_)))
-            && is_spec_file(relative);
-        if !fine {
-            return Err(format!("'{path}' is not a module of the project: use a path like todo.clarity inside the project's folder, or `project`"));
-        }
-        Ok(dir.join(relative))
+        crate::files::project_file(file, dir, path)
     }
 
     /// The part folders of the project: its custom parts and libraries.
@@ -226,29 +176,6 @@ impl ProjectTools {
         let (_, dir) = self.open()?;
         let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
         Ok(crate::parts::part_folders(dir, &project))
-    }
-
-    /// A file inside a custom part's or a library's folder, when `path` names
-    /// one: never outside it, and never in its build output.
-    fn part_file(&self, path: &str) -> Result<Option<PathBuf>, String> {
-        let (_, dir) = self.open()?;
-        for folder in self.part_folders()? {
-            let Some(inside) = path.strip_prefix(&format!("{}/", folder.folder)) else { continue };
-            let pieces: Vec<&str> = inside.split('/').collect();
-            if inside.is_empty() || pieces.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.starts_with('.')) || inside.contains('\\') {
-                return Err(format!("'{path}' is not a file of {} {}: write a path like {}/src/lib.rs", folder.kind, folder.name, folder.folder));
-            }
-            if pieces.len() > 1 && crate::parts::BUILD_FOLDERS.contains(&pieces[0]) {
-                return Err(format!("'{path}' is in the build's output of {} {}, which is not written by hand", folder.kind, folder.name));
-            }
-            return Ok(Some(dir.join(&folder.folder).join(inside)));
-        }
-        Ok(None)
-    }
-
-    /// The file Clarity writes in a part's or library's folder, when `path` is it.
-    fn clarity_s_file(&self, path: &str) -> Result<bool, String> {
-        Ok(self.part_folders()?.iter().any(|f| f.own.as_ref().is_some_and(|own| path == format!("{}/{own}", f.folder))))
     }
 
     /// Puts what the data model changed into the agent's migration step
@@ -260,70 +187,30 @@ impl ProjectTools {
         Ok(if followed.said.is_empty() { String::new() } else { format!("{}\n", followed.said) })
     }
 
-    /// Renames an entity, an enum or a field of an entity or record across
-    /// the project, through the checked model; the step records the rename,
-    /// so a stored table or column keeps its data.
+    /// Renames an entity, an enum, a field, a value, a window or a view
+    /// across the project the one way (crate::renames); the step records a
+    /// data rename, so a stored table or column keeps its data.
     pub(crate) fn rename(&mut self, input: &Value) -> Result<String, String> {
-        use clarity_spec::rename::{RenameKind, rename, rename_field};
-        let (_, dir) = self.open()?.clone();
+        use crate::renames::Renaming;
+        let (file, dir) = self.open()?.clone();
         let text = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
         let (kind, from, to) = (text("kind"), text("from"), text("to"));
-        let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read the project: {err}"))?;
-        if project.diagnostics.iter().any(|d| d.severity == Severity::Error) {
-            return Err("fix the errors first: a rename follows the checked model".into());
-        }
-        let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
-        let source = |path: &str| std::fs::read_to_string(at(path)).ok();
-        let (changed, renamed, what) = match kind.as_str() {
-            "entity" => (rename(&project, source, RenameKind::Entity, &from, &to)?, Some(clarity_spec::migrate::Rename { entity: None, from: from.clone(), to: to.clone(), value: false }), format!("entity {from}")),
-            "enum" => (rename(&project, source, RenameKind::Enum, &from, &to)?, None, format!("enum {from}")),
-            "field" => {
-                let entity = text("entity");
-                if entity.is_empty() {
-                    return Err("a field is renamed in its entity: give entity, like Customer".into());
-                }
-                let renamed = Some(clarity_spec::migrate::Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone(), value: false });
-                (rename_field(&project, source, &entity, &from, &to)?, renamed, format!("field {entity}.{from}"))
-            }
-            "value" => {
-                let enumeration = text("entity");
-                if enumeration.is_empty() {
-                    return Err("a value is renamed in its enum: give entity, like ItemKind".into());
-                }
-                let renamed = Some(clarity_spec::migrate::Rename::value(&enumeration, &from, &to));
-                (clarity_spec::value_rename::rename_value(&project, source, &enumeration, &from, &to)?, renamed, format!("value {enumeration}.{from}"))
-            }
-            "window" | "view" => {
-                let page = project.pages().find(|p| p.name.name == from).ok_or_else(|| format!("there is no window or view {from}"))?;
-                let is_view = page.kind == clarity_spec::model::PageKind::View;
-                if (kind == "view") != is_view {
-                    let (is, not) = if is_view { ("view", "window") } else { ("window", "view") };
-                    return Err(format!("{from} is a {is}, not a {not}: give kind {is}"));
-                }
-                (rename(&project, source, RenameKind::Page, &from, &to)?, None, format!("{kind} {from}"))
-            }
+        let renaming = match kind.as_str() {
+            "entity" => Renaming::Entity,
+            "enum" => Renaming::Enum,
+            "field" => Renaming::Field { entity: text("entity") },
+            "value" => Renaming::Value { enumeration: text("entity") },
+            "window" => Renaming::Window,
+            "view" => Renaming::View,
             _ => return Err("kind is entity, enum, field, value, window or view".into()),
         };
-        if changed.is_empty() {
-            return Ok(format!("Nothing to rename: {what} is called {to} already."));
+        let renamed = crate::renames::rename(&file, &dir, &renaming, &from, &to)?;
+        if renamed.written.is_empty() {
+            return Ok(format!("Nothing to rename: {} is called {to} already.", renamed.what));
         }
-        let mut paths = Vec::new();
-        for file in changed {
-            let path = at(&file.path);
-            let before = std::fs::read_to_string(&path).ok();
-            write_atomically(&path, &file.text)?;
-            paths.push(clarity_project::slashed(path.strip_prefix(&dir).unwrap_or(&path)));
-            self.written.push(Written { file: path, before, after: Some(file.text) });
-            // A window's file takes its new name: the old one goes, kept for Undo.
-            if let Some(was) = file.moved_from {
-                let was = at(&was);
-                let before = std::fs::read_to_string(&was).ok();
-                std::fs::remove_file(&was).map_err(|err| format!("cannot remove {}: {err}", was.display()))?;
-                self.written.push(Written { file: was, before, after: None });
-            }
-        }
-        let step = self.follow(&renamed.into_iter().collect::<Vec<_>>())?;
-        Ok(format!("Renamed {what} to {to} in {}. {step}{}", listed(&paths.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
+        self.written.extend(renamed.written.into_iter().map(Written::from));
+        let step = if renamed.step.is_empty() { String::new() } else { format!("{}\n", renamed.step) };
+        Ok(format!("Renamed {} to {to} in {}. {step}{}", renamed.what, listed(&renamed.paths.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
     }
 
     /// What a structural tool tells after its edit (crate::structural): the
@@ -345,8 +232,10 @@ impl ProjectTools {
 
     /// The project's problems, as `file:line:col: error: message` lines.
     pub fn problems(&self) -> Result<String, String> {
-        let (_, dir) = self.open()?;
-        let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
+        let (file, _) = self.open()?;
+        // The one check of every front end (clarity_project::check): the web APIs' modules first.
+        let checked = clarity_project::check(file).map_err(|err| format!("cannot read the project: {err}"))?;
+        let project = checked.project;
         let lines: Vec<String> = project
             .diagnostics
             .iter()
@@ -364,15 +253,16 @@ impl ProjectTools {
             (0, n) => format!("No errors; {n} warning(s):\n{}", lines.join("\n")),
             (e, _) => format!("{e} error(s):\n{}", lines.join("\n")),
         };
+        let said = if checked.notes.is_empty() { said } else { format!("{said}\nWeb APIs: {}", checked.notes.join("; ")) };
         // Every check says what is left to translate, so no agent leaves a language showing another's texts.
         Ok(match untranslated(&project) {
-            Some(left) => format!("{said}\nNot translated yet (empty, or still the default's text): {left}. Run missing_translations and translate them before you finish; keep a text the same only where the language says it the same way."),
+            Some(left) => format!("{said}\nNot translated yet (a key missing or empty): {left}. Run missing_translations and translate them before you finish."),
             None => said,
         })
     }
 
-    /// Per language other than the default, the keys still empty or the same
-    /// as the default's text: what is left to translate.
+    /// Per language, the default too, the keys absent from its file or left
+    /// empty (clarity_spec::translations::missing): what is left to translate.
     pub fn missing_translations(&self) -> Result<String, String> {
         let (_, dir) = self.open()?;
         let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
@@ -381,8 +271,8 @@ impl ProjectTools {
             return Ok(format!("The project has no {default} language file."));
         }
         let mut out = Vec::new();
-        for (language, left) in clarity_spec::translations::left_to_translate(&project) {
-            let left: Vec<String> = left.iter().map(|(key, text)| format!("    {key} {text:?}")).collect();
+        for (language, lacking) in clarity_spec::translations::missing(&project) {
+            let left: Vec<String> = lacking.iter().map(|m| format!("    {} {}", m.key, clarity_spec::lexer::quote(m.default_text.as_deref().unwrap_or("")))).collect();
             if !left.is_empty() {
                 out.push(format!("{language} ({} to translate; the {default} text after each key):\n{}", left.len(), left.join("\n")));
             }
@@ -451,36 +341,17 @@ impl ProjectTools {
         std::fs::read_to_string(&file).map_err(|_| format!("{path} does not exist yet"))
     }
 
+    /// Writes a file by the one rule of which files an agent writes
+    /// (crate::files::writable): a diagram through write_diagram's checks,
+    /// any other file whole, kept for Undo, then the project checked.
     fn write(&mut self, path: &str, text: &str) -> Result<String, String> {
-        if self.clarity_s_file(path.trim())? {
-            return Err(format!("{path} is Clarity's: Clarity writes it from the declaration, so change the declaration instead"));
-        }
-        // The guidance keeps its sections, which the wizard reads back: only its tools write it.
-        if path.trim().trim_start_matches("./") == clarity_spec::guidance::FILE {
-            return Err(format!("{path} is the app's guidance for agents: write it a section at a time with set_guidance, and read it with guidance"));
-        }
-        // Reports and their stylesheets change only through the report tools, as the Reports tab changes them.
-        let trimmed = path.trim().trim_start_matches("./");
-        if trimmed.starts_with(&format!("{}/", clarity_spec::reports::REPORTS_DIR)) && (trimmed.ends_with(".report") || trimmed.ends_with(".css")) {
-            let names: Vec<String> = crate::structural::reports::definitions().into_iter().map(|t| t.name).collect();
-            return Err(format!("{path} is a report or its stylesheet: change it with the report tools, which check every change: {}", names.join(", ")));
-        }
-        // Windows, views and the app change only through the structural tools (docs/ledger/mcp-tools.md).
-        if clarity_spec::cxaml::is_page_file(path.trim()) {
-            let names: Vec<String> = crate::structural::windows::definitions().into_iter().chain(crate::structural::frame::definitions()).map(|t| t.name).collect();
-            return Err(format!(
-                "{path} is a window, view or app: change it with the structural tools, which check every change and keep the markup right: {}",
-                names.join(", ")
-            ));
-        }
-        let file = self.file_of(path)?;
-        let before = std::fs::read_to_string(&file).ok();
-        if let Some(folder) = file.parent() {
-            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-        }
-        let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
-        write_atomically(&file, &text)?;
-        self.written.push(Written { file, before, after: Some(text) });
+        let (file, dir) = self.open()?.clone();
+        let target = match crate::files::writable(&file, &dir, path)? {
+            crate::files::Writable::Diagram(name) => return self.write_diagram(&name, text),
+            crate::files::Writable::Checked(target) | crate::files::Writable::PartFile(target) => target,
+        };
+        let change = crate::files::write_text(&target, text)?;
+        self.written.push(Written { file: change.file, before: change.before, after: change.after });
         let step = self.follow(&[])?;
         Ok(format!("Wrote {path}. {step}{}", self.problems()?))
     }
@@ -584,35 +455,16 @@ impl ProjectTools {
         Ok(out)
     }
 
-    /// Writes a diagram into the diagrams folder, and says what it proposes.
+    /// Writes a diagram into the diagrams folder the one way
+    /// (crate::diagrams::write_diagram), and says what it proposes.
     fn write_diagram(&mut self, name: &str, text: &str) -> Result<String, String> {
         let (_, dir) = self.open()?.clone();
-        let file = crate::diagrams::diagram_file(&dir, name)?;
-        let before = std::fs::read_to_string(&file).ok();
-        // A project has one ERD: data changes go into it, and a second is refused, naming it.
-        if clarity_spec::diagrams::kind_of(text) == Some(clarity_spec::diagrams::DiagramKind::Erd) {
-            let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
-            let erds: Vec<String> = clarity_spec::diagrams::diagram_files(&dir)
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|d| d.kind == Some(clarity_spec::diagrams::DiagramKind::Erd) && d.name != shown)
-                .map(|d| format!("diagrams/{}", d.name))
-                .collect();
-            if !erds.is_empty() {
-                return Err(format!("the project has its ERD already ({}): write the change into it, keeping what it holds", erds.join(", ")));
-            }
-        }
-        if clarity_spec::diagrams::kind_of(text) == Some(clarity_spec::diagrams::DiagramKind::Class)
-            && let Some(dotted) = dotted_class(text)
-        {
-            let own = dotted.rsplit('.').next().unwrap_or_default();
-            return Err(format!("{dotted} is no class: name a class by its own name, in relations too ({own}), and put it in its module's namespace (namespace {} {{ class {own} }})", dotted.split('.').next().unwrap_or_default()));
-        }
-        std::fs::create_dir_all(dir.join(clarity_spec::diagrams::DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
-        let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
-        write_atomically(&file, &text)?;
+        let (file, change) = crate::diagrams::write_diagram(&dir, name, text)?;
         let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
-        self.written.push(Written { file, before, after: Some(text.clone()) });
+        let text = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
+        if let Some(change) = change {
+            self.written.push(Written::from(change));
+        }
         Ok(format!("Wrote diagrams/{shown}. {}", self.proposals_text(&text)?))
     }
 
@@ -640,25 +492,15 @@ impl ProjectTools {
     }
 
     /// Writes what the data dictionary changed since the last migration step
-    /// as the next step, as the Migrate button does.
+    /// as the next step, the one way (crate::steps::write_steps).
     fn migrate(&mut self, input: &Value) -> Result<String, String> {
-        let (file, dir) = self.open()?.clone();
-        let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read the project: {err}"))?;
-        if project.diagnostics.iter().any(|d| d.severity == Severity::Error) {
-            return Err("fix the errors first: a step is written from a project that checks clean".into());
-        }
-        let first = clarity_project::load(&file).settings.and_then(|s| s.datasources.first().map(|d| d.name.clone())).unwrap_or_else(|| "main".into());
-        let source = input["source"].as_str().filter(|s| !s.trim().is_empty()).map(String::from).unwrap_or(first);
+        let (_, dir) = self.open()?.clone();
+        let text = |key: &str| input[key].as_str().map(str::trim).filter(|t| !t.is_empty());
         // Never a guessed rename: the agent renames with the rename tool, whose step records it.
-        let ops = clarity_spec::migrate::pending(&project, &source, &[]);
-        if ops.is_empty() {
-            return Ok(format!("Nothing to migrate in {source}: every change is in a step already."));
-        }
-        let title = input["title"].as_str().filter(|t| !t.trim().is_empty()).unwrap_or(crate::steps::AGENT_STEP);
-        let path = clarity_spec::write_step(&dir, &source, title.trim(), &ops).map_err(|err| format!("cannot write the step: {err}"))?;
-        let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-        self.written.push(Written { file: path.clone(), before: None, after: Some(text.clone()) });
-        Ok(format!("Wrote the step {}:\n{text}\n{}", path.display(), self.problems()?))
+        let request = crate::steps::StepRequest { source: text("source"), title: text("title"), renames: &[], allow_data_loss: input["allowDataLoss"].as_bool().unwrap_or(false) };
+        let migrated = crate::steps::write_steps(&dir, &request)?;
+        self.written.extend(migrated.written.into_iter().map(Written::from));
+        Ok(format!("{}\n{}", migrated.said, self.problems()?))
     }
 
     /// The folder the project is generated into, as its `output` setting says.
@@ -710,15 +552,13 @@ impl ProjectTools {
 
     fn new_project(&mut self, input: &Value) -> Result<String, String> {
         let name = input["name"].as_str().unwrap_or_default().trim();
-        if name.is_empty() {
-            return Err("a project needs a name, like todo".into());
-        }
         let folder = input["folder"].as_str().map(PathBuf::from).unwrap_or_else(|| self.projects_folder.clone());
         let stack: Stack = match input.get("stack") {
             Some(stack) if !stack.is_null() => serde_json::from_value(stack.clone()).map_err(|err| format!("the stack does not fit: {err}"))?,
             _ => clarity_project::starter("App", "app").stack,
         };
-        let file = crate::new_project::write_new_project(&folder.join(name), stack)?;
+        // The one way a project is made, with the New project dialog's checks.
+        let file = crate::new_project::new_project(&folder, name, stack)?;
         let dir = clarity_project::module_dir(&file);
         self.project = Some((file.clone(), dir));
         self.made = Some(file.clone());
@@ -793,7 +633,7 @@ impl Tools for ProjectTools {
             tool("check", "Checks the whole project and gives its problems.", schema(json!({}), &[])),
             tool(
                 "missing_translations",
-                "Lists, per language, the keys whose text is still empty or the same as the default language's, with the default text: what to translate. Write the translations into translations/<language>.clarity with write_file.",
+                "Lists, per language, the keys absent from its file or left empty, with the default language's text: what to translate. Write the translations into translations/<language>.clarity with write_file.",
                 schema(json!({}), &[]),
             ),
             tool(
@@ -815,8 +655,15 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "migrate",
-                "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet. The app does not migrate its databases itself: it stops when one is behind, and clarity-migrate brings it up to date (Run in Clarity does it first; `include migrate` in the project file puts the tool in the output folder for whoever installs the app).",
-                schema(json!({ "title": { "type": "string", "description": "What the step does, like \"Tasks\"." }, "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
+                "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet. It takes no renames (rename with the rename tool, whose step records it) and refuses changes that can lose data unless allowDataLoss is set. The app does not migrate its databases itself: it stops when one is behind, and clarity-migrate brings it up to date (Run in Clarity does it first; `include migrate` in the project file puts the tool in the output folder for whoever installs the app).",
+                schema(
+                    json!({
+                        "title": { "type": "string", "description": "What the step does, like \"Tasks\"; Step N by default." },
+                        "source": { "type": "string", "description": "The data source; every one with migration steps (the SQL databases Clarity owns) by default." },
+                        "allowDataLoss": { "type": "boolean", "description": "Write changes that can lose data (removing a field or an entity, changing a type); only when the person agreed." }
+                    }),
+                    &[],
+                ),
             ),
             tool(
                 "rename",
@@ -843,7 +690,7 @@ impl Tools for ProjectTools {
                 schema(
                     json!({
                         "name": { "type": "string", "description": "The project's file name, like todo." },
-                        "folder": { "type": "string", "description": "The folder to make it in; the folder of the open project by default." },
+                        "folder": { "type": "string", "description": "The folder to make it in, a full path; the projects folder of Clarity settings by default, else the folder of the open project." },
                         "stack": { "type": "object", "description": "Optional: { backend: rust|go|csharp|c|cpp, ui: webview|clarity, targets: [desktop, cli] }." }
                     }),
                     &["name"],
@@ -908,7 +755,7 @@ impl Tools for ProjectTools {
             "migrate" => self.migrate(input),
             "rename" => self.rename(input),
             "read_generated" => self.generated(&text("path")),
-            "generate" => self.open().and_then(|(file, _)| crate::generate::generate(file, None).map(|lines| lines.join("\n")).map_err(|why| why.join("\n"))),
+            "generate" => self.open().and_then(|(file, _)| clarity_build::generate(file, None).map(|source| source.lines().join("\n"))),
             "diagram_view" => self.diagram_view(),
             "write_diagram" => self.write_diagram(&text("name"), &text("text")),
             "diagram_proposals" => self.diagram_text(&text("name")).and_then(|(_, t)| self.proposals_text(&t)),
@@ -1031,7 +878,8 @@ mod tests {
         let wrote = tools.call("write_file", &json!({"path": "tasks.clarity", "text": task}));
         assert!(wrote.text.contains("Wrote the step") && wrote.text.contains("No errors"), "{}", wrote.text);
         assert_eq!(steps().len(), before + 1);
-        assert!(latest().contains("add entity Task") && latest().contains(crate::steps::AGENT_STEP), "{}", latest());
+        // Titled as every step is, whoever made the change: the person in the IDE or an agent.
+        assert!(latest().contains("add entity Task") && latest().contains(&format!("migration \"Step {}\"", before + 1)), "{}", latest());
 
         // No database has applied it: a rename folds in, and the step adds the entity as it is now.
         let renamed = tools.call("rename", &json!({"kind": "field", "entity": "Task", "from": "title", "to": "name"}));
@@ -1162,7 +1010,7 @@ mod tests {
         // The new entity goes into the agent's migration step at once, so nothing warns that it is in none.
         assert!(fixed.text.contains("Wrote the step migrations/main/") && fixed.text.contains("add entity Task") && fixed.text.ends_with("No problems."), "{}", fixed.text);
         let step = tools.call("migrate", &json!({"title": "Tasks"}));
-        assert!(!step.is_error && step.text.starts_with("Nothing to migrate"), "{}", step.text);
+        assert!(!step.is_error && step.text.starts_with(crate::steps::NOTHING_TO_MIGRATE), "{}", step.text);
         assert_eq!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap(), "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle\n");
 
         // Paths stay inside the project.
@@ -1256,17 +1104,23 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    /// What is left to translate, per language: empty, or the same as the default's text.
+    /// What is left to translate, per language: a key absent from its file or
+    /// left empty (clarity_spec::translations::missing). A text the same as
+    /// the default's is a translation.
     #[test]
     fn missing_translations_lists_what_is_left_to_translate() {
         let (root, file, dir) = project("missing");
         let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
         let en = std::fs::read_to_string(dir.join("translations/en.clarity")).unwrap();
         std::fs::write(dir.join("translations/nl.clarity"), en.replacen("translation en", "translation nl", 1)).unwrap();
+        assert_eq!(tools.call("missing_translations", &json!({})).text, "Every language has its own text for every key.", "the same as en is no gap");
+        let (key, text) = en.lines().filter_map(|l| l.trim().split_once(' ')).find(|(_, t)| t.starts_with('"') && *t != "\"\"").unwrap();
+        let nl = en.replacen("translation en", "translation nl", 1).replacen(&format!("{key} {text}"), &format!("{key} \"\""), 1);
+        std::fs::write(dir.join("translations/nl.clarity"), nl).unwrap();
         let left = tools.call("missing_translations", &json!({}));
-        assert!(!left.is_error && left.text.starts_with("nl ("), "{}", left.text);
+        assert!(!left.is_error && left.text.starts_with("nl (1 to translate") && left.text.contains(&format!("    {key} {text}")), "{}", left.text);
         // Every check says so, until it is done.
-        assert!(tools.call("check", &json!({})).text.contains("still the default's text): nl "), "the check is silent about it");
+        assert!(tools.call("check", &json!({})).text.contains("Not translated yet (a key missing or empty): nl 1."), "the check is silent about it");
         std::fs::remove_file(dir.join("translations/nl.clarity")).unwrap();
         assert_eq!(tools.call("missing_translations", &json!({})).text, "Every language has its own text for every key.");
         std::fs::remove_dir_all(&root).unwrap();

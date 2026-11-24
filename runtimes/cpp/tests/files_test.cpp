@@ -114,7 +114,7 @@ TEST(a_folder_lists_and_writes_the_files_of_its_extensions) {
         }
         CHECK_EQ(written, c["written"].get<bool>());
     }
-    CHECK_THROWS(StorageError, db.files_in(folder_store, {}, false));
+    CHECK_THROWS(ValueError, db.files_in(folder_store, {}, false));
     fs::remove_all(root);
 }
 

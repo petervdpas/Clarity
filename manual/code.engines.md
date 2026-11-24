@@ -203,16 +203,17 @@ clarity_engine::on_open!(|| Ok(()));
 
 `Err` is the engine's refusal, in its words. `clarity_engine::clock()`, `random()` and `log(...)` are the services, and `clarity_engine::Bytes` is `bytes`. Clarity builds the engine as a `cdylib` for `wasm32-unknown-unknown` and copies the `.wasm` file into the `engines` folder; outside Clarity, `cargo build --release --target wasm32-unknown-unknown` in its folder does the same.
 
+The engine's source goes wherever the project goes, so its `Cargo.toml` takes the library as it is published, `clarity-engine = "0.4"`, as Clarity writes it. The checker warns at the engine's declaration when the source would build only on this machine: it takes a crate from a folder outside the project (`path = "../../../somewhere"`, or a path from the root of the disk), or it asks for another `clarity-engine` than the one this Clarity builds engines on.
+
 The examples have one each, with their source next to the file:
 
 | Example | Engine | What it shows |
 |---|---|---|
-| shop | `Pricing` | an order's total from its lines, with volume discounts; called from a data event |
 | records | `Images` | the size of a picture, read from its file's `bytes` |
 | dial | `Gauge` | the needle's angle and colour, called from a draw handler |
-| noughts | `Board` | a game kept with `state per window` and `on open`, using `random` |
+| modelling | `Fcdm` | the C# of a data model's classes, interfaces and enums, and the layout of its diagrams |
 
-Each opens in Clarity's engine editor with its code, and Run builds what changed. `examples/build-engines.sh` builds them all at once from a terminal.
+Each opens in Clarity's engine editor with its code, and Run builds what changed. `examples/build-engines.sh` builds them all at once from a terminal. The noughts example's `Board`, a game kept with `state per window` and `on open`, using `random`, is written in Clarity; see [An engine written in Clarity](#an-engine-written-in-clarity).
 
 ### The engine interface
 

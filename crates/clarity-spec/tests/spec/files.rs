@@ -99,6 +99,19 @@ fn code_reaches_only_the_file_stores_of_the_settings() {
     assert!(found.contains(&"there is no file store 'photos'; the project settings have scans".to_string()), "{found:#?}");
 }
 
+/// A path written in code is inside its store or folder: one absolute by its
+/// form (`/`, `\\`, `~`, a drive letter) names a place on one machine and is refused.
+#[test]
+fn a_written_path_is_inside_its_store() {
+    for path in ["/tmp/titles.txt", "~/titles.txt", "C:/titles.txt", "\\\\server\\titles.txt"] {
+        let source = with("\"exports/titles.txt\"", &format!("{path:?}"));
+        let found = errors(&load(&source, &["photos"]));
+        assert_eq!(found, [format!("the path \"{path}\" is a place on one machine; write a path inside the store or folder, like exports/titles.txt, or let the person choose the folder in a folder setting")], "{source}");
+    }
+    let joined = with("\"exports/titles.txt\"", "\"/tmp/\" + \"titles.txt\"");
+    assert_eq!(errors(&load(&joined, &["photos"])).len(), 1, "the start of a path put together");
+}
+
 #[test]
 fn reading_and_writing_files_are_effects() {
     let source = with("    effects db.write, files.read\n", "    effects db.write\n");

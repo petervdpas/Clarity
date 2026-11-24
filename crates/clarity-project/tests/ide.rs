@@ -170,26 +170,15 @@ fn closing_leaves_the_same_project_another_ide_opened_since() {
     assert_eq!(ide::open_project_in(&file), Some(shop));
 }
 
+/// The older key "outsideAgents" (the setting "Let outside agents work on my
+/// project", removed 2026-11-23) is ignored: a file that holds it still reads,
+/// and opening a project keeps it as one of the other keys.
 #[test]
-fn outside_agents_are_let_in_until_the_person_turns_them_off() {
+fn the_older_outside_agents_key_is_ignored() {
     let dir = home("outside");
+    let shop = project(&dir, "Shop");
     let file = dir.join("ide.json");
-    assert!(ide::outside_agents_in(&file), "no settings file: on");
-    std::fs::write(&file, r#"{ "theme": "dark" }"#).unwrap();
-    assert!(ide::outside_agents_in(&file), "no key: on");
-    ide::set_outside_agents_in(&file, false).unwrap();
-    assert!(!ide::outside_agents_in(&file));
-    let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-    assert_eq!(kept["theme"], "dark", "the other keys stay");
-    ide::set_outside_agents_in(&file, true).unwrap();
-    assert!(ide::outside_agents_in(&file));
-}
-
-#[test]
-fn the_switch_is_not_written_over_settings_that_cannot_be_read() {
-    let dir = home("outside-broken");
-    let file = dir.join("ide.json");
-    std::fs::write(&file, "{ half").unwrap();
-    assert!(ide::set_outside_agents_in(&file, false).is_err());
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ half");
+    std::fs::write(&file, r#"{ "outsideAgents": false }"#).unwrap();
+    ide::set_open_project_in(&file, &shop, &here()).unwrap();
+    assert_eq!(ide::open_project_in(&file), Some(shop));
 }

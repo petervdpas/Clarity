@@ -2925,6 +2925,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 if !Ty::Text.accepts(&ty) {
                     self.error(format!("the path to write it to must be text, not {}", ty.name()), path.span);
                 }
+                // Inside its store or folder, on every machine.
+                if let Some(start) = path_start(path).filter(|p| crate::files::one_machine(p)) {
+                    self.error(
+                        format!("the path \"{start}\" is a place on one machine; write a path inside the store or folder, like exports/titles.txt, or let the person choose the folder in a folder setting"),
+                        path.span,
+                    );
+                }
             }
             StmtKind::For { var, list, body } => {
                 if let Some(problem) = crate::names::name_problem("local", &var.name) {
@@ -5920,6 +5927,16 @@ fn item_ty(item: Item<'_>) -> Ty<'_> {
 
 /// The file name a write's path ends in, when the path ends in written
 /// text: `"notes.csv"`, or `name + ".md"` (then `.md`, whose extension counts).
+/// The literal text a path starts with: the whole of `"a/b"`, or the first
+/// literal of a path put together with `+`.
+fn path_start(path: &Expr) -> Option<&str> {
+    match &path.kind {
+        ExprKind::Str { value } => Some(value),
+        ExprKind::Binary { left, .. } => path_start(left),
+        _ => None,
+    }
+}
+
 fn written_name(path: &Expr) -> Option<String> {
     match &path.kind {
         ExprKind::Str { value } => Some(value.rsplit('/').next().unwrap_or(value).to_string()),

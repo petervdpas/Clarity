@@ -21,6 +21,8 @@ Every change is written to the module at once and checked.
 
 **New window** offers **Settings window** when the project has settings: a dialog with a labeled form of every setting and a Close button. Open it from a menu item or a button, as any window.
 
+Every setting is one the person can reach. In a project with windows, the checker warns about a setting that no part binds, no picker opens (`language`, `theme`) and no handler sets: "no window shows setting 'exportsFolder', so the person using the app cannot set it; bind a part to settings.exportsFolder, such as in a settings window (New window, Settings window) opened from a menu". A program of commands only sets its settings in code.
+
 ### `settings`
 
 ```text
@@ -132,7 +134,7 @@ And a folder part in a dialog shows it, in `design/Preferences.cxaml`:
 ```
 
 - It is kept with the settings, in `settings.json`, like any other setting. Until the person chooses one, the store is in its `default`; without a default, in a folder named after the store.
-- A relative folder is in the folder the settings file is in (such as `~/.config/records/photos`); an absolute one is used as it is.
+- A relative folder, the `default` too, is where the program keeps its data, as a relative file store and a SQLite database the project owns are (see [Data sources](data.sources.md)): the person's folder for application data under the program's name (such as `~/.local/share/records/exports`), or the folder `CLARITY_DATA` names (Clarity's Run names the project's data folder). An absolute one is used as it is.
 - It is read at every use: a folder chosen while the application runs is where the next file goes, at once. Files already in the old folder stay there: moving them is the person's choice.
 - The folder part shows it: a text field with the path and a button, in Clarity's word `chooseFolder`, that opens the system's folder picker. In a browser there is no picker, so the path is typed. Only a folder part shows a folder setting.
 - In code it is text: `settings.photosFolder = "/mnt/photos"`.

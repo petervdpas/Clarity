@@ -39,6 +39,35 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Build a generated project's program with its stack's own tools
+    ///
+    /// Builds what `clarity gen` wrote, as the IDE's Build does: the engines whose source changed,
+    /// then a release program, with Clarity.UI's library where it draws with it. See manual/project.run-build.md.
+    Build {
+        /// The project file, like shop.clarity; its modules are in shop/.
+        project: PathBuf,
+        /// A debug program instead of a release one.
+        #[arg(long)]
+        debug: bool,
+        /// The command-line program, of a project that has windows too.
+        #[arg(long)]
+        cli: bool,
+    },
+    /// Build a generated project's program when it changed, and run it
+    ///
+    /// Does what the IDE's Run does: builds a debug program when it changed since the last build, migrates the
+    /// program's databases, and starts it here, on the project's data. The words after `--` go to
+    /// the command-line program. See manual/project.run-build.md.
+    Run {
+        /// The project file, like shop.clarity; its modules are in shop/.
+        project: PathBuf,
+        /// A release program instead of a debug one.
+        #[arg(long)]
+        release: bool,
+        /// The words the command-line program runs with, after `--`.
+        #[arg(last = true)]
+        words: Vec<String>,
+    },
     /// Write the files of custom parts and libraries
     ///
     /// Writes the file each custom part and library follows from its declaration, and a starter
@@ -68,9 +97,11 @@ enum Command {
         /// The title of the step; "Step N" by default.
         #[arg(long)]
         title: Option<String>,
-        /// Treat proposed renames as a removal and an addition.
-        #[arg(long)]
-        no_renames: bool,
+        /// A rename the step records, so the data stays: `Customer=Client` for an entity,
+        /// `Customer.name=fullName` for a field, `Kind.Private=Personal` for a value of an enum.
+        /// Repeat it for more; nothing else is taken as a rename.
+        #[arg(long = "rename", value_name = "FROM=TO")]
+        renames: Vec<String>,
         /// Write the step even when changes can lose data.
         #[arg(long)]
         allow_data_loss: bool,
@@ -207,7 +238,7 @@ enum UsersCommand {
 
 #[derive(Subcommand)]
 enum DataCommand {
-    /// Take a backup of a data source's database, beside it in backups/.
+    /// Take a backup of a data source's database, into its folder in the project's backups folder.
     Backup {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -226,8 +257,9 @@ enum DataCommand {
     /// Create the databases or bring them up to date
     ///
     /// With Clarity's migration tool (clarity-migrate): every database the project owns, SQLite,
-    /// PostgreSQL, MySQL or SQL Server, gets the steps it lacks (a database that changes is backed
-    /// up first); one ahead of the project's steps is refused. See manual/data.migrations.md.
+    /// PostgreSQL, MySQL or SQL Server, gets the steps it lacks (an SQLite database that changes is
+    /// backed up first when the project has a backups folder); one ahead of the project's steps is
+    /// refused, and the first that fails stops the rest, as Run does. See manual/data.migrations.md.
     Migrate {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -239,8 +271,8 @@ enum DataCommand {
     Restore {
         /// The project file, like shop.clarity.
         project: PathBuf,
-        /// The backup's file, as `clarity data backups` lists it.
-        backup: PathBuf,
+        /// The backup's file name, as `clarity data backups` lists it; a path is refused.
+        backup: String,
         /// The data source; the first SQLite one the project owns by default.
         #[arg(long)]
         source: Option<String>,
@@ -256,24 +288,26 @@ enum SpecCommand {
     },
     /// Name unnamed parts, and make part and handler names camelCase
     ///
-    /// In every module of a project: what the checker asks of projects written before names
-    /// were required.
+    /// In every window, view and app of a project, in a module or in its own .cxaml, with the
+    /// code and the translations' slots that name them: what the checker asks of projects
+    /// written before names were required. Refused when the project would gain an error.
     Names {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
     /// Make every text people read a key
     ///
-    /// In the modules, a key in place of each text, and a file per language giving every key its
-    /// value, the texts' own in the default language: what the checker asks of projects written
-    /// before texts had keys. See manual/languages.md.
+    /// In the modules and the windows', views' and app's .cxaml files, a key in place of each
+    /// text, added to the file of every language: the texts' own in the default language. The
+    /// keys the project has stay. What the checker asks of projects written before texts had
+    /// keys. See manual/languages.md.
     Keys {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
     /// List the keys each language has no text for yet
     ///
-    /// Written as lines to fill in. See manual/languages.md.
+    /// A key its file lacks or leaves empty, written as lines to fill in. See manual/languages.md.
     Texts {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
@@ -320,15 +354,17 @@ fn main() -> ExitCode {
             SpecCommand::Keys { dir } => keys(&dir),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
+        Command::Build { project, debug, cli } => build_or_run(&project, !debug, cli, None),
+        Command::Run { project, release, words } => build_or_run(&project, release, !words.is_empty(), Some(words)),
         Command::Parts { project } => parts(&project),
         Command::ConvertPages { project } => convert_pages(&project),
         Command::Migrate {
             project,
             check,
             title,
-            no_renames,
+            renames,
             allow_data_loss,
-        } => migrate(&project, check, title, no_renames, allow_data_loss),
+        } => migrate(&project, check, title, &renames, allow_data_loss),
         Command::Import {
             project,
             source,
@@ -455,81 +491,120 @@ fn parts(project_file: &std::path::Path) -> ExitCode {
 }
 
 fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
+    // The one way to generate, as the IDE's Generate and the agents' generate tool do (crates/clarity-build).
+    match clarity_build::generate(project_file, out) {
+        Ok(source) => {
+            source.lines().iter().for_each(|line| eprintln!("{line}"));
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            why.lines().for_each(|line| eprintln!("clarity: {line}"));
+            ExitCode::from(if project_file.is_file() { 1 } else { 2 })
+        }
+    }
+}
+
+/// `clarity build` and (with `words`) `clarity run`: what the IDE's Build
+/// and Run do (crates/clarity-build), saying each step on the terminal; Run
+/// starts the program here and ends with its exit code.
+fn build_or_run(project_file: &std::path::Path, release: bool, cli: bool, words: Option<Vec<String>>) -> ExitCode {
     if !project_file.is_file() {
         eprintln!("clarity: {} is not a project file; give one like shop.clarity", project_file.display());
         return ExitCode::from(2);
     }
-    // The same generating as the agents' generate tool (crates/clarity-tools).
-    match clarity_tools::generate::generate(project_file, out) {
-        Ok(lines) => {
-            lines.iter().for_each(|line| eprintln!("{line}"));
-            ExitCode::SUCCESS
-        }
-        Err(why) => {
-            why.iter().for_each(|line| eprintln!("clarity: {line}"));
-            ExitCode::FAILURE
-        }
+    // Absolute, so the program is found from its own folder, where it starts.
+    let project_file = &std::path::absolute(project_file).unwrap_or_else(|_| project_file.to_path_buf());
+    let say = |line: String| eprintln!("{line}");
+    let fail = |why: String| {
+        eprintln!("clarity: {why}");
+        ExitCode::FAILURE
+    };
+    let generated = match clarity_build::generate_out(project_file, release, cli, clarity_build::GENERATE_IN_THE_TERMINAL) {
+        Ok(generated) => generated,
+        Err(why) => return fail(why),
+    };
+    if let Err(why) = clarity_build::ready(&generated) {
+        return fail(why);
+    }
+    let run = words.is_some();
+    // The engines whose source changed first, so the program has them as written; their problems are in cargo's lines.
+    let engines = match clarity_build::engines::build_changed(&clarity_project::module_dir(project_file), &say, &|_| {}) {
+        Ok(built) => built,
+        Err(why) => return fail(why),
+    };
+    // Run starts the last build when nothing changed since, as the IDE does.
+    let binary = match &generated.built {
+        Some((toolchain, _)) if run && !engines => generated.out.join(&toolchain.program),
+        _ => match clarity_build::toolchain(&generated, &say).and_then(|toolchain| clarity_build::compile(&generated, &toolchain, &say)) {
+            Ok(binary) => binary,
+            Err(why) => return fail(why),
+        },
+    };
+    let Some(words) = words else {
+        eprintln!("built {}", binary.display());
+        return ExitCode::SUCCESS;
+    };
+    // The program does not migrate (docs/ledger/migrations.md): Run migrates its databases first.
+    if let Err(why) = clarity_build::migrate(&generated, &say) {
+        return fail(why);
+    }
+    // A program served to a browser alone listens at the project's port, which no other program may hold.
+    let address = clarity_build::serves(project_file, &generated.stack, cli);
+    if let Some(address) = &address
+        && let Err(why) = clarity_build::can_serve_at(address)
+    {
+        return fail(why);
+    }
+    eprintln!("{} (in {})", binary.display(), generated.out.display());
+    // In the person's terminal: what the program writes and reads is theirs.
+    let mut command = clarity_project::terminal_command(&binary);
+    command.args(&words).current_dir(&generated.out);
+    // The program works on the project's data, not the person's (conformance/data-folder.json).
+    if let Some(data) = &generated.data {
+        command.env("CLARITY_DATA", data);
+    }
+    if let Some(address) = &address {
+        eprintln!("serving at http://{address}");
+        command.args(["--address", address]);
+    }
+    match command.status() {
+        Ok(status) => status.code().map_or(ExitCode::FAILURE, |code| ExitCode::from(code.clamp(0, 255) as u8)),
+        Err(why) => fail(format!("cannot start {}: {why}", binary.display())),
     }
 }
 
-/// Loads the modules of a project, given its project file or its folder.
+/// Reads and checks a project, given its project file or its folder, the
+/// one way every front end does (clarity_project::check).
 fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
-    let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
-    // Each web API's module follows its description and picks (manual/code.web-apis.md).
-    if path.is_file() {
-        match clarity_project::refresh_apis(path) {
-            Ok(warnings) => warnings.iter().for_each(|w| eprintln!("clarity: {w}")),
-            Err(why) => eprintln!("clarity: {why}"),
+    match clarity_project::check(path) {
+        Ok(checked) => {
+            checked.notes.iter().for_each(|note| eprintln!("clarity: {note}"));
+            Ok(checked.project)
+        }
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            Err(ExitCode::from(2))
         }
     }
-    clarity_project::load_modules(&dir).map_err(|err| {
-        eprintln!("clarity: cannot read {}: {err}", dir.display());
-        ExitCode::from(2)
-    })
 }
 
 fn names(path: &std::path::Path) -> ExitCode {
     let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        eprintln!("clarity: cannot read {}", dir.display());
-        return ExitCode::from(2);
-    };
-    let mut files: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "clarity")).collect();
-    files.sort();
-    let mut changed = 0;
-    let mut renames = Vec::new();
-    for file in &files {
-        let Ok(text) = std::fs::read_to_string(file) else { continue };
-        let named = match clarity_spec::edit::apply(&text, &clarity_spec::edit::Edit::NameParts) {
-            Ok(outcome) => outcome.text,
-            Err(err) => {
-                eprintln!("clarity: {}: {err}", file.display());
-                continue;
-            }
-        };
-        let (camel, renamed) = clarity_spec::names::camel_names_with(&named);
-        renames.extend(renamed);
-        if camel != text {
-            if let Err(err) = std::fs::write(file, &camel) {
-                eprintln!("clarity: cannot write {}: {err}", file.display());
+    // The one way the agents' name_parts and camel_names take too (clarity_tools::naming).
+    let mut written: Vec<PathBuf> = Vec::new();
+    for naming in [clarity_tools::naming::name_parts, clarity_tools::naming::camel_names] {
+        match naming(&dir, None) {
+            Ok(changes) => written.extend(changes.into_iter().map(|c| c.file).filter(|f| !written.contains(f)).collect::<Vec<_>>()),
+            Err(why) => {
+                eprintln!("clarity: {why}");
                 return ExitCode::FAILURE;
             }
-            eprintln!("named {}", file.display());
-            changed += 1;
         }
     }
-    // The translations' texts follow the renamed slots of the module's texts.
-    let translations = dir.join(clarity_spec::translations::TRANSLATIONS_DIR);
-    if let Ok(entries) = std::fs::read_dir(&translations) {
-        for path in entries.filter_map(Result::ok).map(|e| e.path()) {
-            let Ok(text) = std::fs::read_to_string(&path) else { continue };
-            let renamed = clarity_spec::names::rename_slots(&text, &renames);
-            if renamed != text && std::fs::write(&path, &renamed).is_ok() {
-                eprintln!("renamed slots in {}", path.display());
-            }
-        }
+    for file in &written {
+        eprintln!("named {}", file.display());
     }
-    eprintln!("{changed} of {} file(s) changed", files.len());
+    eprintln!("{} file(s) changed", written.len());
     ExitCode::SUCCESS
 }
 
@@ -563,48 +638,21 @@ fn check(dir: &std::path::Path) -> ExitCode {
 }
 
 fn keys(path: &std::path::Path) -> ExitCode {
-    let project = match load(path) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
     let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
-    let read = |folder: &std::path::Path| -> Vec<(String, String)> {
-        let Ok(entries) = std::fs::read_dir(folder) else { return Vec::new() };
-        let mut files: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "clarity")).collect();
-        files.sort();
-        files.into_iter().filter_map(|p| std::fs::read_to_string(&p).ok().map(|t| (p.display().to_string(), t))).collect()
-    };
-    let modules = read(&dir);
-    let folder = dir.join(clarity_spec::translations::TRANSLATIONS_DIR);
-    let languages = read(&folder);
-    let default = clarity_spec::translations::default_language(&project);
-    let made = clarity_spec::keyed::make_keys(
-        &modules.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
-        &languages.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
-        &default,
-    );
-    for ((path, before), (_, after)) in modules.iter().zip(&made.modules) {
-        if before != after {
-            if let Err(err) = std::fs::write(path, after) {
-                eprintln!("clarity: cannot write {path}: {err}");
-                return ExitCode::FAILURE;
+    // The one way the IDE's Make texts keys takes too (clarity_tools::texts_keys).
+    match clarity_tools::texts_keys::make_texts_keys(&dir) {
+        Ok(changes) => {
+            for change in &changes {
+                eprintln!("wrote {}", change.file.display());
             }
-            eprintln!("keyed {path}");
+            eprintln!("{} file(s) changed", changes.len());
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            ExitCode::FAILURE
         }
     }
-    if let Err(err) = std::fs::create_dir_all(&folder) {
-        eprintln!("clarity: cannot make {}: {err}", folder.display());
-        return ExitCode::FAILURE;
-    }
-    for language in made.languages.keys() {
-        let file = folder.join(format!("{language}.clarity"));
-        if let Err(err) = std::fs::write(&file, made.language_file(language)) {
-            eprintln!("clarity: cannot write {}: {err}", file.display());
-            return ExitCode::FAILURE;
-        }
-        eprintln!("wrote {}", file.display());
-    }
-    ExitCode::SUCCESS
 }
 
 fn texts(dir: &std::path::Path) -> ExitCode {
@@ -612,21 +660,21 @@ fn texts(dir: &std::path::Path) -> ExitCode {
         Ok(project) => project,
         Err(code) => return code,
     };
-    use clarity_spec::translations::{default_language, keys};
-    let used = keys(&project);
+    use clarity_spec::translations::{default_language, keys, missing};
+    // A key is missing in a language when its file lacks it or leaves it empty: the one
+    // rule the IDE's languages table and the agents' missing_translations count by.
+    let used = keys(&project).len();
     let default = default_language(&project);
-    let defaults = project.translations.get(&default);
-    for (language, values) in &project.translations {
-        let empty: Vec<_> = used.iter().filter(|u| values.get(&u.key).is_none_or(|v| v.is_empty())).collect();
-        println!("// {language}{}: {} of {} keys have no value", if *language == default { " (default)" } else { "" }, empty.len(), used.len());
-        for u in empty {
-            let said = defaults.and_then(|d| d.get(&u.key)).filter(|v| !v.is_empty()).map(|v| format!(" {}", clarity_spec::lexer::quote(v))).unwrap_or_default();
-            println!("    {} \"\"  // {}{said}", u.key, u.places.join(", "));
+    for (language, lacking) in missing(&project) {
+        println!("// {language}{}: {} of {used} keys missing", if language == default { " (default)" } else { "" }, lacking.len());
+        for m in lacking {
+            let said = m.default_text.as_deref().map(|v| format!(" {}", clarity_spec::lexer::quote(v))).unwrap_or_default();
+            println!("    {} \"\"  // {}{said}", m.key, m.places.join(", "));
         }
     }
     if project.translations.is_empty() {
-        println!("// {} keys, and no language file yet; add translations/{default}.clarity", used.len());
-        for u in &used {
+        println!("// {used} keys, and no language file yet; add translations/{default}.clarity");
+        for u in keys(&project) {
             println!("    {} \"\"  // {}", u.key, u.places.join(", "));
         }
     }
@@ -670,126 +718,104 @@ fn model(dir: &std::path::Path, samples: bool) -> ExitCode {
     }
 }
 
-/// Moves every page block into its `.cxaml` file; refuses to write over a
-/// `.cxaml` that is there already, and says whether the project still loads.
+/// Moves every page block into its `.cxaml` file (clarity_tools::pages_out,
+/// the one way the IDE's Move pages into design takes too): refused, moving
+/// nothing, when a `.cxaml` is there already or the project would gain an error.
 fn convert_pages(project_file: &std::path::Path) -> ExitCode {
     let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
-    let before = match load(project_file) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
-    let paths = match clarity_spec::spec_files(&dir) {
-        Ok(paths) => paths,
-        Err(err) => {
-            eprintln!("clarity: cannot read {}: {err}", dir.display());
-            return ExitCode::from(2);
+    match clarity_tools::pages_out::move_pages_into_design(&dir) {
+        Ok(changes) => {
+            let pages = changes.iter().filter(|c| c.before.is_none()).count();
+            eprintln!("{pages} window(s), view(s) and app(s) moved into .cxaml files");
+            ExitCode::SUCCESS
         }
-    };
-    let mut files = Vec::new();
-    for path in &paths {
-        match std::fs::read_to_string(path) {
-            Ok(text) => files.push((path.display().to_string(), text)),
-            Err(err) => {
-                eprintln!("clarity: cannot read {}: {err}", path.display());
-                return ExitCode::from(2);
-            }
-        }
-    }
-    let moved = match clarity_spec::cxaml::moved_out(&files) {
-        Ok(moved) => moved,
         Err(why) => {
             eprintln!("clarity: {why}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Some((path, _)) = moved.iter().find(|(p, _)| clarity_spec::cxaml::is_page_file(p) && std::path::Path::new(p).exists()) {
-        eprintln!("clarity: {path} is there already; nothing was moved");
-        return ExitCode::FAILURE;
-    }
-    let pages = moved.iter().filter(|(p, _)| clarity_spec::cxaml::is_page_file(p)).count();
-    for (path, text) in &moved {
-        let path = std::path::Path::new(path);
-        if let Some(folder) = path.parent() {
-            if let Err(err) = std::fs::create_dir_all(folder) {
-                eprintln!("clarity: cannot make {}: {err}", folder.display());
-                return ExitCode::from(2);
-            }
-        }
-        if let Err(err) = std::fs::write(path, text) {
-            eprintln!("clarity: cannot write {}: {err}", path.display());
-            return ExitCode::from(2);
+            ExitCode::FAILURE
         }
     }
-    eprintln!("{pages} window(s), view(s) and app(s) moved into .cxaml files");
-    // The project as it loads now: the same errors as before, no new ones.
-    let after = match load(project_file) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
-    let errors = |p: &clarity_spec::Project| p.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect::<Vec<_>>();
-    let new: Vec<String> = errors(&after).into_iter().filter(|e| !errors(&before).contains(e)).collect();
-    for e in &new {
-        eprintln!("clarity: new error: {e}");
-    }
-    if new.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
-fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, no_renames: bool, allow_data_loss: bool) -> ExitCode {
+fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, renames: &[String], allow_data_loss: bool) -> ExitCode {
     use clarity_spec::migrate;
+    use clarity_tools::steps;
     let project = match load(project_file) {
         Ok(project) => project,
         Err(code) => return code,
     };
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
-    if !errors.is_empty() {
-        for diagnostic in errors {
-            eprintln!("{diagnostic}");
-        }
-        eprintln!("clarity: fix the errors before migrating");
-        return ExitCode::FAILURE;
+    for diagnostic in &errors {
+        eprintln!("{diagnostic}");
     }
-    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
-    let mut pending_any = false;
-    // Each SQL data source Clarity owns has its own steps; an external one (a
-    // database or a file it does not own) has none.
-    for source in project.sources.iter().filter(|s| s.sql && !s.external).map(|s| s.name.as_str()) {
-        let renames = if no_renames { Vec::new() } else { migrate::proposed_renames(&project, source) };
-        let ops = migrate::pending(&project, source, &renames);
-        if ops.is_empty() {
-            continue;
+    let renames = match renames.iter().map(|r| named_rename(&project, r)).collect::<Result<Vec<_>, _>>() {
+        Ok(renames) => renames,
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            return ExitCode::from(2);
         }
-        pending_any = true;
-        eprintln!("Changes in data source {source} not in a migration yet:");
-        for op in &ops {
+    };
+    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
+    let pending = match steps::pending(&project, None, &renames) {
+        Ok(pending) => pending,
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
+    for p in pending.iter().filter(|p| !p.ops.is_empty()) {
+        eprintln!("Changes in data source {} not in a migration yet:", p.source);
+        for op in &p.ops {
             let mark = if op.loses_data() { "  (can lose data)" } else { "" };
             for (i, line) in migrate::op_text(op).lines().enumerate() {
                 eprintln!("  {line}{}", if i == 0 { mark } else { "" });
             }
         }
-        if !renames.is_empty() {
-            eprintln!("Renames are proposed; use --no-renames to remove and add instead.");
-        }
-        if check {
-            continue;
-        }
-        if ops.iter().any(migrate::Op::loses_data) && !allow_data_loss {
-            eprintln!("clarity: some changes can lose data; check them and run again with --allow-data-loss");
-            return ExitCode::FAILURE;
-        }
-        let count = project.migrations.as_ref().and_then(|m| m.get(source)).map_or(0, Vec::len);
-        let title = title.clone().unwrap_or_else(|| format!("Step {}", count + 1));
-        match clarity_spec::write_step(&dir, source, &title, &ops) {
-            Ok(path) => eprintln!("Wrote {}", path.display()),
-            Err(err) => {
-                eprintln!("clarity: cannot write the step: {err}");
-                return ExitCode::FAILURE;
+        let suggested: Vec<&migrate::Rename> = p.proposed.iter().filter(|r| !renames.contains(r)).collect();
+        if !suggested.is_empty() {
+            eprintln!("Clarity can take these as renames, so the data stays; name each one you mean with --rename:");
+            for r in suggested {
+                let from = match &r.entity {
+                    Some(entity) => format!("{entity}.{}", r.from),
+                    None => r.from.clone(),
+                };
+                eprintln!("  --rename {from}={}", r.to);
             }
         }
     }
-    if !pending_any {
-        eprintln!("The migrations cover the data dictionary; nothing to migrate.");
+    if check {
+        if pending.iter().all(|p| p.ops.is_empty()) {
+            eprintln!("{}", steps::NOTHING_TO_MIGRATE);
+        }
+        return ExitCode::SUCCESS;
     }
-    ExitCode::SUCCESS
+    let request = steps::StepRequest { source: None, title: title.as_deref(), renames: &renames, allow_data_loss };
+    match steps::write_steps(&dir, &request) {
+        Ok(migrated) => {
+            for change in &migrated.written {
+                eprintln!("Wrote {}", change.file.display());
+            }
+            if migrated.written.is_empty() {
+                eprintln!("{}", migrated.said);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            let hint = if why.contains("can lose data") { " (--allow-data-loss)" } else { "" };
+            eprintln!("clarity: {why}{hint}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// A rename named on the command line (`--rename FROM=TO`): `Customer` an
+/// entity, `Customer.name` a field, `Kind.Private` a value of the enum Kind.
+fn named_rename(project: &clarity_spec::Project, text: &str) -> Result<clarity_spec::migrate::Rename, String> {
+    let (from, to) = text.split_once('=').map(|(f, t)| (f.trim(), t.trim())).filter(|(f, t)| !f.is_empty() && !t.is_empty()).ok_or_else(|| format!("--rename {text}: write it as FROM=TO, like Customer.name=fullName"))?;
+    Ok(match from.split_once('.') {
+        Some((owner, name)) if project.enums().any(|e| e.name.name == owner) => clarity_spec::migrate::Rename::value(owner, name, to),
+        Some((owner, name)) => clarity_spec::migrate::Rename { entity: Some(owner.into()), from: name.into(), to: to.into(), value: false },
+        None => clarity_spec::migrate::Rename { entity: None, from: from.into(), to: to.into(), value: false },
+    })
 }
 
 fn import(project_file: &std::path::Path, source: &str, module: Option<String>, tables: Vec<String>, list: bool, schema: Option<PathBuf>) -> ExitCode {
@@ -850,35 +876,16 @@ fn own(project_file: &std::path::Path, source: &str) -> ExitCode {
     }
 }
 
-/// Backups of a project's databases: take one, list them, restore one.
 /// `clarity data migrate`: the databases the project owns created or brought up to date with
-/// Clarity's migration tool (clarity-migrate), each SQLite one where Clarity runs the project.
+/// Clarity's migration tool (clarity-migrate), as Run does before it starts the program
+/// (`clarity_build::databases`, `clarity_build::migrate_databases`): each SQLite one where Run
+/// opens it, stopping at the first that fails.
 fn migrate_data(project_file: &std::path::Path, source: Option<&str>) -> ExitCode {
-    let dir = clarity_project::module_dir(project_file);
-    let Some(settings) = clarity_project::load(project_file).settings else {
-        eprintln!("clarity: {} cannot be read", project_file.display());
-        return ExitCode::FAILURE;
-    };
-    let project = match clarity_project::load_modules(&dir) {
-        Ok(project) if !project.has_errors() => project,
-        Ok(project) => {
-            for d in project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error) {
-                eprintln!("{}", d.message);
-            }
-            eprintln!("clarity: the project has errors; fix them before migrating");
-            return ExitCode::FAILURE;
-        }
-        Err(err) => {
-            eprintln!("clarity: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let databases = match clarity_gen::migrated_databases(&project, &settings) {
+    let project_file = &std::path::absolute(project_file).unwrap_or_else(|_| project_file.to_path_buf());
+    let databases = match clarity_build::databases(project_file) {
         Ok(databases) => databases,
-        Err(errors) => {
-            for e in errors {
-                eprintln!("clarity: {e}");
-            }
+        Err(why) => {
+            eprintln!("clarity: {why}");
             return ExitCode::FAILURE;
         }
     };
@@ -888,61 +895,40 @@ fn migrate_data(project_file: &std::path::Path, source: Option<&str>) -> ExitCod
         eprintln!("clarity: the project owns no database of data source {name}");
         return ExitCode::FAILURE;
     }
-    let mut failed = false;
-    for found in databases.into_iter().filter(|d| source.is_none_or(|name| d.source == name)) {
-        // A SQLite database is the one where Clarity runs the project; a server's as the app connects to it.
-        let location = match settings.datasources.iter().find(|s| s.name == found.source) {
-            Some(data_source) if found.dialect == "sqlite" => clarity_project::sqlite_path(&dir, data_source).display().to_string(),
-            _ => found.location,
-        };
-        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location, steps: found.steps };
-        match clarity_migrate::migrate(&database) {
-            Ok(clarity_migrate::Outcome::UpToDate) => eprintln!("{} is up to date: {}", database.source, database.location),
-            Ok(clarity_migrate::Outcome::Migrated(n)) => eprintln!("Migrated {} by {n} step{}: {}", database.source, if n == 1 { "" } else { "s" }, database.location),
-            Err(why) => {
-                eprintln!("clarity: {why}");
-                failed = true;
-            }
+    let chosen: Vec<clarity_migrate::Database> = databases.into_iter().filter(|d| source.is_none_or(|name| d.source == name)).collect();
+    match clarity_build::migrate_databases(&chosen, &|line: String| eprintln!("{line}")) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            ExitCode::FAILURE
         }
     }
-    if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
 }
 
+/// Backups of a project's databases: take one, list them, restore one by its
+/// file name, with the one version the IDE and its agent use (`clarity_project::backups`).
 fn data(command: DataCommand) -> ExitCode {
-    if let DataCommand::Migrate { project, source } = &command {
-        return migrate_data(project, source.as_deref());
-    }
-    let (project, source) = match &command {
-        DataCommand::Backup { project, source } | DataCommand::Backups { project, source } | DataCommand::Restore { project, source, .. } => (project, source.as_deref()),
-        DataCommand::Migrate { .. } => unreachable!("migrated above"),
-    };
-    let dir = clarity_project::module_dir(project);
-    let (name, database) = match clarity_project::database_to_back_up(&dir, source) {
-        Ok(found) => found,
-        Err(err) => {
-            eprintln!("clarity: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
     let done = match command {
-        DataCommand::Backup { .. } => clarity_db::backup::take(&database, clarity_db::backup::MANUAL).map(|b| eprintln!("Backed up {name} to {}", b.path.display())),
-        DataCommand::Backups { .. } => {
-            let all = clarity_db::backup::list(&database);
+        DataCommand::Migrate { project, source } => return migrate_data(&project, source.as_deref()),
+        DataCommand::Backup { project, source } => {
+            clarity_project::backups::take(&clarity_project::module_dir(&project), source.as_deref()).map(|(found, b)| eprintln!("Backed up {} to {}", found.source, b.path.display()))
+        }
+        DataCommand::Backups { project, source } => clarity_project::backups::list(&clarity_project::module_dir(&project), source.as_deref()).map(|(found, all)| {
             if all.is_empty() {
-                eprintln!("{name} has no backups yet; clarity data backup takes one.");
+                eprintln!("{} has no backups yet in {}; clarity data backup takes one.", found.source, found.folder.display());
             }
             for b in all {
-                println!("{}  {:<24} {:>10}  {}", b.when, b.why, size(b.bytes), b.path.display());
-            }
-            Ok(())
-        }
-        DataCommand::Migrate { .. } => Ok(()),
-        DataCommand::Restore { backup, .. } => clarity_db::backup::restore(&database, &backup).map(|before| {
-            eprintln!("Restored {name} from {}.", backup.display());
-            if before.path != backup {
-                eprintln!("What it replaced is kept in {}.", before.path.display());
+                println!("{}  {:<24} {:>10}  {}", b.when, b.why, size(b.bytes), b.file);
             }
         }),
+        DataCommand::Restore { project, backup, source } => {
+            clarity_project::backups::restore(&clarity_project::module_dir(&project), source.as_deref(), &backup).map(|(found, before)| {
+                eprintln!("Restored {} from {backup}.", found.source);
+                if before.file != backup {
+                    eprintln!("What it replaced is kept as {}.", before.file);
+                }
+            })
+        }
     };
     match done {
         Ok(()) => ExitCode::SUCCESS,

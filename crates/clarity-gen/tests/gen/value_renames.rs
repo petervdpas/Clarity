@@ -39,9 +39,9 @@ fn steps(kind: SourceKind) -> Vec<Vec<String>> {
 fn stored_values_take_the_new_name() {
     let steps = steps(SourceKind::Sqlite);
     let db = Db::memory().unwrap();
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1])), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1], None)), 1);
     db.batch("main", r#"INSERT INTO customer (name, kind, kinds) VALUES ('Ada', 'Private', '["Private","Business"]'), ('Grace', 'Business', '["Business"]')"#).unwrap();
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps)), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps, None)), 1);
     let rows = db.rows("main", "SELECT kind, kinds FROM customer ORDER BY name", &[]).unwrap();
     assert_eq!(rows[0], vec![SqlValue::Text("Personal".into()), SqlValue::Text(r#"["Personal","Business"]"#.into())]);
     assert_eq!(rows[1], vec![SqlValue::Text("Business".into()), SqlValue::Text(r#"["Business"]"#.into())]);

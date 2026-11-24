@@ -282,7 +282,7 @@ fn migrates_and_keeps_records(variable: &str, dialect: Dialect, kind: SourceKind
     }
     let steps = steps(kind);
 
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1])), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1], None)), 1);
     let since = NaiveDate::from_ymd_opt(2026, 1, 15);
     let mut ada = Before {
         name: "Ada Lovelace".into(),
@@ -331,8 +331,8 @@ fn migrates_and_keeps_records(variable: &str, dialect: Dialect, kind: SourceKind
     assert_eq!(names(&db.find::<Order>(&by_name).unwrap(), |o| &o.number), ["ORD-G", "ORD-1"]);
     db.delete(&grace2).unwrap();
 
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps)), 1);
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps)), 0);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps, None)), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps, None)), 0);
     assert_eq!(db.schema_version().unwrap(), 2);
 
     let customer = db.get::<Customer>(ada.id).unwrap();

@@ -24,7 +24,7 @@ fn backups_are_named_and_pruned_as_every_stack_does() {
     for f in prune["files"].as_array().unwrap() {
         std::fs::write(dir.join("backups").join(f.as_str().unwrap()), "").unwrap();
     }
-    backup::prune(&dir.join(format!("{}.db", prune["database"].as_str().unwrap())));
+    backup::prune(&dir.join("backups"), prune["database"].as_str().unwrap());
     let mut left: Vec<String> = std::fs::read_dir(dir.join("backups")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
     left.sort();
     let wanted: Vec<String> = prune["left"].as_array().unwrap().iter().map(|f| f.as_str().unwrap().to_string()).collect();
@@ -32,3 +32,17 @@ fn backups_are_named_and_pruned_as_every_stack_does() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+
+/// A backup's file read back: its moment, its count within that second and
+/// its reason; a file that is not one of this database's backups is none.
+/// The one reading of backup names, for clarity-migrate and for Clarity's
+/// Backups (clarity_db).
+#[test]
+fn a_backup_s_file_reads_back_as_when_count_and_why() {
+    let read = |file: &str| backup::parse("shop", file);
+    assert_eq!(read("shop-20261105T213012Z-manual.db"), Some(backup::Named { when: "20261105T213012Z".into(), count: 1, why: "manual".into() }));
+    assert_eq!(read("shop-20261105T213012Z-before-migration-0006_2.db"), Some(backup::Named { when: "20261105T213012Z".into(), count: 2, why: "before-migration-0006".into() }));
+    for not in ["other-20261105T213012Z-manual.db", "shop-2026110XT213012Z-manual.db", "shop-20261105T213012Z-Manual.db", "shop-20261105T213012Z-manual.txt", "shop-20261105T213012Z-manual_x.db"] {
+        assert_eq!(read(not), None, "{not}");
+    }
+}

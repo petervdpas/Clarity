@@ -1,0 +1,14 @@
+[package]
+name = "clarity-build"
+description = "Generate, Build and Run of a Clarity project, shared by the IDE and the clarity command"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-gen = { path = "../clarity-gen" }
+clarity-migrate = { path = "../clarity-migrate" }
+# Clarity.UI's library and browser files, fetched from their release when nothing carries them.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }

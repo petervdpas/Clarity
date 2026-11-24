@@ -10,11 +10,15 @@ export type BackupList = { source: string,
  */
 database: string | null, 
 /**
+ * Its backups folder: a folder of the source's name in the project's backups folder.
+ */
+folder: string | null, 
+/**
  * The newest first.
  */
 backups: Array<BackupEntry>, 
 /**
- * Why there is no backing up here: an external source, a server database.
+ * Why there is no backing up here: no backups folder, an external source, a server database.
  */
 unavailable: string | null, 
 /**

@@ -376,7 +376,7 @@ action exportCollection()
     write lines to exports "collection.txt"
 ```
 
-- The store is a file store of the project file (`filestore exports "data/exports"`). A path that would leave the store is refused when it runs. In `write`, the `to` belongs to `write`, not to a range.
+- The store is a file store of the project file (`filestore exports "data/exports"`). A path that would leave the store is refused when it runs, and one written as a place on one machine (`"/tmp/list.txt"`, `"~/list.txt"`, `"C:/list.txt"`, also as the start of a path put together with `+`) is refused by the checker: "the path \"/tmp/list.txt\" is a place on one machine; write a path inside the store or folder, like exports/titles.txt, or let the person choose the folder in a folder setting". In `write`, the `to` belongs to `write`, not to a range.
 - In handlers, commands, data events and actions with `effects files.write`.
 - "what to write must be text or bytes, not Album"; "the path to write it to must be text, not integer"; "function 'export' cannot reach files; an action can, with 'effects files.write'"; "action 'exportCollection' writes a file, which needs 'effects files.write'".
 

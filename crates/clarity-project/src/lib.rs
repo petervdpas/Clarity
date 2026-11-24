@@ -4,8 +4,9 @@
 //! docs/ledger/project-file.md.
 
 pub mod activity;
+pub mod backups;
 mod background;
-pub use background::{background_command, no_window};
+pub use background::{background_command, no_window, terminal_command};
 #[cfg(windows)]
 pub use background::BACKGROUND_FLAGS;
 pub mod browse;
@@ -16,6 +17,7 @@ mod file_import;
 mod signin_file;
 pub mod folders;
 pub mod mappings;
+pub mod mcp_access;
 pub mod ide;
 pub mod openapi;
 pub mod recent;
@@ -320,6 +322,12 @@ pub struct Settings {
     /// without Clarity (docs/ledger/migrations.md): `include migrate`.
     #[serde(default)]
     pub include_migrate: bool,
+    /// The folder the backups of the project's databases go in, under the
+    /// project's folder so every system finds it (docs/ledger/backups.md):
+    /// `backups "data/backups"`, each data source's in a folder of its name
+    /// inside it. Without it the project takes no backups.
+    #[serde(default)]
+    pub backups: Option<String>,
     /// Who is using the program (docs/ledger/signin.md):
     /// `signin Member on desktop web` with its strategies; none without it.
     #[serde(default)]
@@ -441,17 +449,23 @@ pub fn clarity_home() -> PathBuf {
 /// a drive path no longer than the limit the prefix is there to lift.
 /// Elsewhere, and on every other system, the path is its own answer.
 pub fn plain(path: PathBuf) -> PathBuf {
-    #[cfg(windows)]
+    plain_in(path, std::env::consts::OS)
+}
+
+/// `plain` by the rule of system `os`, whichever system runs it: Windows'
+/// for "windows", the path as it is for every other.
+pub fn plain_in(path: PathBuf, os: &str) -> PathBuf {
+    const VERBATIM: &str = r"\\?\";
+    const LONGEST: usize = 260;
+    if os != "windows" {
+        return path;
+    }
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(VERBATIM)
+        && rest.len() < LONGEST
+        && matches!(rest.as_bytes(), [drive, b':', b'\\', ..] if drive.is_ascii_alphabetic())
     {
-        const VERBATIM: &str = r"\\?\";
-        const LONGEST: usize = 260;
-        let text = path.to_string_lossy();
-        if let Some(rest) = text.strip_prefix(VERBATIM)
-            && rest.len() < LONGEST
-            && matches!(rest.as_bytes(), [drive, b':', b'\\', ..] if drive.is_ascii_alphabetic())
-        {
-            return PathBuf::from(rest);
-        }
+        return PathBuf::from(rest);
     }
     path
 }
@@ -501,6 +515,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         include_migrate: false,
+        backups: None,
         signin: None,
         engines_interpreted: false,
         agents_read_closed: false,
@@ -617,6 +632,7 @@ pub fn validate(settings: &Settings) -> Vec<String> {
         problems.push("the output folder must be a folder of its own, like out".to_string());
     }
     problems.extend(settings.keeps.iter().filter_map(|folder| file::kept_problem(folder)));
+    problems.extend(settings.backups.as_deref().and_then(file::backups_problem));
     problems.extend(settings.language.as_deref().and_then(language_problem));
     problems.extend(settings.currency.as_deref().and_then(currency_problem));
     if settings.row_height.is_some_and(|h| !clarity_spec::layout::row_height_fits(h)) {
@@ -648,6 +664,8 @@ pub fn validate(settings: &Settings) -> Vec<String> {
         }
         if let Some(problem) = source_problem(source) {
             problems.push(format!("data source '{}': {problem}", source.name));
+        } else if let Some(problem) = matches!(source.kind, SourceKind::Sqlite | SourceKind::File).then(|| one_machine_problem("the file", source.url.trim())).flatten() {
+            problems.push(format!("data source '{}': {problem}", source.name));
         }
         if source.kind != SourceKind::Rest && (source.openapi.is_some() || !source.picks.is_empty() || !source.pick_schemas.is_empty()) {
             problems.push(format!("data source '{}': only a web API has an openapi description and picks", source.name));
@@ -675,9 +693,24 @@ pub fn validate(settings: &Settings) -> Vec<String> {
             problems.push(format!("file store '{}' needs a folder", store.name));
         } else if ["env:", "setting:"].iter().any(|prefix| store.location.strip_prefix(prefix).is_some_and(|rest| rest.trim().is_empty())) {
             problems.push(format!("file store '{}': the location names no variable or setting after its prefix", store.name));
+        } else if let Some(problem) = one_machine_problem("the folder", store.location.trim()).or_else(|| store_outside_data(settings, store)) {
+            problems.push(format!("file store '{}': {problem}", store.name));
+        }
+    }
+    for codec in &settings.codecs {
+        if let Some(problem) = one_machine_problem("the library", codec.from.trim()) {
+            problems.push(format!("codec '{}': {problem}", codec.name));
         }
     }
     problems
+}
+
+/// Why `path`, a folder or file the project file names, would work on one
+/// machine only (clarity_spec::files::one_machine): a project runs anywhere
+/// with a path inside it, `env:NAME` or `setting:name`.
+pub fn one_machine_problem(what: &str, path: &str) -> Option<String> {
+    clarity_spec::files::one_machine(path)
+        .then(|| format!("{what} \"{path}\" is a place on one machine; write a folder inside the project (like data/...) or a folder setting the person chooses (setting:name)"))
 }
 
 /// The prefix of a keychain entry named on its own, which Clarity does not
@@ -1153,37 +1186,53 @@ fn kept_beside(source: &DataSource) -> Option<String> {
     Path::new(url).file_name().map(|n| n.to_string_lossy().into_owned())
 }
 
-/// The folder Clarity's Run names in CLARITY_DATA for the project in `dir`:
-/// where it keeps its first own SQLite database, so a run in Clarity works on
-/// the project's data; none when it keeps none beside it.
-pub fn data_folder(dir: &Path, settings: &Settings) -> Option<PathBuf> {
-    let source = settings.datasources.iter().find(|s| kept_beside(s).is_some())?;
-    sqlite_path(dir, source).parent().map(Path::to_path_buf)
+/// The folder name of a file store the project names with a relative folder
+/// (`filestore photos "data/photos"`): a built program keeps it in its data
+/// folder under that name (conformance/data-folder.json, `stores`); none for
+/// an absolute folder, `env:` or `setting:`.
+fn store_kept(store: &FileStore, root: &Path) -> Option<String> {
+    let location = store.location.as_str();
+    if location.contains(':') || Path::new(location).is_absolute() {
+        return None;
+    }
+    // Its whole path from the data folder, so two stores share a folder only when they name the same one.
+    let rest = Path::new(location).strip_prefix(root).ok()?;
+    let parts: Vec<String> = rest.components().filter_map(|c| match c {
+        std::path::Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+        _ => None,
+    }).collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
 }
 
-/// The SQLite database Clarity backs up for data source `source` of the
-/// project in folder `dir` (the first one it owns when none is named), with
-/// the source's name (docs/ledger/backups.md). An external source is someone
-/// else's, and a server database its administrator's for now: each says so.
-pub fn database_to_back_up(dir: &Path, source: Option<&str>) -> Result<(String, PathBuf), String> {
-    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
-    let settings = load(&file).settings.ok_or_else(|| format!("{} cannot be read", file.display()))?;
-    let found = match source {
-        Some(name) => settings.datasources.iter().find(|s| s.name == name).ok_or_else(|| format!("the project has no data source {name}"))?,
-        None => settings
-            .datasources
-            .iter()
-            .find(|s| s.kind == SourceKind::Sqlite && !s.external)
-            .ok_or_else(|| "the project owns no SQLite database to back up".to_string())?,
-    };
-    if found.external {
-        return Err(format!("data source {} is external: its database is someone else's, and Clarity neither backs it up nor restores it", found.name));
+/// The folder a project keeps its own data in, relative to its folder: that
+/// of its first own SQLite database (`data` for "data/shop.db"), else the
+/// project's folder itself. A built program keeps the same files in its data folder.
+fn data_root(settings: &Settings) -> PathBuf {
+    settings.datasources.iter().find(|s| kept_beside(s).is_some()).and_then(|s| Path::new(&s.url).parent().map(Path::to_path_buf)).unwrap_or_default()
+}
+
+/// A relative file store outside the project's data folder, which a built program has no place for.
+fn store_outside_data(settings: &Settings, store: &FileStore) -> Option<String> {
+    let location = store.location.trim();
+    let root = data_root(settings);
+    let relative = !location.contains(':') && !Path::new(location).is_absolute();
+    (relative && store_kept(store, &root).is_none()).then(|| {
+        let root = slashed(&root);
+        format!("the folder \"{location}\" is outside the project's data folder ({root}), where a built program keeps its files; put it inside {root}")
+    })
+}
+
+/// The folder Clarity's Run names in CLARITY_DATA for the project in `dir`:
+/// where it keeps its first own SQLite database, else the folder its first
+/// project's own folder when it has relative file stores only, so a run in
+/// Clarity works on the project's data; none when it keeps neither beside it.
+pub fn data_folder(dir: &Path, settings: &Settings) -> Option<PathBuf> {
+    if let Some(source) = settings.datasources.iter().find(|s| kept_beside(s).is_some()) {
+        return sqlite_path(dir, source).parent().map(Path::to_path_buf);
     }
-    match found.kind {
-        SourceKind::Sqlite => Ok((found.name.clone(), sqlite_path(dir, found))),
-        SourceKind::Rest => Err(format!("data source {} is a web API; its data is kept by the service behind it", found.name)),
-        other => Err(format!("data source {} is {}; its administrator backs it up until Clarity backs up server databases itself", found.name, source_word(other))),
-    }
+    // Without a database of its own, the project's folder is its data folder: its stores keep their path as written.
+    settings.filestores.iter().find(|s| store_kept(s, Path::new("")).is_some())?;
+    Some(std::path::absolute(dir).unwrap_or(dir.to_path_buf()))
 }
 
 /// Hands the project file's language, currency and theme to the project,
@@ -1416,11 +1465,13 @@ fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
     }
 }
 
-/// The settings a generated application is built with. A relative SQLite
-/// location or file store is in the project's folder `dir`, for Clarity and
-/// for the application alike, so it becomes the full path from there: the
-/// same place whether a database is owned or external, and whichever folder
-/// the application runs in.
+/// The settings a generated application is built with. An SQLite database
+/// and a file store the project keeps beside it (a relative location) are
+/// in the program's data folder, found while it runs (data:<program>/<name>,
+/// conformance/data-folder.json), so nothing of the machine it is built on
+/// is written into it. Another relative SQLite location (external, or
+/// `beside`) is in the project's folder `dir`, so it becomes the full path
+/// from there.
 pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     let mut built = settings.clone();
     let program = clarity_spec::model::snake_case(&settings.name);
@@ -1433,11 +1484,13 @@ pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
             None => slashed(&sqlite_path(dir, source)),
         };
     }
-    // A folder setting is found while the application runs, in the person's settings.
-    for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:") && !s.location.starts_with("setting:")) {
-        let path = Path::new(&store.location);
-        let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
-        store.location = slashed(&std::path::absolute(&joined).unwrap_or(joined));
+    // A relative folder is in the program's data folder, found while it runs; an
+    // absolute one, `env:` and a folder setting (the person's) stay as written.
+    let root = data_root(settings);
+    for store in built.filestores.iter_mut() {
+        if let Some(name) = store_kept(store, &root) {
+            store.location = format!("data:{program}/{name}");
+        }
     }
     // A codec library is found beside the project, as written.
     for codec in built.codecs.iter_mut() {
@@ -1718,6 +1771,34 @@ pub fn refresh_apis(project_file: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(warnings)
+}
+
+/// A project read and checked ([`check`]).
+pub struct Checked {
+    pub project: clarity_spec::Project,
+    /// What writing the web APIs' modules again said: a description that is
+    /// not there, a pick it no longer has.
+    pub notes: Vec<String>,
+}
+
+/// Reads and checks the project of `path`, its project file or the folder
+/// of its modules, the one way `clarity spec check`, the IDE and the agents'
+/// check tool do: each web API's module is written again from its
+/// description and picks first ([`refresh_apis`], manual/code.web-apis.md),
+/// then the modules are read and checked. Fails only when the modules
+/// cannot be read.
+pub fn check(path: &Path) -> Result<Checked, String> {
+    let (file, dir) = if path.is_dir() { (path.with_extension(clarity_spec::SPEC_EXTENSION), path.to_path_buf()) } else { (path.to_path_buf(), module_dir(path)) };
+    let notes = if file.is_file() {
+        match refresh_apis(&file) {
+            Ok(warnings) => warnings,
+            Err(why) => vec![why],
+        }
+    } else {
+        Vec::new()
+    };
+    let project = load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    Ok(Checked { project, notes })
 }
 
 /// An operation of a web API's description, as the picking shows it.

@@ -1,3 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <App class="videoplayer.Videoplayer" title="@videoplayerTitle" main="Main">
+  <Menu name="mainMenu">
+    <Item caption="@fileItem" name="fileItem">
+      <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
+      <Item caption="@quitItem" name="quitItem" opens="quit" />
+    </Item>
+  </Menu>
 </App>

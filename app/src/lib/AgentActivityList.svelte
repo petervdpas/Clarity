@@ -1,8 +1,8 @@
 <script lang="ts">
-  // Outside agents in Clarity settings, Agent (docs/ledger/acp.md): whether an
-  // agent program the person added Clarity to (Claude Code, Codex, Copilot
-  // through `clarity mcp`) may work on the open project, and what those
-  // agents did, call by call, as it happens. The list is read only while
+  // Agent activity in Clarity settings, Agent (docs/ledger/acp.md): what the
+  // agent programs the person added Clarity to (Claude Code, Codex, Copilot
+  // through `clarity mcp`) did, call by call, as it happens. Whether they may
+  // work at all is the status bar's MCP switches. The list is read only while
   // this section is open.
 
   import { invoke } from "@clarity/ui/host/backend.ts";
@@ -13,27 +13,9 @@
   /** The calls the list keeps, newest first. */
   const SHOWN = 200;
 
-  let allowed = $state<boolean | null>(null);
   let calls = $state<AgentActivity[]>([]);
   let error = $state<string | null>(null);
   let last = 0;
-
-  async function load() {
-    try {
-      allowed = await invoke<boolean>("outside_agents");
-    } catch (err) {
-      error = String(err);
-    }
-  }
-
-  async function set(value: boolean) {
-    error = null;
-    try {
-      allowed = await invoke<boolean>("set_outside_agents", { allowed: value });
-    } catch (err) {
-      error = String(err);
-    }
-  }
 
   async function follow() {
     try {
@@ -52,27 +34,14 @@
   }
 
   $effect(() => {
-    void load();
     void follow();
     const timer = setInterval(() => void follow(), FOLLOW_MS);
     return () => clearInterval(timer);
   });
 </script>
 
-<div class="outside">
+<div class="activity">
   {#if error}<p class="refused" role="alert">{error}</p>{/if}
-  <fieldset>
-    <legend>Outside agents</legend>
-    <label class="check">
-      <input type="checkbox" checked={allowed ?? true} disabled={allowed === null} onchange={(e) => set(e.currentTarget.checked)} />
-      <span>Let outside agents work on my project</span>
-    </label>
-    <p class="muted">
-      An agent program you added Clarity to (Claude Code, Codex or Copilot, with <code>clarity mcp</code>) works on the project open here. Turned off, it can
-      still read Clarity's manual and references, and nothing else. Holds from its next call.
-    </p>
-  </fieldset>
-
   <fieldset>
     <legend>Agent activity</legend>
     {#if calls.length === 0}
@@ -94,7 +63,7 @@
 </div>
 
 <style>
-  .outside {
+  .activity {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -121,11 +90,6 @@
   legend {
     font-size: 12px;
     color: var(--text-muted);
-  }
-  .check {
-    display: flex;
-    gap: 6px;
-    align-items: center;
   }
   ul {
     list-style: none;

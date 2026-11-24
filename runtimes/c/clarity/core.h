@@ -102,6 +102,10 @@ typedef enum {
     /// with (docs/ledger/migrations.md): its message is the English line the
     /// program stops with (conformance/migrate-check.json).
     CLARITY_STEPS,
+    /// A database or file store at `env:NAME` while that environment variable
+    /// is unset or empty (conformance/data-folder.json): its text names the
+    /// variable in Clarity's own words (clarity_said).
+    CLARITY_NOT_SET,
 } ClarityErrorKind;
 
 typedef struct ClarityText ClarityText;

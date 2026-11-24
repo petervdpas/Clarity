@@ -519,6 +519,8 @@ private:
         std::string program, setting, fallback;
     };
     std::map<std::string, StoreSetting> store_settings_;
+    /// The file stores at env:NAME with the variable unset, by name: each use says so.
+    std::map<std::string, std::string> stores_not_set_;
     /// The settings of the running handler: the window's data had them when
     /// the call began, and its code sets them before they are kept; a file
     /// store whose folder is a setting reads them first (conformance/settings.json, `now`).

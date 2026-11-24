@@ -162,3 +162,28 @@ code Card
 ";
     assert_eq!(errors(&page, code), Vec::<String>::new());
 }
+
+/// A setting no window shows can never be set by the person: the checker
+/// warns, naming it, unless a part binds it (a settings window above all) or,
+/// for `language` and `theme`, a menu item, button or part opens their picker,
+/// or a handler of a window or the app sets it (a menu item per language).
+/// A project without windows (commands only) sets its settings in code.
+#[test]
+fn a_setting_no_window_shows_is_warned_about() {
+    let warnings = |page: &str| -> Vec<String> { project(page, CODE).diagnostics.into_iter().filter(|d| d.severity == Severity::Warning).map(|d| d.message).collect() };
+    let shown = warnings(SHOP);
+    assert!(!shown.iter().any(|m| m.contains("no window shows")), "{shown:#?}");
+    let hidden = warnings(&SHOP.replace("        switch name toolbarSwitch at 4,3 span 4 bind settings.showToolbar\n", ""));
+    assert!(
+        hidden.iter().any(|m| m == "no window shows setting 'showToolbar', so the person using the app cannot set it; bind a part to settings.showToolbar, such as in a settings window (New window, Settings window) opened from a menu"),
+        "{hidden:#?}"
+    );
+    let unpicked = SHOP.replace("        dropdown name languageBox at 4,1 span 4 bind settings.language\n", "");
+    assert!(warnings(&unpicked).iter().any(|m| m.contains("setting 'language'")), "language without a part or a picker");
+    let picked = unpicked.replace("    button \"Fewer\"", "    button \"Language\" name languageButton at 7,1 span 2 on click -> language\n    button \"Fewer\"");
+    let found = warnings(&picked);
+    assert!(!found.iter().any(|m| m.contains("setting 'language'")), "the picker shows it: {found:#?}");
+    let handled = format!("{}{CODE}\n    handler toDutch\n        settings.language = \"nl\"\n", unpicked.replace("    button \"Fewer\"", "    button \"Dutch\" name dutchButton at 7,1 span 2 on click: toDutch\n    button \"Fewer\""));
+    let found: Vec<String> = load_keyed([("shop.clarity", handled.as_str())], &[], "en").diagnostics.into_iter().filter(|d| d.severity == Severity::Warning).map(|d| d.message).collect();
+    assert!(!found.iter().any(|m| m.contains("setting 'language'")), "a handler sets it: {found:#?}");
+}

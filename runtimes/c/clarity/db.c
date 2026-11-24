@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "clarity/backup.h"
 #include "clarity/db_internal.h"
 #include "clarity/disk.h"
 #include "clarity/people.h"
@@ -61,6 +60,7 @@ void clarity_db_close(ClarityDb* db) {
         free(db->stores[i].program);
         free(db->stores[i].setting);
         free(db->stores[i].fallback);
+        free(db->stores[i].not_set);
     }
     free(db->sources);
     free(db->stores);

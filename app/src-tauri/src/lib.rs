@@ -4,6 +4,7 @@
 mod browser_keys;
 mod fail_safe;
 mod build;
+mod left_running;
 mod logging;
 mod links;
 mod foundry;
@@ -23,6 +24,7 @@ mod themes;
 mod translations;
 mod vault;
 mod acp;
+mod mcp_access;
 mod browse;
 mod agent;
 mod manual;
@@ -41,10 +43,12 @@ use std::time::Duration;
 use clarity_project::{Catalog, ProjectFile, Settings, Stack};
 // Writing files and new projects, shared with the MCP server (crates/clarity-tools).
 use clarity_tools::files::{FileChange, is_spec_file, write_atomically};
+#[cfg(test)]
 use clarity_tools::new_project::write_new_project;
 use clarity_spec::Preview;
 use clarity_spec::edit::Edit;
 use clarity_spec::rename::RenameKind;
+use clarity_tools::renames::Renaming;
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -187,8 +191,9 @@ fn open_project(
 /// history (opening the project again would start a new one).
 #[tauri::command]
 fn check_project(state: State<WatchState>) -> Result<Preview, String> {
-    let (_, dir) = open_project_of(&state)?;
-    load(&dir)
+    let (file, _) = open_project_of(&state)?;
+    // The one check of every front end (clarity_project::check): the web APIs' modules first.
+    Ok(Preview::new(clarity_project::check(&file)?.project))
 }
 
 /// The project file at `path`, with the folder of its modules.
@@ -265,33 +270,13 @@ fn apply_edit(
 }
 
 /// Moves every page still written in a module's file into its own `.cxaml`
-/// in `design/`: Move pages into design, under
-/// Problems, as `clarity convert-pages` does. One change for Undo.
+/// in `design/` (clarity_tools::pages_out, the one way `clarity
+/// convert-pages` takes too): Move pages into design, under Problems. One
+/// change for Undo.
 #[tauri::command]
 fn move_pages_out(state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let dir = open_dir_of(&state)?;
-    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    let mut files = Vec::new();
-    for path in clarity_spec::spec_files(&dir).map_err(read_err)? {
-        let text = std::fs::read_to_string(&path).map_err(read_err)?;
-        files.push((path.display().to_string(), text));
-    }
-    let moved = clarity_spec::cxaml::moved_out(&files)?;
-    let mut changes = Vec::new();
-    for (path, after) in moved {
-        let file = PathBuf::from(&path);
-        let before = files.iter().find(|(p, _)| *p == path).map(|(_, t)| t.clone());
-        if before.is_none() && file.exists() {
-            return Err(format!("{} is there already; nothing was moved", file.display()));
-        }
-        if let Some(folder) = file.parent() {
-            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-        }
-        changes.push(FileChange { file, before, after: Some(after) });
-    }
-    for change in &changes {
-        change.make()?;
-    }
+    let changes = clarity_tools::pages_out::move_pages_into_design(&dir)?;
     record(&history, changes)?;
     load(&dir)
 }
@@ -485,96 +470,39 @@ fn rename(
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<Preview, String> {
-    let dir = open_dir_of(&state)?;
-    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
-    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
-    let renamed = clarity_spec::rename::rename(&before, source, kind, &name, new_name.trim())?;
-    write_renamed(&dir, &before, renamed, &history)
+    let renaming = match kind {
+        RenameKind::Entity => Renaming::Entity,
+        RenameKind::Enum => Renaming::Enum,
+        RenameKind::Page => Renaming::Page,
+    };
+    write_renamed(&state, &history, &renaming, &name, &new_name)
 }
 
 /// Renames field `name` of entity or record `entity` and every place that
 /// names it, in all files: the entity editor's name cell asks for it.
 #[tauri::command]
 fn rename_field(entity: String, name: String, new_name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
-    let dir = open_dir_of(&state)?;
-    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
-    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
-    let renamed = clarity_spec::rename::rename_field(&before, source, &entity, &name, new_name.trim())?;
-    write_renamed(&dir, &before, renamed, &history)
+    write_renamed(&state, &history, &Renaming::Field { entity }, &name, &new_name)
 }
 
 /// Renames value `name` of enum `enumeration` and every place that names
-/// it, in all files: the enum editor's value cell asks for it. The next
+/// it, in all files: the enum editor's value cell asks for it. The
 /// migration step gives the records that keep it the new name.
 #[tauri::command]
-fn rename_value(enumeration: String, name: String, new_name: String, state: State<WatchState>, history: State<HistoryState>, values: State<migrations::ValueRenames>) -> Result<Preview, String> {
-    let dir = open_dir_of(&state)?;
-    let before = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
-    let source = |path: &str| std::fs::read_to_string(at(path)).ok();
-    let renamed = clarity_spec::value_rename::rename_value(&before, source, &enumeration, &name, new_name.trim())?;
-    let preview = write_renamed(&dir, &before, renamed, &history)?;
-    values.add(clarity_spec::migrate::Rename::value(&enumeration, &name, new_name.trim()));
-    Ok(preview)
+fn rename_value(enumeration: String, name: String, new_name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    write_renamed(&state, &history, &Renaming::Value { enumeration }, &name, &new_name)
 }
 
-/// Writes a rename's files once the whole project checks with them in
-/// place, as one change for Undo. A path is the project's (relative to
-/// `dir`, such as `translations/en.clarity`) or absolute.
-fn write_renamed(dir: &Path, before: &clarity_spec::Project, renamed: Vec<clarity_spec::rename::Renamed>, history: &HistoryState) -> Result<Preview, String> {
-    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    if renamed.is_empty() {
-        return load(dir);
+/// Renames the one way (clarity_tools::renames, as the agents do): the
+/// renamed files and the migration step that records a data rename are one
+/// change for Undo.
+fn write_renamed(state: &WatchState, history: &HistoryState, renaming: &Renaming, name: &str, new_name: &str) -> Result<Preview, String> {
+    let (file, dir) = open_project_of(state)?;
+    let renamed = clarity_tools::renames::rename(&file, &dir, renaming, name, new_name)?;
+    if !renamed.written.is_empty() {
+        record(history, renamed.written)?;
     }
-    let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
-    // Check the whole project with every renamed file in place.
-    let mut sources = Vec::new();
-    let mut paths = clarity_spec::spec_files(&dir).map_err(read_err)?;
-    paths.extend(clarity_spec::cxaml::page_files(&dir, &paths.clone(), &[]).map_err(read_err)?);
-    for path in paths {
-        let shown = path.display().to_string();
-        // A moved file (a renamed window's) is read under its new path only.
-        if renamed.iter().any(|r| r.moved_from.as_deref().is_some_and(|was| at(was) == path)) {
-            continue;
-        }
-        let text = match renamed.iter().find(|r| at(&r.path) == path) {
-            Some(r) => r.text.clone(),
-            None => std::fs::read_to_string(&path).map_err(read_err)?,
-        };
-        sources.push((shown, text));
-    }
-    for r in renamed.iter().filter(|r| r.moved_from.is_some()) {
-        sources.push((at(&r.path).display().to_string(), r.text.clone()));
-    }
-    let after = clarity_spec::load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())));
-    if let Some(error) = clarity_spec::new_error(before, &after) {
-        return Err(error.message.clone());
-    }
-    let mut changes = Vec::new();
-    for r in renamed {
-        let file = at(&r.path);
-        if r.moved_from.is_some() && file.exists() {
-            return Err(format!("{} is there already", file.display()));
-        }
-        let old = if r.moved_from.is_some() { None } else { Some(std::fs::read_to_string(&file).map_err(read_err)?) };
-        write_atomically(&file, &r.text)?;
-        changes.push(FileChange {
-            file,
-            before: old,
-            after: Some(r.text),
-        });
-        // A window's file takes its new name: the old one goes, kept for Undo.
-        if let Some(was) = r.moved_from {
-            let was = at(&was);
-            let old = std::fs::read_to_string(&was).map_err(read_err)?;
-            std::fs::remove_file(&was).map_err(read_err)?;
-            changes.push(FileChange { file: was, before: Some(old), after: None });
-        }
-    }
-    record(history, changes)?;
-    load(dir)
+    load(&dir)
 }
 
 /// Makes a new module by hand: its file `name.clarity` beside the others,
@@ -620,7 +548,7 @@ fn preview_server(app: AppHandle) -> PreviewServer {
         clarity_gen::preview::load(&file, &dir)
     });
     // The release's browser files, fetched when not here yet; a cDdev's own when swapped (swap.rs).
-    let library: clarity_gen::preview::Library = std::sync::Arc::new(build::browser_folder);
+    let library: clarity_gen::preview::Library = std::sync::Arc::new(clarity_build::browser_folder);
     PreviewServer(clarity_gen::preview::Server::start(loader, library, &clarity_gen::preview::secret()).ok())
 }
 
@@ -686,7 +614,13 @@ fn replay(state: &WatchState, history: &HistoryState, way: Replay) -> Result<Pre
     }
     for c in &change.0 {
         match pick(c).1 {
-            Some(text) => write_atomically(&c.file, &text)?,
+            // A file brought back may be in a folder deleted with it (a part's folder, parts.rs).
+            Some(text) => {
+                if let Some(folder) = c.file.parent() {
+                    std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+                }
+                write_atomically(&c.file, &text)?
+            }
             None => std::fs::remove_file(&c.file)
                 .map_err(|err| format!("cannot remove {}: {err}", c.file.display()))?,
         }
@@ -808,7 +742,11 @@ fn new_project(
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<Preview, String> {
-    let file = write_new_project(Path::new(&path), stack)?;
+    // The one way a project is made (clarity_tools::new_project::new_project), checked as the dialog checked it.
+    let path = Path::new(&path);
+    let folder = path.parent().unwrap_or(Path::new(""));
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let file = clarity_tools::new_project::new_project(folder, &name, stack)?;
     open_file(&file.display().to_string(), app, &state, &history)
 }
 
@@ -851,6 +789,10 @@ pub fn run() {
     own_build::leave_out_own_build();
     tauri::Builder::default()
         .setup(|app| {
+            // A program a Clarity before this one left running (a crash, a restart) is ended, so it frees its port.
+            if let Some(pid) = left_running::end_left(&clarity_project::clarity_home()) {
+                logging::line(&format!("ended the program Run started before Clarity last ended (process {pid})"));
+            }
             // The splash screen first, so something shows while the rest starts.
             let info = app.package_info();
             let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
@@ -891,7 +833,7 @@ pub fn run() {
             splash::status(app.handle(), "Starting the preview");
             app.manage(preview_server(app.handle().clone()));
             // DevTools' builds, and the agents' asks to press a Build (a Clarity run from its repository).
-            app.manage(devtools::DevJobs::default());
+            app.manage(devtools::dev_jobs());
             devtools::watch_asks(app.handle().clone());
             splash::status(app.handle(), "Loading the designer");
             if let Some(window) = app.get_webview_window("main") {
@@ -910,6 +852,8 @@ pub fn run() {
                 let app = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Destroyed = event {
+                        // The program Run started ends with Clarity: a web program would keep its port.
+                        build::stop(&app);
                         if let Some(manual) = app.get_webview_window("manual") {
                             manual.destroy().ok();
                         }
@@ -927,7 +871,6 @@ pub fn run() {
         .manage(splash::SplashState::default())
         .manage(WatchState::default())
         .manage(HistoryState::default())
-        .manage(migrations::ValueRenames::default())
         .manage(build::BuildState::default())
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
@@ -991,6 +934,7 @@ pub fn run() {
             parts::build_part,
             environment::environment_view,
             environment::choose_tool,
+            environment::choose_agent,
             environment::install_engine_target,
             folders::folders_view,
             folders::set_folder,
@@ -1049,10 +993,11 @@ pub fn run() {
             vault::connection_save,
             vault::connection_remove,
             agent::agent_send,
-            acp::outside_agents,
-            acp::set_outside_agents,
             acp::agent_activity,
+            mcp_access::mcp_servers,
+            mcp_access::set_mcp_server,
             acp::agent_sign_in,
+            acp::agents_installed,
             acp::agent_set_choice,
             browse::browse_list,
             browse::browse_places,
@@ -1093,8 +1038,14 @@ pub fn run() {
             diagrams::diagram_proposals,
             diagrams::apply_diagram
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to start Clarity");
+        .build(tauri::generate_context!())
+        .expect("failed to start Clarity")
+        // However Clarity ends, the program Run started ends with it.
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                build::stop(app);
+            }
+        });
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.31.0"
+version = "0.32.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -30,12 +30,12 @@ video = ["audio", "dep:clarity-video"]
 pdf = ["dep:clarity-pdf", "dep:clarity-data"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.64.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.65.0", default-features = false }
 clarity-auth = { path = "../rust-auth", version = "0.4.0" }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/ledger/canvas-toolbox.md).
 clarity-image = { path = "../rust-image", version = "0.2.0" }
 clarity-graph = { path = "../rust-graph", version = "0.2.0" }
-clarity-pdf = { path = "../rust-pdf", version = "0.2.0", optional = true }
+clarity-pdf = { path = "../rust-pdf", version = "0.3.0", optional = true }
 clarity-data = { path = "../rust-data", version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -103,8 +103,9 @@ pub fn file(program: &str) -> Option<PathBuf> {
 /// The folder of file store `store` when a folder setting names it, on
 /// system `os`: the kept value when it is text that is not empty, else
 /// `default`, else a folder named after the store; a relative folder is in
-/// `settings_folder`, the folder of the settings file.
-pub fn store_folder_in(os: &str, settings_folder: &str, store: &str, kept: &Value, default: &str) -> String {
+/// `data_folder`, the program's data folder (crate::data_folder::folder),
+/// or where the program runs when that is "".
+pub fn store_folder_in(os: &str, data_folder: &str, store: &str, kept: &Value, default: &str) -> String {
     let chosen = kept.as_str().filter(|k| !k.is_empty()).unwrap_or(default);
     let chosen = if chosen.is_empty() { store } else { chosen };
     let bytes = chosen.as_bytes();
@@ -113,7 +114,7 @@ pub fn store_folder_in(os: &str, settings_folder: &str, store: &str, kept: &Valu
     } else {
         chosen.starts_with('/')
     };
-    if absolute { chosen.to_string() } else { format!("{settings_folder}/{chosen}") }
+    if absolute { chosen.to_string() } else { crate::data_folder::in_folder(data_folder, chosen) }
 }
 
 /// The value a file store reads for its folder setting `setting`: what the

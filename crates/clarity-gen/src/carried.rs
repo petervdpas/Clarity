@@ -29,7 +29,7 @@ static CARRIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// Names the folder of the runtimes the installed Clarity carries, which
 /// the IDE does when it starts.
 pub fn set_carried(folder: PathBuf) {
-    let _ = CARRIED.set(folder);
+    let _ = CARRIED.set(clarity_project::plain(folder));
 }
 
 /// The folder of the carried runtimes, when the installed Clarity has it.

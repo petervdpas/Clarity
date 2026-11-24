@@ -1,6 +1,8 @@
-//! The person's own agent in the chat panel (docs/ledger/acp.md): a vault
-//! connection of kind `codex` or `copilot` starts that vendor's program over
-//! ACP (crates/clarity-acp), signed in with its own login, so no API key.
+//! The person's own agent in the chat panel (docs/ledger/acp.md): an agent
+//! program a scan finds on the computer (Codex, Copilot), listed by its key,
+//! or an old vault connection of kind `codex` or `copilot`, starts that
+//! vendor's program over ACP (crates/clarity-acp), signed in with its own
+//! login, so no API key and no vault entry.
 //!
 //! The panel shows its turns as it shows Clarity's own agent's: the same
 //! events, the same Allow/Deny, one Undo per turn. A turn is a snapshot of
@@ -52,20 +54,61 @@ const PANEL_LINES: [&str; 3] = [
     "show_window and show_diagram show a window in Preview or a diagram when your turn ends; a project new_project makes opens then too.",
 ];
 
-/// The vendor of a connection, when it is an outside agent's.
+/// The vendor of a connection, when it is an outside agent's: a vault
+/// connection of kind codex or copilot, else the agent of that key
+/// (`codex`, `copilot`) when the vault has no connection of the name.
 pub fn vendor_of(app: &AppHandle, connection: &str) -> Option<Vendor> {
     let vault = app.state::<super::vault::VaultState>();
-    super::vault::resolve(&vault, connection, "kind").ok().and_then(|kind| Vendor::of_kind(&kind))
+    let in_vault = super::vault::has_connection(&vault, connection);
+    let kind = if in_vault { super::vault::resolve(&vault, connection, "kind").ok() } else { None };
+    outside_vendor(in_vault, kind.as_deref(), connection)
+}
+
+/// The outside agent the panel's `connection` names: a vault connection
+/// (`in_vault`) by its kind, else the agent of that key.
+fn outside_vendor(in_vault: bool, kind: Option<&str>, connection: &str) -> Option<Vendor> {
+    if in_vault { kind.and_then(Vendor::of_kind) } else { Vendor::of_key(connection) }
+}
+
+/// The program of `vendor` for `connection`: the command of its vault
+/// connection when an old one names one, else the chosen or scanned one.
+fn program_of(app: &AppHandle, connection: &str, vendor: Vendor) -> Result<clarity_acp::Program, String> {
+    let from_vault = {
+        let vault = app.state::<super::vault::VaultState>();
+        super::vault::has_connection(&vault, connection)
+            .then(|| super::vault::resolve(&vault, connection, "command").ok())
+            .flatten()
+            .filter(|c| !c.trim().is_empty())
+            .map(PathBuf::from)
+    };
+    find(vendor, from_vault.as_deref())
+}
+
+/// An agent program installed on this computer, as the Agent panel lists it.
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InstalledAgent {
+    /// What the panel sends as its connection: `codex`, `copilot`.
+    pub key: String,
+    /// As people know it: `Codex`, `GitHub Copilot`.
+    pub name: String,
+    /// The program it starts: the one chosen in Clarity settings > Environment, else the first found.
+    pub program: String,
+}
+
+/// The agent programs installed on this computer, for the Agent panel's picker.
+#[tauri::command(async)]
+pub fn agents_installed() -> Vec<InstalledAgent> {
+    clarity_acp::vendors::installed()
+        .into_iter()
+        .map(|f| InstalledAgent { key: f.vendor.key().to_string(), name: f.vendor.name().to_string(), program: f.program.display().to_string() })
+        .collect()
 }
 
 /// Starts a turn of the outside agent of `connection`; reports through the panel's events.
 pub fn send(app: AppHandle, connection: String, vendor: Vendor, text: String) -> Result<(), String> {
     let (file, dir) = open_project_of(&app.state::<WatchState>()).map_err(|_| format!("open a project first: {} works on the project open in Clarity", vendor.name()))?;
-    let from_settings = {
-        let vault = app.state::<super::vault::VaultState>();
-        super::vault::resolve(&vault, &connection, "command").ok().filter(|c| !c.trim().is_empty()).map(PathBuf::from)
-    };
-    let program = find(vendor, from_settings.as_deref())?;
+    let program = program_of(&app, &connection, vendor)?;
     let state = app.state::<AgentState>();
     if state.running.swap(true, Ordering::SeqCst) {
         return Err("the agent is still working; stop it first".into());
@@ -360,12 +403,8 @@ pub async fn agent_sign_in(connection: String, app: AppHandle) -> Result<String,
     if crate::foundry::is_foundry(&app, &connection) {
         return tauri::async_runtime::spawn_blocking(move || crate::foundry::sign_in(&app, &connection)).await.map_err(|err| err.to_string())?;
     }
-    let vendor = vendor_of(&app, &connection).ok_or_else(|| format!("the connection {connection} is not an outside agent's; its kind is codex, copilot or foundry"))?;
-    let from_settings = {
-        let vault = app.state::<super::vault::VaultState>();
-        super::vault::resolve(&vault, &connection, "command").ok().filter(|c| !c.trim().is_empty()).map(PathBuf::from)
-    };
-    let program = find(vendor, from_settings.as_deref())?;
+    let vendor = vendor_of(&app, &connection).ok_or_else(|| format!("{connection} is not an outside agent: Codex or GitHub Copilot found on this computer, or a vault connection of kind codex, copilot or foundry"))?;
+    let program = program_of(&app, &connection, vendor)?;
     match vendor.sign_in() {
         VendorSignIn::Command(args) => {
             let status = tauri::async_runtime::spawn_blocking(move || clarity_project::background_command(&program.command).args(args).envs(program.env.iter().cloned()).status())
@@ -405,19 +444,6 @@ pub struct AgentActivity {
     pub said: String,
 }
 
-/// Whether outside agents may work on the open project (Clarity settings, Agent).
-#[tauri::command]
-pub fn outside_agents() -> bool {
-    clarity_project::ide::outside_agents()
-}
-
-/// Lets outside agents work on the project, or not; holds from their next call.
-#[tauri::command]
-pub fn set_outside_agents(allowed: bool) -> Result<bool, String> {
-    clarity_project::ide::set_outside_agents(allowed)?;
-    Ok(clarity_project::ide::outside_agents())
-}
-
 /// The calls outside agents made after call `after`, oldest first.
 #[tauri::command]
 pub fn agent_activity(after: u64) -> Vec<AgentActivity> {
@@ -442,6 +468,18 @@ mod tests {
             assert!(told.contains(words), "{words}");
         }
         assert!(!told.contains('\u{2014}') && !told.contains('\u{2013}'));
+    }
+
+    /// The panel names an agent found on the computer by its key; a vault
+    /// connection of that name wins, by its kind, so an old one keeps working.
+    #[test]
+    fn the_panel_s_connection_names_its_outside_agent() {
+        assert_eq!(outside_vendor(false, None, "codex"), Some(Vendor::Codex));
+        assert_eq!(outside_vendor(false, None, "copilot"), Some(Vendor::Copilot));
+        assert_eq!(outside_vendor(false, None, "anthropic"), None);
+        assert_eq!(outside_vendor(true, Some(" Copilot "), "work"), Some(Vendor::Copilot));
+        assert_eq!(outside_vendor(true, Some("anthropic"), "codex"), None, "the vault's connection named codex is not Codex");
+        assert_eq!(outside_vendor(true, None, "codex"), None);
     }
 
     #[test]

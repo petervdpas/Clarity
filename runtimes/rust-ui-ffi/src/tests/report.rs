@@ -22,6 +22,8 @@ fn pdf(report: &str, data: &str) -> Result<Vec<u8>, String> {
 
 #[test]
 fn a_report_of_the_running_program_becomes_a_pdf() {
+    // The running program's files are the process's: a program a test starts beside it would replace them.
+    let _one = super::GLOBAL.lock().unwrap_or_else(|p| p.into_inner());
     running();
     let made = pdf("Note", r#"{ "note": { "title": "Hello" } }"#).unwrap();
     assert!(made.starts_with(b"%PDF-"));

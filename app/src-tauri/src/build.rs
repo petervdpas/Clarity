@@ -33,18 +33,7 @@ pub struct AppRunning {
     pub address: Option<String>,
 }
 
-/// Whether a web application Run starts can listen at `address`, the
-/// project's port: no other program may listen there already.
-pub fn can_serve_at(address: &str) -> Result<(), String> {
-    match std::net::TcpListener::bind(address) {
-        Ok(_) => Ok(()),
-        Err(_) => {
-            let port = address.rsplit(':').next().unwrap_or(address);
-            Err(format!("another program listens on port {port}; stop it, or set another port on the Project tab"))
-        }
-    }
-}
-
+pub use clarity_build::{Generated, Source, can_serve_at};
 
 #[derive(Default)]
 pub struct BuildState {
@@ -213,138 +202,9 @@ pub fn stack_tools() -> Vec<StackTools> {
         .collect()
 }
 
-/// Generates the project of the project file `file` into its output folder.
-/// Returns the folder of the program to build, the desktop one or (with
-/// `cli`) the command-line one, and how its stack builds it, as a debug or
-/// (with `release`) a release program.
-/// A generated program: where it is, how to build it, and what its last
-/// build was made from.
-pub struct Generated {
-    pub out: PathBuf,
-    /// The project's data folder, which Run names in CLARITY_DATA so the program works on the project's data.
-    pub data: Option<PathBuf>,
-    /// The program's databases, which Run migrates with clarity-migrate before it starts the program.
-    pub databases: Vec<clarity_migrate::Database>,
-    pub toolchain: clarity_gen::Toolchain,
-    pub stack: clarity_project::Stack,
-    /// The mark of its generated files, which a build records.
-    pub fingerprint: String,
-    pub release: bool,
-    /// The last build, while it was made from these same files and its
-    /// program is there: Run starts it without building again.
-    pub built: Option<(clarity_gen::Toolchain, bool)>,
-    /// Whether the build links Clarity.UI's library from the folder
-    /// CLARITY_UI names, which Clarity fetches when the person names none.
-    pub library: bool,
-}
-
-/// Generates the project (the Generate button): transpiles it into its
-/// source tree, the code of each of its programs in its stack's language and
-/// UI framework, written into the output folder; built nothing yet. It builds
-/// and runs with the stack's own tools, in Clarity or outside it.
+/// Generates the project (the Generate button): the one way the clarity command and the agents generate too (`clarity_build::generate`).
 pub fn generate_source(file: &Path) -> Result<Source, String> {
-    let dir = clarity_project::module_dir(file);
-    // Each web API's module follows its description and picks (manual/code.web-apis.md).
-    clarity_project::refresh_apis(file)?;
-    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    // Each native part's header follows its declaration, and a new part gets a starter (manual/design.custom-parts.md).
-    clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
-    let mut source = transpile(file)?;
-    source.written = clarity_gen::write_programs_listed(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
-    // With `include migrate`, Clarity's data migration tools beside the programs (docs/ledger/migrations.md).
-    let built = clarity_project::build_settings(&dir, &source.settings);
-    let tools = clarity_gen::write_migration_tools(&source.out, &project, &built, &clarity_gen::clarity_programs_folder())?;
-    source.written.written.extend(tools);
-    Ok(source)
-}
-
-/// The project transpiled in memory, nothing written: its output folder, settings and programs.
-fn transpile(file: &Path) -> Result<Source, String> {
-    let dir = clarity_project::module_dir(file);
-    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let loaded = clarity_project::load(file);
-    let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
-    let settings = match (loaded.settings, loaded.problems.first()) {
-        (Some(settings), None) => settings,
-        (_, Some(problem)) => return Err(format!("{shown}: {problem}")),
-        (None, None) => return Err(format!("{shown} cannot be read")),
-    };
-    let built = clarity_project::build_settings(&dir, &settings);
-    let mut programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
-    // A program served to a browser carries Clarity.UI's browser files (round B of manual/start.how-it-works.md).
-    if clarity_gen::web_browser::needs_library(&programs) {
-        clarity_gen::web_browser::with_library(&mut programs, &browser_folder()?)?;
-    }
-    let out = clarity_project::out_dir(file, &settings);
-    let formats = project.uses_formats();
-    // The databases the app owns with their steps, which Run migrates first (the app does not, docs/ledger/migrations.md).
-    let databases = clarity_gen::migrated_databases(&project, &built).map_err(|errors| errors.join("; "))?;
-    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default(), formats, databases })
-}
-
-/// A project's source tree as it was written: its output folder, its settings and programs.
-pub struct Source {
-    pub out: PathBuf,
-    pub settings: clarity_project::Settings,
-    pub programs: Vec<clarity_gen::Program>,
-    /// The project file's name, as messages name it.
-    shown: String,
-    /// What Generate wrote and removed in the output folder; nothing for a transpile alone.
-    pub written: clarity_gen::Written,
-    /// Whether the code reads or writes a format, so a Go, C or C++ program of any target links Clarity.Formats.
-    pub formats: bool,
-    /// The databases the app owns, with every step, as clarity-migrate migrates them.
-    pub databases: Vec<clarity_gen::MigratedDatabase>,
-}
-
-/// What Build and Run build: the source Generate wrote, which must be the
-/// project as it is now; they generate nothing themselves.
-pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
-    let Source { out, settings, programs, shown, formats, databases, .. } = transpile(file)?;
-    // Each program is in its own folder of the output; one without windows has only the command line.
-    let cli = cli || !settings.stack.has_ui();
-    if cli && !settings.stack.has(clarity_project::Target::Cli) {
-        return Err(format!("{shown} has no command-line program; add the cli target to the stack"));
-    }
-    let target = if cli { clarity_project::Target::Cli } else { clarity_gen::windowed_target(&settings) };
-    let toolchain_of = |release: bool| if cli { clarity_gen::cli_toolchain(&settings, release) } else { clarity_gen::toolchain(&settings, release) };
-    let toolchain = toolchain_of(release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
-    let out = clarity_project::target_dir(&out, target);
-    let fingerprint = programs.iter().find(|p| p.target == target).map(clarity_gen::fingerprint).unwrap_or_default();
-    match clarity_gen::last_generated(&out) {
-        None => return Err(format!("{shown} is not generated yet: press Generate first")),
-        Some(generated) if generated != fingerprint => return Err(format!("{shown} changed since it was generated: press Generate first")),
-        Some(_) => {}
-    }
-    let built = clarity_gen::last_build(&out, &fingerprint)
-        .and_then(|release| toolchain_of(release).map(|t| (t, release)))
-        .filter(|(t, _)| out.join(&t.program).exists());
-    // Clarity.UI's folder: a desktop program draws with it, and a program whose code uses a format links Clarity.Formats from it.
-    let library = (!cli && clarity_gen::uses_clarity_ui(&settings)) || (formats && matches!(settings.stack.backend, clarity_project::Backend::Go | clarity_project::Backend::C | clarity_project::Backend::Cpp));
-    let data = clarity_project::data_folder(&clarity_project::module_dir(file), &settings);
-    // Each database where the program opens it when Run names the data folder.
-    let databases = databases
-        .into_iter()
-        .map(|d| clarity_migrate::Database { source: d.source, dialect: d.dialect, location: d.location, steps: d.steps })
-        .map(|d| match &data {
-            Some(folder) => clarity_migrate::in_data_folder(&d, folder),
-            None => d,
-        })
-        .collect();
-    Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library, databases })
-}
-
-/// Why the generated project in `out` cannot be built on this machine: the
-/// tools of its stack that are missing; none when they are all there.
-pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Option<String> {
-    (!tools.missing.is_empty()).then(|| {
-        format!(
-            "the project is generated in {}; to build {} here, install {} (the manual's page Setting up the build tools says how)",
-            out.display(),
-            clarity_gen::tools::stack_name(tools.backend, tools.ui),
-            tools.missing.join(", and ")
-        )
-    })
+    clarity_build::generate(file, None)
 }
 
 /// Builds a custom part or a library on its own, in its folder, its output
@@ -428,17 +288,10 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     }
     begin_output(&app);
     // Generating works without the stack's tools; building needs them.
-    let found = generate_out(&file, release, command_line.is_some()).and_then(|generated| {
-        let (out, stack) = (generated.out.clone(), generated.stack.clone());
+    let found = clarity_build::generate_out(&file, release, command_line.is_some(), clarity_build::GENERATE_IN_THE_IDE).and_then(|generated| {
         // A program served to a browser alone runs as a web server, at the project's port.
-        let serves = (command_line.is_none() && stack.has(clarity_project::Target::Web) && !stack.has(clarity_project::Target::Desktop))
-            .then(|| clarity_project::load(&file).settings.map(|s| clarity_project::serve_address(&s)))
-            .flatten();
-        let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
-        match cannot_build(&tools, &out) {
-            Some(why) => Err(why),
-            None => Ok((generated, serves)),
-        }
+        let serves = clarity_build::serves(&file, &generated.stack, command_line.is_some());
+        clarity_build::ready(&generated).map(|()| (generated, serves))
     });
     let (generated, serves) = match found {
         Ok(found) => found,
@@ -457,7 +310,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             // Run starts the last build when nothing changed since: the
             // generated files, the engines and the parts are as it had them.
             Ok(false) if run && let Some((toolchain, _)) = &generated.built => build(&app, &generated, toolchain, false, run, serves, command_line.as_deref()),
-            Ok(_) => match with_library(&app, &generated) {
+            Ok(_) => match clarity_build::toolchain(&generated, &|line| send_line(&app, line)) {
                 Ok(toolchain) => build(&app, &generated, &toolchain, true, run, serves, command_line.as_deref()),
                 Err(message) => BuildDone { ok: false, message, binary: None },
             },
@@ -469,104 +322,9 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     Ok(())
 }
 
-/// The toolchain of `generated`, with Clarity.UI's library for a Rust, Go,
-/// C or C++ desktop program (manual/start.how-it-works.md): the folder CLARITY_UI names, else the
-/// one fetched from the library's release into the cache folder, fetched
-/// now when it is not there yet.
-/// With the runtimes the installed Clarity carries, for when the internet
-/// does not answer (`with_carried`).
-fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::Toolchain, String> {
-    let toolchain = with_carried(app, generated.toolchain.clone(), generated.stack.backend, &generated.out);
-    if !generated.library {
-        return Ok(toolchain);
-    }
-    let folder = library_folder(app)?;
-    Ok(clarity_gen::with_clarity_ui(toolchain, generated.stack.backend, &folder))
-}
-
-/// `toolchain` with the runtimes the installed Clarity carries
-/// (docs/ledger/offline.md): the internet first; only when the stack's
-/// registry does not answer, its carried runtimes, unpacked into the cache
-/// folder the first time, said in the build's output.
-fn with_carried(app: &AppHandle, toolchain: clarity_gen::Toolchain, backend: clarity_project::Backend, out: &Path) -> clarity_gen::Toolchain {
-    let (Some(carried), Some(registry)) = (clarity_gen::carried::carried(), clarity_gen::carried::registry(backend)) else { return toolchain };
-    if answers(registry) {
-        return toolchain;
-    }
-    let Some(cache) = clarity_gen::clarity_ui::cache_dir() else { return toolchain };
-    send_line(app, format!("No answer from {registry}: building with the runtimes Clarity carries"));
-    match clarity_gen::carried::unpacked(carried, backend, &cache) {
-        Ok(folder) => {
-            send_line(app, format!("The runtimes are in {}", folder.display()));
-            clarity_gen::carried::offline(toolchain, backend, &folder, out)
-        }
-        Err(why) => {
-            send_line(app, why);
-            toolchain
-        }
-    }
-}
-
-/// Whether `url` answers at all within a few seconds.
-fn answers(url: &str) -> bool {
-    off_runtime(|| {
-        let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(5)).build() else { return false };
-        client.get(url).send().is_ok()
-    })
-}
-
-/// Runs `work` on a thread of its own: the blocking client panics on the
-/// async runtime's threads, where DevTools' tab commands run.
-fn off_runtime<T: Send>(work: impl FnOnce() -> T + Send) -> T {
-    std::thread::scope(|s| s.spawn(work).join()).unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-}
-
-/// The folder of Clarity.UI's library for a build: the one CLARITY_UI names,
-/// the one Clarity carries, else fetched now into the cache folder.
+/// The folder of Clarity.UI's library for a build, its fetching said in the Output panel.
 pub(crate) fn library_folder(app: &AppHandle) -> Result<PathBuf, String> {
-    let library = clarity_gen::clarity_ui::library();
-    let folder = clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| send_line(app, line))?;
-    keep_openh264(&folder);
-    Ok(folder)
-}
-
-/// Makes sure the library's folder holds Cisco's openh264, which every video
-/// app carries (docs/ledger/video-camera.md): in the background, never holding a build
-/// up, and quietly offline. A folder Clarity carries already has it; one
-/// fetched before it did, or Clarity's own repository build, gets it from Cisco.
-fn keep_openh264(folder: &std::path::Path) {
-    let folder = folder.to_path_buf();
-    std::thread::spawn(move || {
-        if let Err(why) = clarity_gen::clarity_ui::ensure_openh264(&folder, std::env::consts::OS, std::env::consts::ARCH, &download) {
-            eprintln!("openh264 for video apps: {why}");
-        }
-    });
-}
-
-/// The folder of Clarity.UI's browser files for a web program: the one
-/// CLARITY_UI_BROWSER names, the one Clarity carries, else fetched now from
-/// the library's release into the cache folder.
-pub(crate) fn browser_folder() -> Result<PathBuf, String> {
-    let library = clarity_gen::clarity_ui::browser_library();
-    clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| eprintln!("{line}"))
-}
-
-/// The largest download Clarity takes: an archive of Clarity.UI's library is some tens of MB.
-const DOWNLOAD_LIMIT: u64 = 512 * 1024 * 1024;
-
-/// The bytes at `url`, over HTTPS: the network part of fetching Clarity.UI's library.
-pub(crate) fn download(url: &str) -> Result<Vec<u8>, String> {
-    off_runtime(|| {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(600))
-            .build()
-            .map_err(|err| format!("cannot download {url}: {err}"))?;
-        let response = client.get(url).send().map_err(|err| format!("cannot download {url}: {err}"))?;
-        if !response.status().is_success() {
-            return Err(format!("cannot download {url}: {}", response.status()));
-        }
-        clarity_gen::clarity_ui::read_limited(response, DOWNLOAD_LIMIT)
-    })
+    clarity_build::library_folder(&|line| send_line(app, line))
 }
 
 /// Builds the generated program with `toolchain` (unless `building` is
@@ -579,30 +337,13 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         message,
         binary: None,
     };
-    if building {
-        if let Err(done) = build_with(app, out, toolchain) {
-            return done;
-        }
-        // Go's build has no step of its own after `go build`: the libraries go beside the program here,
-        // as C's, C++'s and Rust's builds put them (on Windows the program finds them only there).
-        if generated.library && generated.stack.backend == clarity_project::Backend::Go {
-            let placed = library_folder(app).and_then(|folder| clarity_gen::libraries_beside(&folder, &out.join(&toolchain.program), std::env::consts::OS).map_err(|err| format!("cannot put the libraries beside the program: {err}")));
-            if let Err(message) = placed {
-                return failed(message);
-            }
-        }
-        let _ = clarity_gen::record_build(out, &generated.fingerprint, generated.release);
+    if building && let Err(message) = clarity_build::compile(generated, toolchain, &|line| send_line(app, line)) {
+        return failed(message);
     }
     let binary = out.join(&toolchain.program);
     // The program does not migrate (docs/ledger/migrations.md): Run migrates its databases first, with clarity-migrate.
-    if run {
-        for database in &generated.databases {
-            match clarity_migrate::migrate(database) {
-                Ok(clarity_migrate::Outcome::Migrated(n)) => send_line(app, format!("{} migrated by {n} step{}", database.source, if n == 1 { "" } else { "s" })),
-                Ok(clarity_migrate::Outcome::UpToDate) => {}
-                Err(why) => return failed(format!("cannot migrate: {why}")),
-            }
-        }
+    if run && let Err(message) = clarity_build::migrate(generated, &|line| send_line(app, line)) {
+        return failed(message);
     }
     if run && let Some(line) = command_line {
         return run_command_line(app, out, &binary, line, generated.data.as_deref());
@@ -628,7 +369,11 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
             command.args(["--address", address]);
         }
         match command.spawn() {
-            Ok(child) => started(app, child, address.map(|a| format!("http://{a}"))),
+            Ok(child) => {
+                // Remembered while it runs, so a Clarity that ends without stopping it ends it when it starts again.
+                crate::left_running::remember(&clarity_project::clarity_home(), child.id(), &binary);
+                started(app, child, address.map(|a| format!("http://{a}")))
+            }
             Err(err) => return failed(format!("cannot start {}: {err}", binary.display())),
         }
     }
@@ -637,46 +382,6 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         message: if run { "running".to_string() } else { format!("built {}", binary.display()) },
         binary: Some(binary.display().to_string()),
     }
-}
-
-/// Runs the stack's build tool in `out`, its output in the Output panel.
-fn build_with(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain) -> Result<(), BuildDone> {
-    let failed = |message: String| BuildDone { ok: false, message, binary: None };
-    let mut command = clarity_project::background_command(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, toolchain.tool).unwrap_or_else(|| toolchain.tool.into()));
-    command
-        .args(&toolchain.args)
-        // The tool starts others (go runs gcc and pkg-config): they look where Clarity looks.
-        .env("PATH", clarity_gen::tools::tool_path())
-        // The C and C++ compilers chosen in the Environment settings, for CMake.
-        .envs(clarity_gen::tools::tool_env())
-        .envs(toolchain.env.iter().cloned())
-        .current_dir(out)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    // The command first, so the output says what runs where.
-    send_line(app, format!("{} {} (in {})", toolchain.tool, toolchain.args.join(" "), out.display()));
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(err) => return Err(failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing))),
-    };
-    // cargo reports on stderr, dotnet on stdout: both go to the output.
-    let stdout = child.stdout.take().map(|stdout| {
-        let app = app.clone();
-        std::thread::spawn(move || send_lines(&app, stdout))
-    });
-    if let Some(stderr) = child.stderr.take() {
-        send_lines(app, stderr);
-    }
-    if let Some(reader) = stdout {
-        let _ = reader.join();
-    }
-    match child.wait() {
-        Ok(status) if status.success() => {}
-        Ok(_) => return Err(failed("the build failed; see the output".to_string())),
-        Err(err) => return Err(failed(format!("{} stopped: {err}", toolchain.tool))),
-    }
-    Ok(())
 }
 
 /// Runs the command-line program with the words of `line`, in its folder:
@@ -799,6 +504,7 @@ fn started(app: &AppHandle, child: Child, address: Option<String>) {
 
 /// The application Run started has ended: the screen is told.
 fn ended(app: &AppHandle) {
+    crate::left_running::forget(&clarity_project::clarity_home());
     if let Ok(mut address) = app.state::<BuildState>().address.held() {
         *address = None;
     }
@@ -835,95 +541,9 @@ mod tests {
     #[test]
     fn a_download_on_the_async_runtime_does_not_panic() {
         tauri::async_runtime::block_on(async {
-            assert!(download("http://127.0.0.1:9/library.tar.gz").is_err());
-            assert!(!answers("http://127.0.0.1:9/"));
+            assert!(clarity_build::download("http://127.0.0.1:9/library.tar.gz").is_err());
+            assert!(!clarity_build::answers("http://127.0.0.1:9/"));
         });
-    }
-
-    /// A copy of the project `name` in the repository's `folder` (an example,
-    /// or a project of the tests), on the stack its project file names.
-    fn project_copy(folder: &str, name: &str) -> PathBuf {
-        fn copy(from: &Path, to: &Path) {
-            std::fs::create_dir_all(to).unwrap();
-            for entry in std::fs::read_dir(from).unwrap() {
-                let path = entry.unwrap().path();
-                let file = path.file_name().unwrap();
-                if path.is_dir() {
-                    // What a run left behind is not the example's.
-                    if file != "out" && file != "data" {
-                        copy(&path, &to.join(file));
-                    }
-                } else {
-                    std::fs::copy(&path, to.join(file)).unwrap();
-                }
-            }
-        }
-        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(folder);
-        let dir = std::env::temp_dir().join(format!("clarity-run-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let project = format!("{name}.clarity");
-        std::fs::copy(examples.join(&project), dir.join(&project)).unwrap();
-        copy(&examples.join(name), &dir.join(name));
-        dir
-    }
-
-    #[test]
-    fn generates_the_example_into_out() {
-        let dir = project_copy("test-projects", "shop");
-        let file = dir.join("shop.clarity");
-        // Build builds only what Generate wrote, and only while it is the project as it is.
-        assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("is not generated yet: press Generate first"));
-        // Generate writes every file again each time, and says each one it wrote.
-        let first = generate_source(&file).unwrap().written;
-        assert!(first.written.contains(&"desktop/Cargo.toml".to_string()) && first.written.contains(&"desktop/src/main.rs".to_string()), "{first:?}");
-        let again = generate_source(&file).unwrap().written;
-        assert!(again.written == first.written && again.removed.is_empty(), "{again:?}");
-        let Generated { out, toolchain, .. } = generate_out(&file, true, false).unwrap();
-        // The desktop program, in its own folder of the output (manual/code.commands.md).
-        assert_eq!(out, dir.join("shop/out/desktop"));
-        assert!(out.join("Cargo.toml").exists());
-        assert!(out.join("src/main.rs").exists());
-        assert_eq!(toolchain.tool, "cargo");
-        assert_eq!(out.join(&toolchain.program), out.join(if cfg!(windows) { "target/release/shop.exe" } else { "target/release/shop" }));
-        let text = std::fs::read_to_string(&file).unwrap();
-        std::fs::write(&file, text.replacen("currency EUR", "currency USD", 1)).unwrap();
-        assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("changed since it was generated: press Generate first"));
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// Without the stack's tools the project is still generated, and Build
-    /// says what to install, so it can be built here later or elsewhere.
-    #[test]
-    fn missing_tools_say_what_to_install_after_generating() {
-        let check = clarity_gen::tools::StackTools {
-            backend: clarity_project::Backend::Csharp,
-            ui: clarity_project::Ui::Clarity,
-            generated: true,
-            found: vec![],
-            missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
-            guides: vec!["net-on-linux"],
-        };
-        assert_eq!(
-            cannot_build(&check, Path::new("/p/shop/out")),
-            Some(
-                "the project is generated in /p/shop/out; to build C# with Clarity.UI here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download (the manual's page Setting up the build tools says how)"
-                    .to_string()
-            )
-        );
-        let ready = clarity_gen::tools::StackTools { missing: vec![], guides: vec![], found: vec![".NET SDK 10.0.402".into()], ..check };
-        assert_eq!(cannot_build(&ready, Path::new("/p/shop/out")), None);
-    }
-
-    /// What the Output panel shows is kept, so the agent can read it.
-    #[test]
-    fn a_web_application_is_served_where_nothing_else_listens() {
-        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = held.local_addr().unwrap().to_string();
-        let port = held.local_addr().unwrap().port();
-        assert_eq!(can_serve_at(&address), Err(format!("another program listens on port {port}; stop it, or set another port on the Project tab")));
-        drop(held);
-        assert_eq!(can_serve_at(&address), Ok(()));
     }
 
     #[test]
@@ -959,34 +579,5 @@ mod tests {
         assert!(text.starts_with(&format!("The last build succeeded: running. Its last {OUTPUT_LINES} lines (5 earlier ones are left out):\nline 6\n")), "{}", &text[..120]);
         assert!(text.ends_with(&format!("line {}", OUTPUT_LINES + 5)));
         assert!(!text.contains("dotnet build"));
-    }
-
-    #[test]
-    fn a_csharp_project_is_generated_for_dotnet() {
-        let dir = project_copy("test-projects", "todo");
-        generate_source(&dir.join("todo.clarity")).unwrap();
-        let Generated { out, toolchain, .. } = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
-        assert!(out.join("Todo.csproj").exists());
-        assert!(!out.join("Cargo.toml").exists());
-        assert_eq!(toolchain.tool, "dotnet");
-        assert!(toolchain.program.starts_with("bin/Debug"), "{}", toolchain.program.display());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// A first Go, C or C++ desktop build fetches Clarity.UI's library from
-    /// its release on GitHub. Ignored: it needs the network and the release
-    /// of this library version (the tag runtimes/rust-ui-ffi/v<version>).
-    #[test]
-    #[ignore]
-    fn clarity_ui_library_is_fetched_from_its_release() {
-        use clarity_gen::clarity_ui;
-        let cache = std::env::temp_dir().join(format!("clarity-ui-fetch-{}", std::process::id()));
-        let os = std::env::consts::OS;
-        let rid = clarity_ui::rid(os, std::env::consts::ARCH);
-        let library = clarity_ui::library_in(None, None, Some(&cache), rid.as_deref(), clarity_ui::release_version(), os);
-        let folder = clarity_ui::provide(library, clarity_ui::RELEASES, &download, &|line| println!("{line}"));
-        let unpacked = folder.as_ref().is_ok_and(|folder| folder.starts_with(&cache) && clarity_ui::complete(folder, os));
-        let _ = std::fs::remove_dir_all(&cache);
-        assert!(unpacked, "{folder:?}");
     }
 }

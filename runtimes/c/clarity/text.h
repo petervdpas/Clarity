@@ -63,6 +63,11 @@ ClarityText* clarity_keyed_text(const char* key, const char* english);
 /// any other error, which a window shows by its message, the English of the
 /// shared cases.
 const ClarityText* clarity_said(const ClarityError* error);
+/// A database or file store at `env:NAME` with the variable unset or empty
+/// (CLARITY_NOT_SET, conformance/data-folder.json). Always false.
+bool clarity_not_set(const char* variable);
+/// Code listed or wrote a folder that is no store, with no folder chosen (a value error). Always false.
+bool clarity_no_folder_chosen(void);
 /// Text shown as it is: a brace in it is no slot.
 ClarityText* clarity_plain_text(const char* text);
 /// The slot at `path` gets its value; gives `text` back.

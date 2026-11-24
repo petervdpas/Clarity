@@ -148,3 +148,31 @@ action file() -> text
         assert!(module.contains(keyed), "{keyed}:\n{module}");
     }
 }
+
+/// Keys made in a project that has keys already join its language files:
+/// every key a file has stays as written, a line that translated a text by
+/// what it said gives way to the key made of it, and each new key goes at
+/// the end with its value.
+#[test]
+fn new_keys_join_a_language_file_and_its_keys_stay() {
+    let before = "// Dutch.\ntranslation nl\n    cardTitle \"Klantkaart\"\n    \"Save\" \"Opslaan\"\n";
+    let added = vec![("saveCaption".to_string(), "Opslaan".to_string()), ("cardTitle".to_string(), "Other".to_string()), ("quitItem".to_string(), String::new())];
+    assert_eq!(keyed::with_keys(Some(before), "nl", &added), "// Dutch.\ntranslation nl\n    cardTitle \"Klantkaart\"\n    saveCaption \"Opslaan\"\n    quitItem \"\"\n");
+    assert_eq!(keyed::with_keys(None, "en", &added[..1]), "translation en\n    saveCaption \"Opslaan\"\n");
+}
+
+/// A key a change adds has its text in the default language and is empty in
+/// the others, so it counts as missing there until it is translated.
+#[test]
+fn a_new_key_is_empty_in_every_language_but_the_default() {
+    let dir = std::env::temp_dir().join(format!("clarity-plan-keys-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("translations")).unwrap();
+    std::fs::write(dir.join("translations/en.clarity"), "translation en\n").unwrap();
+    std::fs::write(dir.join("translations/nl.clarity"), "translation nl\n").unwrap();
+    let planned = keyed::plan_keys(&dir, "en", &[("saveCaption".to_string(), "Save".to_string())]).unwrap();
+    let after = |name: &str| planned.iter().find(|(p, _, _)| p.ends_with(name)).map(|(_, _, t)| t.clone()).unwrap();
+    assert_eq!(after("en.clarity"), "translation en\n    saveCaption \"Save\"\n");
+    assert_eq!(after("nl.clarity"), "translation nl\n    saveCaption \"\"\n");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

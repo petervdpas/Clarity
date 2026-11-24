@@ -240,7 +240,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "camel_names",
-            "Renames every part and handler that is not camelCase to camelCase, wherever it is used, in one window or view, or in every one.",
+            "Renames every part and handler that is not camelCase to camelCase, wherever it is used (the window's code, the slots of the translations), in one window or view, or in every one.",
             schema(json!({ "window": { "type": "string", "description": "A window, view or app; every one when left out." } }), &[]),
         ),
     ]
@@ -266,8 +266,8 @@ pub fn call(tools: &mut ProjectTools, name: &str, input: &Value) -> Option<Resul
         "set_event" => set_event(tools, input),
         "wire_event" => wire_event(tools, input),
         "set_handler_code" => set_handler_code(tools, input),
-        "name_parts" => housekeeping(tools, input, Edit::NameParts, "Named the parts"),
-        "camel_names" => housekeeping(tools, input, Edit::CamelNames, "Made the names camelCase"),
+        "name_parts" => housekeeping(tools, input, crate::naming::name_parts, "Named the parts"),
+        "camel_names" => housekeeping(tools, input, crate::naming::camel_names, "Made the names camelCase"),
         _ => return None,
     };
     Some(result)
@@ -862,43 +862,16 @@ fn with_body(code: &str, name: &str, body: &str) -> Option<String> {
     Some(out.iter().map(|l| format!("{l}\n")).collect())
 }
 
-/// NameParts or CamelNames on one window, view or the app, or on every one.
-fn housekeeping(tools: &mut ProjectTools, input: &Value, edit: Edit, what: &str) -> Result<String, String> {
+/// Naming parts or camelCase names (crate::naming, the one way `clarity spec
+/// names` takes too) on one window, view or the app, or on every one.
+fn housekeeping(tools: &mut ProjectTools, input: &Value, naming: fn(&Path, Option<&Path>) -> Result<Vec<crate::files::FileChange>, String>, what: &str) -> Result<String, String> {
     let (dir, project) = loaded(tools)?;
-    let files: Vec<PathBuf> = match text(input, "window").filter(|w| !w.is_empty()) {
-        Some(window) => vec![places::frame_owner(&project, &dir, &window)?.file],
-        None => {
-            let mut files: Vec<PathBuf> = Vec::new();
-            for file in project.files.iter().filter(|f| !f.pages.is_empty() || !f.apps.is_empty()) {
-                let path = Path::new(&file.path);
-                let path = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
-                if !files.contains(&path) {
-                    files.push(path);
-                }
-            }
-            files
-        }
+    let only = match text(input, "window").filter(|w| !w.is_empty()) {
+        Some(window) => Some(places::frame_owner(&project, &dir, &window)?.file),
+        None => None,
     };
-    let mut all = crate::edits::Applied::default();
-    for file in &files {
-        match crate::edits::apply(&dir, file, &edit) {
-            Ok(applied) => {
-                for change in applied.changes {
-                    // A module written by several files' edits is one change, before the first to after the last.
-                    match all.changes.iter_mut().find(|c| c.file == change.file) {
-                        Some(kept) => kept.after = change.after,
-                        None => all.changes.push(change),
-                    }
-                }
-            }
-            Err(err) => {
-                let shown = clarity_project::slashed(file.strip_prefix(&dir).unwrap_or(file));
-                let done = tools.applied(what, all)?;
-                return Err(format!("{shown}: {err}. Before it: {done}"));
-            }
-        }
-    }
-    tools.applied(what, all)
+    let changes = naming(&dir, only.as_deref())?;
+    tools.applied(what, crate::edits::Applied { changes, focus: None })
 }
 
 #[cfg(test)]

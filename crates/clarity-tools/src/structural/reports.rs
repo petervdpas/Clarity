@@ -16,6 +16,7 @@ use clarity_spec::Severity;
 use serde_json::{Value, json};
 
 use super::{schema, tool};
+use crate::files::{FileChange, write_atomically};
 use crate::{ProjectTools, Written};
 
 /// The properties of a class the designer sets (ReportLook.svelte).
@@ -143,14 +144,103 @@ fn needed(input: &Value, key: &str) -> Result<String, String> {
     if value.is_empty() { Err(format!("give {key}")) } else { Ok(value) }
 }
 
-fn folder(tools: &ProjectTools) -> Result<PathBuf, String> {
+fn report_file(tools: &ProjectTools, name: &str) -> Result<PathBuf, String> {
     let (_, dir) = tools.open()?;
-    Ok(dir.join(REPORTS_DIR))
+    let file = report_path(dir, name)?;
+    if file.is_file() { Ok(file) } else { Err(format!("there is no report {name}: {}", names(tools)?)) }
 }
 
-fn report_file(tools: &ProjectTools, name: &str) -> Result<PathBuf, String> {
-    let file = folder(tools)?.join(format!("{name}.{REPORT_EXTENSION}"));
-    if file.is_file() { Ok(file) } else { Err(format!("there is no report {name}: {}", names(tools)?)) }
+/// The file of report `name` in the project's folder `dir`; refused for a
+/// name that is no report's name. The one rule of the IDE and the agents.
+pub fn report_path(dir: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if !name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) || !name.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(format!("'{name}' is no report's name: letters and digits, starting with a capital, like Invoice"));
+    }
+    Ok(dir.join(REPORTS_DIR).join(format!("{name}.{REPORT_EXTENSION}")))
+}
+
+/// The file of a stylesheet of the reports folder (`invoice.css`); refused
+/// for a name that is no plain `.css` file name.
+pub fn stylesheet_path(dir: &Path, file: &str) -> Result<PathBuf, String> {
+    let file = file.trim();
+    let plain = file.ends_with(".css") && file.len() > 4 && !file.starts_with('.') && file.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if !plain {
+        return Err(format!("a report's stylesheet is a file of the reports folder ending in .css, as in invoice.css, not '{file}'"));
+    }
+    Ok(dir.join(REPORTS_DIR).join(file))
+}
+
+/// The errors of the reports, as the checker says them, by file.
+fn report_errors(dir: &Path) -> Result<Vec<(String, String)>, String> {
+    let project = clarity_project::load_modules(dir).map_err(|e| format!("cannot read the project: {e}"))?;
+    let folder = dir.join(REPORTS_DIR);
+    Ok(project.diagnostics.iter().filter(|d| d.severity == Severity::Error && Path::new(&d.path).starts_with(&folder)).map(|d| (d.path.clone(), d.message.clone())).collect())
+}
+
+/// Writes the files of one change to the reports (`(file, text)`), refused
+/// and taken back when a report would gain an error; the files whose text
+/// changed are given back for Undo. Every report write goes through here.
+pub fn write_checked(dir: &Path, files: Vec<(PathBuf, String)>) -> Result<Vec<FileChange>, String> {
+    let files: Vec<(PathBuf, String, Option<String>)> = files
+        .into_iter()
+        .map(|(f, text)| {
+            let before = std::fs::read_to_string(&f).ok();
+            (f, text, before)
+        })
+        .filter(|(_, text, before)| before.as_deref() != Some(text.as_str()))
+        .collect();
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+    let before_errors = report_errors(dir)?;
+    for (file, text, _) in &files {
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
+        }
+        write_atomically(file, text)?;
+    }
+    let gained: Vec<String> = report_errors(dir)?.into_iter().filter(|e| !before_errors.contains(e)).map(|(_, message)| message).collect();
+    if !gained.is_empty() {
+        for (file, _, before) in &files {
+            match before {
+                Some(text) => write_atomically(file, text)?,
+                None => {
+                    let _ = std::fs::remove_file(file);
+                }
+            }
+        }
+        return Err(format!("refused, nothing written: the report would gain {}", gained.join("; ")));
+    }
+    Ok(files.into_iter().map(|(file, text, before)| FileChange { file, before, after: Some(text) }).collect())
+}
+
+/// Adds report `name`, as the Reports tab's New report: what a new report
+/// starts with, and the records it takes (`data`: a name and an entity each).
+pub fn add_report_file(dir: &Path, name: &str, data: &[(String, String)]) -> Result<Vec<FileChange>, String> {
+    let file = report_path(dir, name)?;
+    let name = name.trim();
+    if file.exists() {
+        return Err(format!("there is a report {name} already"));
+    }
+    let mut design = report_design::read(&clarity_spec::reports::starter(name))?;
+    for (data, ty) in data {
+        if data.trim().is_empty() || ty.trim().is_empty() {
+            return Err("each data has a name and a type (an entity)".into());
+        }
+        design.data.push((data.trim().to_string(), ty.trim().to_string()));
+    }
+    write_checked(dir, vec![(file, report_design::write(&design))])
+}
+
+/// Writes report `name` with `text`, as the Reports tab designed it.
+pub fn save_report(dir: &Path, name: &str, text: &str) -> Result<Vec<FileChange>, String> {
+    write_checked(dir, vec![(report_path(dir, name)?, text.to_string())])
+}
+
+/// Writes stylesheet `file` of the reports folder with `text`.
+pub fn save_stylesheet(dir: &Path, file: &str, text: &str) -> Result<Vec<FileChange>, String> {
+    write_checked(dir, vec![(stylesheet_path(dir, file)?, text.to_string())])
 }
 
 /// The reports there are, as a sentence.
@@ -168,46 +258,17 @@ fn opened(tools: &ProjectTools, input: &Value) -> Result<(String, PathBuf, Repor
     Ok((name, file, design))
 }
 
-/// The report's errors as the checker says them.
-fn errors_in(dir: &Path, file: &Path) -> Result<Vec<String>, String> {
-    let project = clarity_project::load_modules(dir).map_err(|e| format!("cannot read the project: {e}"))?;
-    let path = file.display().to_string();
-    Ok(project.diagnostics.iter().filter(|d| d.severity == Severity::Error && d.path == path).map(|d| d.message.clone()).collect())
-}
-
-/// Writes the files of one change (`(file, text)`), refused and taken back
-/// when the report `file` would check worse; kept for Undo.
-fn saved(tools: &mut ProjectTools, report: &Path, files: Vec<(PathBuf, String)>, done: String) -> Result<String, String> {
+/// Writes the files of one change through `write_checked`; kept for Undo.
+fn saved(tools: &mut ProjectTools, files: Vec<(PathBuf, String)>, done: String) -> Result<String, String> {
     let (_, dir) = tools.open()?.clone();
-    let before_errors = if report.is_file() { errors_in(&dir, report)? } else { Vec::new() };
-    let kept: Vec<(PathBuf, Option<String>)> = files.iter().map(|(f, _)| (f.clone(), std::fs::read_to_string(f).ok())).collect();
-    for (file, text) in &files {
-        if let Some(parent) = file.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("cannot make {}: {e}", parent.display()))?;
-        }
-        crate::files::write_atomically(file, text)?;
-    }
-    let after_errors = errors_in(&dir, report)?;
-    let gained: Vec<&String> = after_errors.iter().filter(|e| !before_errors.contains(e)).collect();
-    if !gained.is_empty() {
-        for (file, before) in &kept {
-            match before {
-                Some(text) => crate::files::write_atomically(file, text)?,
-                None => {
-                    let _ = std::fs::remove_file(file);
-                }
-            }
-        }
-        return Err(format!("refused, nothing written: the report would gain {}", gained.iter().map(|e| e.as_str()).collect::<Vec<_>>().join("; ")));
-    }
-    for ((file, text), (_, before)) in files.into_iter().zip(kept) {
-        tools.written.push(Written { file, before, after: Some(text) });
+    for change in write_checked(&dir, files)? {
+        tools.written.push(Written::from(change));
     }
     Ok(format!("{done}. {}", tools.problems()?))
 }
 
 fn save(tools: &mut ProjectTools, file: &Path, design: &ReportDesign, done: String) -> Result<String, String> {
-    saved(tools, file, vec![(file.to_path_buf(), report_design::write(design))], done)
+    saved(tools, vec![(file.to_path_buf(), report_design::write(design))], done)
 }
 
 fn band_kind(input: &Value) -> Result<String, String> {
@@ -306,24 +367,13 @@ fn or(value: String, fallback: &str) -> String {
 
 fn add_report(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
     let name = needed(input, "name")?;
-    if !name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) || !name.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return Err(format!("'{name}' is no report's name: letters and digits, starting with a capital, like Invoice"));
+    let data: Vec<(String, String)> = input["data"].as_array().map(|items| items.iter().map(|item| (text(item, "name"), text(item, "type"))).collect()).unwrap_or_default();
+    let (_, dir) = tools.open()?.clone();
+    let file = report_path(&dir, &name)?;
+    for change in add_report_file(&dir, &name, &data)? {
+        tools.written.push(Written::from(change));
     }
-    let file = folder(tools)?.join(format!("{name}.{REPORT_EXTENSION}"));
-    if file.exists() {
-        return Err(format!("there is a report {name} already"));
-    }
-    let mut design = report_design::read(&clarity_spec::reports::starter(&name))?;
-    if let Some(items) = input["data"].as_array() {
-        for item in items {
-            let (data, ty) = (text(item, "name"), text(item, "type"));
-            if data.is_empty() || ty.is_empty() {
-                return Err("each data has a name and a type (an entity)".into());
-            }
-            design.data.push((data, ty));
-        }
-    }
-    save(tools, &file, &design, format!("Added report {name} ({})", file.display()))
+    Ok(format!("Added report {name} ({}). {}", file.display(), tools.problems()?))
 }
 
 fn change_report(tools: &mut ProjectTools, input: &Value) -> Result<String, String> {
@@ -463,12 +513,13 @@ fn set_class(tools: &mut ProjectTools, input: &Value) -> Result<String, String> 
             sheet
         }
     };
-    let sheet = file.with_file_name(&sheet_name);
+    let (_, dir) = tools.open()?;
+    let sheet = stylesheet_path(dir, &sheet_name)?;
     let css = std::fs::read_to_string(&sheet).unwrap_or_default();
     // The stylesheet goes first, so the report naming it finds it there.
     files.insert(0, (sheet.clone(), report_design::with_declaration(&css, &format!(".{class}"), &property, &value)));
     let done = if value.is_empty() { format!("Took {property} away from .{class} in {sheet_name}") } else { format!("Set .{class} {{ {property}: {value} }} in {sheet_name}") };
-    saved(tools, &file, files, done)
+    saved(tools, files, done)
 }
 
 #[cfg(test)]
@@ -494,6 +545,41 @@ mod tests {
         let said = tools.call(name, &input);
         assert!(!said.is_error, "{name}: {}", said.text);
         said.text
+    }
+
+    /// The IDE's Reports tab and the agents add and save a report the one
+    /// way: one name rule, one stylesheet rule, a report that would gain an
+    /// error refused with nothing written, the files given back for Undo.
+    #[test]
+    fn reports_are_added_and_saved_one_way() {
+        let (root, dir, _) = project("one-way");
+        for bad in ["invoice", "In voice", "", "../Invoice"] {
+            assert!(super::add_report_file(&dir, bad, &[]).unwrap_err().contains("is no report's name"), "{bad}");
+        }
+        let data = [("order".to_string(), "Order".to_string())];
+        let added = super::add_report_file(&dir, "Invoice", &data).unwrap();
+        let file = dir.join("reports/Invoice.report");
+        assert_eq!(added.len(), 1);
+        assert!(added[0].file == file && added[0].before.is_none());
+        assert!(std::fs::read_to_string(&file).unwrap().contains("Order"));
+        assert!(super::add_report_file(&dir, "Invoice", &[]).unwrap_err().contains("already"));
+
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(super::save_report(&dir, "Invoice", &text).unwrap().is_empty(), "the same text changes nothing");
+        let mut design = clarity_spec::report_design::read(&text).unwrap();
+        let mut part = clarity_spec::report_design::new_part("Field", (0.0, 0.0)).unwrap();
+        clarity_spec::report_design::set_word(&mut part.attrs, "bind", "order.nothing");
+        design.bands.iter_mut().find(|b| b.kind == "ReportHeader").unwrap().parts.push(part);
+        let broken = clarity_spec::report_design::write(&design);
+        let refused = super::save_report(&dir, "Invoice", &broken).unwrap_err();
+        assert!(refused.contains("refused"), "{refused}");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), text, "nothing written");
+
+        assert!(super::save_stylesheet(&dir, "../escape.css", "").unwrap_err().contains("ending in .css"));
+        assert!(super::save_stylesheet(&dir, "invoice.txt", "").is_err());
+        let sheet = super::save_stylesheet(&dir, "invoice.css", ".title { color: red; }\n").unwrap();
+        assert_eq!(sheet[0].file, dir.join("reports/invoice.css"));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -54,6 +54,26 @@ const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(
  * person's folder for application data (conformance/data-folder.json). */
 const char* clarity_data_folder_sqlite_on(const char* os, const char* location, const char* (*env)(const char* name));
 
+/* The program's data folder (conformance/data-folder.json, folders): the
+ * folder CLARITY_DATA names, else the person's folder for application data
+ * under the program's name; "" when the environment names neither, which is
+ * where the program runs. A relative file store and a relative folder
+ * setting are in it, as a relative SQLite database is. `env` NULL reads the
+ * process's environment. */
+const char* clarity_data_folder(const char* program, const char* (*env)(const char* name));
+/// clarity_data_folder on system `os` ("windows", "macos" or another).
+const char* clarity_data_folder_on(const char* os, const char* program, const char* (*env)(const char* name));
+/* The folder of a file store at `location` (conformance/data-folder.json,
+ * stores): data:<program>/<name> (a relative folder in the project file) is
+ * in the program's data folder under its own name; env:NAME is that
+ * variable's value, CLARITY_NOT_SET while it is unset or empty; anything
+ * else is as it is. */
+bool clarity_data_folder_store(const char* location, const char* (*env)(const char* name), const char** out);
+/// clarity_data_folder_store on system `os`.
+bool clarity_data_folder_store_on(const char* os, const char* location, const char* (*env)(const char* name), const char** out);
+/// `name` in `folder`; just `name` when there is no folder.
+const char* clarity_in_folder(const char* folder, const char* name);
+
 /// Why the databases did not open, as the person reads it (manual/data.settings.md,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.

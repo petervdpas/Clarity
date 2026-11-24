@@ -71,8 +71,8 @@ If a field is missing or wrong, the panel says which: a connection without an `a
 
 ## Choosing a connection
 
-The box at the top of the Agent panel lists the connection named `anthropic` and every connection that has a `kind` field. Pick one there; Clarity remembers your choice. You cannot change it while a turn runs. See [The agent](ai.agent.md).
+The box at the top of the Agent panel lists the connection named `anthropic` and every connection that has a `kind` field, then the agent programs installed on your computer. Pick one there; Clarity remembers your choice. You cannot change it while a turn runs. See [The agent](ai.agent.md).
 
 ## Other kinds
 
-The `kind` field says which kind of model a connection reaches, so other providers can be added later without changing how connections work. Today Clarity's agent works with `anthropic` and `foundry`; `codex` and `copilot` are your own agent program (see [Your own agent in Clarity](ai.your-agent.md)). A connection of any other kind is refused with a message that says so.
+The `kind` field says which kind of model a connection reaches, so other providers can be added later without changing how connections work. Today Clarity's agent works with `anthropic` and `foundry`. Your own agent program (Codex, GitHub Copilot) needs no connection: the panel lists it once it is installed (see [Your own agent in Clarity](ai.your-agent.md)); a connection of kind `codex` or `copilot` made before keeps working, and a new one is refused. A connection of any other kind is refused with a message that says so.

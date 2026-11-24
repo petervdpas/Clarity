@@ -13,7 +13,7 @@
   import DevToolsSettings from "./DevToolsSettings.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import LoggingSettings from "./LoggingSettings.svelte";
-  import OutsideAgentsSettings from "./OutsideAgentsSettings.svelte";
+  import AgentActivityList from "./AgentActivityList.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
   import { agent } from "./agentStore.svelte";
   import { IDE_THEMES, type IdeTheme } from "./ideTheme";
@@ -125,7 +125,7 @@
         {/each}
       </fieldset>
       <p class="muted">The agent runs nothing else: it reads and writes the project, and one Undo takes a whole answer back. A choice holds from the next message.</p>
-      <OutsideAgentsSettings />
+      <AgentActivityList />
     {/if}
   </div>
 </section>

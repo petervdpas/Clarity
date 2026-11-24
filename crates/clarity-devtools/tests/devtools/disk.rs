@@ -113,6 +113,21 @@ fn a_place_is_marked_for_the_next_start_by_its_folders() {
     drop(held);
 }
 
+/// The Disk tab as the IDE and the agent (MCP disk_state) read it: one
+/// view, each place with its size and whether it is marked for the next start.
+#[test]
+fn the_disk_tab_is_one_view() {
+    let repo = temp("view");
+    file(repo.join("target/debug/clarity.exe"), 10);
+    disk::mark(&repo, "debug", true).unwrap();
+    let view = disk::view(&repo);
+    let debug = view.places.iter().find(|p| p.key == "debug").unwrap();
+    assert_eq!((debug.bytes, debug.marked), (10, true));
+    assert!(view.places.iter().filter(|p| p.key != "debug").all(|p| !p.marked));
+    assert_eq!(view.places.len(), disk::places(&repo).len(), "every place");
+    assert_eq!(view.low, view.free.is_some_and(|f| f < disk::ROOM));
+}
+
 #[test]
 fn the_free_space_and_sizes_read_as_people_read_them() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

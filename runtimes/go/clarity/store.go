@@ -37,11 +37,10 @@ func location(text string) (string, error) {
 	if !ok {
 		return text, nil
 	}
-	value, set := os.LookupEnv(name)
-	if !set {
-		return "", &StorageError{What: "the environment variable " + name + " is not set"}
+	if value := os.Getenv(name); value != "" {
+		return value, nil
 	}
-	return value, nil
+	return "", &NotSetError{Variable: name}
 }
 
 // open connects to the database of a data source.

@@ -796,7 +796,8 @@ pub fn add_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)])
 
 /// What `add_keys` would write: each language file that changes, with what
 /// it holds now (none for one not there yet) and after. A new key gets the
-/// default language's text in every language.
+/// default language's text in the default language and is empty in the
+/// others, where it counts as missing until it is translated.
 pub fn plan_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)]) -> std::io::Result<Vec<(std::path::PathBuf, Option<String>, String)>> {
     let folder = dir.join(crate::translations::TRANSLATIONS_DIR);
     let mut languages: Vec<std::path::PathBuf> = match std::fs::read_dir(&folder) {
@@ -808,29 +809,47 @@ pub fn plan_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)]
         languages.push(default_file);
     }
     languages.sort();
+    let empty: Vec<(String, String)> = keys.iter().map(|(key, _)| (key.clone(), String::new())).collect();
     let mut written = Vec::new();
     for path in languages {
         let language = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let before = std::fs::read_to_string(&path).ok();
-        let (parsed, _) = crate::translations::parse(before.as_deref().unwrap_or(""));
-        let mut after = before.clone().unwrap_or_else(|| format!("translation {language}\n"));
-        for (key, value) in keys {
-            if parsed.entries.iter().any(|e| &e.key == key) {
-                continue;
-            }
-            // Every language starts with the default language's text, so none shows an empty one;
-            // the missing_translations tool lists what is still the default's, to translate.
-            let value = value.as_str();
-            if !after.ends_with('\n') {
-                after.push('\n');
-            }
-            after.push_str(&format!("    {key} {}\n", quote(value)));
-        }
+        let after = with_keys(before.as_deref(), &language, if language == default { keys } else { &empty });
         if before.as_deref() != Some(after.as_str()) {
             written.push((path, before, after));
         }
     }
     Ok(written)
+}
+
+/// The language file `before` of `language` (none when there is none yet)
+/// with the keys `added`, each with its value: every key the file has stays
+/// as written, a line that translated a text by what it said (`"Save"
+/// "Opslaan"`, from before texts had keys) gives way to the keys made of it,
+/// and each new key goes at the end.
+pub fn with_keys(before: Option<&str>, language: &str, added: &[(String, String)]) -> String {
+    let (parsed, _) = crate::translations::parse(before.unwrap_or(""));
+    let mut after = String::new();
+    for line in before.unwrap_or("").lines() {
+        let (lexed, _) = lex(line);
+        let old = lexed.first().is_some_and(|l| matches!(l.tokens.as_slice(), [from, to] if from.kind == TokenKind::Str && to.kind == TokenKind::Str));
+        if !old {
+            after.push_str(line);
+            after.push('\n');
+        }
+    }
+    if before.is_none() {
+        after = format!("translation {language}\n");
+    }
+    let mut written: Vec<&str> = Vec::new();
+    for (key, value) in added {
+        if parsed.entries.iter().any(|e| &e.key == key) || written.contains(&key.as_str()) {
+            continue;
+        }
+        written.push(key);
+        after.push_str(&format!("    {key} {}\n", quote(value)));
+    }
+    after
 }
 
 /// Loads `sources` as a project whose texts are keys: their texts made

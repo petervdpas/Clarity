@@ -1269,14 +1269,20 @@ pub fn sqlite_steps(project: &Project, source: &str) -> Result<Vec<(String, Vec<
 
 /// A database an app owns as Clarity's migration tool migrates it
 /// (docs/ledger/migrations.md, Design): its data source, the SQL it speaks,
-/// where the app finds it, and its steps in that SQL. clarity-migrate reads
-/// the same fields (`clarity_migrate::Database`).
+/// where the app finds it, its steps in that SQL, and the folder an SQLite
+/// database is backed up into first. clarity-migrate reads the same fields
+/// (`clarity_migrate::Database`).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct MigratedDatabase {
     pub source: String,
     pub dialect: String,
     pub location: String,
     pub steps: Vec<Vec<String>>,
+    /// The project's `backups` folder with the data source's name
+    /// (`data/backups/main`), which clarity-migrate finds in the folder of the
+    /// database's file; none when the project takes no backups or the database is a server's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backups: Option<String>,
 }
 
 /// The databases the project owns, each with every migration step in its
@@ -1295,7 +1301,8 @@ pub fn migrated_databases(project: &Project, settings: &Settings) -> Result<Vec<
             Sql::Mssql => "mssql",
         };
         let steps = schema::steps(project, &name, sql)?.into_iter().map(|(_, statements)| statements).collect();
-        out.push(MigratedDatabase { source: name, dialect: dialect.to_string(), location, steps });
+        let backups = settings.backups.as_deref().filter(|_| sql == Sql::Sqlite).map(|folder| format!("{}/{name}", folder.trim().trim_end_matches(['/', '\\']).replace('\\', "/")));
+        out.push(MigratedDatabase { source: name, dialect: dialect.to_string(), location, steps, backups });
     }
     Ok(out)
 }
@@ -1468,9 +1475,16 @@ pub fn uses_clarity_ui(settings: &clarity_project::Settings) -> bool {
 /// `toolchain` building with Clarity.UI's library in `folder` (the one
 /// CLARITY_UI names, or the one Clarity fetched): cgo's flags for Go, the
 /// variable CLARITY_UI for CMake.
-pub fn with_clarity_ui(mut toolchain: Toolchain, backend: Backend, folder: &std::path::Path) -> Toolchain {
+pub fn with_clarity_ui(toolchain: Toolchain, backend: Backend, folder: &std::path::Path) -> Toolchain {
+    with_clarity_ui_on(toolchain, backend, folder, std::env::consts::OS)
+}
+
+/// `with_clarity_ui` for a build on system `os`.
+pub fn with_clarity_ui_on(mut toolchain: Toolchain, backend: Backend, folder: &std::path::Path, os: &str) -> Toolchain {
+    // A verbatim folder (\\?\C:\...), as Windows names the installed Clarity's, is one no build tool takes.
+    let folder = &clarity_project::plain_in(folder.to_path_buf(), os);
     let env = match backend {
-        Backend::Go => go_cgo_env(Some(folder), std::env::consts::OS),
+        Backend::Go => go_cgo_env(Some(folder), os),
         Backend::C | Backend::Cpp | Backend::Rust => vec![("CLARITY_UI", folder.display().to_string())],
         _ => Vec::new(),
     };

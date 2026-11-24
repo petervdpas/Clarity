@@ -319,6 +319,16 @@ migration "Versions"
 
 `clarity-migrate`, Clarity's own migration tool, applies the steps a database does not have yet: Run in Clarity does it before the program starts, `clarity data migrate` from the command line, and the tool beside an app where it is installed. Each step runs in a transaction where the database allows it (see the differences above). The generated application does not migrate: when it starts it checks that its database has exactly the steps it was made with, and otherwise stops before any window with one line in English (`The database main needs migrating: run clarity-migrate`, or `The database main belongs to a newer version of this app`). On SQLite, which does not enforce references while a step builds a table again, the tool checks the references between records before a step is kept. A step that ran never changes: to undo it, write a new step.
 
-Before it applies steps to a SQLite database that already has a schema, `clarity-migrate` backs it up beside it, in `backups/` (`data/backups/shop-20261105T205905Z-before-migration-0006.db`, the time in UTC), and keeps the newest ten of those; a backup taken by hand stays. When it cannot back up, it does not migrate. The Database section of the Project tab takes a backup by hand and restores or deletes one; `clarity data backup shop.clarity`, `clarity data backups shop.clarity` and `clarity data restore shop.clarity <file>` do the same from the command line. A restore first backs up what it replaces. A server database is backed up by its administrator.
+When a step cannot be applied, the databases after it are left as they are: Run and `clarity data migrate` stop at the first database that fails.
+
+### Backups
+
+Backups are a project option: the project file's `backups` line names a folder under the project's folder (`backups "data/backups"`, **Backups folder** in the Project settings view; see [The project file](project.file.md#backups)). Each data source's backups go in a folder of its name inside it, as copies named for when (UTC) and why: `data/backups/main/shop-20261105T205905Z-before-migration-0006.db`.
+
+- Before it applies steps to a SQLite database that already has a schema, `clarity-migrate` backs it up there and keeps the newest ten of those; a backup taken by hand stays. When it cannot back up, it does not migrate.
+- The Database section of the Project tab takes a backup by hand and restores or deletes one; `clarity data backup shop.clarity`, `clarity data backups shop.clarity` and `clarity data restore shop.clarity <file>` do the same from the command line, and the IDE's agent with its backup tools. A restore takes a backup of that folder by its file name, as the list gives it, never a path, and first backs up what it replaces.
+- Without the line the project takes no backups: each of these says to set the backups folder, and `clarity-migrate` migrates without a backup first.
+- With **Include data migration tools**, the `clarity-migrate.json` beside an installed app names the same folder (`data/backups/main`), found in the folder the database opens in.
+- An external database is someone else's and a server database is backed up by its administrator: Clarity backs up neither.
 
 See also [Entities and enums](data.entities.md), [Migrations](data.migrations.md), [Calling web APIs](code.web-apis.md) and [The project file](project.file.md).

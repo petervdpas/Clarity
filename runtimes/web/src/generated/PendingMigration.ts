@@ -12,7 +12,7 @@ source: string,
  */
 changes: Array<PendingChange>, 
 /**
- * Renames Clarity proposes: a name that went and one that came.
+ * Renames Clarity proposes for the person to pick: a name that went and one that came.
  */
 proposed: Array<Rename>, 
 /**

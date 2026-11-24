@@ -36,6 +36,8 @@ type Db struct {
 	stores map[string]string
 	// storeSettings are the file stores whose folder is a folder setting, by name.
 	storeSettings map[string]storeSetting
+	// The file stores at env:NAME with the variable unset: each use says so.
+	storesNotSet map[string]string
 	// held are the settings of the running handler: the window's data had
 	// them when the call began, and its code sets them before they are kept;
 	// a file store whose folder is a setting reads them first

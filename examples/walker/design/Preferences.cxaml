@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="walker.Preferences" title="@preferencesTitle">
+  <Form name="settingsForm" at="1,1" span="12" rows="4" bind="settings" labels="3">
+    <Dropdown name="languageBox" at="4,1" span="6" bind="settings.language" />
+    <Dropdown name="themeBox" at="4,2" span="6" bind="settings.theme" />
+    <Spinbox name="speedBox" at="4,3" span="3" bind="settings.speed" />
+    <Textbox name="walkerNameBox" at="4,4" span="6" bind="settings.walkerName" />
+  </Form>
+  <Button name="closeButton" at="11,6" span="2" caption="@closeButtonCaption" opens="close" cancel="true" />
+</Dialog>

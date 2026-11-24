@@ -16,11 +16,18 @@ struct Machine {
     programs: HashMap<&'static str, HashMap<String, &'static str>>,
     /// Where Clarity.UI's library comes from; by default fetched on the first build.
     library: Option<Library>,
+    /// Visual Studio's own linker, on a Windows machine with its C++ build tools.
+    msvc_linker: Option<PathBuf>,
 }
 
 impl Machine {
     fn library(mut self, library: Library) -> Self {
         self.library = Some(library);
+        self
+    }
+
+    fn msvc_linker(mut self, linker: &str) -> Self {
+        self.msvc_linker = Some(PathBuf::from(linker));
         self
     }
 
@@ -37,6 +44,10 @@ impl Probe for Machine {
 
     fn run(&self, program: &str, args: &[&str]) -> Option<String> {
         self.programs.get(program)?.get(&args.join(" ")).map(|s| s.to_string())
+    }
+
+    fn msvc_linker(&self) -> Option<PathBuf> {
+        self.msvc_linker.clone()
     }
 
     fn clarity_ui(&self) -> Library {
@@ -69,6 +80,26 @@ fn rust_on_clarity_ui_needs_only_cargo() {
     let all = clarity_gen::tools::check_all(&Machine::default());
     assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Clarity));
     assert!(clarity_gen::tools::report(&all).contains("Rust with Clarity.UI: missing Rust with cargo"));
+}
+
+/// Rust's MSVC toolchain on Windows links with Visual Studio's C++ build
+/// tools: without them Rust is not ready, whatever other program is named
+/// link (MSYS2's and Git's coreutils have one that links nothing); with them
+/// it is. Rust's GNU toolchain needs no Visual Studio.
+#[test]
+fn rust_with_msvc_needs_visual_studio_s_build_tools() {
+    let rust = |host: &'static str| Machine::default().with("cargo", "--version", "cargo 1.100.0\n").with("rustc", "-vV", host);
+    let msvc = "rustc 1.100.0\nbinary: rustc\nhost: x86_64-pc-windows-msvc\n";
+    let without = check(Backend::Rust, Ui::Clarity, &rust(msvc));
+    assert!(!without.ready());
+    let at = without.missing.iter().position(|m| m.contains("Visual Studio")).unwrap_or_else(|| panic!("{:?}", without.missing));
+    assert!(without.missing[at].contains("Desktop development with C++"), "{}", without.missing[at]);
+    // Rust's own guide, which names the build tools: the manual's heading for this system.
+    assert_eq!(without.guides[at], check(Backend::Rust, Ui::Clarity, &Machine::default()).guides[0]);
+    let with = check(Backend::Rust, Ui::Clarity, &rust(msvc).msvc_linker(r"C:\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\link.exe"));
+    assert!(with.ready(), "{:?}", with.missing);
+    let gnu = check(Backend::Rust, Ui::Clarity, &rust("rustc 1.100.0\nhost: x86_64-pc-windows-gnu\n"));
+    assert!(gnu.ready(), "{:?}", gnu.missing);
 }
 
 #[test]

@@ -55,6 +55,8 @@ translation nl
     recordStillUsed "Deze {table} wordt nog door andere records gebruikt"
     divisionByZero "Deling door nul"
     numberTooLarge "Het getal is te groot"
+    variableNotSet "De omgevingsvariabele {variable} moet ingesteld zijn"
+    noFolderChosen "Er is geen map gekozen"
     addRow "Toevoegen"
     deletePerson "{name} verwijderen?"
     deletePersonYes "Verwijderen"

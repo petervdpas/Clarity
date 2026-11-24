@@ -3,5 +3,6 @@
   <Toolbar name="mainToolbar">
     <Item kind="button" caption="@languageCaption" name="languageButton" icon="languages" opens="language" />
     <Item kind="button" caption="@themeCaption" name="themeButton" opens="theme" />
+    <Item kind="button" caption="@preferencesButtonCaption" name="preferencesButton" opens="Preferences" />
   </Toolbar>
 </App>

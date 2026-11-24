@@ -37,13 +37,21 @@ pub fn built_at(repo: &Path, piece: &Piece, os: &str) -> Option<SystemTime> {
     built_file(repo, piece, os).and_then(|f| std::fs::metadata(f).and_then(|m| m.modified()).ok())
 }
 
+/// The key of a piece's build among DevTools' builds (`piece:clarityUi`),
+/// with `debug` of its debug build (`piece:clarityUi:debug`): the IDE runs
+/// it under this key and build_state reads its record by it.
+pub fn job_key(piece: &str, debug: bool) -> String {
+    if debug { format!("piece:{piece}:debug") } else { format!("piece:{piece}") }
+}
+
 /// The build a tab's Build button runs for `piece`, in the repository:
 /// at most two jobs of cargo at once, as the machine can bear.
 pub fn build(repo: &Path, piece: &Piece) -> Runnable {
     match piece.kind {
         Kind::Native { package, .. } => Runnable::new("cargo", &["build", "--release", "-p", package], repo).with_env("CARGO_BUILD_JOBS", "2"),
         // Thin LTO for the cDdev's own browser files (Cargo.toml's browser-own); releases build `browser`.
-        Kind::Browser => Runnable::new(&clarity_gen_core::tools::bash(), &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "2").with_env("CLARITY_BROWSER_PROFILE", "browser-own"),
+        // One job: linking the browser files takes most of the memory a 7.5 GB machine has beside the IDE.
+        Kind::Browser => Runnable::new(&clarity_gen_core::tools::bash(), &["runtimes/rust-ui-browser/build.sh"], repo).with_env("CARGO_BUILD_JOBS", "1").with_env("CLARITY_BROWSER_PROFILE", "browser-own"),
         Kind::Runtime { folder: "runtimes/rust" } => Runnable::new("cargo", &["build", "-p", "clarity-runtime"], repo).with_env("CARGO_BUILD_JOBS", "2"),
         // The NuGet packages come from the Release build, into each project's bin/Release.
         Kind::Runtime { folder: "runtimes/csharp" } => Runnable::new("dotnet", &["build", "-c", "Release", "Clarity.slnx"], &repo.join("runtimes/csharp")).with_env("MSBUILDDISABLENODEREUSE", "1"),

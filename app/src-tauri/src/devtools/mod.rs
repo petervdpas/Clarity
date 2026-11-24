@@ -6,7 +6,8 @@
 //! builds (jobs.rs, one build at a time). An agent presses Build through
 //! Clarity's MCP (build_piece): its ask comes through a file
 //! (clarity_project::dev_asks), and the page allows it as the person chose
-//! for agents. The release planning is release.rs, the Disk tab disk.rs. An installed Clarity has
+//! for agents. Every build's state is written to its file beside the asks
+//! as it changes (`dev_jobs`), which the agent follows with build_state. The release planning is release.rs, the Disk tab disk.rs. An installed Clarity has
 //! no DevTools and always uses the release.
 
 pub mod disk;
@@ -31,6 +32,16 @@ pub const ASKED: &str = "devtools-asked";
 /// The builds, one at a time, of the pieces and the release checks.
 #[derive(Clone, Default)]
 pub struct DevJobs(pub Jobs);
+
+/// DevTools' builds; in a Clarity run from its repository each writes its
+/// state to its file beside the agents' asks as it changes, for build_state.
+pub fn dev_jobs() -> DevJobs {
+    let jobs = DevJobs::default();
+    if crate::repository().is_some() {
+        jobs.0.record_in(&dev_asks::jobs(&dev_asks::folder()));
+    }
+    jobs
+}
 
 /// A build, as the page shows it.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -154,15 +165,6 @@ fn hidden() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>
     HIDDEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn job_key(piece: &str) -> String {
-    format!("piece:{piece}")
-}
-
-/// The key of a piece's debug build among the builds (`piece:clarityUi:debug`).
-fn debug_job_key(piece: &str) -> String {
-    format!("piece:{piece}:debug")
-}
-
 fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
     let os = std::env::consts::OS;
     let env = Environment::current();
@@ -183,9 +185,9 @@ fn view(repo: &Path, jobs: &Jobs) -> DevToolsView {
             built: swap::built_at(repo, piece, os).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64),
             signal: swap::behind(repo, piece, os),
             build: swap::build(repo, piece).shown(),
-            job: job_key(piece.key),
+            job: swap::job_key(piece.key, false),
             debug_build: swap::build_debug(repo, piece).map(|b| b.shown()),
-            debug_job: debug_job_key(piece.key),
+            debug_job: swap::job_key(piece.key, true),
         })
         .collect::<Vec<_>>();
     let addable = swap::PIECES.iter().filter(|p| !tabs.iter().any(|t| t.key == p.key)).map(|p| PieceChoice { key: p.key.to_string(), name: p.name.to_string() }).collect();
@@ -197,7 +199,7 @@ fn release_libraries() -> Result<PathBuf, String> {
     let os = std::env::consts::OS;
     let cache = clarity_ui::cache_dir_in(os, |name| std::env::var(name).ok());
     let release = clarity_ui::library_in(None, None, cache.as_deref(), clarity_ui::rid(os, std::env::consts::ARCH).as_deref(), clarity_ui::release_version(), os);
-    clarity_ui::provide(release, clarity_ui::RELEASES, &crate::build::download, &|line| eprintln!("{line}"))
+    clarity_ui::provide(release, clarity_ui::RELEASES, &clarity_build::download, &|line| eprintln!("{line}"))
 }
 
 /// Takes `swaps`: the library choices they give are kept and used from now on.
@@ -292,34 +294,31 @@ pub fn devtools_close_tab(key: String, jobs: State<DevJobs>) -> Result<DevToolsV
     Ok(view(&repo, &jobs.0))
 }
 
-/// The last lines of a build, for an agent's answer.
-fn told(job: &Job) -> String {
-    let tail: Vec<&str> = job.lines.iter().rev().take(40).rev().map(String::as_str).collect();
-    let ended = match &job.state {
-        JobState::Passed => format!("{} built.", job.title),
-        JobState::Failed(why) => format!("{} failed: {why}", job.title),
-        _ => format!("{} goes on.", job.title),
-    };
-    format!("{ended}\n\n{}", tail.join("\n"))
-}
-
 /// Presses a piece's Build, or with `debug` its Build debug: its build
-/// starts, or waits for the one before it. `ask` is the agent's ask it
-/// answers, `by` the agent.
+/// starts, or waits for the one before it. `ask` is the agent's ask: it is
+/// answered only when the build is refused; once started, the agent
+/// follows the build's record (build_state), never waiting for its end.
 #[tauri::command]
 pub fn devtools_build(key: String, debug: Option<bool>, by: Option<String>, ask: Option<String>, app: AppHandle, jobs: State<DevJobs>) -> Result<(), String> {
+    let started = build_now(&key, debug.unwrap_or(false), by, &app, &jobs.0);
+    // Refused (no such piece or debug build, it builds already): the agent hears why.
+    if let (Err(why), Some(id)) = (&started, &ask) {
+        let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: false, text: why.clone() });
+    }
+    started
+}
+
+fn build_now(key: &str, debug: bool, by: Option<String>, app: &AppHandle, jobs: &Jobs) -> Result<(), String> {
     let repo = repo()?;
-    let piece = swap::piece(&key).ok_or_else(|| format!("there is no piece {key}"))?;
-    let debug = debug.unwrap_or(false);
+    let piece = swap::piece(key).ok_or_else(|| format!("there is no piece {key}"))?;
     let (job, name, run) = if debug {
         let run = swap::build_debug(&repo, piece).ok_or_else(|| format!("{} has no debug build", piece.name))?;
-        (debug_job_key(piece.key), format!("{} (debug)", piece.name), run)
+        (swap::job_key(piece.key, true), format!("{} (debug)", piece.name), run)
     } else {
-        (job_key(piece.key), piece.name.to_string(), swap::build(&repo, piece))
+        (swap::job_key(piece.key, false), piece.name.to_string(), swap::build(&repo, piece))
     };
-    let notify = on_change(&app);
+    let notify = on_change(app);
     let after_repo = repo.clone();
-    let answers = ask.clone();
     let ended: OnChange = std::sync::Arc::new(move |job: &Job| {
         notify(job);
         if !matches!(job.state, JobState::Passed | JobState::Failed(_)) {
@@ -336,16 +335,8 @@ pub fn devtools_build(key: String, debug: Option<bool>, by: Option<String>, ask:
                 eprintln!("clarity: {why}");
             }
         }
-        if let Some(id) = &ask {
-            let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: job.state == JobState::Passed, text: told(job) });
-        }
     });
-    let started = jobs.0.start_by(&job, &name, run, by, Some(ended));
-    // Refused (it builds already): the agent hears why.
-    if let (Err(why), Some(id)) = (&started, &answers) {
-        let _ = dev_asks::answer(&dev_asks::folder(), id, &dev_asks::Answer { ok: false, text: why.clone() });
-    }
-    started
+    jobs.start_by(&job, &name, run, by, Some(ended))
 }
 
 /// Refuses an agent's ask: the person said no, or agents may not build.

@@ -170,7 +170,14 @@ public class PictureTests
     public void AStoreComesFromItsPlaceOrTheEnvironment()
     {
         using var db = Sqlite.Memory();
-        Assert.Throws<StorageException>(() => db.AddStore("photos", "env:CLARITY_NO_SUCH_STORE"));
+        // An unset variable does not stop the program: the place that uses the store says so.
+        db.AddStore("photos", "env:CLARITY_NO_SUCH_STORE");
+        var unset = Assert.Throws<NotSetException>(() => db.Files("photos"));
+        Assert.Equal("variableNotSet", unset.Said.Key);
+        Assert.Equal("the environment variable CLARITY_NO_SUCH_STORE is not set", unset.Message);
+        var none = Assert.Throws<NoFolderException>(() => db.Files(Db.FolderStore));
+        Assert.Equal("noFolderChosen", none.Said.Key);
+        Assert.Equal("No folder was chosen", none.Said.Show());
         var store = Scratch("env");
         db.AddStore("photos", store);
         Assert.True(Directory.Exists(store));

@@ -23,8 +23,58 @@ std::string location(const std::string& text) {
     if (text.rfind("env:", 0) != 0) return text;
     std::string name = text.substr(4);
     const char* value = std::getenv(name.c_str());
-    if (!value) throw StorageError("the environment variable " + name + " is not set");
+    if (!value || !*value) throw NotSetError(name);
     return value;
+}
+
+static std::string this_system() {
+#if defined(_WIN32)
+    return "windows";
+#elif defined(__APPLE__)
+    return "macos";
+#else
+    return "linux";
+#endif
+}
+
+std::string data_folder(const std::string& program, const std::function<const char*(const char*)>& env) { return data_folder_on(this_system(), program, env); }
+
+std::string data_folder_on(const std::string& os, const std::string& program, const std::function<const char*(const char*)>& env) {
+    auto get = [&](const char* name) -> std::string {
+        const char* value = env ? env(name) : std::getenv(name);
+        return value ? value : "";
+    };
+    if (std::string moved = get(data_variable); !moved.empty()) return moved;
+    std::string home = get("HOME");
+    std::string data;
+    if (os == "windows") {
+        data = get("APPDATA");
+    } else if (os == "macos") {
+        if (!home.empty()) data = home + "/Library/Application Support";
+    } else {
+        data = get("XDG_DATA_HOME");
+        if (data.empty() && !home.empty()) data = home + "/.local/share";
+    }
+    return data.empty() ? "" : data + "/" + program;
+}
+
+std::string in_folder(const std::string& folder, const std::string& name) { return folder.empty() ? name : folder + "/" + name; }
+
+std::string data_folder_store(const std::string& location, const std::function<const char*(const char*)>& env) { return data_folder_store_on(this_system(), location, env); }
+
+std::string data_folder_store_on(const std::string& os, const std::string& location, const std::function<const char*(const char*)>& env) {
+    if (location.rfind("env:", 0) == 0) {
+        std::string name = location.substr(4);
+        const char* value = env ? env(name.c_str()) : std::getenv(name.c_str());
+        if (!value || !*value) throw NotSetError(name);
+        return value;
+    }
+    if (location.rfind("data:", 0) != 0) return location;
+    std::string kept = location.substr(5);
+    auto slash = kept.find('/');
+    std::string program = slash == std::string::npos ? "" : kept.substr(0, slash);
+    std::string name = slash == std::string::npos ? kept : kept.substr(slash + 1);
+    return in_folder(data_folder_on(os, program, env), name);
 }
 
 std::string data_folder_sqlite(const std::string& location, const std::function<const char*(const char*)>& env) {

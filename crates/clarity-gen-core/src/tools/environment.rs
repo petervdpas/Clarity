@@ -51,12 +51,16 @@ fn names(program: &str) -> &'static [&'static str] {
     }
 }
 
-/// The tools the person chose, by program, and the folders chosen for
-/// Clarity's libraries and packages (Clarity settings > DevTools), by key.
+/// The tools the person chose, by program, the programs of the outside
+/// agents (Codex, Copilot) chosen, by the agent's key, and the folders chosen
+/// for Clarity's libraries and packages (Clarity settings > DevTools), by key.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Environment {
     #[serde(default)]
     tools: BTreeMap<String, PathBuf>,
+    /// Apart from `tools`: builds never search an agent's folder.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    agents: BTreeMap<String, PathBuf>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     libraries: BTreeMap<String, PathBuf>,
     /// The cDdev's swaps (a Clarity run from its repository), which give the library choices.
@@ -92,6 +96,20 @@ impl Environment {
 
     pub fn chosen(&self, program: &str) -> Option<&Path> {
         self.tools.get(program).map(PathBuf::as_path)
+    }
+
+    /// Chooses the program at `path` for the outside agent `key` (`codex`,
+    /// `copilot`), or forgets the choice: the panel then starts the one a scan finds.
+    pub fn choose_agent(&mut self, key: &str, path: Option<PathBuf>) {
+        match path {
+            Some(path) => self.agents.insert(key.to_string(), path),
+            None => self.agents.remove(key),
+        };
+    }
+
+    /// The program chosen for the outside agent `key`, if any.
+    pub fn chosen_agent(&self, key: &str) -> Option<&Path> {
+        self.agents.get(key).map(PathBuf::as_path)
     }
 
     /// Chooses `folder` for `which`, or forgets the choice: builds then take Clarity's own.

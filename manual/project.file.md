@@ -26,7 +26,7 @@ The project file holds one `project` block. You rarely type it: the Project sett
 
 On the **Project** tab, click **Settings** (or the app folder or the stack in the sidebar). The view edits every line:
 
-- Project: **Name**, **Title**, **Icon** (a picture among the resources, or Clarity's own), **Version**, the project's **Folder**, and the **App folder** (the `output` line), chosen with **Browse...** in Clarity's file browser (see [Opening a project](start.overview.md#opening-a-project)) and set back to `out` with **Default**; **Output keeps**, the folders of the output that are the project's own, and **Codecs**, a row per codec library with its name and path, with **Add codec**.
+- Project: **Name**, **Title**, **Icon** (a picture among the resources, or Clarity's own), **Version**, the project's **Folder**, and the **App folder** (the `output` line), chosen with **Browse...** in Clarity's file browser (see [Opening a project](start.overview.md#opening-a-project)) and set back to `out` with **Default**; **Output keeps**, the folders of the output that are the project's own, **Include data migration tools**, the **Backups folder** (the `backups` line), and **Codecs**, a row per codec library with its name and path, with **Add codec**.
 - Stack: **Backend**, **UI** and **Targets** (Desktop, Web, CLI), and the Build tools row with **Environment...**, which opens Clarity settings where the tools are chosen.
 - Language, formats and theme: **Language**, **Currency**, the switch **People set the shortcut keys themselves**, **Engines**, **Row height**, **Port** (for the `web` target), and the themes that are offered, with the one the application starts with.
 - Data sources: a row per source with its kind, location, auth and the **External**, **Read-only** and **Beside the project** boxes; **Import...** for an external SQLite database or a file source, **Own...** for an external SQLite database, **API...** for a web API, the format's options under a file source, and **Add data source**. See [Data sources](data.sources.md).
@@ -59,6 +59,7 @@ project Shop
 - The file starts with `project Name`; every setting is a line indented under it. A line that is not indented is refused: "a project file holds one project; indent its settings".
 - Only `stack` is required: without it, "the project needs a 'stack' line, like: stack rust desktop".
 - Each setting appears once, except `datasource`, `filestore` and `codec`. A second one is refused: "'title' is set twice".
+- A folder or file a SQLite or file data source, a file store or a codec names works on every machine: a path inside the project, `env:NAME` or, for a file store, `setting:name`. A path absolute by its form (`/` or `\` first, `~` for a home folder, or a drive letter like `C:`) is a place on one machine and is refused: "file store 'photos': the folder "/srv/photos" is a place on one machine; write a folder inside the project (like data/...) or a folder setting the person chooses (setting:name)".
 - An unknown setting is an error that lists the settings, and a wrong value an error that names the line and the words that are accepted. A typo never silently picks a default.
 - The lines indented under a `datasource` (`auth`, `paging`, `openapi`, `pick` and a file format's options) and under `signin` belong to that line.
 
@@ -144,6 +145,16 @@ The output folder holds Clarity's data migration tools beside the app: Generate 
 ```clarity
 include migrate
 ```
+
+### `backups`
+
+The folder the backups of the project's databases go in. It is a folder under the project's folder, written from there like `output`, so the project carries it wherever it goes and every system finds it. Each data source's backups go in a folder of its name inside it: `data/backups/main`. In the Project settings view it is **Backups folder**. See [Data sources](data.sources.md#backups).
+
+```clarity
+backups "data/backups"
+```
+
+Without the line the project takes no backups: taking, listing, restoring and deleting backups are refused with a message that says to set the folder, and Clarity's migration tool migrates without a backup first. A folder from the root of the disk (`"/var/backups"`, `"C:/backups"`) or one that goes above the project's folder (`"../backups"`) is refused: "the backups folder '../backups' goes above the project's folder; name a folder under the project's folder, like \"data/backups\"".
 
 ### `language`
 
@@ -237,11 +248,15 @@ datasource payments rest "https://api.example.com/v2"
 
 A file store: a name and the folder that keeps the pictures and files of the `image` and `blob` fields with `store name`, and the files code lists, reads and writes. The folder is relative to the project's folder, `"env:NAME"` (from that environment variable) or `"setting:name"` (a folder setting each person chooses). See [Pictures and files](data.pictures-files.md).
 
+A relative folder is where the program keeps its data, found while it runs, as a SQLite database the project owns is (see [Data sources](data.sources.md)): The folder keeps its whole path from the project's data folder: the folder of the project's own SQLite database (`data` for `"data/records.db"`), else the project's folder itself. So `"data/photos"` next to `"data/records.db"` is `photos` in the data folder, and `"data/old/photos"` is `old/photos`. Clarity's Run uses the project's own folders (`data/photos`), and a built program keeps them in the person's folder for application data under the program's name (`~/.local/share/records/photos` on Linux, `~/Library/Application Support/records/photos` on macOS, `%APPDATA%\records\photos` on Windows), or in the folder `CLARITY_DATA` names. Nothing of the machine the program was built on is written into it, so it runs the same on another one.
+
+With `"env:NAME"` and the variable not set, the program still starts: whatever uses the store says so in Clarity's words `variableNotSet` ("The environment variable {variable} must be set"), which every project with windows has in its language files. A database at `"env:NAME"` that is not set stops the program at its start with the same words.
+
 ```clarity
 filestore photos "data/photos"
 ```
 
-Two stores with one name, a name that is no Clarity name, and a store without a folder are refused.
+Two stores with one name, a name that is no Clarity name, a store without a folder, a folder on one machine only (`/srv/photos`, `~/photos`, `D:/photos`) and a relative folder outside the data folder (`"old/photos"` while the database is in `data`) are refused. A folder the person using the app chooses, such as where exports go, is a folder setting: `filestore exports "setting:exportsFolder"` with `exportsFolder: folder, default "exports"` in the settings, shown in the app's settings window.
 
 ### `codec`
 

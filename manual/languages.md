@@ -146,17 +146,17 @@ Clarity's parts and windows say some things themselves, by keys of their own. A 
 
 ## Making a project's texts keys
 
-A project written before texts had keys gets them with **Make texts keys**, under Problems, or with `clarity spec keys <project folder>`. Each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value; a translation file that translated texts by what they said gives the same keys their translations.
+A project written before texts had keys gets them with **Make texts keys**, under Problems, or with `clarity spec keys <project folder>`; both do the same. Each text people read, in the modules and in every window's, view's and app's own file, becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value. A translation file that translated texts by what they said gives the same keys their translations; another language gets the new key empty. The keys the project has stay as they are, and only the files that change are written.
 
-To see what each language still leaves empty without opening Clarity, run `clarity spec texts <project folder>`: it lists, per language, each key without a text as a line to fill in.
+A key is missing in a language when its file lacks the key or leaves its text empty. A text the same as the default's is a translation: a language may say it the same way (such as "OK"). The languages in the project tree, `clarity spec texts` and the agents' missing_translations count by this one rule. To see what each language still lacks without opening Clarity, run `clarity spec texts <project folder>`: it lists, per language, the default first, each missing key as a line to fill in.
 
 ## i18n in the project tree
 
 The project tree lists the languages under i18n by name: first the default, then each other language. Click one to open it.
 
 - The default language lists every key with where it is used and its text, which you can change; each needs one. A mark per other language says whether it translates the key, and a button per language opens it.
-- Another language lists every key with where it is used, the default's text, and its own to type; it says how many keys it translates. A key left empty shows the default's text. A key still the same as the default's text counts as not translated, as the agents' missing_translations lists it; keep it where the language says it the same way (such as "OK").
-- **Find a key or a text** narrows the list to what holds what you type; **Missing only** to the keys still to translate, empty or the same as the default.
+- Another language lists every key with where it is used, the default's text, and its own to type; it says how many keys it translates. A key left empty shows the default's text and counts as missing.
+- **Find a key or a text** narrows the list to what holds what you type; **Missing only** to the keys still to translate: absent or empty.
 - **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, with every key, and opens it.
 - **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, or the system's.
 

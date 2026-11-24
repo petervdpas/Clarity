@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use clarity_agent::Tools;
-use clarity_mcp::{ClarityServer, LEFT_OUT, NOT_ALLOWED, NO_PROJECT, TURN_TOOLS, WHEN_OFF};
+use clarity_mcp::{ClarityServer, LEFT_OUT, NO_PROJECT, TURN_TOOLS};
 use clarity_tools::turn::{self, Shown};
 use clarity_project::ide::{self, Ide};
 use rmcp::ServiceExt;
@@ -108,6 +108,7 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     let mut offered: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     // Built from the repository (the tests are), the server also offers the cDdev's DevTools Build.
     offered.push(clarity_mcp::BUILD_PIECE.to_string());
+    offered.push(clarity_mcp::BUILD_STATE.to_string());
     offered.push(clarity_mcp::SWAP_PIECE.to_string());
     offered.push(clarity_mcp::RELEASE_STATE.to_string());
     offered.push(clarity_mcp::BUMP_VERSIONS.to_string());
@@ -139,6 +140,7 @@ fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
     let plain = ClarityServer::with_ide_file(dir.join("ide.json"));
     let mut plain_tools: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
     plain_tools.push(clarity_mcp::BUILD_PIECE.to_string());
+    plain_tools.push(clarity_mcp::BUILD_STATE.to_string());
     plain_tools.push(clarity_mcp::SWAP_PIECE.to_string());
     plain_tools.push(clarity_mcp::RELEASE_STATE.to_string());
     plain_tools.push(clarity_mcp::BUMP_VERSIONS.to_string());
@@ -210,22 +212,22 @@ fn a_project_made_without_a_turn_writes_nothing() {
     assert!(!answer.text.contains("when this turn ends"));
 }
 
+/// The older setting "Let outside agents work on my project" is gone
+/// (2026-11-23: the status bar's switches are the one place): a settings file
+/// that still holds its key, off, holds no agent back and reads without error.
 #[test]
-fn turned_off_only_the_manual_and_references_answer() {
+fn the_older_outside_agents_key_is_ignored() {
     let dir = scratch("off");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, false).unwrap();
-    let server = ClarityServer::with_ide_file(file.clone()).for_turn(dir.join("shown.jsonl"));
-    for tool in ["project_overview", "read_file", "write_file", "check", "generate", "new_project", "show_window"] {
-        let answer = server.call(tool, &json!({ "path": "todo.clarity", "name": "Main" }));
-        assert!(answer.is_error, "{tool}");
-        assert_eq!(answer.text, NOT_ALLOWED, "{tool}");
+    let mut settings: serde_json::Map<String, Value> = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    settings.insert("outsideAgents".to_string(), Value::Bool(false));
+    std::fs::write(&file, serde_json::to_string(&settings).unwrap()).unwrap();
+    let plain = ClarityServer::with_ide_file(file.clone());
+    let turn = ClarityServer::with_ide_file(file).for_turn(dir.join("shown.jsonl"));
+    for server in [&plain, &turn] {
+        let answer = server.call_from("codex", "project_overview", &json!({}));
+        assert!(!answer.is_error, "{}", answer.text);
     }
-    for tool in WHEN_OFF {
-        assert_ne!(server.call(tool, &json!({ "topic": "", "section": "" })).text, NOT_ALLOWED, "{tool}");
-    }
-    ide::set_outside_agents_in(&file, true).unwrap();
-    assert!(!server.call("project_overview", &json!({})).is_error);
 }
 
 #[test]
@@ -267,49 +269,111 @@ fn the_server_tells_clarity_s_icon() {
     assert_eq!(embedded("image/svg+xml"), (std::fs::read(root.join("icon.svg")).unwrap(), Some(vec!["any".to_string()])));
 }
 
+/// A build's state as the IDE writes it (clarity_devtools::jobs), for the fake IDE of the tests.
+fn job_record(key: &str, state: clarity_devtools::jobs::RecordState, lines: &[&str]) -> clarity_devtools::jobs::JobRecord {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    clarity_devtools::jobs::JobRecord {
+        key: key.into(),
+        title: "Clarity.UI library".into(),
+        command: "cargo build --release -p clarity-ui-ffi".into(),
+        state,
+        why: None,
+        by: Some("Claude Code".into()),
+        queued: Some(now),
+        started: None,
+        ended: None,
+        lines: lines.iter().map(|l| l.to_string()).collect(),
+        written: now,
+    }
+}
+
 /// build_piece presses a DevTools tab's Build in a Clarity run from its
-/// repository: the IDE takes the ask, builds in the tab and answers.
+/// repository and returns once the IDE took the ask and the build waits or
+/// runs in its tab, never waiting for its end; build_state follows it.
 #[test]
-fn build_piece_asks_the_ide_and_gives_its_answer() {
+fn build_piece_returns_once_the_build_is_queued_and_build_state_follows_it() {
+    use clarity_devtools::jobs::{self, RecordState};
     use clarity_project::dev_asks;
     let dir = scratch("build-piece");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
     assert!(server.tools().iter().any(|t| t.name == "build_piece"), "offered by a server run from the repository");
+    assert!(server.tools().iter().any(|t| t.name == clarity_mcp::BUILD_STATE), "offered by a server run from the repository");
     let unknown = server.call_from("Claude Code", "build_piece", &json!({ "piece": "nothing" }));
     assert!(unknown.is_error && unknown.text.contains("clarityUi"), "{}", unknown.text);
+    let none = server.call_from("Claude Code", "build_state", &json!({ "piece": "clarityUi" }));
+    assert!(!none.is_error && none.text.contains("build_piece"), "no build known yet: {}", none.text);
     // Nobody takes it: no Clarity from the repository runs.
     let alone = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
     assert!(alone.is_error && alone.text.contains("./dev.sh"), "{}", alone.text);
     assert!(dev_asks::pending(&server.asks()).is_empty(), "an ask nobody took is taken back");
-    // The IDE takes it and answers.
+    // The IDE takes it and queues the build, which goes on long after build_piece returned.
     let asks = server.asks();
+    let (queued, go_on) = std::sync::mpsc::channel::<()>();
     let ide = std::thread::spawn(move || {
         for _ in 0..100 {
             if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
                 assert_eq!((ask.key.as_str(), ask.by.as_str()), ("clarityUi", "Claude Code"));
                 assert!(dev_asks::take(&asks, &ask.id));
-                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: true, text: "Finished release".into() }).unwrap();
+                jobs::write_record(&dev_asks::jobs(&asks), &job_record("piece:clarityUi", RecordState::Waiting, &[])).unwrap();
+                // The build ends only after build_piece returned.
+                go_on.recv().unwrap();
+                let mut done = job_record("piece:clarityUi", RecordState::Succeeded, &["Compiling clarity-ui-ffi", "Finished release"]);
+                done.started = done.queued;
+                done.ended = done.queued.map(|q| q + 61_000);
+                jobs::write_record(&dev_asks::jobs(&asks), &done).unwrap();
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         panic!("no ask came");
     });
-    let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
+    let started = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
+    assert!(!started.is_error && started.text.contains("waiting") && started.text.contains("build_state"), "{}", started.text);
+    let waiting = server.call_from("Claude Code", "build_state", &json!({ "piece": "clarityUi" }));
+    assert!(!waiting.is_error && waiting.text.contains("Clarity.UI library (piece:clarityUi): waiting"), "{}", waiting.text);
+    queued.send(()).unwrap();
     ide.join().unwrap();
-    assert!(!built.is_error && built.text.contains("Finished release"), "{}", built.text);
+    let done = server.call_from("Claude Code", "build_state", &json!({ "piece": "clarityUi" }));
+    assert!(done.text.contains("succeeded") && done.text.contains("after 1 min 1 s") && done.text.contains("Finished release"), "{}", done.text);
+    let all = server.call_from("Claude Code", "build_state", &json!({}));
+    assert!(all.text.contains("piece:clarityUi") && all.text.contains("succeeded"), "{}", all.text);
+    assert!(std::fs::read_dir(server.asks()).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().contains(".taken.")), "the ask is forgotten once its build is queued");
+}
+
+/// A build the IDE refuses (the person said no, or it builds already) is
+/// build_piece's error, with why.
+#[test]
+fn build_piece_gives_the_ides_refusal() {
+    use clarity_project::dev_asks;
+    let dir = scratch("build-refused");
+    let (file, _) = opened(&dir);
+    let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
+    let asks = server.asks();
+    let ide = std::thread::spawn(move || {
+        for _ in 0..100 {
+            if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
+                assert!(dev_asks::take(&asks, &ask.id));
+                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: false, text: "Clarity.UI library is building already".into() }).unwrap();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no ask came");
+    });
+    let refused = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi" }));
+    ide.join().unwrap();
+    assert!(refused.is_error && refused.text.contains("building already"), "{}", refused.text);
 }
 
 /// build_piece with `debug` presses a native library's Build debug (the
 /// IDE takes an ask to build debug); a piece without one is refused at once.
 #[test]
 fn build_piece_with_debug_asks_for_the_debug_build_of_a_native_library() {
+    use clarity_devtools::jobs::{self, RecordState};
     use clarity_project::dev_asks;
     let dir = scratch("build-debug");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
     let none = server.call_from("Claude Code", "build_piece", &json!({ "piece": "goModule", "debug": true }));
     assert!(none.is_error && none.text.contains("no debug build"), "{}", none.text);
@@ -319,16 +383,20 @@ fn build_piece_with_debug_asks_for_the_debug_build_of_a_native_library() {
             if let Some(ask) = dev_asks::pending(&asks).into_iter().next() {
                 assert_eq!((ask.action, ask.key.as_str()), (dev_asks::Action::BuildDebug, "clarityUi"));
                 assert!(dev_asks::take(&asks, &ask.id));
-                dev_asks::answer(&asks, &ask.id, &dev_asks::Answer { ok: true, text: "Finished `dev` profile".into() }).unwrap();
+                let mut running = job_record("piece:clarityUi:debug", RecordState::Running, &["Compiling clarity-ui"]);
+                running.started = running.queued;
+                jobs::write_record(&dev_asks::jobs(&asks), &running).unwrap();
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         panic!("no ask came");
     });
-    let built = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi", "debug": true }));
+    let started = server.call_from("Claude Code", "build_piece", &json!({ "piece": "clarityUi", "debug": true }));
     ide.join().unwrap();
-    assert!(!built.is_error && built.text.contains("Finished `dev` profile"), "{}", built.text);
+    assert!(!started.is_error && started.text.contains("running") && started.text.contains("build_state"), "{}", started.text);
+    let state = server.call_from("Claude Code", "build_state", &json!({ "piece": "clarityUi", "debug": true }));
+    assert!(state.text.contains("piece:clarityUi:debug") && state.text.contains("Compiling clarity-ui"), "{}", state.text);
 }
 
 /// swap_piece picks a DevTools tab's own build or the release, as its Swap
@@ -338,7 +406,6 @@ fn swap_piece_asks_the_ide_to_use_the_own_build_or_the_release() {
     use clarity_project::dev_asks;
     let dir = scratch("swap-piece");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file.clone()).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
     assert!(server.tools().iter().any(|t| t.name == clarity_mcp::SWAP_PIECE), "offered by a server run from the repository");
     let unknown = server.call_from("Claude Code", clarity_mcp::SWAP_PIECE, &json!({ "piece": "nothing", "use": "own" }));
@@ -372,7 +439,6 @@ fn swap_piece_asks_the_ide_to_use_the_own_build_or_the_release() {
 fn release_state_says_how_the_releases_and_their_checks_stand() {
     let dir = scratch("release-state");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file);
     assert!(server.tools().iter().any(|t| t.name == clarity_mcp::RELEASE_STATE), "offered by a server run from the repository");
     let said = server.call_from("Claude Code", clarity_mcp::RELEASE_STATE, &json!({}));
@@ -398,7 +464,6 @@ fn release_state_says_how_the_releases_and_their_checks_stand() {
 fn disk_state_says_the_room_left_and_each_build_folder() {
     let dir = scratch("disk-state");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file);
     let said = server.call_from("Claude Code", clarity_mcp::DISK_STATE, &json!({}));
     assert!(!said.is_error, "{}", said.text);
@@ -415,7 +480,6 @@ fn remove_folder_asks_the_ide_and_gives_its_answer() {
     use clarity_project::dev_asks::{self, Action};
     let dir = scratch("remove-folder");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file).with_waits(std::time::Duration::from_millis(1500), std::time::Duration::from_secs(20));
     let unknown = server.call_from("Claude Code", clarity_mcp::REMOVE_FOLDER, &json!({ "folder": "src" }));
     assert!(unknown.is_error && unknown.text.contains("debug"), "only the Disk tab's folders: {}", unknown.text);
@@ -445,7 +509,7 @@ fn remove_folder_asks_the_ide_and_gives_its_answer() {
 fn the_devtools_tools_are_never_compiled_into_a_release() {
     let lib = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs")).unwrap();
     assert!(lib.contains("#[cfg(debug_assertions)]\nmod devtools;"), "the module is behind #[cfg(debug_assertions)]");
-    for name in ["build_piece", "release_state", "disk_state", "remove_folder", "write_release_plan", "clarity_devtools", "dev_asks::ask"] {
+    for name in ["build_piece", "build_state", "release_state", "disk_state", "remove_folder", "write_release_plan", "clarity_devtools", "dev_asks::ask"] {
         let outside = lib.lines().filter(|l| !l.trim_start().starts_with("//")).any(|l| l.contains(name));
         assert!(!outside, "{name} is used outside src/devtools.rs");
     }
@@ -464,6 +528,7 @@ fn the_developers_build_names_itself_clarity_cdev() {
     assert_eq!(server.get_info().server_info.name, "clarity-cdev");
     let said = server.instructions();
     assert!(said.contains("clarity-cdev") && said.contains("developer's build"), "{said}");
+    assert!(said.contains("build_piece") && said.contains("build_state") && said.contains("never with cargo"), "every piece through the one runner, followed with build_state: {said}");
     let turn = server.for_turn(dir.join("shown.jsonl"));
     assert_eq!(turn.get_info().server_info.name, "clarity", "a chat turn is the app developer's");
     assert!(!turn.instructions().contains("clarity-cdev"));
@@ -477,7 +542,6 @@ fn the_developers_build_names_itself_clarity_cdev() {
 fn write_release_plan_refuses_while_a_check_holds_it_back() {
     let dir = scratch("release-plan");
     let (file, _) = opened(&dir);
-    ide::set_outside_agents_in(&file, true).unwrap();
     let server = ClarityServer::with_ide_file(file);
     let plan = json!({ "stamp": "2026-11-17-2359", "plan": { "title": "t", "commit_message": "m", "steps": [{ "title": "Checks on main", "workflow": "checks.yml" }] } });
     let refused = server.call_from("Claude Code", clarity_mcp::WRITE_RELEASE_PLAN, &plan);
@@ -491,4 +555,73 @@ fn write_release_plan_refuses_while_a_check_holds_it_back() {
     }
     let neither = server.call_from("Claude Code", clarity_mcp::WRITE_RELEASE_PLAN, &json!({}));
     assert!(neither.is_error && neither.text.contains("plan"), "{}", neither.text);
+}
+
+/// The person turns a server off and on in Clarity's status bar (`mcp.json`
+/// beside `ide.json`): the same running server reads its switch on every
+/// call. Off, every tool, the manual too, is refused with one message and
+/// changes nothing; the tools are still listed. On again, the next call works.
+#[tokio::test]
+async fn turned_off_in_the_status_bar_every_call_is_refused_until_turned_on() {
+    use clarity_project::mcp_access;
+    let dir = scratch("switch");
+    let (file, project) = opened(&dir);
+    let switches = dir.join("mcp.json");
+    let module = clarity_project::module_dir(&project).join("todo.clarity");
+    let before = std::fs::read_to_string(&module).unwrap();
+    let (server_end, client_end) = tokio::io::duplex(1 << 16);
+    let served = ClarityServer::with_ide_file(file);
+    let name = served.name();
+    assert_eq!(name, "clarity-cdev", "the tests are a build from the repository");
+    let server = tokio::spawn(async move {
+        let running = served.serve(server_end).await.unwrap();
+        running.waiting().await.unwrap();
+    });
+    let client = ().serve(client_end).await.unwrap();
+    let call = |tool: &str, args: Value| {
+        let mut request = CallToolRequestParams::new(tool.to_string());
+        request.arguments = args.as_object().cloned();
+        request
+    };
+
+    // The other server's switch is not this one's.
+    mcp_access::set_in(&switches, "clarity", false).unwrap();
+    let result = client.call_tool(call("project_overview", json!({}))).await.unwrap();
+    assert_ne!(result.is_error, Some(true));
+
+    mcp_access::set_in(&switches, name, false).unwrap();
+    let listed = client.list_all_tools().await.unwrap();
+    assert!(listed.iter().any(|t| t.name == "project_overview"), "the tools are still listed");
+    let write = json!({ "path": "todo.clarity", "text": "project Changed\n" });
+    for (tool, args) in [("write_file", write.clone()), ("project_overview", json!({})), ("manual", json!({ "topic": "" })), (clarity_mcp::RELEASE_STATE, json!({}))] {
+        let result = client.call_tool(call(tool, args)).await.unwrap();
+        assert_eq!(result.is_error, Some(true), "{tool}");
+        assert_eq!(result.content[0].as_text().unwrap().text, clarity_mcp::turned_off(name), "{tool}");
+    }
+    assert_eq!(std::fs::read_to_string(&module).unwrap(), before, "nothing written");
+    let said = clarity_mcp::turned_off(name);
+    assert!(said.contains("clarity-cdev") && said.contains("turned off") && said.contains("status bar"), "{said}");
+
+    mcp_access::set_in(&switches, name, true).unwrap();
+    let result = client.call_tool(call("project_overview", json!({}))).await.unwrap();
+    assert_ne!(result.is_error, Some(true), "on again, the same server answers");
+    let text = result.content[0].as_text().unwrap().text.clone();
+    assert!(text.contains(&project.display().to_string()), "{text}");
+
+    client.cancel().await.unwrap();
+    server.await.unwrap();
+}
+
+/// A turn of the IDE's chat panel is the person's own agent inside Clarity,
+/// not an outside one: the status bar's switches do not hold it.
+#[test]
+fn a_turn_of_the_chat_panel_is_not_held_by_the_switches() {
+    use clarity_project::mcp_access;
+    let dir = scratch("switch-turn");
+    let (file, _) = opened(&dir);
+    for server in mcp_access::SERVERS {
+        mcp_access::set_in(&dir.join("mcp.json"), server, false).unwrap();
+    }
+    let turn = ClarityServer::with_ide_file(file).for_turn(dir.join("shown.jsonl"));
+    assert!(!turn.call_from("codex", "project_overview", &json!({})).is_error);
 }

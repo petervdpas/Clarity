@@ -1,15 +1,17 @@
 //! The Database section of the Project tab: the changes in the data
 //! dictionary that no migration step covers yet, the renames Clarity
-//! proposes, and writing them as the next step.
+//! proposes for the person to pick, and writing them as the next step
+//! through clarity_tools::steps, as the agents and `clarity migrate` do.
 
 use crate::fail_safe::Held;
+use clarity_spec::Preview;
 use clarity_spec::migrate::{self, Rename};
-use clarity_spec::{Preview, Severity};
+use clarity_tools::steps;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use ts_rs::TS;
 
-use super::{FileChange, HistoryState, WatchState, load, open_project_of, record, watch};
+use super::{HistoryState, WatchState, load, open_project_of, record, watch};
 
 /// One change that is not in a step yet.
 #[derive(Serialize, TS)]
@@ -30,7 +32,7 @@ pub struct PendingMigration {
     pub source: String,
     /// The changes, with the renames that were given taken as renames.
     pub changes: Vec<PendingChange>,
-    /// Renames Clarity proposes: a name that went and one that came.
+    /// Renames Clarity proposes for the person to pick: a name that went and one that came.
     pub proposed: Vec<Rename>,
     /// How many steps the project has.
     pub steps: usize,
@@ -38,99 +40,53 @@ pub struct PendingMigration {
     pub blocked: Option<String>,
 }
 
-/// The values of enums renamed in the IDE since the last step: the records
-/// that keep them follow in the next step, which nothing could propose.
-#[derive(Default)]
-pub struct ValueRenames(pub std::sync::Mutex<Vec<Rename>>);
-
-impl ValueRenames {
-    /// A value renamed: renamed again, one rename from its first name to its last.
-    pub fn add(&self, next: Rename) {
-        let Ok(mut kept) = self.0.lock() else { return };
-        match kept.iter().position(|r| r.entity == next.entity && r.to == next.from) {
-            Some(i) if kept[i].from == next.to => {
-                kept.remove(i);
-            }
-            Some(i) => kept[i].to = next.to,
-            None => kept.push(next),
-        }
-    }
-
-    fn all(&self) -> Vec<Rename> {
-        self.0.lock().map(|k| k.clone()).unwrap_or_default()
-    }
-}
-
-fn blocked(project: &clarity_spec::Project) -> Option<String> {
-    project
-        .diagnostics
-        .iter()
-        .find(|d| d.severity == Severity::Error)
-        .map(|d| format!("fix the errors first: {}", d.message))
-}
-
-/// The pending changes of data source `source`, with `renames` taken as
-/// renames; the proposed renames when `renames` is not given.
+/// The pending changes of data source `source`, with `renames` (the ones
+/// the person picked) taken as renames; the renames Clarity proposes are
+/// listed for the person to pick, never taken unasked.
 #[tauri::command]
-pub fn pending_migration(
-    source: String,
-    renames: Option<Vec<Rename>>,
-    state: State<WatchState>,
-    values: State<ValueRenames>,
-) -> Result<PendingMigration, String> {
+pub fn pending_migration(source: String, renames: Option<Vec<Rename>>, state: State<WatchState>) -> Result<PendingMigration, String> {
     let (_, dir) = open_project_of(&state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let proposed = migrate::proposed_renames(&project, &source);
-    let mut renames = renames.unwrap_or_else(|| proposed.clone());
-    renames.extend(values.all());
-    let changes = migrate::pending(&project, &source, &renames)
-        .iter()
-        .map(|op| PendingChange {
-            text: migrate::op_text(op),
-            loses_data: op.loses_data(),
-        })
-        .collect();
+    let renames = renames.unwrap_or_default();
+    let pending = steps::pending(&project, Some(&source), &renames)?.pop().ok_or_else(|| format!("data source {source} has no migration steps"))?;
     Ok(PendingMigration {
-        changes,
-        proposed,
-        steps: project.migrations.as_ref().and_then(|m| m.get(&source)).map_or(0, Vec::len),
+        changes: pending
+            .ops
+            .iter()
+            .map(|op| PendingChange {
+                text: migrate::op_text(op),
+                loses_data: op.loses_data(),
+            })
+            .collect(),
+        proposed: pending.proposed,
+        steps: pending.steps,
         source,
-        blocked: blocked(&project),
+        blocked: steps::blocked(&project),
     })
 }
 
-/// Writes the pending changes of `source` as its next step. Undo removes
-/// it again.
+/// Writes the pending changes of `source` as its next step, the one way
+/// (clarity_tools::steps::write_steps): `renames` are the ones the person
+/// picked, and changes that can lose data are written once the person
+/// checked them (`allow_data_loss`). Undo removes the step again.
 #[tauri::command]
 pub fn create_migration(
     source: String,
     title: String,
     renames: Vec<Rename>,
+    allow_data_loss: Option<bool>,
     app: AppHandle,
     state: State<WatchState>,
     history: State<HistoryState>,
-    values: State<ValueRenames>,
 ) -> Result<Preview, String> {
-    let mut renames = renames;
-    renames.extend(values.all());
     let (file, dir) = open_project_of(&state)?;
-    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    if let Some(reason) = blocked(&project) {
-        return Err(reason);
-    }
-    let title = title.trim();
-    if title.is_empty() {
-        return Err("give the step a title".into());
-    }
-    let ops = migrate::pending(&project, &source, &renames);
     let had_folder = dir.join(clarity_spec::MIGRATIONS_DIR).join(&source).is_dir();
-    let path = clarity_spec::write_step(&dir, &source, title, &ops).map_err(|err| format!("cannot write the step: {err}"))?;
-    let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-    record(&history, vec![FileChange { file: path, before: None, after: Some(text) }])?;
-    // The step holds them now.
-    if let Ok(mut kept) = values.0.lock() {
-        kept.clear();
+    let request = steps::StepRequest { source: Some(&source), title: Some(&title), renames: &renames, allow_data_loss: allow_data_loss.unwrap_or(false) };
+    let migrated = steps::write_steps(&dir, &request)?;
+    if migrated.written.is_empty() {
+        return Err(migrated.said);
     }
+    record(&history, migrated.written)?;
     // The folder is new: watch it from now on, like the modules.
     if !had_folder {
         let watcher = watch(&file, &dir, app)?;

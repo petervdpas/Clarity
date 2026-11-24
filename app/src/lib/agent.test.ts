@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
+import { addUsage, agentConnections, agentPicks, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
 
 test("text pieces join the answer, and tools show with their results", () => {
@@ -80,6 +80,28 @@ test("connections of kind codex or copilot are in the picker", () => {
     { name: "secret", fields: [["kind", { mode: "vault", category: "AI", key: "kind" }]] },
   ] as ConnectionRow[];
   assert.deepEqual(agentConnections(rows), ["anthropic", "codex", "work", "secret"]);
+});
+
+test("the agent programs found on the computer join the picker, with no vault connection", () => {
+  const rows = [
+    { name: "anthropic", fields: [["apikey", { mode: "vault", category: "AI", key: "anthropic" }]] },
+    { name: "work", fields: [["kind", { mode: "plain", value: "copilot" }]] },
+  ] as ConnectionRow[];
+  const installed = [
+    { key: "codex", name: "Codex", program: "/usr/local/bin/codex-acp" },
+    { key: "copilot", name: "GitHub Copilot", program: "/home/p/.local/bin/copilot" },
+  ];
+  assert.deepEqual(agentPicks(rows, installed), [
+    { id: "anthropic", label: "anthropic", title: "The connection anthropic in the vault" },
+    { id: "work", label: "work", title: "The connection work in the vault" },
+    { id: "codex", label: "Codex", title: "Codex on this computer: /usr/local/bin/codex-acp" },
+    { id: "copilot", label: "GitHub Copilot", title: "GitHub Copilot on this computer: /home/p/.local/bin/copilot" },
+  ]);
+  // Not installed, not listed.
+  assert.deepEqual(agentPicks([], []), []);
+  // A vault connection of the same name is the one the panel talks through.
+  const named = [{ name: "Codex", fields: [["kind", { mode: "plain", value: "codex" }]] }] as ConnectionRow[];
+  assert.deepEqual(agentPicks(named, installed.slice(0, 1)).map((p) => p.id), ["Codex"]);
 });
 
 test("reading the design document shows which part", () => {

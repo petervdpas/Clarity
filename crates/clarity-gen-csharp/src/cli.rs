@@ -373,7 +373,8 @@ public static class Program
         }}
         catch (Exception e) when (e is ClarityException or IOException)
         {{
-            Console.Error.WriteLine(e.Message);
+            // In Clarity's own words where it has them (an environment variable not set, conformance/data-folder.json).
+            Console.Error.WriteLine(e is ClarityException said ? CliLanguage.Show(said.Said) : e.Message);
             return 1;
         }}
         using var opened = db;

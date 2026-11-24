@@ -8,7 +8,7 @@ another.
 
 The Main window holds one view, MainView:
 
-- A folder picker at the top. The chosen folder is kept in the person's settings, and changing it stops the video and lists the new folder.
+- A folder picker at the top. The chosen folder is kept in the person's settings (File > Settings shows it too), and changing it stops the video and lists the new folder.
 - The video, with a table of the folder's mp4 files beside it (also those in folders below it). Opening a row plays it.
 - A progress slider under the video that follows it twice a second; moving it moves the video.
 - The title of what plays, a volume slider (80 at the start), and **Previous**, **Play**, **Pause**, **Stop** and **Next**.

@@ -1436,7 +1436,7 @@ func (windows) Picture(db *clarity.Db, entity string, id int64, field string) ([
 func main() {{
 {use_secrets}{check_engines}\tdb, err := openDatabases()
 {unconnected_open}\tif err != nil {{
-\t\tfmt.Fprintln(os.Stderr, err)
+\t\tfmt.Fprintln(os.Stderr, clarity.Shown(err))
 \t\tos.Exit(1)
 \t}}
 \tdefer db.Close()

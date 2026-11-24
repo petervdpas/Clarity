@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 /// A database to migrate: its data source, the SQL it speaks (`sqlite`,
 /// `postgres`, `mysql`, `mssql`), where it is as the app finds it (a file,
 /// a connection, `env:NAME` or `setting:<program>/<name>`), and every step
-/// it should have, each a list of statements in its SQL. The generator
+/// it should have, each a list of statements in its SQL, and the folder an
+/// SQLite database is backed up into before steps change it. The generator
 /// writes these (`clarity_gen::migrated_databases`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Database {
@@ -20,6 +21,12 @@ pub struct Database {
     pub dialect: String,
     pub location: String,
     pub steps: Vec<Vec<String>>,
+    /// The folder its backups go in (docs/ledger/backups.md): the project's
+    /// `backups` folder with the data source's name; a relative one is in the
+    /// folder of the database's file. None when the project takes no backups:
+    /// it is migrated without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backups: Option<String>,
 }
 
 /// The file beside the tool, written with an app, that it reads when it is given none.
@@ -79,13 +86,15 @@ pub fn state(database: &Database) -> Result<(usize, usize), String> {
 
 /// Applies the steps `database` has not had yet, in order, each all or
 /// nothing where the database can undo it; a database that has a schema is
-/// backed up first. A database ahead of the steps (a newer app's) is refused.
+/// backed up first into its backups folder, when it has one. A database
+/// ahead of the steps (a newer app's) is refused.
 pub fn migrate(database: &Database) -> Result<Outcome, String> {
-    migrate_open(&connect(database)?, &database.source, &database.steps)
+    migrate_open(&connect(database)?, &database.source, &database.steps, database.backups.as_deref().map(std::path::Path::new))
 }
 
-/// `migrate` on a database already open as `source` of `db`.
-pub fn migrate_open(db: &Db, source: &str, steps: &[Vec<String>]) -> Result<Outcome, String> {
+/// `migrate` on a database already open as `source` of `db`, backing it up
+/// into `backups` (relative: in the folder of its file) first; none takes no backup.
+pub fn migrate_open(db: &Db, source: &str, steps: &[Vec<String>], backups: Option<&std::path::Path>) -> Result<Outcome, String> {
     let dialect = db.dialect(source).map_err(|e| e.to_string())?;
     let had = steps_had(db, source, dialect)?;
     if had > steps.len() {
@@ -97,9 +106,12 @@ pub fn migrate_open(db: &Db, source: &str, steps: &[Vec<String>]) -> Result<Outc
     if had == steps.len() {
         return Ok(Outcome::UpToDate);
     }
-    // A database that already has a schema is backed up before it changes (docs/ledger/backups.md).
-    if had > 0 && dialect == Dialect::Sqlite {
-        backup_first(db, source, had + 1)?;
+    // A database that already has a schema is backed up before it changes, when the project takes backups (docs/ledger/backups.md).
+    if let Some(folder) = backups
+        && had > 0
+        && dialect == Dialect::Sqlite
+    {
+        backup_first(db, source, had + 1, folder)?;
     }
     for (i, statements) in steps.iter().enumerate().skip(had) {
         apply(db, source, dialect, i + 1, statements)?;
@@ -166,17 +178,18 @@ fn apply(db: &Db, source: &str, dialect: Dialect, version: usize, statements: &[
     }
 }
 
-/// Backs up the SQLite database before step `step` is applied to it, beside
-/// it in `backups/` (conformance/backups.json), and prunes the older automatic
-/// backups; nothing for one in memory. A backup that fails stops the migration.
-fn backup_first(db: &Db, source: &str, step: usize) -> Result<(), String> {
+/// Backs up the SQLite database before step `step` is applied to it, into
+/// `folder` (relative: in the folder of its file; conformance/backups.json),
+/// and prunes the older automatic backups there; nothing for one in memory.
+/// A backup that fails stops the migration.
+fn backup_first(db: &Db, source: &str, step: usize, folder: &std::path::Path) -> Result<(), String> {
     let refused = |what: String| format!("the database was not migrated, since it could not be backed up first: {what}");
     let rows = db.rows(source, "SELECT file FROM pragma_database_list WHERE name = 'main'", &[]).map_err(|e| refused(e.to_string()))?;
     let file = match rows.first().and_then(|r| r.first()) {
         Some(SqlValue::Text(file)) if !file.is_empty() => std::path::PathBuf::from(file),
         _ => return Ok(()),
     };
-    let dir = file.parent().unwrap_or(std::path::Path::new(".")).join("backups");
+    let dir = file.parent().unwrap_or(std::path::Path::new(".")).join(folder);
     std::fs::create_dir_all(&dir).map_err(|e| refused(format!("{}: {e}", dir.display())))?;
     let name = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "database".into());
     let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
@@ -189,7 +202,7 @@ fn backup_first(db: &Db, source: &str, step: usize) -> Result<(), String> {
     }
     let quoted = path.to_string_lossy().replace('\'', "''");
     db.batch(source, &format!("VACUUM INTO '{quoted}'")).map_err(|e| refused(e.to_string()))?;
-    backup::prune(&file);
+    backup::prune(&dir, &name);
     Ok(())
 }
 

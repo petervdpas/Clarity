@@ -58,6 +58,41 @@ impl<'a> Checker<'a> {
                 self.error(file, "'Settings' is the name of the project's settings; give this entity another name", entity.name.span);
             }
         }
+        // Every setting is one the person can reach (docs/ledger/settings-secrets.md): a part
+        // binds it, a picker opens for language and theme, or a handler sets it. Commands alone set theirs in code.
+        let windows = files.iter().any(|f| !f.pages.is_empty());
+        let bound = |name: &str| {
+            files.iter().flat_map(|f| &f.pages).any(|p| crate::model::shows_setting(&p.widgets, name))
+                || files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame))).any(|frame| {
+                    frame.sidebars.iter().any(|s| crate::model::shows_setting(&s.widgets, name)) || frame.footer.as_ref().is_some_and(|ft| crate::model::shows_setting(&ft.widgets, name))
+                })
+        };
+        // A handler of a window or the app that sets it, as a menu item per language does.
+        let mut set: Vec<String> = Vec::new();
+        for handler in files.iter().flat_map(|f| &f.code).flat_map(|c| &c.handlers) {
+            crate::code::check::each_stmt(&handler.body, &mut |stmt| {
+                if let crate::code::StmtKind::Assign { target, .. } = &stmt.kind
+                    && let crate::code::ExprKind::Member { object, member } = &target.kind
+                    && matches!(&object.kind, crate::code::ExprKind::Name { name } if name == crate::parser::SETTINGS_DATA)
+                {
+                    set.push(member.name.clone());
+                }
+            });
+        }
+        let picked = |target: &str| crate::frame::any_click_in(files, &|w| w.on_click.as_deref() == Some(target), &|c| c.on_click.as_deref() == Some(target));
+        for (file, settings) in blocks.iter().filter(|_| windows) {
+            for field in &settings.fields {
+                let name = field.name.name.as_str();
+                let picker = matches!(field.ty, FieldType::Language | FieldType::Theme) && picked(name);
+                if !bound(name) && !picker && !set.iter().any(|s| s == name) {
+                    self.warning(
+                        *file,
+                        format!("no window shows setting '{name}', so the person using the app cannot set it; bind a part to settings.{name}, such as in a settings window (New window, Settings window) opened from a menu"),
+                        field.span,
+                    );
+                }
+            }
+        }
         for (file, settings) in blocks {
             for field in &settings.fields {
                 if field.ty == FieldType::Secret && field.modifiers.default.is_some() {

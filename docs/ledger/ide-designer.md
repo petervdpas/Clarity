@@ -14,7 +14,7 @@ Progress: 75%
   - Inspector: `PageProperties.svelte` (2096 lines; Properties), `PageTells.svelte` + `ViewLineTells.svelte` (a view's tells, wired on the content line that shows it), `FrameProperties.svelte` (regions, ribbon tabs and groups), `CodePanel.svelte` (Code tab checked as typed, Text tab with the `.cxaml`), `IconField.svelte`
   - Double-click a part writes its handler; templates: blank window, blank dialog, blank view, splash, toolbox, sign-in, settings, form or browse per entity (`NewWindowDialog.svelte:86-100`; a dialog is `addPage` kind dialog, `App.svelte:1085`); New app asks for a name and a module (`NewAppDialog.svelte`)
   - Preview tab: run any window with sample data, Back and breadcrumb, language switch (`ClarityWindow.svelte`)
-- CLI: `clarity convert-pages <project>` moves page and app blocks out of modules (`crates/clarity-cli/src/main.rs:576`)
+- CLI: `clarity convert-pages <project>` moves page and app blocks out of modules; it and the IDE's Move pages into design are one function, `crates/clarity-tools/src/pages_out.rs` `move_pages_into_design` (refuses a `.cxaml` there already and a new error, before writing anything; before and after for Undo)
 - Docs: manual/design.windows.md, design.frame.md, design.parts.md, design.text.md
 
 ## Tests

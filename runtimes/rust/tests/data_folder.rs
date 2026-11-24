@@ -56,3 +56,34 @@ fn a_database_opens_where_every_runtime_opens_it() {
         assert_eq!(case["file"].as_str().unwrap(), got.replace('\\', "/"), "{case}");
     }
 }
+
+/// Every runtime finds a program's data folder alike (conformance/data-folder.json, `folders`).
+#[test]
+fn the_data_folder_is_where_every_runtime_finds_it() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/data-folder.json")).unwrap();
+    for case in cases["folders"].as_array().unwrap() {
+        let env = case["env"].as_object().unwrap().clone();
+        let got = data_folder::folder_in(case["os"].as_str().unwrap(), case["program"].as_str().unwrap(), |name| env.get(name).and_then(|v| v.as_str()).map(str::to_string));
+        assert_eq!(case["folder"].as_str().unwrap(), got.replace('\\', "/"), "{case}");
+    }
+}
+
+/// Every runtime places a file store alike, and an unset variable is said in
+/// Clarity's own words (conformance/data-folder.json, `stores`).
+#[test]
+fn a_file_store_is_where_every_runtime_places_it() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/data-folder.json")).unwrap();
+    for case in cases["stores"].as_array().unwrap() {
+        let env = case["env"].as_object().unwrap().clone();
+        let got = data_folder::store_in(case["os"].as_str().unwrap(), case["location"].as_str().unwrap(), |name| env.get(name).and_then(|v| v.as_str()).map(str::to_string));
+        match case["unset"].as_str() {
+            Some(variable) => {
+                let err = got.expect_err(&case.to_string());
+                let said = clarity_runtime::program::said(&err);
+                assert_eq!(said.key.as_deref(), Some("variableNotSet"), "{case}");
+                assert_eq!(said.show(), format!("The environment variable {variable} must be set"), "{case}");
+            }
+            None => assert_eq!(case["folder"].as_str().unwrap(), got.unwrap().replace('\\', "/"), "{case}"),
+        }
+    }
+}

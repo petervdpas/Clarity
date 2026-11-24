@@ -79,6 +79,14 @@ export function askedTab(ask: { action: string; key: string }): string {
   return ask.action === "remove" ? DISK_TAB : ask.key;
 }
 
+/** The pieces with a build waiting or running (job keys `piece:<key>` and `piece:<key>:debug`) that have no tab yet: their tab is added, so a build shows while it goes whoever started it. */
+export function building(jobs: Record<string, JobLike>, tabs: string[]): string[] {
+  const keys = Object.entries(jobs)
+    .filter(([key, job]) => key.startsWith("piece:") && (job?.state === "waiting" || job?.state === "running"))
+    .map(([key]) => key.split(":")[1]);
+  return [...new Set(keys)].filter((key) => !tabs.includes(key));
+}
+
 /** The tabs in their order: Disk and Release planning first, then the pieces marked with a signal, then the others, each in the order given. */
 export function tabOrder(pieces: { key: string; signal: string | null }[]): string[] {
   return [DISK_TAB, RELEASE_TAB, ...pieces.filter((p) => p.signal).map((p) => p.key), ...pieces.filter((p) => !p.signal).map((p) => p.key)];

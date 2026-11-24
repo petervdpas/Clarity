@@ -28,7 +28,7 @@ it and open its address in a browser.
 - A canvas drawn from code (`ondraw`) in its own units (200 by 100), with `clear`, `rect`, `image` and `text` in theme colours.
 - Pictures as constants (`const right1: picture = "walk-right-1.svg"`), picked per step by a function.
 - A Timer part that is switched on and off from code.
-- Settings per person (language, theme, speed and the figure's name), which on the web are kept by the browser.
+- Settings per person (language, theme, speed and the figure's name), which on the web are kept by the browser; the toolbar's Settings button opens them all in one dialog.
 - Two themes, Light and Dark.
 
 ## Files

@@ -178,7 +178,7 @@ fn the_commands_run(program: &Path, dir: &Path) {
     for found in clarity_gen::migrated_databases(&project(), &settings(Backend::Rust)).unwrap() {
         let at = dir.join(&found.location);
         std::fs::create_dir_all(at.parent().unwrap()).unwrap();
-        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location: at.display().to_string(), steps: found.steps };
+        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location: at.display().to_string(), steps: found.steps, backups: None };
         clarity_migrate::migrate(&database).unwrap();
     }
     std::fs::create_dir_all(dir.join("data")).unwrap();

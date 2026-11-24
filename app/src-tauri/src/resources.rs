@@ -158,12 +158,9 @@ pub fn guidance_sections(state: State<WatchState>) -> Result<Vec<clarity_spec::g
 #[tauri::command]
 pub fn save_guidance_section(key: String, text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (project, dir) = open_project_of(&state)?;
-    let file = dir.join(clarity_spec::guidance::FILE);
-    let before = std::fs::read_to_string(&file).ok();
-    let app = project.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
-    let after = clarity_spec::guidance::saved(before.as_deref(), app, &key, &text)?;
-    if before.as_deref() != Some(after.as_str()) {
-        write(vec![FileChange { file, before, after: Some(after) }], &history)?;
+    // The one way of the agents' set_guidance: the file headed by the project's title.
+    if let Some(change) = clarity_tools::structural::guidance::save_section(&project, &dir, &key, &text)? {
+        record(&history, vec![change])?;
     }
     load(&dir)
 }

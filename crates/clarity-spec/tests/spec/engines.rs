@@ -204,3 +204,80 @@ fn an_engine_with_state_per_window_is_called_by_a_window() {
     let app = "app Shop\n    data moves: integer\n\ncode Shop\n    handler moved\n        moves = Board.count()\n";
     assert_has(&errors(&source(app), test_engine()), "engine Board keeps state per window, so only a window's handlers call it, not the app");
 }
+
+/// The warnings the checker gives about an engine's source, its Cargo.toml.
+fn source_warnings(cargo: &str) -> Vec<String> {
+    let mut project = project(SHOP, test_engine());
+    engines::check_sources(&mut project, &[("test".to_string(), cargo.to_string())]);
+    project.diagnostics.iter().filter(|d| d.severity == Severity::Warning && d.message.contains("source")).map(|d| d.message.clone()).collect()
+}
+
+fn cargo_with(dependency: &str) -> String {
+    format!("[package]\nname = \"test\"\nversion = \"0.1.0\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\n{dependency}\nserde = {{ version = \"1\", features = [\"derive\"] }}\n")
+}
+
+/// An engine's source that takes a crate from a folder outside the project
+/// builds only where that folder is: the checker warns at the engine.
+#[test]
+fn an_engine_source_with_a_path_outside_the_project_is_warned_about() {
+    let warned = source_warnings(&cargo_with("clarity-engine = { path = \"../../../../runtimes/rust-engine\" }"));
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert!(warned[0].contains("engine Pricing") && warned[0].contains("../../../../runtimes/rust-engine") && warned[0].contains("outside the project"), "{}", warned[0]);
+    assert_eq!(source_warnings(&cargo_with("helper = { path = \"/home/someone/helper\" }")).len(), 1);
+    assert_eq!(source_warnings(&cargo_with("helper = { path = 'C:\\\\Libraries\\\\helper' }")).len(), 1);
+    // A folder inside the project goes where the project goes.
+    assert_eq!(source_warnings(&cargo_with("clarity-engine = \"0.4\"\nhelper = { path = \"../../shared/helper\" }")), Vec::<String>::new());
+}
+
+/// An engine's source that asks for another engine library than this
+/// Clarity builds engines on is warned about; every way of writing the same
+/// one is not.
+#[test]
+fn an_engine_source_asking_for_another_engine_library_is_warned_about() {
+    let warned = source_warnings(&cargo_with("clarity-engine = \"0.3\""));
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert!(warned[0].contains("clarity-engine 0.3") && warned[0].contains(&format!("clarity-engine {}", engines::ENGINE_LIBRARY_VERSION)), "{}", warned[0]);
+    assert_eq!(source_warnings(&cargo_with("clarity-engine = { version = \"0.2.1\", default-features = false }")).len(), 1);
+    for same in ["clarity-engine = \"0.4\"", "clarity-engine = \"0.4.0\"", "clarity-engine = \"^0.4\"", "clarity-engine = \"=0.4.0\"", "clarity-engine = { version = \"0.4\", features = [] }"] {
+        assert_eq!(source_warnings(&cargo_with(same)), Vec::<String>::new(), "{same}");
+    }
+}
+
+/// An engine without a source of its own (a file only, perhaps written in
+/// another language) has nothing to warn about.
+#[test]
+fn an_engine_without_a_source_has_no_source_warnings() {
+    let mut project = project(SHOP, test_engine());
+    engines::check_sources(&mut project, &[("other".to_string(), cargo_with("clarity-engine = \"0.1\""))]);
+    assert!(!project.diagnostics.iter().any(|d| d.message.contains("source")), "{:?}", project.diagnostics);
+}
+
+/// The sources are the Cargo.toml of each folder in the engines folder.
+#[test]
+fn the_engine_sources_are_read_from_the_engines_folder() {
+    let dir = std::env::temp_dir().join(format!("clarity-spec-engine-sources-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("engines/test/src")).unwrap();
+    std::fs::write(dir.join("engines/test/Cargo.toml"), "[package]\nname = \"test\"\n").unwrap();
+    std::fs::create_dir_all(dir.join("engines/loose")).unwrap();
+    std::fs::write(dir.join("engines/test.wasm"), TEST_ENGINE).unwrap();
+    let sources = engines::engine_sources(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(sources, vec![("test".to_string(), "[package]\nname = \"test\"\n".to_string())]);
+}
+
+/// Loading a project's folder checks its engines' sources as the IDE and
+/// `clarity spec check` see them.
+#[test]
+fn loading_a_project_warns_about_an_engine_source_that_builds_only_here() {
+    let dir = std::env::temp_dir().join(format!("clarity-spec-engine-load-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("engines/test")).unwrap();
+    std::fs::write(dir.join("shop.clarity"), SHOP).unwrap();
+    std::fs::write(dir.join("engines/test.wasm"), TEST_ENGINE).unwrap();
+    std::fs::write(dir.join("engines/test/Cargo.toml"), cargo_with("clarity-engine = { path = \"../../../rust-engine\" }")).unwrap();
+    let project = clarity_spec::load_dir(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    let warned: Vec<&String> = project.diagnostics.iter().filter(|d| d.severity == Severity::Warning && d.message.contains("outside the project")).map(|d| &d.message).collect();
+    assert_eq!(warned.len(), 1, "{:?}", project.diagnostics);
+}

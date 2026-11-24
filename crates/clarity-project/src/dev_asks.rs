@@ -23,6 +23,12 @@ pub fn folder() -> PathBuf {
     crate::clarity_home().join("dev-asks")
 }
 
+/// The folder beside the asks where the IDE writes each DevTools build's
+/// state as it changes (clarity_devtools::jobs::JobRecord), which build_state reads.
+pub fn jobs(dir: &Path) -> PathBuf {
+    dir.join("jobs")
+}
+
 /// What an agent asks the IDE to do.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

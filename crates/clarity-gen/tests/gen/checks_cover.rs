@@ -160,7 +160,7 @@ fn every_conformance_file_is_read_by_the_tests_it_names() {
 /// The tests about the examples themselves, which read examples/: their builds,
 /// checks and sweeps over every example, the examples' diagrams and texts, the
 /// release checks' list of them, and tests that only build paths named so.
-const ABOUT_THE_EXAMPLES: [&str; 24] = [
+const ABOUT_THE_EXAMPLES: [&str; 25] = [
     "runtimes/rust-ui/tests/windows/every_example.rs",
     "crates/clarity-spec/tests/spec/design_edit.rs",
     "crates/clarity-gen/tests/gen/examples_build.rs",
@@ -182,6 +182,7 @@ const ABOUT_THE_EXAMPLES: [&str; 24] = [
     "crates/clarity-spec/tests/spec/translations.rs",
     "crates/clarity-spec/tests/spec/diagram_views.rs",
     "crates/clarity-project/tests/settings.rs",
+    "crates/clarity-project/tests/engines.rs",
     "app/src-tauri/src/lib.rs",
     "app/src/lib/ui/everyWindow.svelte.test.ts",
     "runtimes/rust-ui/tests/windows/windows_canvas_drag.rs",

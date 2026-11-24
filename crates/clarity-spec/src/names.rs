@@ -112,9 +112,18 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
     if renames.is_empty() {
         return (source.to_string(), renames);
     }
+    let out = renamed_in(source, &lines, &scoped, &renames);
+    (out, renames)
+}
+
+/// `source` with `renames` made on its lines that `scoped` marks: a part's or
+/// handler's name wherever those lines use it, and the slots of their texts.
+/// A name after a dot (a field), a list of fields and text stay as they are.
+fn renamed_in(source: &str, lines: &[crate::lexer::Line], scoped: &[bool], renames: &[(String, String)]) -> String {
+    use crate::lexer::TokenKind;
     let mut out = String::with_capacity(source.len());
     let mut at = 0;
-    for line in lines.iter().zip(&scoped).filter(|(_, s)| **s).map(|(l, _)| l) {
+    for line in lines.iter().zip(scoped).filter(|(_, s)| **s).map(|(l, _)| l) {
         // A list of fields after `columns` or `show`: `columns name, price`.
         let mut in_fields = false;
         for (i, t) in line.tokens.iter().enumerate() {
@@ -122,7 +131,7 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
             if t.kind == TokenKind::Str {
                 // The parts named in its slots: `{grid.selected.title}`.
                 let mut raw = source[start..end].to_string();
-                for (old, new) in &renames {
+                for (old, new) in renames {
                     raw = raw.replace(&format!("{{{old}."), &format!("{{{new}.")).replace(&format!("{{{old}}}"), &format!("{{{new}}}"));
                 }
                 if raw != source[start..end] {
@@ -162,7 +171,104 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
         }
     }
     out.push_str(&source[at..]);
-    (out, renames)
+    out
+}
+
+/// A window's, view's or app's own file (`.cxaml`, `markup`) and its module's
+/// text (`module`) with every part and handler of that page that is not
+/// camelCase renamed to camelCase: a part where the markup declares it
+/// (`name`), names it (`for`) or shows it in a slot (`{grid.selected}`), a
+/// handler where an event runs it (`onclick="goClicked(1)"`); in the module,
+/// in the page's own code block (`code Main`) only. Its data, the views it
+/// shows and another page's code keep their names. Gives the markup, the
+/// module and the renames (old name, new name), for the translations' slots.
+pub fn camel_names_of_page(markup: &str, module: &str) -> (String, String, Vec<(String, String)>) {
+    use crate::lexer::{TokenKind, lex};
+    let unchanged = || (markup.to_string(), module.to_string(), Vec::new());
+    let (Some((_, owner)), Ok(root)) = (crate::cxaml::class_of(markup), crate::xml::read(markup)) else { return unchanged() };
+    let (lines, _) = lex(module);
+    let mut in_scope = false;
+    let scoped: Vec<bool> = lines
+        .iter()
+        .map(|l| {
+            if l.indent == 0 {
+                in_scope = l.tokens.first().is_some_and(|t| t.text == "code") && l.tokens.get(1).is_some_and(|t| t.text == owner);
+            }
+            in_scope
+        })
+        .collect();
+    // Elements whose `name` is no part: the page's data, what it tells, the view a content shows.
+    const NOT_PARTS: [&str; 3] = ["Data", "Tells", "View"];
+    fn parts(element: &crate::xml::Element, found: &mut Vec<String>) {
+        for child in &element.children {
+            if NOT_PARTS.contains(&child.name.as_str()) {
+                continue;
+            }
+            if let Some(name) = child.get("name") {
+                found.push(name.to_string());
+            }
+            parts(child, found);
+        }
+    }
+    let mut declared = Vec::new();
+    parts(&root, &mut declared);
+    for line in lines.iter().zip(&scoped).filter(|(l, s)| **s && l.indent > 0).map(|(l, _)| l) {
+        if line.tokens.first().is_some_and(|t| t.text == "handler")
+            && let Some(name) = line.tokens.get(1).filter(|t| t.kind == TokenKind::Ident)
+        {
+            declared.push(name.text.clone());
+        }
+    }
+    let mut taken: std::collections::HashSet<String> = lines.iter().flat_map(|l| &l.tokens).filter(|t| t.kind == TokenKind::Ident).map(|t| t.text.clone()).collect();
+    taken.extend(declared.iter().cloned());
+    let mut renames: Vec<(String, String)> = Vec::new();
+    for name in declared.iter().filter(|n| !is_camel_case(n)) {
+        if renames.iter().any(|(old, _)| old == name) {
+            continue;
+        }
+        let base = camel_case(name);
+        let new = if taken.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !taken.contains(n)).expect("a free name") } else { base };
+        taken.insert(new.clone());
+        renames.push((name.clone(), new));
+    }
+    if renames.is_empty() {
+        return unchanged();
+    }
+    let module_after = renamed_in(module, &lines, &scoped, &renames);
+    // Each attribute value that changes, by where it is in the markup.
+    fn values(element: &crate::xml::Element, renames: &[(String, String)], is_part: bool, out: &mut Vec<(usize, usize, String)>) {
+        let markup_name = |value: &str| renames.iter().find(|(old, _)| old == value).map(|(_, new)| new.clone());
+        for attribute in &element.attributes {
+            let value = attribute.value.as_str();
+            let new = match attribute.name.as_str() {
+                "name" if is_part => markup_name(value),
+                "for" => markup_name(value),
+                // A handler, with the values it is run with: `goClicked(1)`.
+                word if (word.starts_with("on") && word != "opens") || word == "handler" => {
+                    let (handler, rest) = value.split_at(value.find('(').unwrap_or(value.len()));
+                    markup_name(handler.trim()).map(|new| format!("{new}{rest}"))
+                }
+                _ => None,
+            };
+            let new = new.unwrap_or_else(|| rename_slots(value, renames));
+            if new != value {
+                out.push((attribute.span.start as usize, attribute.span.end as usize, crate::xml::escaped(&new)));
+            }
+        }
+        for child in &element.children {
+            if !matches!(child.name.as_str(), "Data" | "Tells") {
+                values(child, renames, child.name != "View", out);
+            }
+        }
+    }
+    let mut changes = Vec::new();
+    values(&root, &renames, false, &mut changes);
+    changes.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+    let mut markup_after = markup.to_string();
+    for (start, end, text) in changes {
+        markup_after.replace_range(start..end, &text);
+    }
+    (markup_after, module_after, renames)
 }
 
 /// `text` with the parts its slots name renamed: `{loan_grid.selected}`

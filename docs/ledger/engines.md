@@ -10,12 +10,14 @@ Progress: 65%
 - Generators: `compile_engines` in `crates/clarity-gen/src/lib.rs:845`; each stack embeds the files
 - Runtimes: R `runtimes/rust/src/engine.rs` (wasmi 2); Go `runtimes/go/engine` (wazero 1.12); C `runtimes/c/engine` + `third_party/wasm3`; C++ `runtimes/cpp/engine`; C# `runtimes/csharp/Clarity.Runtime.Engines` (Wasmtime 48)
 - Clarity.UI: `runtimes/rust-ui/src/engines.rs` (beside the screen), `dialogs/long_call.rs` (progress and Stop)
-- Engine library: `runtimes/rust-engine` (crate `clarity-engine` 0.3.1, for engine authors)
+- Engine library: `runtimes/rust-engine` (crate `clarity-engine` 0.4.0, for engine authors); a new engine asks for it as `clarity-engine = "0.4"` (`engines::ENGINE_LIBRARY_VERSION`, tied to the crate's version by a test), and so do the examples' engines, so they build where an example is downloaded to (2026-11-23: on Windows the modelling example said fcdm was missing, its engine naming `path = "../../../../runtimes/rust-engine"`)
 - Project: `crates/clarity-project/src/engines.rs` (Rust engine crate in `engines/<name>/`, stubs, build)
 - IDE: `app/src/lib/EngineEditor.svelte`, `app/src-tauri/src/engines.rs`
 - Docs: manual `code.engines.md`
 
 ## Tests
+- `crates/clarity-project/tests/engines.rs`: `a_new_engine_asks_for_the_engine_library_s_own_version`, `the_examples_engines_build_outside_the_repository`
+- `crates/clarity-spec/tests/spec/engines.rs`: the checker warns at an engine whose source (`engines/<name>/Cargo.toml`, read by `engines::engine_sources`, checked by `engines::check_sources` when a folder loads) takes a crate from a folder outside the project or asks for another `clarity-engine` than `engines::ENGINE_LIBRARY_VERSION` (user 2026-11-23: "yes, add the checker warning")
 - `conformance/engines.json`, `progress.json`, `screen-engines.json`: run by R, Go, C, C++, C#
 - `conformance/clarity-engines.json`: run by `crates/clarity-wasm` only
 - `crates/clarity-wasm/tests/`: conformance.rs, noughts.rs, progress.rs, sky.rs

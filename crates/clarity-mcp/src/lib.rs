@@ -9,7 +9,6 @@
 use std::path::{Path, PathBuf};
 
 use clarity_agent::{ToolDef, ToolResult, Tools};
-use clarity_spec::model::PageKind;
 use clarity_project::activity::Call;
 use clarity_tools::ProjectTools;
 use clarity_tools::turn::{self, Shown};
@@ -21,13 +20,13 @@ use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Value, json};
 
-// The cDdev's DevTools tools (build_piece, release_state, disk_state,
+// The cDdev's DevTools tools (build_piece, build_state, release_state, disk_state,
 // remove_folder): only in a server built from Clarity's repository, never
 // compiled into a release, as an installed Clarity has no DevTools.
 #[cfg(debug_assertions)]
 mod devtools;
 #[cfg(debug_assertions)]
-pub use devtools::{BUILD_PIECE, BUMP_VERSIONS, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER, SWAP_PIECE, WRITE_RELEASE_PLAN};
+pub use devtools::{BUILD_PIECE, BUILD_STATE, BUMP_VERSIONS, DISK_STATE, RELEASE_STATE, REMOVE_FOLDER, SWAP_PIECE, WRITE_RELEASE_PLAN};
 
 /// Clarity's icon, as the installers have it (app/src-tauri/icons): a PNG
 /// every MCP client takes and the SVG it is made from.
@@ -55,13 +54,14 @@ pub const LEFT_OUT: [&str; 7] = ["build", "build_output", "list_backups", "backu
 /// parts, and making a new project.
 pub const WITHOUT_PROJECT: [&str; 3] = ["manual", "parts", "new_project"];
 
-/// The tools that still answer when the person turned outside agents off:
-/// Clarity's documents and its parts, which touch no project.
-pub const WHEN_OFF: [&str; 2] = ["manual", "parts"];
-
-/// What every other tool answers while outside agents are turned off.
-pub const NOT_ALLOWED: &str = "Clarity does not allow outside agents to work on the project now: the person turned it \
-off in Clarity's settings (\"Let outside agents work on my project\"). Clarity's manual and references still answer.";
+/// What every tool answers while the person turned this server off in
+/// Clarity's status bar (clarity_project::mcp_access).
+pub fn turned_off(server: &str) -> String {
+    format!(
+        "Clarity's MCP access for {server} is turned off in Clarity: nothing was read or changed. Ask the person to turn \
+{server} on in Clarity's status bar (MCP)."
+    )
+}
 
 /// What every other tool answers while no project is open in Clarity.
 pub const NO_PROJECT: &str = "No project is open in Clarity. Ask the person to open the project in Clarity first; \
@@ -109,6 +109,8 @@ pub struct ClarityServer {
     turn: Option<PathBuf>,
     /// The activity log, beside `ide_file`.
     activity: PathBuf,
+    /// The servers' switches (clarity_project::mcp_access), beside `ide_file`.
+    switches: PathBuf,
 }
 
 impl Default for ClarityServer {
@@ -126,6 +128,7 @@ impl ClarityServer {
     /// The server on the project `ide_file` records as open.
     pub fn with_ide_file(ide_file: PathBuf) -> ClarityServer {
         let activity = ide_file.with_file_name(clarity_project::activity::FILE_NAME);
+        let switches = ide_file.with_file_name(clarity_project::mcp_access::FILE_NAME);
         ClarityServer {
             #[cfg(debug_assertions)]
             asks: ide_file.with_file_name("dev-asks"),
@@ -136,6 +139,7 @@ impl ClarityServer {
             ide_file,
             turn: None,
             activity,
+            switches,
         }
     }
 
@@ -190,27 +194,44 @@ impl ClarityServer {
     /// Calls the tool `name` for the MCP client `client`, and adds the call to
     /// the activity log: the tool, the file it names, how it ended, never a file's text.
     pub fn call_from(&self, client: &str, name: &str, input: &Value) -> ToolResult {
+        if let Some(refused) = self.switched_off() {
+            self.record(client, name, input, &refused);
+            return refused;
+        }
         #[cfg(debug_assertions)]
         let devtools = if self.turn.is_none() { self.devtools_call(client, name, input) } else { None };
         #[cfg(not(debug_assertions))]
         let devtools: Option<ToolResult> = None;
         let result = devtools.unwrap_or_else(|| self.call(name, input));
+        self.record(client, name, input, &result);
+        result
+    }
+
+    /// The refusal while the person turned this server off in Clarity's status
+    /// bar, read again on every call; none while it is on. A turn of the IDE's
+    /// chat panel is the person's own agent in Clarity, which the switches do not hold.
+    fn switched_off(&self) -> Option<ToolResult> {
+        let off = self.turn.is_none() && !clarity_project::mcp_access::is_on_in(&self.switches, self.name());
+        off.then(|| ToolResult { text: turned_off(self.name()), is_error: true })
+    }
+
+    /// Adds a call to the activity log.
+    fn record(&self, client: &str, name: &str, input: &Value, result: &ToolResult) {
         let said = if result.is_error { result.text.clone() } else { format!("{} characters", result.text.chars().count()) };
         let path = input.get("path").and_then(Value::as_str).map(str::to_string);
         let call = Call { client: client.to_string(), tool: name.to_string(), path, ok: !result.is_error, said };
         if let Err(why) = clarity_project::activity::record_in(&self.activity, &call) {
             eprintln!("clarity: {why}");
         }
-        result
     }
 
     /// Calls the tool `name` with `input` on the project open in the IDE now.
     pub fn call(&self, name: &str, input: &Value) -> ToolResult {
         let failed = |text: String| ToolResult { text, is_error: true };
-        let showing = self.turn.is_some() && TURN_TOOLS.contains(&name);
-        if !WHEN_OFF.contains(&name) && !clarity_project::ide::outside_agents_in(&self.ide_file) {
-            return failed(NOT_ALLOWED.to_string());
+        if let Some(refused) = self.switched_off() {
+            return refused;
         }
+        let showing = self.turn.is_some() && TURN_TOOLS.contains(&name);
         if LEFT_OUT.contains(&name) && !showing {
             return failed(format!("{name} is not offered here: build, run, backups and showing windows are the person's, in Clarity"));
         }
@@ -218,7 +239,7 @@ impl ClarityServer {
         if project.is_none() && !WITHOUT_PROJECT.contains(&name) {
             return failed(NO_PROJECT.to_string());
         }
-        let mut tools = ProjectTools::new(project.as_deref().map(open), projects_folder(project.as_deref()));
+        let mut tools = ProjectTools::new(project.as_deref().map(open), clarity_tools::new_project::projects_folder(project.as_deref()));
         if let (true, Some(turn)) = (showing, &self.turn) {
             let shown = match name {
                 "show_window" => window(&tools, input["name"].as_str().unwrap_or_default()),
@@ -254,22 +275,11 @@ fn turn_tools() -> Vec<ToolDef> {
     ]
 }
 
-/// The window `name` of the open project, to show in Preview; a window or a dialog that is there.
+/// The window `name` of the open project, to show in Preview (clarity_tools::turn::window).
 fn window(tools: &ProjectTools, name: &str) -> Result<(Shown, String), String> {
     let (_, dir) = tools.open()?;
-    let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
-    let windows: Vec<&str> = project
-        .files
-        .iter()
-        .flat_map(|f| &f.pages)
-        .filter(|p| matches!(p.kind, PageKind::Window | PageKind::Dialog))
-        .map(|p| p.name.name.as_str())
-        .collect();
-    let name = name.trim();
-    if !windows.contains(&name) {
-        return Err(format!("the project has no window '{name}'; its windows are: {}", windows.join(", ")));
-    }
-    Ok((Shown::Window(name.to_string()), format!("Showing {name} in Preview when this turn ends.")))
+    let shown = turn::window(dir, name)?;
+    Ok((shown, format!("Showing {} in Preview when this turn ends.", name.trim())))
 }
 
 /// The written diagram `name`, to open in Clarity.
@@ -282,16 +292,6 @@ fn diagram(tools: &ProjectTools, name: &str) -> Result<(Shown, String), String> 
 /// The project file with its folder of modules.
 fn open(file: &Path) -> (PathBuf, PathBuf) {
     (file.to_path_buf(), clarity_project::module_dir(file))
-}
-
-/// Where a new project goes by default: the projects folder of Clarity
-/// settings, else beside the open project, else `Clarity` in the home folder;
-/// as the IDE's agent does.
-fn projects_folder(project: Option<&Path>) -> PathBuf {
-    clarity_project::Folders::current()
-        .projects
-        .or_else(|| project.and_then(Path::parent).map(Path::to_path_buf))
-        .unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("Clarity"))
 }
 
 /// A tool as MCP describes it.

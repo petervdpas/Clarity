@@ -24,6 +24,7 @@ Progress: 40%
 - `runtimes/rust-pdf/tests/markdown.rs`: words of a heading and paragraph, heading sizes by level, bold and italic, text Typst would read written as it is, paper sizes, margin, pages and page numbers, the same PDF every time, an empty text
 
 ## Open
+- Markdown to PDF with a stylesheet the person changes in the app, through the novel example's full change: NOT BUILT, no design ([examples](examples.md)).
 - Step 1, clarity-pdf: Markdown to PDF with paragraphs, headings, emphasis, page size, margins, page numbers: BUILT 2026-11-19. Lists, quotes, code, rules and links are laid out plainly already (step 2 styles them).
 - Step 2, lists, quotes, code, links; the stylesheet (CSS subset, optionally from the theme); carried fonts: BUILT 2026-11-19. Images: OPEN, Clarity's Markdown has no images on any stack (`clarity_runtime::markdown`, conformance/markdown.json); code colors: OPEN, the reader keeps no fence language. Both need the reader changed on every stack first; needs decision.
 - Step 3, tables over pages; math in Markdown: BUILT 2026-11-19. Clarity's Markdown reads tables and TeX math on every reader ([markdown](markdown.md)); the PDF lays tables out with the header on each page (`th`, `td`, `table` in the stylesheet) and sets math through MiTeX (`mitex` 0.2.4, its Typst definitions carried in `runtimes/rust-pdf/mitex/`, `xarrow` made locally, `\KaTeX` fixed for Typst 0.15); a formula Typst cannot set shows its TeX as code and the rest lays out.

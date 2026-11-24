@@ -16,6 +16,7 @@
       <Item caption="@themeSepia" name="sepiaItem" onclick="toSepia" />
       <Item caption="@themeInk" name="inkItem" onclick="toInk" />
     </Item>
+    <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
   </Menu>
   <Footer status="@novelStatus" columns="12" />
 </App>

@@ -339,6 +339,23 @@ fn clarity_ui_goes_to_the_build() {
     assert!(!clarity_gen::uses_clarity_ui(&shop(Backend::Csharp, Ui::Clarity)));
 }
 
+/// The installed Clarity on Windows names its library's folder as the
+/// system hands it over (`\\?\C:\Program Files\Clarity IDE\clarity-ui`); every
+/// build gets it without that prefix, which gcc, CMake and cgo cannot use.
+#[test]
+fn clarity_ui_goes_to_the_build_without_a_verbatim_prefix() {
+    let folder = std::path::Path::new(r"\\?\C:\Program Files\Clarity IDE\clarity-ui");
+    for backend in [Backend::Go, Backend::C, Backend::Cpp, Backend::Rust] {
+        let built = clarity_gen::with_clarity_ui_on(clarity_gen::toolchain(&shop(backend, Ui::Clarity), false).unwrap(), backend, folder, "windows");
+        let named: Vec<_> = built.env.iter().filter(|(name, _)| *name == "CLARITY_UI" || name.starts_with("CGO_")).collect();
+        assert!(!named.is_empty(), "{backend:?}: {:?}", built.env);
+        for (name, value) in named {
+            assert!(!value.contains(r"\\?\"), "{backend:?} {name}={value}");
+        }
+        assert!(built.env.iter().any(|(_, value)| value.contains(r"C:\Program Files\Clarity IDE\clarity-ui")), "{backend:?}: {:?}", built.env);
+    }
+}
+
 /// The C and C++ runtimes fetch the library the same way, with the version
 /// the generated CMakeLists.txt names.
 #[test]

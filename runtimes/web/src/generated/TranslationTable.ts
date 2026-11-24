@@ -14,6 +14,6 @@ default: string,
  */
 languages: Array<string>, rows: Array<TranslationRow>, 
 /**
- * How many keys each language leaves empty.
+ * How many keys each language lacks (`is_missing`).
  */
 missing: Array<number>, };

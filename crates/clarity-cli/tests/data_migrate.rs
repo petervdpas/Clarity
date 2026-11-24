@@ -4,10 +4,10 @@
 
 use std::process::Command;
 
-#[test]
-fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
+/// The todo test project copied as a fresh checkout has it, into a folder of its own for `test`.
+fn copied(test: &str) -> std::path::PathBuf {
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-projects");
-    let root = std::env::temp_dir().join(format!("clarity-migrate-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("clarity-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("todo")).unwrap();
     std::fs::copy(source.join("todo.clarity"), root.join("todo.clarity")).unwrap();
@@ -20,6 +20,12 @@ fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
         std::fs::create_dir_all(to.parent().unwrap()).unwrap();
         std::fs::copy(&entry, to).unwrap();
     }
+    root
+}
+
+#[test]
+fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
+    let root = copied("migrate");
     let clarity = env!("CARGO_BIN_EXE_clarity");
     // The YAML file source `ideas` is external: it never gets steps.
     let pending = Command::new(clarity).args(["migrate", "--check"]).arg(root.join("todo.clarity")).output().unwrap();
@@ -27,7 +33,7 @@ fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
     assert!(!listed.contains("data source ideas"), "{listed}");
     let first = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
     let said = String::from_utf8_lossy(&first.stderr);
-    assert!(first.status.success() && said.contains("Migrated main by"), "{said}");
+    assert!(first.status.success() && said.contains("main migrated by"), "{said}");
     assert!(root.join("todo/data/todo.db").is_file());
     let again = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
     assert!(String::from_utf8_lossy(&again.stderr).contains("is up to date"));
@@ -40,6 +46,35 @@ fn data_migrate_creates_the_database_then_finds_it_up_to_date() {
     let refused = Command::new(clarity).args(["data", "migrate"]).arg(root.join("todo.clarity")).output().unwrap();
     let said = String::from_utf8_lossy(&refused.stderr);
     assert!(!refused.status.success() && said.contains("belongs to a newer version of the app"), "{said}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `clarity data backup`, `backups` and `restore` work in the project's backups
+/// folder, as the IDE's do (docs/ledger/backups.md): without one the project
+/// takes no backups, and a restore takes a backup's file name, never a path.
+#[test]
+fn data_backups_need_the_projects_backups_folder_and_restore_by_file_name() {
+    let root = copied("backups");
+    let clarity = env!("CARGO_BIN_EXE_clarity");
+    let project = root.join("todo.clarity");
+    let data = |args: &[&str]| Command::new(clarity).arg("data").args(args).arg(&project).output().unwrap();
+    assert!(data(&["migrate"]).status.success());
+    let refused = data(&["backup"]);
+    let said = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success() && said.contains("takes no backups") && said.contains("backups \"data/backups\""), "{said}");
+    let text = std::fs::read_to_string(&project).unwrap();
+    let (first, rest) = text.split_once('\n').unwrap();
+    std::fs::write(&project, format!("{first}\n    backups \"data/backups\"\n{rest}")).unwrap();
+    let taken = data(&["backup"]);
+    assert!(taken.status.success(), "{}", String::from_utf8_lossy(&taken.stderr));
+    let listed = String::from_utf8_lossy(&data(&["backups"]).stdout).to_string();
+    let file = listed.split_whitespace().last().unwrap().to_string();
+    assert!(root.join("todo/data/backups/main").join(&file).is_file(), "{listed}");
+    let path = root.join("todo/data/backups/main").join(&file).display().to_string();
+    let by_path = Command::new(clarity).args(["data", "restore"]).arg(&project).arg(&path).output().unwrap();
+    assert!(!by_path.status.success() && String::from_utf8_lossy(&by_path.stderr).contains("not a path"));
+    let restored = Command::new(clarity).args(["data", "restore"]).arg(&project).arg(&file).output().unwrap();
+    assert!(restored.status.success() && String::from_utf8_lossy(&restored.stderr).contains("What it replaced is kept as"), "{}", String::from_utf8_lossy(&restored.stderr));
     let _ = std::fs::remove_dir_all(&root);
 }
 

@@ -140,61 +140,14 @@ pub fn rename_key(from: String, to: String, state: State<WatchState>, history: S
     load(&dir)
 }
 
-/// Makes every text people read a key, in every module, with a file per
-/// language giving each key its text (the default language's from the
-/// texts as written, the others' from their old translations): Make texts
-/// keys, under Problems. One change for Undo.
+/// Makes every text people read a key, in every module and every window's,
+/// view's and app's `.cxaml`, joining the language files
+/// (clarity_tools::texts_keys, the one way `clarity spec keys` takes too):
+/// Make texts keys, under Problems. One change for Undo.
 #[tauri::command]
 pub fn make_texts_keys(state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let default = translations::default_language(&project);
-    let read_all = |folder: &Path| -> Result<Vec<(PathBuf, String)>, String> {
-        if !folder.is_dir() {
-            return Ok(Vec::new());
-        }
-        clarity_spec::spec_files(folder)
-            .map_err(|err| format!("cannot read {}: {err}", folder.display()))?
-            .into_iter()
-            .map(|p| std::fs::read_to_string(&p).map(|t| (p.clone(), t)).map_err(|err| format!("cannot read {}: {err}", p.display())))
-            .collect()
-    };
-    let mut modules = read_all(&dir)?;
-    // Each window's and view's .cxaml too (clarity_spec::cxaml::make_keys_with_pages).
-    let module_count = modules.len();
-    for path in clarity_spec::cxaml::page_files(&dir, &[], &[]).map_err(|err| format!("cannot read {}: {err}", dir.display()))? {
-        let markup = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-        modules.push((path, markup));
-    }
-    let folder = dir.join(TRANSLATIONS_DIR);
-    let languages = read_all(&folder)?;
-    let names = |files: &[(PathBuf, String)]| files.iter().map(|(p, t)| (p.display().to_string(), t.clone())).collect::<Vec<_>>();
-    let (module_names, language_names) = (names(&modules), names(&languages));
-    let (module_names, page_names) = module_names.split_at(module_count);
-    let made = clarity_spec::cxaml::make_keys_with_pages(
-        &module_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
-        &page_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
-        &language_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
-        &default,
-    );
-    let mut changes = Vec::new();
-    for ((path, before), (_, after)) in modules.iter().zip(&made.modules) {
-        if before != after {
-            changes.push(FileChange { file: path.clone(), before: Some(before.clone()), after: Some(after.clone()) });
-        }
-    }
-    for language in made.languages.keys() {
-        let path = folder.join(format!("{language}.{}", clarity_spec::SPEC_EXTENSION));
-        let before = languages.iter().find(|(p, _)| *p == path).map(|(_, t)| t.clone());
-        let after = made.language_file(language);
-        if before.as_deref() != Some(after.as_str()) {
-            changes.push(FileChange { file: path, before, after: Some(after) });
-        }
-    }
-    std::fs::create_dir_all(&folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-    for change in &changes {
-        change.make()?;
-    }
+    let changes = clarity_tools::texts_keys::make_texts_keys(&dir)?;
     record(&history, changes)?;
     load(&dir)
 }

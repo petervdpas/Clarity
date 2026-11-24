@@ -5,6 +5,7 @@ import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
 import type { AgentAsk } from "@clarity/ui/generated/AgentAsk.ts";
 import type { AgentEvent } from "@clarity/ui/generated/AgentEvent.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { InstalledAgent } from "@clarity/ui/generated/InstalledAgent.ts";
 import type { Runs } from "@clarity/ui/generated/Runs.ts";
 import type { Usage } from "@clarity/ui/generated/Usage.ts";
 
@@ -135,4 +136,19 @@ export function agentConnections(rows: ConnectionRow[]): string[] {
     .filter((r) => named(r) || r.fields.some(([field]) => field === "kind"))
     .sort((a, b) => Number(named(b)) - Number(named(a)))
     .map((r) => r.name);
+}
+
+/** One choice of the panel's picker: what goes to the backend as the connection, what it reads as, and its tooltip. */
+export type AgentPick = { id: string; label: string; title: string };
+
+/** The panel's picker: the vault's connections the agent can talk to, then
+ *  the agent programs found on this computer (Codex, Copilot), which need no
+ *  vault connection. A vault connection of an agent's name stands for it. */
+export function agentPicks(rows: ConnectionRow[], installed: InstalledAgent[]): AgentPick[] {
+  const named = agentConnections(rows);
+  const taken = new Set(named.map((n) => n.toLowerCase()));
+  return [
+    ...named.map((name) => ({ id: name, label: name, title: `The connection ${name} in the vault` })),
+    ...installed.filter((a) => !taken.has(a.key.toLowerCase())).map((a) => ({ id: a.key, label: a.name, title: `${a.name} on this computer: ${a.program}` })),
+  ];
 }

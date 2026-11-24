@@ -124,7 +124,25 @@ TEST(a_picture_in_a_file_store_is_a_file_named_by_its_bytes) {
     // A path that leaves the store is refused.
     db.batch("", "UPDATE album SET photo = '../secret.png' WHERE id = " + std::to_string(album.id));
     CHECK_THROWS(InvalidError, db.picture<Album>(album.id, "photo"));
-    CHECK_THROWS(StorageError, Db::memory().add_store("photos", "env:CLARITY_NO_SUCH_STORE"));
+    {
+        // An unset variable does not stop the program: the place that uses the store says so.
+        Db other = Db::memory();
+        other.add_store("photos", "env:CLARITY_NO_SUCH_STORE");
+        try {
+            other.files("photos");
+            CHECK(false);
+        } catch (const NotSetError& e) {
+            CHECK_EQ(std::string(e.what()), "the environment variable CLARITY_NO_SUCH_STORE is not set");
+            CHECK_EQ(*said(e)->key(), "variableNotSet");
+        }
+        try {
+            other.files(folder_store);
+            CHECK(false);
+        } catch (const ValueError& e) {
+            CHECK_EQ(*said(e)->key(), "noFolderChosen");
+            CHECK_EQ(said(e)->show(), "No folder was chosen");
+        }
+    }
     std::filesystem::remove_all(store);
 }
 

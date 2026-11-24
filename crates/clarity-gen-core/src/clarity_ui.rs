@@ -333,7 +333,7 @@ static BUNDLED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// Names the folder of the library the installed Clarity carries: its
 /// resource folder's `clarity-ui`.
 pub fn set_bundled(folder: PathBuf) {
-    let _ = BUNDLED.set(folder);
+    let _ = BUNDLED.set(clarity_project::plain(folder));
 }
 
 /// The IDE's product name (tauri.conf.json's productName), which names its
@@ -366,7 +366,7 @@ static BUNDLED_BROWSER: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new(
 
 /// Names the folder of the browser files the installed Clarity carries: its resource folder's `clarity-ui-browser`.
 pub fn set_bundled_browser(folder: PathBuf) {
-    let _ = BUNDLED_BROWSER.set(folder);
+    let _ = BUNDLED_BROWSER.set(clarity_project::plain(folder));
 }
 
 /// Where the browser files come from on this machine.

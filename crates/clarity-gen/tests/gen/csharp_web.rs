@@ -25,6 +25,7 @@ page Field: window
     data x: integer, default 10
     canvas name field at 1,1 span 12 rows 8 units 200 x 100 on draw: drawField
     button \"Walk\" name walkButton at 1,9 span 3 on click: walkClicked
+    spinbox name speedBox at 4,9 span 3 bind settings.speed
     timer name clock every 0.1 on tick: stepped
 
 code Field

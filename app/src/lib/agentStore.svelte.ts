@@ -5,7 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
+import { addUsage, agentPicks, applyAnswer, applyAsk, applyEvent, NO_USAGE, type AgentPick, type Item } from "./agent";
 import { isRuns } from "./agent";
 import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
 import type { Runs } from "@clarity/ui/generated/Runs.ts";
@@ -14,6 +14,7 @@ import type { AgentChoice } from "@clarity/ui/generated/AgentChoice.ts";
 import type { AgentEnded } from "@clarity/ui/generated/AgentEnded.ts";
 import type { AgentEvent } from "@clarity/ui/generated/AgentEvent.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { InstalledAgent } from "@clarity/ui/generated/InstalledAgent.ts";
 import type { Usage } from "@clarity/ui/generated/Usage.ts";
 import { unlock } from "./unlockStore.svelte";
 
@@ -41,7 +42,8 @@ class AgentStore {
   open = $state(remembered(OPEN_KEY) === "true");
   items = $state<Item[]>([]);
   running = $state(false);
-  connections = $state<string[]>([]);
+  /** The picker's choices: the vault's connections, then the agent programs found on this computer. */
+  connections = $state<AgentPick[]>([]);
   /** Whether Sign in runs. */
   signingIn = $state(false);
   /** Whether the connection is not signed in (its agent program, or its Microsoft sign-in), so the panel offers Sign in. */
@@ -83,13 +85,13 @@ class AgentStore {
   }
 
   async loadConnections() {
-    try {
-      const rows = await invoke<ConnectionRow[]>("connections_list");
-      this.connections = agentConnections(rows);
-    } catch {
-      this.connections = [];
-    }
-    if (this.connections.length > 0 && !this.connections.includes(this.connection)) this.pick(this.connections[0]);
+    // Each half on its own: an unreadable vault still lists the programs found, and the other way round.
+    const [rows, installed] = await Promise.all([
+      invoke<ConnectionRow[]>("connections_list").catch(() => [] as ConnectionRow[]),
+      invoke<InstalledAgent[]>("agents_installed").catch(() => [] as InstalledAgent[]),
+    ]);
+    this.connections = agentPicks(rows, installed);
+    if (this.connections.length > 0 && !this.connections.some((c) => c.id === this.connection)) this.pick(this.connections[0].id);
   }
 
   setRuns(runs: Runs) {

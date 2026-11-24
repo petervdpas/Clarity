@@ -456,19 +456,13 @@ impl Client {
                 let number = |key: &str| params[key].as_u64().map(|n| n as u32);
                 Ok(json!({ "content": lines(&text, number("line"), number("limit")) }))
             }
+            // Written by the one rule and the one write of Clarity's tools (clarity_tools::files):
+            // a part's code, and nothing the tools check or refuse.
             "fs/write_text_file" => {
                 let path = PathBuf::from(params["path"].as_str().unwrap_or_default());
                 let content = params["content"].as_str().unwrap_or_default();
-                if clarity_s_own(&self.root, &path) {
-                    return Err((INVALID_PARAMS, OWN_FILES.to_string()));
-                }
-                inside(&self.root, &path)
-                    .and_then(|real| {
-                        if let Some(folder) = real.parent() {
-                            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-                        }
-                        std::fs::write(&real, content).map_err(|err| format!("cannot write {}: {err}", path.display()))
-                    })
+                self.in_project(&path)
+                    .and_then(|(file, dir, relative)| clarity_tools::files::write_beside_tools(&file, &dir, &relative, content))
                     .map_err(|why| (INVALID_PARAMS, why))?;
                 Ok(Value::Null)
             }
@@ -538,14 +532,32 @@ impl Client {
         approval && self.known_tool(&params["toolCall"]).title.is_some_and(|t| t.starts_with(&format!("mcp.{TOOL_SERVER}.")))
     }
 
-    /// Whether a permission would change one of Clarity's own files, which
-    /// every AI changes only through Clarity's tools.
+    /// Whether a permission would change a file of the project that Clarity's
+    /// tools write or refuse by their one rule (clarity_tools::files::writable):
+    /// anything but a file of a part's folder. A file outside goes to the person.
     fn changes_clarity_s_own(&self, call: &Value) -> bool {
         let id = call["toolCallId"].as_str().unwrap_or_default();
         let mut tool = self.known.lock().ok().and_then(|k| k.get(id).cloned()).unwrap_or_default();
         tool.merge(call);
         let reads = matches!(tool.kind.as_deref(), Some("read" | "search"));
-        !reads && tool.locations.iter().any(|path| clarity_s_own(&self.root, path))
+        let tools_only = |path: &PathBuf| match self.in_project(path) {
+            Ok((file, dir, relative)) => !matches!(clarity_tools::files::writable(&file, &dir, &relative), Ok(clarity_tools::files::Writable::PartFile(_))),
+            Err(_) => false,
+        };
+        !reads && tool.locations.iter().any(tools_only)
+    }
+
+    /// The project file, the folder of its modules (the client's root) and
+    /// `path` in that folder with `/`, when `path` lies inside it ([`inside`]).
+    fn in_project(&self, path: &Path) -> Result<(PathBuf, PathBuf, String), String> {
+        let real = inside(&self.root, path)?;
+        let dir = self.root.canonicalize().map_err(|err| format!("cannot reach the project folder: {err}"))?;
+        let relative = real.strip_prefix(&dir).map_err(|_| format!("{} is outside the project; the agent reaches only its files", path.display()))?;
+        let relative: Vec<String> = relative.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
+        // The project file sits beside the folder of its modules, by the same name.
+        let mut file = dir.clone().into_os_string();
+        file.push(".clarity");
+        Ok((PathBuf::from(file), dir, relative.join("/")))
     }
 
     /// A `session/update`: kept for permissions, and told to the panel.
@@ -629,22 +641,6 @@ fn sign_in_of(way: &Value) -> Option<SignIn> {
 
 /// The name Clarity's tools go to the agent under (the IDE's ToolServer).
 pub const TOOL_SERVER: &str = "clarity";
-
-/// What an agent is told when it writes one of Clarity's own files itself.
-const OWN_FILES: &str = "Clarity's own files (modules, the project file, windows and views, README.md, the resources' texts) change only through Clarity's tools: write_file for code and texts, the structural tools (add_entity, add_window, add_part, change_part...) for the rest";
-
-/// Whether `path` is one of Clarity's own files in the project folder
-/// `root`, which every AI changes only through Clarity's tools: a module or
-/// the project file (`.clarity`), a window or view (`.cxaml`), the README,
-/// or a Markdown text of the resources.
-pub fn clarity_s_own(root: &Path, path: &Path) -> bool {
-    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
-    if matches!(extension, "clarity" | "cxaml") {
-        return true;
-    }
-    let within = path.strip_prefix(root).ok();
-    within.is_some_and(|w| w == Path::new("README.md") || (w.starts_with("resources") && extension == "md"))
-}
 
 /// `path` when it lies inside the project folder `root`: absolute, without
 /// `..`, and not leading out through a link. A file that is not there yet

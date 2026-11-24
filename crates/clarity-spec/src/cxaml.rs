@@ -1450,9 +1450,17 @@ pub fn write_with_pages_moved_out(path: &std::path::Path, text: &str) -> std::io
 /// and its markup is written again. The result lists the modules and then
 /// the pages, each by its own path; a page that cannot be read is left out.
 pub fn make_keys_with_pages(modules: &[(&str, &str)], pages: &[(&str, &str)], translations: &[(&str, &str)], default: &str) -> crate::keyed::Keyed {
+    make_keys_with_pages_beside(modules, pages, translations, default, &std::collections::BTreeMap::new())
+}
+
+/// `make_keys_with_pages` beside the keys the project has already with their
+/// default language's texts (`keyed::make_keys_beside`): a new text that
+/// says the same as one of them takes its key, and only the new keys are in
+/// the result's languages.
+pub fn make_keys_with_pages_beside(modules: &[(&str, &str)], pages: &[(&str, &str)], translations: &[(&str, &str)], default: &str, existing: &std::collections::BTreeMap<String, String>) -> crate::keyed::Keyed {
     let read: Vec<(&str, &str, crate::design_edit::Designed)> = pages.iter().filter_map(|(path, markup)| read_designed(markup, path).ok().map(|d| (*path, *markup, d))).collect();
     let (places, mut designed): (Vec<(&str, &str)>, Vec<crate::design_edit::Designed>) = read.into_iter().map(|(p, m, d)| ((p, m), d)).unzip();
-    let mut keyed = crate::keyed::make_keys_designed(modules, &mut designed, translations, default, &std::collections::BTreeMap::new());
+    let mut keyed = crate::keyed::make_keys_designed(modules, &mut designed, translations, default, existing);
     for ((path, markup), designed) in places.iter().zip(&designed) {
         keyed.modules.push((path.to_string(), written_again(markup, designed)));
     }

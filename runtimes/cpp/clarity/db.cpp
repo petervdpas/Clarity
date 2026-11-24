@@ -1,7 +1,5 @@
 #include "clarity/db.hpp"
 
-#include "clarity/backup.hpp"
-
 #include <algorithm>
 #include <fstream>
 #include <set>

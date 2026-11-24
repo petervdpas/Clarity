@@ -348,6 +348,9 @@ pub fn said(err: &Error) -> Text {
         Error::InUse { table, .. } => Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", Slot::text(*table)),
         Error::DividedByZero => Text::keyed("divisionByZero", "Division by zero"),
         Error::TooLarge => Text::keyed("numberTooLarge", "The number is too large"),
+        // A database or file store at an unset environment variable (conformance/data-folder.json).
+        Error::NotSet(variable) => Text::keyed("variableNotSet", "The environment variable {variable} must be set").with("variable", Slot::text(variable.as_str())),
+        Error::NoFolder => Text::keyed("noFolderChosen", "No folder was chosen"),
         other => Text::plain(other.to_string()),
     }
 }

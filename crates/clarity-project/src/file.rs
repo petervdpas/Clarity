@@ -92,6 +92,33 @@ pub fn kept_problem(name: &str) -> Option<String> {
     None
 }
 
+/// What is wrong with `folder` as the project's backups folder: it must be
+/// a folder under the project's folder, written from there, so every system
+/// finds it (docs/ledger/backups.md); none when it is one.
+pub fn backups_problem(folder: &str) -> Option<String> {
+    let slashed = folder.trim().replace('\\', "/");
+    let like = "name a folder under the project's folder, like \"data/backups\"";
+    let bytes = slashed.as_bytes();
+    if slashed.starts_with('/') || (bytes.len() >= 2 && bytes[1] == b':') {
+        return Some(format!("the backups folder '{folder}' is a path from the root of the disk; {like}"));
+    }
+    let mut depth = 0usize;
+    for part in slashed.split('/').filter(|p| !p.is_empty() && *p != ".") {
+        if part == ".." {
+            let Some(up) = depth.checked_sub(1) else {
+                return Some(format!("the backups folder '{folder}' goes above the project's folder; {like}"));
+            };
+            depth = up;
+        } else {
+            depth += 1;
+        }
+    }
+    if depth == 0 {
+        return Some(format!("the backups folder '{folder}' is not a folder under the project's folder; {like}"));
+    }
+    None
+}
+
 /// The words of the paging kinds, as the project file writes them.
 const PAGING_KINDS: [(PagingKind, &str); 4] =
     [(PagingKind::Page, "page"), (PagingKind::Offset, "offset"), (PagingKind::Cursor, "cursor"), (PagingKind::Link, "link")];
@@ -186,6 +213,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut currency = None;
     let mut keys_editable = None;
     let mut include_migrate = None;
+    let mut backups = None;
     let mut signin: Option<clarity_spec::signin::Signin> = None;
     // Whether the indented lines that follow belong to the signin block.
     let mut in_signin = false;
@@ -364,6 +392,17 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: write 'include migrate' to put Clarity's data migration tools in the output folder"));
                 }
                 include_migrate = Some(true);
+            }
+            "backups" => {
+                once(backups.is_some())?;
+                let folder = match a.as_slice() {
+                    [t] if t.kind == TokenKind::Str => t.text.clone(),
+                    _ => return Err(format!("line {line}: write 'backups' and a folder under the project's folder in quotes, like: backups \"data/backups\"")),
+                };
+                if let Some(problem) = backups_problem(&folder) {
+                    return Err(format!("line {line}: {problem}"));
+                }
+                backups = Some(folder);
             }
             "agents" if a.first().and_then(|t| word(t)) == Some("at") => {
                 once(agents_at_most.is_some())?;
@@ -601,7 +640,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, include, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec"
+                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, include, backups, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec"
                 ));
             }
         }
@@ -628,6 +667,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
         include_migrate: include_migrate.unwrap_or(false),
+        backups,
         signin,
         engines_interpreted: engines_interpreted.unwrap_or(false),
         agents_read_closed: agents_closed.is_some_and(|c| c.0),
@@ -748,6 +788,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if settings.include_migrate {
         lines.push(("include".into(), 1, "include migrate".to_string()));
+    }
+    if let Some(folder) = &settings.backups {
+        lines.push(("backups".into(), 1, format!("backups {}", quote(folder))));
     }
     if let Some(language) = &settings.language {
         lines.push(("language".into(), 1, format!("language {}", quote(language))));

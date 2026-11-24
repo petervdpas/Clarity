@@ -195,6 +195,8 @@ translation de
     recordStillUsed "Dieses {table} wird noch von anderen Datensätzen verwendet"
     divisionByZero "Division durch null"
     numberTooLarge "Die Zahl ist zu groß"
+    variableNotSet "Die Umgebungsvariable {variable} muss gesetzt sein"
+    noFolderChosen "Es wurde kein Ordner gewählt"
     engineTooLong "{engine} lief länger als {seconds} Sekunden und wurde gestoppt"
     engineStopped "{engine} wurde gestoppt"
     engineBroke "{engine} funktioniert in {function} nicht mehr"

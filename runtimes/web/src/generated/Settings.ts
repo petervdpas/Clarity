@@ -77,6 +77,13 @@ keys_editable: boolean,
  */
 include_migrate: boolean, 
 /**
+ * The folder the backups of the project's databases go in, under the
+ * project's folder so every system finds it (docs/ledger/backups.md):
+ * `backups "data/backups"`, each data source's in a folder of its name
+ * inside it. Without it the project takes no backups.
+ */
+backups: string | null, 
+/**
  * Who is using the program (docs/ledger/signin.md):
  * `signin Member on desktop web` with its strategies; none without it.
  */

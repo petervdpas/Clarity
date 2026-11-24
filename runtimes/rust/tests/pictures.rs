@@ -165,7 +165,11 @@ fn a_picture_in_a_file_store_is_a_file_named_by_its_bytes() {
 #[test]
 fn a_store_comes_from_its_place_or_the_environment() {
     let mut db = Db::memory().unwrap();
-    assert!(db.add_store("photos", "env:CLARITY_NO_SUCH_STORE").is_err());
+    // An unset variable does not stop the program: the place that uses the store says so.
+    db.add_store("photos", "env:CLARITY_NO_SUCH_STORE").unwrap();
+    let err = db.files("photos").unwrap_err();
+    assert_eq!(clarity_runtime::program::said(&err).key.as_deref(), Some("variableNotSet"));
+    assert_eq!(err.to_string(), "the environment variable CLARITY_NO_SUCH_STORE is not set");
     let store = scratch("env");
     db.add_store("photos", &store.display().to_string()).unwrap();
     assert!(store.is_dir(), "the folder is made");
@@ -213,26 +217,29 @@ fn a_picture_is_copied_from_another_record() {
 #[test]
 fn a_store_keeps_its_files_in_a_folder_setting() {
     let home = scratch("setting");
-    let variable = if cfg!(target_os = "windows") {
-        "APPDATA"
+    let variables: &[&str] = if cfg!(target_os = "windows") {
+        &["APPDATA"]
     } else if cfg!(target_os = "macos") {
-        "HOME"
+        &["HOME"]
     } else {
-        "XDG_CONFIG_HOME"
+        &["XDG_CONFIG_HOME", "XDG_DATA_HOME"]
     };
-    // SAFETY: this test alone sets the variable in this program, before it reads it.
-    unsafe { std::env::set_var(variable, &home) };
+    for variable in variables {
+        // SAFETY: this test alone sets the variables in this program, before it reads them.
+        unsafe { std::env::set_var(variable, &home) };
+    }
     let program = "clarity-folder-test";
-    let settings_folder = clarity_runtime::settings::file(program).unwrap().parent().unwrap().to_path_buf();
+    let data_folder = std::path::PathBuf::from(clarity_runtime::data_folder::folder(program, |name| std::env::var(name).ok()));
     let mut db = Db::memory().unwrap();
     apply_steps(&db, "", &[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
     db.add_store_setting("photos", program, "photosFolder", "photos").unwrap();
     let name = picture::file_name(&JPG).unwrap();
 
-    // Not chosen yet: the default, in the settings' folder.
+    // Not chosen yet: the default, in the program's data folder (conformance/data-folder.json).
     let mut first = Album { title: "First".into(), photo: Some(Picture::New(JPG.to_vec())), ..Album::default() };
     db.save(&mut first).unwrap();
-    assert_eq!(std::fs::read(settings_folder.join("photos").join(&name)).unwrap(), JPG);
+    assert_eq!(data_folder, home.join(program));
+    assert_eq!(std::fs::read(data_folder.join("photos").join(&name)).unwrap(), JPG);
 
     // Chosen while the program runs: the next save keeps its file there.
     let chosen = home.join("chosen");

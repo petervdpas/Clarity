@@ -1,5 +1,10 @@
 module invoices
 
+// What each person sets for themselves, kept on their machine: the folder
+// the invoices are saved in.
+settings
+    exportsFolder: folder, default "exports", label @exportsFolderSetting
+
 entity Order
     number: text(12), required, unique, label @orderNumberLabel
     notes: text(400), label @orderNotesLabel

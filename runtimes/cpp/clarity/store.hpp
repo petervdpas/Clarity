@@ -46,6 +46,24 @@ std::string data_folder_sqlite(const std::string& location, const std::function<
 // data:<program>/<file> location opens in CLARITY_DATA's folder, else in the
 // person's folder for application data (conformance/data-folder.json).
 std::string data_folder_sqlite_on(const std::string& os, const std::string& location, const std::function<const char*(const char*)>& env = {});
+/// The program's data folder (conformance/data-folder.json, folders): the
+/// folder CLARITY_DATA names, else the person's folder for application data
+/// under the program's name; "" when the environment names neither, which is
+/// where the program runs. A relative file store and a relative folder
+/// setting are in it, as a relative SQLite database is.
+std::string data_folder(const std::string& program, const std::function<const char*(const char*)>& env = {});
+/// data_folder on system `os` ("windows", "macos" or another).
+std::string data_folder_on(const std::string& os, const std::string& program, const std::function<const char*(const char*)>& env = {});
+/// The folder of a file store at `location` (conformance/data-folder.json,
+/// stores): data:<program>/<name> (a relative folder in the project file) is
+/// in the program's data folder under its own name; env:NAME is that
+/// variable's value, a NotSetError while it is unset or empty; anything else
+/// is as it is.
+std::string data_folder_store(const std::string& location, const std::function<const char*(const char*)>& env = {});
+/// data_folder_store on system `os`.
+std::string data_folder_store_on(const std::string& os, const std::string& location, const std::function<const char*(const char*)>& env = {});
+/// `name` in `folder`; just `name` when there is no folder.
+std::string in_folder(const std::string& folder, const std::string& name);
 /// Connects to the database of a data source.
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at);
 std::unique_ptr<Driver> open_sqlite(const std::string& path);

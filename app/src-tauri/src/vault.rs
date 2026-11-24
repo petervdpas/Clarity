@@ -272,6 +272,15 @@ impl Store {
         if !problems.is_empty() {
             return Err(problems.join(" "));
         }
+        // The vault keeps only secrets: an outside agent is found on the computer (docs/ledger/acp.md).
+        if was.is_none()
+            && let Some(vendor) = fields.iter().find(|(name, _)| name == "kind").and_then(|(_, f)| f.value.as_deref()).and_then(clarity_acp::vendors::Vendor::of_kind)
+        {
+            return Err(format!(
+                "{} needs no connection: Clarity finds it on this computer and lists it in the Agent panel. Choose another program for it in Clarity settings > Environment",
+                vendor.name()
+            ));
+        }
         connections.save(Connection::new(row.name.trim(), fields)).map_err(said)?;
         if let Some(was) = was.filter(|_| renamed) {
             connections.remove(was).map_err(said)?;
@@ -295,6 +304,11 @@ impl Store {
         }
     }
 
+    /// Whether there is a connection named `name` (in any case); the vault need not be unlocked.
+    pub fn has_connection(&self, name: &str) -> bool {
+        Connections::load(self.connections_file()).is_ok_and(|c| c.get(name).is_some())
+    }
+
     pub fn remove_connection(&self, name: &str) -> Result<Vec<ConnectionRow>, String> {
         Connections::load(self.connections_file()).and_then(|mut c| c.remove(name)).map_err(said)?;
         self.connections()
@@ -304,6 +318,11 @@ impl Store {
 /// The value of field `key` of a connection, for the rest of Clarity.
 pub fn resolve(state: &VaultState, connection: &str, key: &str) -> Result<String, String> {
     with(state, |s| s.resolve(connection, key))
+}
+
+/// Whether there is a connection named `name`, for the rest of Clarity.
+pub fn has_connection(state: &VaultState, name: &str) -> bool {
+    with(state, |s| Ok(s.has_connection(name))).unwrap_or(false)
 }
 
 /// The secret under (category, key) for the rest of Clarity, or None when there is none.
@@ -557,6 +576,25 @@ mod tests {
         assert_eq!(store.resolve("shop", "password").unwrap_err(), "the vault is locked");
         assert!(store.resolve("nowhere", "host").is_err());
         assert!(store.remove_connection("shop").unwrap().is_empty());
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    /// The vault keeps only secrets (docs/ledger/acp.md, 2026-11-23): Codex
+    /// and Copilot are found on the computer, so a new connection of kind
+    /// codex or copilot is refused; one already there still reads and saves.
+    #[test]
+    fn outside_agents_need_no_new_connection_but_old_ones_keep_working() {
+        let (store, folder) = store("outside-agents");
+        let kind = |name: &str, kind: &str| ConnectionRow { name: name.into(), fields: vec![("kind".into(), FieldValue::Plain { value: kind.into() })] };
+        let why = store.save_connection(None, &kind("mine", " Codex ")).unwrap_err();
+        assert!(why.contains("Clarity settings > Environment"), "{why}");
+        assert!(store.save_connection(None, &kind("mine", "copilot")).is_err());
+        assert!(!store.has_connection("mine"));
+        assert!(store.save_connection(None, &kind("local", "openai")).is_ok());
+        // One written before stays, is known by name without unlocking, and saves again.
+        Connections::load(store.connections_file()).unwrap().save(Connection::new("work", vec![("kind".into(), ConnectionField::plain("copilot"))])).unwrap();
+        assert!(store.has_connection("work") && store.has_connection(" Work "));
+        assert!(store.save_connection(Some("work"), &kind("work", "copilot")).is_ok());
         std::fs::remove_dir_all(&folder).unwrap();
     }
 }

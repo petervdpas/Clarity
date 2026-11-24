@@ -12,6 +12,12 @@ publish = false
 serde_json.workspace = true
 # The version the workspace already has through the IDE: the program, its pipes, the channels.
 tokio = { version = "1.53.3", features = ["rt", "sync", "process", "io-util"] }
+# The agent's own writes follow the one rule of Clarity's tools: which files, and how they are written.
+clarity-tools.workspace = true
+# The scan for the agents' programs looks where the build tools check looks, and
+# the person's choice of program is kept with the tools' (Clarity settings > Environment).
+clarity-gen-core = { path = "../clarity-gen-core" }
 
 [dev-dependencies]
+clarity-project.workspace = true
 tokio = { version = "1.53.3", features = ["rt", "sync", "process", "io-util", "macros"] }

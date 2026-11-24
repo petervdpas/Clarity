@@ -124,7 +124,7 @@ void a_folder_setting_is_where_every_runtime_puts_a_store(void) {
     cJSON* cases = conformance("settings.json");
     const cJSON* c;
     cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "folders")) {
-        const char* found = clarity_store_folder_in(cJSON_GetObjectItem(c, "os")->valuestring, cJSON_GetObjectItem(c, "settingsFolder")->valuestring,
+        const char* found = clarity_store_folder_in(cJSON_GetObjectItem(c, "os")->valuestring, cJSON_GetObjectItem(c, "dataFolder")->valuestring,
                                                     cJSON_GetObjectItem(c, "store")->valuestring, cJSON_GetObjectItem(c, "kept"), cJSON_GetObjectItem(c, "default")->valuestring);
         CHECK_TEXT(found, cJSON_GetObjectItem(c, "folder")->valuestring);
     }
@@ -143,15 +143,18 @@ void a_store_keeps_its_files_in_a_folder_setting(void) {
     setenv("HOME", home, 1);
 #else
     setenv("XDG_CONFIG_HOME", home, 1);
+    setenv("XDG_DATA_HOME", home, 1);
 #endif
     const char* program = "clarity-folder-test";
-    const char* settings_folder = clarity_parent(clarity_settings_file(program));
+    // The default is in the program's data folder (conformance/data-folder.json).
+    const char* data_folder = clarity_data_folder(program, NULL);
+    CHECK_TEXT(data_folder, clarity_format("%s/%s", home, program));
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_add_store_setting(db, "photos", program, "photosFolder", "photos"));
-    // Not chosen yet: the default, in the settings' folder.
+    // Not chosen yet: the default, in the program's data folder.
     CHECK_OK(clarity_write_text(db, "photos", "first.txt", "first"));
-    CHECK(clarity_exists(clarity_format("%s/photos/first.txt", settings_folder)));
+    CHECK(clarity_exists(clarity_format("%s/photos/first.txt", data_folder)));
     // Chosen while the program runs: the next file goes there.
     const char* chosen = clarity_format("%s/chosen", home);
     cJSON* values = cJSON_CreateObject();

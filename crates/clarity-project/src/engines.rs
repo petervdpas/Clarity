@@ -12,8 +12,9 @@ use clarity_spec::code::{EngineDecl, EngineFunction, EngineState, TypeRef, TypeR
 use serde::Serialize;
 use ts_rs::TS;
 
-/// The version of the `clarity-engine` library a new engine depends on.
-pub const ENGINE_LIBRARY_VERSION: &str = "0.3";
+/// The version of the `clarity-engine` library a new engine depends on: the
+/// checker's, so a new engine never draws its warning.
+pub use clarity_spec::engines::ENGINE_LIBRARY_VERSION;
 
 /// The target an engine is built for: WebAssembly without an operating system.
 pub const TARGET: &str = "wasm32-unknown-unknown";

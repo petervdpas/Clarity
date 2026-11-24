@@ -112,7 +112,7 @@ fn searches(db: &mut Db, dialect: Dialect, kind: SourceKind) {
         }
     }
     let steps = steps(kind);
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1])), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps[..1], None)), 1);
     for (title, notes, tags) in [
         ("Kind of Blue", "Miles Davis, recorded in 1959", r#"["jazz","modal"]"#),
         ("Blue Train", "John Coltrane on Blue Note", r#"["jazz","hard bop"]"#),
@@ -121,7 +121,7 @@ fn searches(db: &mut Db, dialect: Dialect, kind: SourceKind) {
     ] {
         db.save(&mut Album { title: title.into(), notes: notes.into(), tags: tags.into(), year: 1959, ..Album::default() }).unwrap();
     }
-    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps)), 1);
+    assert_eq!(migrated(clarity_migrate::migrate_open(&db, "main", &steps, None)), 1);
 
     // Every word, each as the start of a word, in any searched field.
     assert_eq!(found(db, "blue"), ["Blue Train", "Kind of Blue"]);

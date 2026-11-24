@@ -146,6 +146,20 @@ const SHOW_WINDOW: &str = "show_window";
 const SHOW_DIAGRAM: &str = "show_diagram";
 const OPEN_PROJECT: &str = "open_project";
 
+/// The window `name` of the project in the module folder `dir`, to show in
+/// Preview: a window or a dialog the project has. The one check of the IDE's
+/// agent and the agents over MCP.
+pub fn window(dir: &Path, name: &str) -> Result<Shown, String> {
+    use clarity_spec::model::PageKind;
+    let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
+    let windows: Vec<&str> = project.files.iter().flat_map(|f| &f.pages).filter(|p| matches!(p.kind, PageKind::Window | PageKind::Dialog)).map(|p| p.name.name.as_str()).collect();
+    let name = name.trim();
+    if !windows.contains(&name) {
+        return Err(format!("the project has no window '{name}'; its windows are: {}", windows.join(", ")));
+    }
+    Ok(Shown::Window(name.to_string()))
+}
+
 /// Adds `shown` to the turn's file `file`, one JSON line.
 pub fn show(file: &Path, shown: &Shown) -> Result<(), String> {
     use std::io::Write;

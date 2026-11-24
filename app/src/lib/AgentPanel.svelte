@@ -49,14 +49,14 @@
   <header>
     <strong>Agent</strong>
     <select aria-label="Connection" value={agent.connection} onchange={(e) => agent.pick(e.currentTarget.value)} disabled={agent.running}>
-      {#each agent.connections as name (name)}
-        <option value={name}>{name}</option>
+      {#each agent.connections as choice (choice.id)}
+        <option value={choice.id} title={choice.title}>{choice.label}</option>
       {:else}
         <option value={agent.connection}>{agent.connection}</option>
       {/each}
     </select>
     {#if agent.needsSignIn || agent.signingIn}
-      <button onclick={() => agent.signIn()} disabled={agent.running || agent.signingIn} title="Sign in the way this connection does (the agent program's vendor, or Microsoft): a browser opens">{agent.signingIn ? "Signing in..." : "Sign in"}</button>
+      <button onclick={() => agent.signIn()} disabled={agent.running || agent.signingIn} title="Sign in the way this agent does (the agent program's vendor, or Microsoft): a browser opens">{agent.signingIn ? "Signing in..." : "Sign in"}</button>
     {/if}
     <button onclick={() => agent.forget()} disabled={agent.running || agent.items.length === 0} title="Start a new conversation">New</button>
     <button onclick={() => agent.toggle()} title="Hide the agent">&times;</button>
@@ -114,7 +114,7 @@
       {/if}
     {:else}
       <p class="empty">
-        Ask for an app, a window or a change. The agent reads and writes the open project, checks every change, and one Undo takes a whole answer back. It works through the connection {agent.connection} in the vault: a key for Clarity's own agent, or kind codex or copilot for your own agent program, signed in its own way.
+        Ask for an app, a window or a change. The agent reads and writes the open project, checks every change, and one Undo takes a whole answer back. It works through the choice above: a connection in the vault with a key for Clarity's own agent, or Codex or GitHub Copilot found on this computer, your own agent program, signed in its own way. Clarity settings > Environment chooses another copy of a program.
       </p>
     {/each}
     {#if agent.running}<p class="note">Working...</p>{/if}

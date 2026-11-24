@@ -1,7 +1,7 @@
 //! The project's custom parts and libraries that name their library: their
 //! folders, languages and files, and which file in each is Clarity's.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clarity_spec::code::PartLibrary;
 use serde::Serialize;
@@ -85,6 +85,36 @@ pub struct PartFolder {
     pub own: Option<String>,
 }
 
+/// `path` in the folder of the part or library `folder`, relative to that
+/// folder, checked the one way every front end checks it (the IDE's part
+/// files, the agents' tools): plain names split by `/`, none empty, `.`,
+/// `..` or hidden, no backslash, and nothing in the build's output.
+pub fn part_path(folder: &PartFolder, path: &str) -> Result<PathBuf, String> {
+    let pieces: Vec<&str> = path.split('/').collect();
+    if path.is_empty() || pieces.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.starts_with('.')) || path.contains('\\') {
+        return Err(format!("'{}/{path}' is not a file of {} {}: write a path like {}/src/lib.rs", folder.folder, folder.kind, folder.name, folder.folder));
+    }
+    if pieces.len() > 1 && BUILD_FOLDERS.contains(&pieces[0]) {
+        return Err(format!("'{}/{path}' is in the build's output of {} {}, which is not written by hand", folder.folder, folder.kind, folder.name));
+    }
+    Ok(pieces.iter().collect())
+}
+
+/// The file `path` of the part's or library's folder `folder`, in the
+/// project's folder `dir`, to write: the one rule of the IDE's part files and
+/// the agents' tools ([`part_path`]), and never Clarity's own file there.
+pub fn part_file(dir: &Path, folder: &PartFolder, path: &str) -> Result<PathBuf, String> {
+    if folder.own.as_deref() == Some(path) {
+        return Err(format!("{}/{path} is Clarity's: Clarity writes it from the declaration, so change the declaration instead", folder.folder));
+    }
+    Ok(dir.join(&folder.folder).join(part_path(folder, path)?))
+}
+
+/// Whether `path` in a part's folder is Clarity's file there, or a folder that holds it.
+pub fn holds_own(folder: &PartFolder, path: &str) -> bool {
+    folder.own.as_deref().is_some_and(|own| own == path || own.starts_with(&format!("{path}/")))
+}
+
 /// The project's custom parts and libraries that name their library, with their folders.
 pub fn part_folders(dir: &Path, project: &clarity_spec::Project) -> Vec<PartFolder> {
     let mut out = Vec::new();
@@ -127,6 +157,23 @@ pub fn builds_alone(project: &clarity_spec::Project, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One rule for a path in a part's folder, the strict one, for the IDE and the agents alike.
+    #[test]
+    fn a_path_in_a_part_s_folder_is_plain_and_outside_the_build() {
+        let arena = PartFolder { kind: "part", name: "Arena".into(), language: "Rust", folder: "parts/Arena".into(), own: Some("src/clarity.rs".into()) };
+        assert_eq!(part_path(&arena, "src/lib.rs").unwrap(), Path::new("src").join("lib.rs"));
+        assert_eq!(part_path(&arena, "build").unwrap(), Path::new("build"), "a file named like a build folder");
+        for wrong in ["", "/etc/passwd", "../escape.rs", "src/../../x", "./src/lib.rs", "src//lib.rs", ".hidden", "src/.env", "src\\lib.rs", "src/"] {
+            let why = part_path(&arena, wrong).unwrap_err();
+            assert!(why.contains("is not a file of part Arena"), "{wrong}: {why}");
+        }
+        for output in ["target/debug/x", "build/a.o", "bin/x", "obj/x", "node_modules/x"] {
+            assert!(part_path(&arena, output).unwrap_err().contains("build's output"), "{output}");
+        }
+        assert!(holds_own(&arena, "src/clarity.rs") && holds_own(&arena, "src"));
+        assert!(!holds_own(&arena, "src/lib.rs") && !holds_own(&arena, "sr"));
+    }
 
     #[test]
     fn the_tree_shows_folders_first_without_build_output() {

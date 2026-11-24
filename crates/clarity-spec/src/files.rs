@@ -97,3 +97,13 @@ mod tests {
         }
     }
 }
+
+/// Whether `path` names a place on one machine only: absolute by its form
+/// (`/` or `\` first, `~` for a home folder, or a drive letter and `:`),
+/// whatever system checks it. A project and its code name folders and files
+/// inside the project or a store, from the environment or from a setting.
+pub fn one_machine(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes.get(2).is_none_or(|b| matches!(b, b'/' | b'\\'));
+    path.starts_with(['/', '\\', '~']) || drive
+}

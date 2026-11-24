@@ -22,9 +22,10 @@ const char* clarity_settings_os(void);
 /// The folder of file store `store` when a folder setting names it, on
 /// system `os`, in the scratch arena: the `kept` value when it is text that
 /// is not empty, else `fallback` (the setting's default), else a folder
-/// named after the store; a relative folder is in `settings_folder`, the
-/// folder of the settings file.
-const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback);
+/// named after the store; a relative folder is in `data_folder`, the
+/// program's data folder (clarity_data_folder), or where the program runs
+/// when that is "".
+const char* clarity_store_folder_in(const char* os, const char* data_folder, const char* store, const cJSON* kept, const char* fallback);
 /// The value a file store reads for its folder setting `setting`: what the
 /// running handler set (`held`), else what was kept, else "" (conformance/settings.json, `now`).
 /// It points into `held` or `kept`.

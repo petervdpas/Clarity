@@ -258,6 +258,11 @@ pub enum Error {
     /// table and id, the field's column, and why in Clarity's own words. A
     /// window shows it at the input bound to that field (crate::required).
     Required { table: &'static str, id: Id, column: String, text: ui::Text },
+    /// A database or file store at `env:NAME` while that environment
+    /// variable is unset or empty: its name (conformance/data-folder.json).
+    NotSet(String),
+    /// Code listed or wrote a folder that is no store, with no folder chosen.
+    NoFolder,
     /// A database whose migration steps are not the ones the app was made with
     /// (docs/ledger/migrations.md): the app stops with this line, in English
     /// (conformance/migrate-check.json).
@@ -319,6 +324,7 @@ fn first_required_empty(required: &[(&str, &str)], columns: &[&str], values: &[S
 pub fn unconnected_reason(err: &Error) -> ui::Text {
     match err {
         Error::NotKept(_) => ui::Text::key("unconnectedNotKept"),
+        Error::NotSet(_) => crate::program::said(err),
         Error::Storage(what) => ui::Text::key("unconnectedFailed").with("problem", ui::Slot::text(what.clone())),
         other => ui::Text::key("unconnectedFailed").with("problem", ui::Slot::text(other.to_string())),
     }
@@ -340,6 +346,8 @@ impl fmt::Display for Error {
             Error::DividedByZero => f.write_str("division by zero"),
             Error::TooLarge => f.write_str("a number too large"),
             Error::Steps(line) => f.write_str(line),
+            Error::NotSet(name) => write!(f, "the environment variable {name} is not set"),
+            Error::NoFolder => f.write_str("no folder was chosen"),
         }
     }
 }
@@ -531,6 +539,8 @@ enum StorePlace {
     /// A folder setting of `program`, read again at every use (`filestore
     /// photos "setting:photosFolder"`), and the setting's default.
     Setting { program: String, setting: String, default: String },
+    /// `env:NAME` with the variable unset: each use says so.
+    NotSet(String),
 }
 
 /// The databases of an application: one per data source.
@@ -643,11 +653,21 @@ impl Db {
 
     /// Adds the file store `name` at `location`, a folder (made when it is
     /// not there yet); `env:NAME` takes it from that environment variable.
+    /// `data:<program>/<name>` is in the program's data folder, and with
+    /// `env:NAME` unset the store says so where it is used, so the program
+    /// does not stop (conformance/data-folder.json, `stores`).
     pub fn add_store(&mut self, name: &str, location: &str) -> Result<()> {
-        let folder = std::path::PathBuf::from(store::location(location)?);
-        std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
+        let place = match crate::data_folder::store(location, |name| std::env::var(name).ok()) {
+            Ok(folder) => {
+                let folder = std::path::PathBuf::from(folder);
+                std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
+                StorePlace::Folder(folder)
+            }
+            Err(Error::NotSet(variable)) => StorePlace::NotSet(variable),
+            Err(err) => return Err(err),
+        };
         self.stores.retain(|(n, _)| n != name);
-        self.stores.push((name.to_string(), StorePlace::Folder(folder)));
+        self.stores.push((name.to_string(), place));
         Ok(())
     }
 
@@ -684,18 +704,19 @@ impl Db {
         // A folder that is no store, by its path: just a folder.
         if let Some(path) = name.strip_prefix(files::FOLDER) {
             if path.is_empty() {
-                return Err(Error::Storage("no folder was chosen".into()));
+                return Err(Error::NoFolder);
             }
             return Ok(std::path::PathBuf::from(path));
         }
         let place = self.stores.iter().find(|(n, _)| n == name).map(|(_, p)| p).ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))?;
         match place {
             StorePlace::Folder(folder) => Ok(folder.clone()),
+            StorePlace::NotSet(variable) => Err(Error::NotSet(variable.clone())),
             StorePlace::Setting { program, setting, default } => {
-                let file = settings::file(program).ok_or_else(|| Error::Storage("this system names no folder for application settings".into()))?;
-                let settings_folder = file.parent().map(|f| f.display().to_string()).unwrap_or_default();
+                // A relative folder is in the program's data folder (conformance/settings.json, `folders`).
+                let data_folder = crate::data_folder::folder(program, |name| std::env::var(name).ok());
                 let kept = serde_json::Value::String(settings::now(&self.held.borrow(), &settings::read(program), setting));
-                let folder = std::path::PathBuf::from(settings::store_folder_in(settings::OS, &settings_folder, name, &kept, default));
+                let folder = std::path::PathBuf::from(settings::store_folder_in(settings::OS, &data_folder, name, &kept, default));
                 std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
                 Ok(folder)
             }

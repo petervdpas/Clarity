@@ -25,6 +25,12 @@ pub struct Applied {
 /// and writes what it changes; refused, writing nothing, when the project
 /// would gain an error.
 pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
+    // Naming parts and camelCase names have one way, for the designer's fix in Problems too (crate::naming).
+    match edit {
+        Edit::NameParts => return crate::naming::name_parts(dir, Some(file)).map(|changes| Applied { changes, focus: None }),
+        Edit::CamelNames => return crate::naming::camel_names(dir, Some(file)).map(|changes| Applied { changes, focus: None }),
+        _ => {}
+    }
     let source = std::fs::read_to_string(file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
     let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
     let before = clarity_project::load_modules(dir).map_err(read_err)?;
@@ -139,7 +145,7 @@ pub fn apply(dir: &Path, file: &Path, edit: &Edit) -> Result<Applied, String> {
 }
 
 /// The errors of `after` that `before` did not have, by file and message.
-fn new_errors<'a>(before: &clarity_spec::Project, after: &'a clarity_spec::Project) -> Vec<&'a clarity_spec::Diagnostic> {
+pub(crate) fn new_errors<'a>(before: &clarity_spec::Project, after: &'a clarity_spec::Project) -> Vec<&'a clarity_spec::Diagnostic> {
     use clarity_spec::Severity;
     let known: Vec<(&str, &str)> = before.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| (d.path.as_str(), d.message.as_str())).collect();
     after.diagnostics.iter().filter(|d| d.severity == Severity::Error && !known.contains(&(d.path.as_str(), d.message.as_str()))).collect()
@@ -194,7 +200,7 @@ fn fitted(dir: &Path, replaced: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String
 
 /// The error an edit would add, with the file and line it would be at, so
 /// the agent finds what to change first.
-fn refusal(dir: &Path, replaced: &[(&Path, &str)], error: &clarity_spec::Diagnostic) -> String {
+pub(crate) fn refusal(dir: &Path, replaced: &[(&Path, &str)], error: &clarity_spec::Diagnostic) -> String {
     if error.path.is_empty() {
         return error.message.clone();
     }

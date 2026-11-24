@@ -17,7 +17,6 @@ type defaultsFile struct {
 		TriesMinutes   int64 `json:"triesMinutes"`
 	} `json:"signin"`
 	UndoSteps     int64 `json:"undoSteps"`
-	KeptBackups   int64 `json:"keptBackups"`
 	HTTPSeconds   int64 `json:"httpSeconds"`
 	OwnersPerRead int64 `json:"ownersPerRead"`
 	EditBusKeeps  int64 `json:"editBusKeeps"`
@@ -46,7 +45,6 @@ func TestTheDefaultsAreTheSpecs(t *testing.T) {
 		{"sign-in tries", SigninTries, file.Signin.Tries},
 		{"sign-in wait", SigninTriesSeconds, file.Signin.TriesMinutes * 60},
 		{"undo steps", UndoSteps, file.UndoSteps},
-		{"kept backups", KeptAutomatic, file.KeptBackups},
 		{"http", int64(HTTPTimeout / time.Second), file.HTTPSeconds},
 		{"owners per read", OwnersPerRead, file.OwnersPerRead},
 		{"edit bus", maxEdits, file.EditBusKeeps},

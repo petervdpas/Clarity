@@ -852,28 +852,83 @@ pub fn tree(repo: &Path) -> Result<String, String> {
     Ok(fingerprint(&head(repo)?, &snapshot(repo)?))
 }
 
+/// How a release check stands on the tree as it is, decided once for the
+/// plan (MCP `release_state`, `held_back`), the Release planning tab and its Run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Counted {
+    /// It passed on the tree as it is.
+    Passed,
+    /// It failed on the tree as it is.
+    Failed,
+    /// It ran, but on another tree: a file it reads changed since, or the tree could not be read.
+    OtherTree,
+    NotRun,
+}
+
+impl Counted {
+    /// How the last run `record` of a check counts while the fingerprint of
+    /// what the check reads is `now`; with none (the tree could not be read)
+    /// a run counts as on another tree, never as passed.
+    pub fn of(record: Option<&CheckRecord>, now: Option<&str>) -> Counted {
+        match record {
+            None => Counted::NotRun,
+            Some(r) if now != Some(r.tree.as_str()) => Counted::OtherTree,
+            Some(r) if r.passed => Counted::Passed,
+            Some(_) => Counted::Failed,
+        }
+    }
+
+    /// Whether its last run was on the tree as it is.
+    pub fn current(self) -> bool {
+        matches!(self, Counted::Passed | Counted::Failed)
+    }
+
+    /// Why it holds a plan back, after its title; none when it passed.
+    fn held_back(self, title: &str) -> Option<String> {
+        match self {
+            Counted::Passed => None,
+            Counted::Failed => Some(format!("{title}: failed")),
+            Counted::OtherTree => Some(format!("{title}: ran on another tree")),
+            Counted::NotRun => Some(format!("{title}: not run")),
+        }
+    }
+}
+
+/// A release check, its last run, and how that counts now.
+#[derive(Debug, Clone)]
+pub struct CheckStanding {
+    pub check: Check,
+    pub record: Option<CheckRecord>,
+    pub counted: Counted,
+}
+
+/// Every release check for the changed files `files`, each with how it
+/// stands on the tree as it is: what a plan, the Release planning tab and
+/// its Run read. A tree that cannot be read leaves every run on another tree.
+pub fn check_standings(repo: &Path, files: &[String]) -> Vec<CheckStanding> {
+    let records = check_records(repo);
+    let state = tree_state(repo).ok();
+    checks(repo, files)
+        .into_iter()
+        .map(|check| {
+            let now = state.as_ref().map(|s| s.fingerprint(&check));
+            let record = records.get(&check.key).cloned();
+            let counted = Counted::of(record.as_ref(), now.as_deref());
+            CheckStanding { check, record, counted }
+        })
+        .collect()
+}
+
 /// The checks of `checks` (key, title, the fingerprint of what it reads now)
 /// that hold a plan back, each with why: failed, ran on another tree, or not run.
 pub fn held_back_of(checks: impl Iterator<Item = (String, String, String)>, records: &BTreeMap<String, CheckRecord>) -> Vec<String> {
-    checks
-        .filter_map(|(key, title, tree)| match records.get(&key) {
-            Some(r) if r.tree != tree => Some(format!("{title}: ran on another tree")),
-            Some(r) if r.passed => None,
-            Some(_) => Some(format!("{title}: failed")),
-            None => Some(format!("{title}: not run")),
-        })
-        .collect()
+    checks.filter_map(|(key, title, tree)| Counted::of(records.get(&key), Some(&tree)).held_back(&title)).collect()
 }
 
 /// The release checks that hold a plan back now: none when every one passed on the tree as it is.
 pub fn held_back(repo: &Path) -> Result<Vec<String>, String> {
     let (files, _) = since_ide_release(repo)?;
-    let state = tree_state(repo)?;
-    let checks = checks(repo, &files).into_iter().map(|c| {
-        let print = state.fingerprint(&c);
-        (c.key, c.title, print)
-    });
-    Ok(held_back_of(checks, &check_records(repo)))
+    Ok(check_standings(repo, &files).iter().filter_map(|s| s.counted.held_back(&s.check.title)).collect())
 }
 
 /// Whether `stamp` is a plan's name: `YYYY-MM-DD-HHMM`.

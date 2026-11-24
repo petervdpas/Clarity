@@ -7,5 +7,5 @@ project Novel
     stack cpp desktop
     output "out"
     datasource main sqlite "data/novel.db"
-    filestore export "export"
+    filestore export "setting:exportFolder"
     theme Paper Night Sepia Ink

@@ -1,7 +1,8 @@
 <script lang="ts">
   // The project's migration steps against its data dictionary: the changes
-  // no step covers yet, the renames Clarity proposes, and writing them as
-  // the next step. The backend decides what is pending; this only shows it.
+  // no step covers yet, the renames Clarity can suggest (taken only when the
+  // person ticks them), and writing them as the next step. The backend
+  // decides what is pending; this only shows it.
 
   import { invoke } from "@tauri-apps/api/core";
   import type { PendingMigration } from "@clarity/ui/generated/PendingMigration.ts";
@@ -25,8 +26,8 @@
 
   let pending = $state<PendingMigration | null>(null);
   let error = $state<string | null>(null);
-  /** The proposed renames the developer turned down. */
-  let declined = $state<Rename[]>([]);
+  /** The suggested renames the developer ticked; none is taken unasked. */
+  let picked = $state<Rename[]>([]);
   let title = $state("");
   let checked = $state(false);
   let busy = $state(false);
@@ -35,17 +36,17 @@
     return a.entity === b.entity && a.from === b.from && a.to === b.to;
   }
 
-  function isDeclined(r: Rename): boolean {
-    return declined.some((d) => same(d, r));
+  function isPicked(r: Rename): boolean {
+    return picked.some((p) => same(p, r));
   }
 
   function describe(r: Rename): string {
     return r.entity ? `${r.entity}.${r.from} is now ${r.to}` : `${r.from} is now ${r.to}`;
   }
 
-  /** The proposed renames that are still taken as renames. */
+  /** The suggested renames the developer ticked, taken as renames. */
   function accepted(): Rename[] {
-    return (pending?.proposed ?? []).filter((r) => !isDeclined(r));
+    return (pending?.proposed ?? []).filter((r) => isPicked(r));
   }
 
   async function refresh(renames: Rename[] | null) {
@@ -61,13 +62,13 @@
   // change what is pending.
   $effect(() => {
     void preview;
-    declined = [];
+    picked = [];
     checked = false;
     refresh(null);
   });
 
   function toggle(r: Rename, on: boolean) {
-    declined = on ? declined.filter((d) => !same(d, r)) : [...declined, r];
+    picked = on ? [...picked, r] : picked.filter((p) => !same(p, r));
     refresh(accepted());
   }
 
@@ -80,7 +81,7 @@
     busy = true;
     try {
       const name = title.trim() || `Step ${next}`;
-      onapplied(await invoke<Preview>("create_migration", { source, title: name, renames: accepted() }));
+      onapplied(await invoke<Preview>("create_migration", { source, title: name, renames: accepted(), allowDataLoss: checked }));
       title = "";
     } catch (err) {
       error = String(err);
@@ -117,10 +118,10 @@
     {#if pending.proposed.length > 0}
       <fieldset class="renames">
         <legend>Renames</legend>
-        <p class="hint">A name went and a name of the same type came. Kept as a rename, the data stays; otherwise the old field is removed.</p>
+        <p class="hint">A name went and a name of the same type came. Tick it to keep it as a rename, so the data stays; otherwise the old field is removed.</p>
         {#each pending.proposed as r, i (i)}
           <label>
-            <input type="checkbox" checked={!isDeclined(r)} onchange={(e) => toggle(r, e.currentTarget.checked)} />
+            <input type="checkbox" checked={isPicked(r)} onchange={(e) => toggle(r, e.currentTarget.checked)} />
             {describe(r)}
           </label>
         {/each}

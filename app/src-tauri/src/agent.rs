@@ -138,7 +138,7 @@ impl IdeTools {
     fn backup_source(&self, input: &Value) -> Result<(PathBuf, String), String> {
         let (_, dir) = self.core.open()?.clone();
         let named = input["source"].as_str().map(str::trim).filter(|s| !s.is_empty());
-        let (source, _) = clarity_project::database_to_back_up(&dir, named)?;
+        let source = clarity_project::backups::backed_up(&dir, named)?.source;
         Ok((dir, source))
     }
 
@@ -192,7 +192,7 @@ impl Tools for IdeTools {
             ),
             tool(
                 "backup_data",
-                "Takes a backup of a data source's database, beside it in backups/. It asks the person first. Take one before you change data in bulk or restore.",
+                "Takes a backup of a data source's database, into its folder in the project's backups folder (the project file's backups line; without it the project takes no backups). It asks the person first. Take one before you change data in bulk or restore.",
                 schema(json!({ "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
             ),
             tool(
@@ -233,10 +233,13 @@ impl Tools for IdeTools {
             "restore_backup" => self.restore_backup(input),
             "build_output" => Ok(self.output.clone()),
             "build" => self.build(input),
-            "show_window" => {
-                self.shown = Some(text("name"));
-                Ok(format!("Showing {} in Preview.", text("name")))
-            }
+            // A window or dialog the project has: the one check of every agent (clarity_tools::turn::window).
+            "show_window" => self.core.open().and_then(|(_, dir)| clarity_tools::turn::window(dir, &text("name"))).map(|_| {
+                let name = text("name").trim().to_string();
+                let said = format!("Showing {name} in Preview.");
+                self.shown = Some(name);
+                said
+            }),
             "show_diagram" => self.core.diagram_text(&text("name")).map(|(file, _)| {
                 let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
                 self.shown_diagram = Some(shown.clone());
@@ -436,7 +439,7 @@ fn turn_budget(text: &str) -> Result<Option<u64>, String> {
 /// open project. Returns at once; the turn reports through events.
 #[tauri::command]
 pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
-    // A connection of kind codex or copilot is the person's own agent program, signed in its own way (docs/ledger/acp.md).
+    // An agent program found on the computer (or an old vault connection of kind codex or copilot) is the person's own, signed in its own way (docs/ledger/acp.md).
     if let Some(vendor) = crate::acp::vendor_of(&app, &connection) {
         return crate::acp::send(app, connection, vendor, text);
     }
@@ -458,10 +461,7 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
     let stop = agent.stop.clone();
     let project = open_project_of(&app.state::<WatchState>()).ok();
     // New projects go to the projects folder of Clarity settings, else beside the open one.
-    let projects_folder = clarity_project::Folders::current()
-        .projects
-        .or_else(|| project.as_ref().and_then(|(file, _)| file.parent().map(Path::to_path_buf)))
-        .unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("Clarity"));
+    let projects_folder = clarity_tools::new_project::projects_folder(project.as_ref().map(|(file, _)| file.as_path()));
     std::thread::spawn(move || {
         let state = app.state::<AgentState>();
         let mut tools = IdeTools::new(project, projects_folder);
@@ -633,7 +633,11 @@ mod tests {
     #[test]
     fn backing_up_and_restoring_ask_the_person_first() {
         let (root, file, dir) = project("backups");
-        let (_, path) = clarity_project::database_to_back_up(&dir, None).unwrap();
+        // Backups are the project's option: its backups folder (docs/ledger/backups.md).
+        let text = std::fs::read_to_string(&file).unwrap();
+        let (first, rest) = text.split_once('\n').unwrap();
+        std::fs::write(&file, format!("{first}\n    backups \"data/backups\"\n{rest}")).unwrap();
+        let path = clarity_project::backups::backed_up(&dir, None).unwrap().database;
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let db = rusqlite::Connection::open(&path).unwrap();
         db.execute_batch("CREATE TABLE IF NOT EXISTS item (id INTEGER PRIMARY KEY);").unwrap();

@@ -195,7 +195,9 @@ void a_folder_lists_and_writes_the_files_of_its_extensions(void) {
         CHECK(written == cJSON_IsTrue(cJSON_GetObjectItem(c, "written")));
     }
     ClarityFileList none;
-    CHECK_FAILS(CLARITY_STORAGE, clarity_files_in(db, CLARITY_FOLDER_STORE, "", false, &none));
+    // No folder chosen: said in Clarity's own words.
+    CHECK_FAILS(CLARITY_VALUE, clarity_files_in(db, CLARITY_FOLDER_STORE, "", false, &none));
+    CHECK_TEXT(clarity_said(clarity_error())->key, "noFolderChosen");
     clarity_db_close(db);
     remove_tree(root);
 }

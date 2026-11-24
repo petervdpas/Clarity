@@ -3,24 +3,14 @@
 //! a report's pages for the report tab's preview: laid out by Clarity.Pdf
 //! with sample data of its Data's entities, in its stylesheet, as SVG.
 
-use std::path::{Path, PathBuf};
-
 use clarity_spec::Preview;
-use clarity_spec::reports::{REPORT_EXTENSION, REPORTS_DIR};
+use clarity_spec::reports::REPORTS_DIR;
+use clarity_tools::structural::reports;
 use serde::Serialize;
 use tauri::State;
 use ts_rs::TS;
 
-use super::{FileChange, HistoryState, WatchState, load, open_project_of, record, write_atomically};
-
-/// A report's file in the module folder `dir`; refused for a name that is no plain name.
-fn report_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
-    let plain = name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && name.chars().all(|c| c.is_ascii_alphanumeric());
-    if !plain {
-        return Err(format!("a report's name is a word starting with a capital, as in Invoice, not '{name}'"));
-    }
-    Ok(dir.join(REPORTS_DIR).join(format!("{name}.{REPORT_EXTENSION}")))
-}
+use super::{FileChange, HistoryState, WatchState, load, open_project_of, record};
 
 /// A report's text as the report tab's designer holds it (clarity_spec::report_design),
 /// as JSON whose words keep their order; or why it cannot be read.
@@ -53,30 +43,24 @@ pub fn report_rules(css: String) -> Vec<(String, Vec<(String, String)>)> {
     clarity_spec::report_design::rules(&css)
 }
 
-/// Makes report `name`, with what a new report starts with.
+/// Makes report `name`, with what a new report starts with, the one way
+/// (clarity_tools::structural::reports, as the agents' add_report).
 #[tauri::command]
 pub fn add_report(name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let file = report_file(&dir, &name)?;
-    if file.exists() {
-        return Err(format!("the reports have {name} already"));
-    }
-    std::fs::create_dir_all(dir.join(REPORTS_DIR)).map_err(|err| format!("cannot make the reports folder: {err}"))?;
-    let text = clarity_spec::reports::starter(&name);
-    write_atomically(&file, &text)?;
-    record(&history, vec![FileChange { file, before: None, after: Some(text) }])?;
+    let changes = reports::add_report_file(&dir, &name, &[])?;
+    record(&history, changes)?;
     load(&dir)
 }
 
-/// Writes report `name` as the report tab designed it; one undo step.
+/// Writes report `name` as the report tab designed it, refused when the
+/// report would gain an error; one undo step.
 #[tauri::command]
 pub fn save_report(name: String, text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let file = report_file(&dir, &name)?;
-    let before = std::fs::read_to_string(&file).ok();
-    if before.as_deref() != Some(text.as_str()) {
-        write_atomically(&file, &text)?;
-        record(&history, vec![FileChange { file, before, after: Some(text) }])?;
+    let changes = reports::save_report(&dir, &name, &text)?;
+    if !changes.is_empty() {
+        record(&history, changes)?;
     }
     load(&dir)
 }
@@ -85,7 +69,7 @@ pub fn save_report(name: String, text: String, state: State<WatchState>, history
 #[tauri::command]
 pub fn delete_report(name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let file = report_file(&dir, &name)?;
+    let file = reports::report_path(&dir, &name)?;
     let text = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
     let change = FileChange { file, before: Some(text), after: None };
     change.make()?;
@@ -94,20 +78,14 @@ pub fn delete_report(name: String, state: State<WatchState>, history: State<Hist
 }
 
 /// Writes a stylesheet of the reports folder (`invoice.css`), as the report
-/// tab's look of a part changes its class; one undo step.
+/// tab's look of a part changes its class, refused when a report would gain
+/// an error; one undo step.
 #[tauri::command]
 pub fn save_report_stylesheet(file: String, text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let plain = file.ends_with(".css") && file.len() > 4 && file.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
-    if !plain {
-        return Err(format!("a report's stylesheet is a file of the reports folder ending in .css, as in invoice.css, not '{file}'"));
-    }
-    std::fs::create_dir_all(dir.join(REPORTS_DIR)).map_err(|err| format!("cannot make the reports folder: {err}"))?;
-    let path = dir.join(REPORTS_DIR).join(&file);
-    let before = std::fs::read_to_string(&path).ok();
-    if before.as_deref() != Some(text.as_str()) {
-        write_atomically(&path, &text)?;
-        record(&history, vec![FileChange { file: path, before, after: Some(text) }])?;
+    let changes = reports::save_stylesheet(&dir, &file, &text)?;
+    if !changes.is_empty() {
+        record(&history, changes)?;
     }
     load(&dir)
 }

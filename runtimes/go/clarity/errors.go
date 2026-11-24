@@ -70,6 +70,7 @@ func Said(err error) (Text, bool) {
 	var value *ValueError
 	var missing *NotFoundError
 	var used *InUseError
+	var unset *NotSetError
 	switch {
 	case errors.As(err, &refused):
 		return refused.Text, true
@@ -79,11 +80,35 @@ func Said(err error) (Text, bool) {
 		return KeyedText("recordNotThere", "There is no {table} with id {id}").With("table", SlotText(missing.Table)).With("id", SlotInteger(*missing.ID, "")), true
 	case errors.As(err, &used):
 		return KeyedText("recordStillUsed", "This {table} is still used by other records").With("table", SlotText(used.Table)), true
+	case errors.As(err, &unset):
+		return KeyedText("variableNotSet", "The environment variable {variable} must be set").With("variable", SlotText(unset.Variable)), true
 	}
 	return Text{}, false
 }
 
 func (e *ValueError) Error() string { return e.What }
+
+// NotSetError is a database or file store at env:NAME while that environment
+// variable is unset or empty (conformance/data-folder.json): Said says it in
+// Clarity's own words, naming the variable.
+type NotSetError struct{ Variable string }
+
+func (e *NotSetError) Error() string { return "the environment variable " + e.Variable + " is not set" }
+
+// noFolderChosen is code listing or writing a folder that is no store, with none chosen.
+func noFolderChosen() error {
+	return saidValue("no folder was chosen", KeyedText("noFolderChosen", "No folder was chosen"))
+}
+
+// Shown is err as a person reads it: Clarity's own words (translated) when
+// Said has them, else its message. A program that cannot open its databases
+// stops with it.
+func Shown(err error) string {
+	if said, ok := Said(err); ok {
+		return said.Show()
+	}
+	return err.Error()
+}
 
 // StepsError is a database whose migration steps are not the ones the app was
 // made with (docs/ledger/migrations.md): the app stops with Line, in English.
@@ -126,6 +151,12 @@ func UnconnectedReason(err error) Text {
 	var notKept *NotKeptError
 	if errors.As(err, &notKept) {
 		return KeyText("unconnectedNotKept")
+	}
+	// A database at an unset environment variable says which (conformance/data-folder.json).
+	var unset *NotSetError
+	if errors.As(err, &unset) {
+		said, _ := Said(err)
+		return said
 	}
 	problem := err.Error()
 	var storage *StorageError

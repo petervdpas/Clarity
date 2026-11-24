@@ -85,3 +85,16 @@ export function agentCall(call: AgentCall | null, now: number): { text: string; 
     title: `${client} called ${call.tool}${where}: ${call.said} Opens the agent activity.`,
   };
 }
+
+/** One of Clarity's MCP servers with its switch, as the IDE gives it (McpServer). */
+export type McpSwitch = { name: string; on: boolean };
+
+/** The MCP item: `off` while any server is turned off, and each server's state on hover. */
+export function mcpStatus(servers: McpSwitch[]): { text: string; off: boolean; title: string } {
+  const states = servers.map((s) => `${s.name} ${s.on ? "on" : "off"}`).join(", ");
+  return {
+    text: "MCP",
+    off: servers.some((s) => !s.on),
+    title: `Clarity's MCP servers${states ? `: ${states}` : ""}. Turns each on or off.`,
+  };
+}

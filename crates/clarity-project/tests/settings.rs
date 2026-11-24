@@ -64,6 +64,7 @@ fn shop() -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         include_migrate: false,
+        backups: None,
         signin: None,
         engines_interpreted: false,
         agents_read_closed: false,
@@ -86,8 +87,7 @@ fn a_path_written_for_a_tool_has_forward_slashes() {
     settings.filestores = vec![clarity_project::FileStore { name: "photos".into(), location: "data/photos".into() }];
     let dir = std::path::absolute("/projects/shop").unwrap();
     let built = clarity_project::build_settings(&dir, &settings);
-    assert_eq!(built.filestores[0].location, clarity_project::slashed(&dir.join("data").join("photos")));
-    assert!(!built.filestores[0].location.contains(std::path::MAIN_SEPARATOR) || std::path::MAIN_SEPARATOR == '/');
+    assert_eq!(built.filestores[0].location, "data:shop/data/photos");
     assert!(!built.datasources[0].url.contains(std::path::MAIN_SEPARATOR) || std::path::MAIN_SEPARATOR == '/');
 }
 
@@ -104,6 +104,20 @@ fn a_canonical_path_is_plain_again() {
     // A path that is not verbatim is its own answer.
     let ordinary = std::path::PathBuf::from("shop/out");
     assert_eq!(clarity_project::plain(ordinary.clone()), ordinary);
+}
+
+/// Windows' rule for a verbatim path, the same from every system: the
+/// prefix goes from a drive path under the limit it lifts, and nothing else
+/// changes; on another system a path is its own answer.
+#[test]
+fn a_verbatim_path_is_plain_by_windows_rule_on_every_system() {
+    let verbatim = std::path::PathBuf::from(r"\\?\C:\Program Files\Clarity IDE\clarity-ui");
+    assert_eq!(clarity_project::plain_in(verbatim.clone(), "windows"), std::path::PathBuf::from(r"C:\Program Files\Clarity IDE\clarity-ui"));
+    assert_eq!(clarity_project::plain_in(verbatim.clone(), "linux"), verbatim);
+    let share = std::path::PathBuf::from(r"\\?\UNC\server\share\clarity-ui");
+    assert_eq!(clarity_project::plain_in(share.clone(), "windows"), share);
+    let long = std::path::PathBuf::from(format!(r"\\?\C:\{}", "a".repeat(300)));
+    assert_eq!(clarity_project::plain_in(long.clone(), "windows"), long);
 }
 
 #[test]
@@ -154,7 +168,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, include, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, include, backups, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -339,6 +353,29 @@ fn each_kind_checks_its_location() {
     assert_eq!(problems, ["data source 'main': a SQLite source is a file path, like data/shop.db"]);
     let problems = problems_of(|s| s.datasources[0].auth = Some(Auth { kind: AuthKind::Bearer, secret: "env:T".into() }));
     assert_eq!(problems, ["data source 'main': only web API sources have auth"]);
+}
+
+/// A project runs on any machine: a folder or file it names is relative to
+/// the project (its data travels with it), from the environment, or a
+/// setting the person chooses; never absolute by its form (`/`, `\\`, `~`,
+/// a drive letter), which names a place on one machine only.
+#[test]
+fn a_location_is_never_a_place_on_one_machine() {
+    let said = |what: &str, path: &str| format!("{what} \"{path}\" is a place on one machine; write a folder inside the project (like data/...) or a folder setting the person chooses (setting:name)");
+    for path in ["/home/ada/shop.db", "~/shop.db", "C:\\shop\\shop.db", "D:/shop.db", "\\\\server\\shop.db"] {
+        let problems = problems_of(|s| {
+            s.datasources[0].kind = SourceKind::Sqlite;
+            s.datasources[0].url = path.into();
+        });
+        assert_eq!(problems, [format!("data source 'main': {}", said("the file", path))], "{path}");
+    }
+    let problems = problems_of(|s| s.filestores.push(FileStore { name: "photos".into(), location: "/srv/photos".into() }));
+    assert_eq!(problems, [format!("file store 'photos': {}", said("the folder", "/srv/photos"))]);
+    let problems = problems_of(|s| s.codecs.push(clarity_project::CodecLibrary { name: "vp9".into(), from: "/opt/codecs/libvp9".into() }));
+    assert_eq!(problems, [format!("codec 'vp9': {}", said("the library", "/opt/codecs/libvp9"))]);
+    for fine in ["data/photos", "env:PHOTOS", "setting:photosFolder", "photos"] {
+        assert!(problems_of(|s| s.filestores.push(FileStore { name: "photos".into(), location: fine.into() })).is_empty(), "{fine}");
+    }
 }
 
 #[test]
@@ -619,10 +656,14 @@ fn file_store_names_are_identifiers_and_unique() {
     assert_eq!(problems_of(|s| s.filestores = vec![FileStore { location: "".into(), ..store("photos") }]), ["file store 'photos' needs a folder"]);
 }
 
-/// A relative file store is in the project's folder, as a SQLite file is,
-/// whichever folder the application runs in; `env:` stays as written.
+/// A relative file store is in the program's data folder under its own
+/// name, as a SQLite file the project keeps is (data:<program>/<folder>,
+/// conformance/data-folder.json): nothing of the machine it was built on
+/// is written into the program. "hard coded folders or files are a problem
+/// when the examples run on a other environment" (the user, 2026-11-23).
+/// An absolute folder, `env:` and `setting:` stay as written.
 #[test]
-fn a_file_store_is_found_from_the_project_folder() {
+fn a_file_store_is_found_in_the_program_s_data_folder() {
     let mut settings = shop();
     settings.filestores = vec![
         FileStore { name: "photos".into(), location: "data/photos".into() },
@@ -634,10 +675,16 @@ fn a_file_store_is_found_from_the_project_folder() {
     // separator between them is the system's own.
     let dir = std::path::absolute("/projects/shop").unwrap();
     let built = clarity_project::build_settings(&dir, &settings);
-    assert_eq!(Path::new(&built.filestores[0].location), dir.join("data/photos"));
+    // Without a database of its own, the data folder is the project's folder: the path stays as written.
+    assert_eq!(built.filestores[0].location, "data:shop/data/photos");
+    assert!(!built.filestores.iter().any(|s| s.location.contains("projects")), "{:?}", built.filestores);
     assert_eq!(built.filestores[1].location, "env:SCAN_FOLDER");
     // A folder setting is the person's, found while the application runs.
     assert_eq!(built.filestores[2].location, "setting:printsFolder");
+    // An absolute folder (which the check refuses) is the one the project names.
+    let mut absolute = settings.clone();
+    absolute.filestores[0].location = "/srv/photos".into();
+    assert_eq!(clarity_project::build_settings(&dir, &absolute).filestores[0].location, "/srv/photos");
     settings.filestores[2].location = "setting: ".into();
     assert_eq!(validate(&settings), ["file store 'prints': the location names no variable or setting after its prefix"]);
 }
@@ -745,6 +792,36 @@ fn the_project_says_whether_the_output_includes_the_data_migration_tools() {
     assert!(!off.contains("include"), "{off}");
     assert_eq!(parse(&format!("{SHOP}    include tools\n")).unwrap_err(), "line 11: write 'include migrate' to put Clarity's data migration tools in the output folder");
     assert_eq!(parse(&format!("{SHOP}    include migrate\n    include migrate\n")).unwrap_err(), "line 12: 'include' is set twice");
+}
+
+/// Where the project keeps the backups of its databases (docs/ledger/backups.md):
+/// `backups "data/backups"`, a folder under the project's folder, so every
+/// system finds it; without the line the project takes no backups.
+#[test]
+fn the_project_says_where_its_backups_go_under_its_own_folder() {
+    let text = format!("{SHOP}    backups \"data/backups\"\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.backups.as_deref(), Some("data/backups"));
+    assert_eq!(parse(SHOP).unwrap().backups, None);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    backups \"data/backups\"\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    // Without a folder, the line goes.
+    let off = write(Some(&written), &Settings { backups: None, ..settings }).unwrap();
+    assert!(!off.contains("backups"), "{off}");
+    // A folder from the root of the disk, or above the project's folder, is refused, naming the line.
+    for outside in ["/var/backups", "C:/backups", "../backups", "data/../../backups", "data/.."] {
+        let error = parse(&format!("{SHOP}    backups \"{outside}\"\n")).unwrap_err();
+        assert!(error.starts_with("line 11: ") && error.contains("under the project's folder"), "{outside}: {error}");
+    }
+    for outside in ["\\\\server\\backups", "C:\\backups", "..\\backups", ""] {
+        let problems = validate(&Settings { backups: Some(outside.into()), ..shop() });
+        assert!(problems.iter().any(|p| p.contains("under the project's folder")), "{outside}: {problems:?}");
+    }
+    assert!(validate(&Settings { backups: Some("data/backups".into()), ..shop() }).is_empty());
+    assert_eq!(parse(&format!("{SHOP}    backups\n")).unwrap_err(), "line 11: write 'backups' and a folder under the project's folder in quotes, like: backups \"data/backups\"");
+    assert_eq!(parse(&format!("{SHOP}    backups \"a\"\n    backups \"b\"\n")).unwrap_err(), "line 12: 'backups' is set twice");
+    assert!(parse(&format!("{SHOP}    backup \"a\"\n")).unwrap_err().contains(", backups,"));
 }
 
 /// `-> keys` opens the keys window, which the project file allows (manual/app.keys.md).
@@ -972,6 +1049,37 @@ fn a_built_program_keeps_its_own_database_in_the_person_s_data_folder() {
     assert_eq!("data:writer_app/writer.db", built.datasources[0].url);
     assert_eq!("/srv/shared.db", built.datasources[1].url);
     assert_eq!(Some(std::path::PathBuf::from("/home/ann/Writer/writer/data")), clarity_project::data_folder(dir, &settings));
+}
+
+/// Without a database of its own, the project's folder is its data folder:
+/// Clarity's Run names it in CLARITY_DATA and a store keeps its whole path,
+/// so a run in Clarity finds the project's files where the project keeps them.
+#[test]
+fn a_project_with_only_a_file_store_has_a_data_folder_too() {
+    let text = "project Gallery\n    stack go desktop\n    filestore photos \"data/photos\"\n";
+    let settings = clarity_project::parse(text).unwrap();
+    let dir = std::path::Path::new("/home/ann/Gallery/gallery");
+    assert_eq!("data:gallery/data/photos", clarity_project::build_settings(dir, &settings).filestores[0].location);
+    assert_eq!(Some(std::path::PathBuf::from("/home/ann/Gallery/gallery")), clarity_project::data_folder(dir, &settings));
+}
+
+/// A relative file store keeps its whole path, measured from the data
+/// folder (the folder of the project's own database): "data/old/photos"
+/// is old/photos in it, so two stores share a folder only when they name
+/// the same one. A store outside the data folder has no place in a built
+/// program and is refused. User, 2026-11-23: "yes, keep the whole path",
+/// "Yes, do that".
+#[test]
+fn a_file_store_keeps_its_whole_path_from_the_data_folder() {
+    let text = "project Gallery\n    stack go desktop\n    datasource main sqlite \"data/gallery.db\"\n    filestore photos \"data/photos\"\n    filestore archive \"data/old/photos\"\n";
+    let settings = clarity_project::parse(text).unwrap();
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    let dir = std::path::Path::new("/home/ann/Gallery/gallery");
+    let built = clarity_project::build_settings(dir, &settings);
+    assert_eq!(built.filestores[0].location, "data:gallery/photos");
+    assert_eq!(built.filestores[1].location, "data:gallery/old/photos");
+    let outside = clarity_project::parse(&text.replace("\"data/old/photos\"", "\"old/photos\"")).unwrap();
+    assert_eq!(validate(&outside), ["file store 'archive': the folder \"old/photos\" is outside the project's data folder (data), where a built program keeps its files; put it inside data"]);
 }
 
 /// A project whose module folder is not named as its project file says what

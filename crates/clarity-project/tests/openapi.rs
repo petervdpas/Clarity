@@ -279,6 +279,27 @@ fn clarity_writes_the_module_and_the_project_checks() {
     assert!(project.in_web_api("Template"));
 }
 
+/// Checking a project is one way, for `clarity spec check`, the IDE's check
+/// and the agents' check tool: each web API's module is written again from
+/// its description and picks first, then the modules are read and checked.
+#[test]
+fn a_check_writes_the_web_apis_modules_first() {
+    let file = project("check", FORMS, PROJECT);
+    let written = file.with_extension("").join("apis/forms.clarity");
+    assert!(!written.exists());
+    let checked = clarity_project::check(&file).unwrap();
+    assert!(written.is_file(), "the module follows its description before the check");
+    assert!(checked.notes.is_empty(), "{:?}", checked.notes);
+    assert!(checked.project.in_web_api("Template"), "the check reads the module it wrote");
+    // The folder of the modules names the same project.
+    let by_folder = clarity_project::check(&clarity_project::module_dir(&file)).unwrap();
+    assert_eq!(by_folder.project.diagnostics.len(), checked.project.diagnostics.len());
+    // A description that is not there is said, and the check goes on.
+    std::fs::remove_file(file.with_extension("").join("apis/forms.yaml")).unwrap();
+    let noted = clarity_project::check(&file).unwrap();
+    assert_eq!(noted.notes, ["data source 'forms': its description apis/forms.yaml is not there"]);
+}
+
 #[test]
 fn a_new_revision_updates_the_entities() {
     let file = project("revision", FORMS, PROJECT);

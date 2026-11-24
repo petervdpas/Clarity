@@ -396,7 +396,7 @@ fn main() -> std::process::ExitCode {{
 {start}{language}    let mut db = match Db::connect(DATABASES) {{
         Ok(db) => db,
         Err(err) => {{
-            eprintln!("{{err}}");
+            eprintln!("{{}}", clarity_runtime::program::said(&err).show());
             return std::process::ExitCode::from(1);
         }}
     }};
@@ -409,7 +409,7 @@ fn main() -> std::process::ExitCode {{
     }}
     for (name, at) in STORES {{
         if let Err(err) = db.add_store(name, at) {{
-            eprintln!("{{err}}");
+            eprintln!("{{}}", clarity_runtime::program::said(&err).show());
             return std::process::ExitCode::from(1);
         }}
     }}

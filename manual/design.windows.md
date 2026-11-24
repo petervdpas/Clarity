@@ -10,7 +10,7 @@ The module's `.clarity` files keep the rest: entities, records, enums, themes, a
 
 The designer reads and writes these files; the Text tab of the inspector shows the file as it is, and you can edit it there. A part writes only what differs from its kind's defaults. A value with `<` or `&` writes them as `&lt;` and `&amp;`, as XML wants: `type="list&lt;Order&gt;"`.
 
-The checker refuses a `class` whose module the project does not have, and a `page` or `app` block still written in a module's `.clarity` file, the old form. **Move pages into design** in Problems, or `clarity convert-pages` on the command line, moves such a block into its own file.
+The checker refuses a `class` whose module the project does not have, and a `page` or `app` block still written in a module's `.clarity` file, the old form. **Move pages into design** in Problems, or `clarity convert-pages` on the command line, moves such a block into its own file; both do the same, and move nothing when a file it would make is there already or the project would gain an error.
 
 ## Window, content, view
 

@@ -20,7 +20,7 @@
   import { browserFiles } from "./browserFilesStore.svelte";
   import { appSettings } from "./appSettings.svelte";
   import { busy, devtools } from "./devtoolsStore.svelte";
-  import { DISK_TAB as DISK, RELEASE_TAB as RELEASE, cycle, tabOrder } from "./devtools";
+  import { DISK_TAB as DISK, RELEASE_TAB as RELEASE, building as piecesBuilding, cycle, tabOrder } from "./devtools";
 
   let view = $state<DevToolsView | null>(null);
   let error = $state<string | null>(null);
@@ -100,6 +100,12 @@
     appSettings.devToolsTab = null;
     shown = asked;
     if (asked !== DISK && asked !== RELEASE && !view.tabs.some((t) => t.key === asked)) void call("devtools_add_tab", { key: asked });
+  });
+
+  // A piece whose build waits or runs keeps its tab while it goes, whoever started it (build_piece, Build).
+  $effect(() => {
+    if (!view) return;
+    for (const key of piecesBuilding(devtools.jobs, view.tabs.map((t) => t.key))) void call("devtools_add_tab", { key });
   });
 
   function close(key: string) {

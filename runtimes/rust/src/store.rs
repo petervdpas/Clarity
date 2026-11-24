@@ -57,7 +57,7 @@ pub(crate) fn location(text: &str) -> Result<String> {
         return Err(Error::NotKept(name.to_string()));
     }
     match text.strip_prefix("env:") {
-        Some(name) => std::env::var(name).map_err(|_| Error::Storage(format!("the environment variable {name} is not set"))),
+        Some(name) => std::env::var(name).ok().filter(|v| !v.is_empty()).ok_or_else(|| Error::NotSet(name.to_string())),
         None => Ok(text.to_string()),
     }
 }

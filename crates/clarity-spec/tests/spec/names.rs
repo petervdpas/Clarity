@@ -380,3 +380,69 @@ engine Sky
     let found = errors(source);
     assert!(!found.iter().any(|m| m.contains("not camelCase")), "{found:#?}");
 }
+
+/// Make them camelCase in a window's own file too: its parts in the
+/// `.cxaml` and its handlers in the module's code block, renamed wherever
+/// the window names them; its data, the views it shows and another window's
+/// code keep their names.
+#[test]
+fn names_are_made_camel_case_in_a_window_file_and_its_code() {
+    let markup = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<Window class=\"game.Main\" onopen=\"window_opened\">
+  <Data name=\"my_list\" type=\"text\" />
+  <Textbox name=\"unit_price\" at=\"1,1\" span=\"6\" bind=\"my_list\" />
+  <Label name=\"price_label\" at=\"1,2\" span=\"6\" caption=\"{unit_price.caption} of {unit_price}\" for=\"unit_price\" />
+  <Button name=\"go_button\" at=\"1,3\" span=\"6\" caption=\"@goCaption\" onclick=\"go_clicked(1)\" />
+  <Content name=\"main\" at=\"1,4\" span=\"12\" rows=\"4\">
+    <View name=\"Other_View\" onsaved=\"go_clicked(2)\" />
+  </Content>
+</Window>
+";
+    let module = "module game
+
+code Main
+    handler window_opened
+        unit_price.caption = \"go_clicked {unit_price.caption}\"
+
+    handler go_clicked(n: integer)
+        go_button.enabled = false
+
+code Other
+    handler go_clicked
+        go_button.enabled = true
+";
+    let (markup_after, module_after, renames) = clarity_spec::names::camel_names_of_page(markup, module);
+    assert_eq!(
+        markup_after,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<Window class=\"game.Main\" onopen=\"windowOpened\">
+  <Data name=\"my_list\" type=\"text\" />
+  <Textbox name=\"unitPrice\" at=\"1,1\" span=\"6\" bind=\"my_list\" />
+  <Label name=\"priceLabel\" at=\"1,2\" span=\"6\" caption=\"{unitPrice.caption} of {unitPrice}\" for=\"unitPrice\" />
+  <Button name=\"goButton\" at=\"1,3\" span=\"6\" caption=\"@goCaption\" onclick=\"goClicked(1)\" />
+  <Content name=\"main\" at=\"1,4\" span=\"12\" rows=\"4\">
+    <View name=\"Other_View\" onsaved=\"goClicked(2)\" />
+  </Content>
+</Window>
+"
+    );
+    assert_eq!(
+        module_after,
+        "module game
+
+code Main
+    handler windowOpened
+        unitPrice.caption = \"go_clicked {unitPrice.caption}\"
+
+    handler goClicked(n: integer)
+        goButton.enabled = false
+
+code Other
+    handler go_clicked
+        go_button.enabled = true
+"
+    );
+    assert!(renames.contains(&("go_button".to_string(), "goButton".to_string())), "{renames:?}");
+    let (again, module_again, none) = clarity_spec::names::camel_names_of_page(&markup_after, &module_after);
+    assert_eq!((again.as_str(), module_again.as_str(), none.len()), (markup_after.as_str(), module_after.as_str(), 0));
+}

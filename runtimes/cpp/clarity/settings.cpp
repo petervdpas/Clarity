@@ -47,7 +47,7 @@ std::string setting_now(const nlohmann::json& held, const nlohmann::json& kept, 
     return "";
 }
 
-std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback) {
+std::string store_folder_in(const std::string& os, const std::string& data_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback) {
     std::string chosen = kept.is_string() && !kept.get<std::string>().empty() ? kept.get<std::string>() : fallback;
     if (chosen.empty()) chosen = store;
     bool absolute;
@@ -57,7 +57,7 @@ std::string store_folder_in(const std::string& os, const std::string& settings_f
     } else {
         absolute = chosen.starts_with('/');
     }
-    return absolute ? chosen : settings_folder + "/" + chosen;
+    return absolute || data_folder.empty() ? chosen : data_folder + "/" + chosen;
 }
 
 std::optional<std::string> settings_file(const std::string& program) {

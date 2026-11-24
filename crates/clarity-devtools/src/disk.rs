@@ -140,6 +140,38 @@ pub fn mark(repo: &Path, key: &str, marked: bool) -> Result<(), String> {
     std::fs::write(&file, folders.iter().map(|f| format!("{f}\n")).collect::<String>()).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
 
+/// A place as the Disk tab shows it, to the person and to the agent alike.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceView {
+    pub key: &'static str,
+    pub name: &'static str,
+    pub cost: &'static str,
+    pub bytes: u64,
+    /// Marked to go at the next start of the IDE.
+    pub marked: bool,
+}
+
+/// The Disk tab: every place with its size and mark, and the free space.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiskView {
+    pub places: Vec<PlaceView>,
+    /// The free space of the disk the repository is on; none when unknown.
+    pub free: Option<u64>,
+    /// Free space is below what builds and checks need ([`ROOM`]).
+    pub low: bool,
+}
+
+/// The Disk tab of `repo`, as the IDE shows it and the agent reads it.
+pub fn view(repo: &Path) -> DiskView {
+    let marked = marked(repo);
+    let places = places(repo)
+        .into_iter()
+        .map(|p| PlaceView { key: p.key, name: p.name, cost: p.cost, bytes: size(&p), marked: marked.contains(&p.key) })
+        .collect();
+    let free = free_space(repo);
+    DiskView { places, free, low: free.is_some_and(|f| f < ROOM) }
+}
+
 /// The free space of the disk holding `path`: the one whose mount point is the longest start of it.
 pub fn free_space(path: &Path) -> Option<u64> {
     // Plain: on Windows canonicalize puts `\\?\` before the path, which no mount point (`E:\`) starts.

@@ -55,7 +55,7 @@
   const others = $derived((table?.languages ?? []).map((l, i) => ({ l, i })).filter(({ l }) => l !== table?.default));
   const total = $derived(table?.rows.length ?? 0);
 
-  /** Whether a key is left to translate in column `i`, as the backend says (translations::untranslated, the rule the agents' tool counts by too): no text and no file, or still the default's text. */
+  /** Whether a key is left to translate in column `i`, as the backend says (translations::is_missing, the rule the CLI and the agents' tool count by too): its key absent or its text empty, and no file. */
   function missing(row: TranslationRow, i: number): boolean {
     return row.missing[i] ?? false;
   }
@@ -119,7 +119,7 @@
       {#if isDefault}
         <p class="lead">Every key with its text, {total} in all; each needs one. Translations show this text where they leave a key empty.</p>
       {:else}
-        <p class="lead">{total - missing} of {total} keys translated{missing === 0 ? ": complete" : ""}. A key left empty shows the {named(table.default)} text; one still the same as it counts as not translated.</p>
+        <p class="lead">{total - missing} of {total} keys translated{missing === 0 ? ": complete" : ""}. A key left empty shows the {named(table.default)} text until it is translated.</p>
       {/if}
     {/if}
   </header>
@@ -187,8 +187,8 @@
               </td>
               {#if isDefault}
                 {#each others as { l: tag, i } (tag)}
-                  <td class="status" class:missing={missing(row, i)} title={missing(row, i) ? (row.values[i] === null ? "Not translated yet" : "Still the default's text: translate it, or keep it where the language says it the same way") : shown(row, i)}>
-                    {missing(row, i) ? (row.values[i] === null && row.resources[i] === null ? "missing" : "same") : "\u2713"}
+                  <td class="status" class:missing={missing(row, i)} title={missing(row, i) ? "Not translated yet" : shown(row, i)}>
+                    {missing(row, i) ? "missing" : "\u2713"}
                   </td>
                 {/each}
               {/if}

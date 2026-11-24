@@ -72,7 +72,7 @@ The Reports tab designs a report on its paper, as report designers do: a bar abo
 
 ## Agents and reports
 
-Agents make and change reports with Clarity's report tools, gesture for gesture as the Reports tab does; a `.report` file and its stylesheet are never written as text. Each change is checked as the designer checks it and refused, writing nothing, when the report would check worse; the Reports tab follows it.
+Agents make and change reports with Clarity's report tools, gesture for gesture as the Reports tab does; a `.report` file and its stylesheet are never written as text. A report is saved the same way from the Reports tab and from the tools: each change is checked and refused, writing nothing, when a report would gain an error; the Reports tab follows it.
 
 - `report_view` shows a report: its paper, margin and headerFirst, its data, its bands in the order they print with each part by its place (part 1, part 2), and the classes of its stylesheet. Without a report it names the reports there are.
 - `add_report` makes a report with the data it takes (`order: Order`), as New report does.

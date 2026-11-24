@@ -30,6 +30,7 @@ Progress: 80%
 - `editors/vscode/README.md:34` installs 0.1.3; the extension is 0.1.38.
 
 ## Decisions
+- 2026-11-23: the IDE's release carries the example projects as `Examples.zip` (release.yml job `examples`: `git archive` of `examples/`, what git keeps, unpacking to `examples/`), an artifact `release-examples` the release job attaches with its checksum. User: "add a step to the ci/cd for the ide installers that zips all examples in Examples.zip as artifact".
 - 2026-10-21: crates publish by tag through GitHub Actions, never by hand. User: "sure, but I didnt do this for nothing eh!!!!!"
 - 2026-10-23: one runtime version bump per batch of slices. User: "put more changes into one runtime release change!!!"
 - 2026-11-04: tags in order (a crate before what needs it, a library before what fetches it, Go sums after the Go tag), enforced by the Release Helper.

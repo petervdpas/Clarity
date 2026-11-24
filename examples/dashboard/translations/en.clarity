@@ -39,3 +39,5 @@ translation en
     recordStillUsed "This {table} is still used by other records"
     divisionByZero "Division by zero"
     numberTooLarge "The number is too large"
+    variableNotSet "The environment variable {variable} must be set"
+    noFolderChosen "No folder was chosen"

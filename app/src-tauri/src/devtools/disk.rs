@@ -39,14 +39,9 @@ pub struct DiskView {
 }
 
 fn view() -> Result<DiskView, String> {
-    let repo = repo()?;
-    let marked = disk::marked(&repo);
-    let places = disk::places(&repo)
-        .into_iter()
-        .map(|p| DiskPlace { key: p.key.into(), name: p.name.into(), cost: p.cost.into(), bytes: disk::size(&p), marked: marked.contains(&p.key) })
-        .collect();
-    let free = disk::free_space(&repo);
-    Ok(DiskView { places, free, low: free.is_some_and(|f| f < disk::ROOM) })
+    let view = disk::view(&repo()?);
+    let places = view.places.into_iter().map(|p| DiskPlace { key: p.key.into(), name: p.name.into(), cost: p.cost.into(), bytes: p.bytes, marked: p.marked }).collect();
+    Ok(DiskView { places, free: view.free, low: view.low })
 }
 
 /// The Disk tab.

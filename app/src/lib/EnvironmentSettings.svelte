@@ -5,13 +5,15 @@
   // chooses a program elsewhere with Browse, or leaves it to Clarity (the
   // first one found). Paths are never typed, so none is mistyped. Beside
   // the stacks, what engines need, with Install for Rust's WebAssembly
-  // target, which asks first.
+  // target, which asks first. Last, the outside agents' programs (Codex,
+  // Copilot) the Agent panel starts, chosen the same way, never in the vault.
 
   import { dialogs } from "./dialogStore.svelte";
   import { browse as browseFiles } from "./fileBrowserStore.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import type { EnvironmentView } from "@clarity/ui/generated/EnvironmentView.ts";
   import type { ToolView } from "@clarity/ui/generated/ToolView.ts";
+  import type { AgentView } from "@clarity/ui/generated/AgentView.ts";
   import { checkTools, openSetupGuide } from "./tools.svelte";
 
   let view = $state<EnvironmentView | null>(null);
@@ -70,6 +72,23 @@
     const start = current ? current.replace(/[\\/][^\\/]*$/, "") || null : null;
     const picked = await browseFiles({ purpose: "tool-program", title: `The ${tool.name} program builds use`, pick: "file", start });
     if (typeof picked === "string") choose(tool, picked);
+  }
+
+  async function chooseAgent(agent: AgentView, path: string | null) {
+    error = null;
+    try {
+      view = await invoke<EnvironmentView>("choose_agent", { key: agent.key, path });
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
+  /** Chooses an agent's program the scan did not find, with Clarity's file browser. */
+  async function browseAgent(agent: AgentView) {
+    const current = agent.chosen ?? agent.used;
+    const start = current ? current.replace(/[\\/][^\\/]*$/, "") || null : null;
+    const picked = await browseFiles({ purpose: "agent-program", title: `The ${agent.name} program the Agent panel starts`, pick: "file", start });
+    if (typeof picked === "string") chooseAgent(agent, picked);
   }
 
   $effect(() => {
@@ -161,6 +180,35 @@
           </div>
           <p class="muted used">
             {#if tool.used}Builds use <code>{tool.used}</code>{tool.chosen ? ", as chosen" : ""}.{:else}Not on this computer; the stacks that need it cannot build here.{/if}
+          </p>
+        </div>
+      {/each}
+    </fieldset>
+    <fieldset>
+      <legend>Agents</legend>
+      <p class="muted">Your own agent programs, which the Agent panel lists as soon as they are installed, with no connection in the vault.</p>
+      {#each view.agents as agent (agent.key)}
+        <div class="tool">
+          <div class="head">
+            <strong>{agent.name}</strong>
+            <span class="muted">in the Agent panel</span>
+          </div>
+          <select
+            aria-label="The {agent.name} program the Agent panel starts"
+            value={agent.chosen ?? AUTOMATIC}
+            onchange={(e) => chooseAgent(agent, e.currentTarget.value === AUTOMATIC ? null : e.currentTarget.value)}
+          >
+            <option value={AUTOMATIC}>{agent.copies.length > 0 ? "The first one found" : "Not found"}</option>
+            {#each agent.copies as copy (copy)}
+              <option value={copy}>{copy}</option>
+            {/each}
+          </select>
+          <div class="other">
+            <input type="text" readonly value={agent.chosen ?? ""} placeholder="Or choose the program elsewhere with Browse" aria-label="The chosen {agent.name}" title={agent.chosen ?? ""} />
+            <button onclick={() => browseAgent(agent)}>Browse...</button>
+          </div>
+          <p class="muted used">
+            {#if agent.used}The Agent panel starts <code>{agent.used}</code>{agent.chosen ? ", as chosen" : ""}.{:else}Not on this computer: install it from <code>{agent.install}</code>.{/if}
           </p>
         </div>
       {/each}

@@ -81,7 +81,7 @@ public sealed class FileTests : IDisposable
             }
             Assert.Equal(c.GetProperty("written").GetBoolean(), written);
         }
-        Assert.Throws<StorageException>(() => db.FilesIn(Db.FolderStore, [], false));
+        Assert.Equal("noFolderChosen", Assert.Throws<NoFolderException>(() => db.FilesIn(Db.FolderStore, [], false)).Said.Key);
     }
 
     /// <summary>

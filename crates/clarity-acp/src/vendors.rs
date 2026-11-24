@@ -1,12 +1,14 @@
 //! The agent programs Clarity's chat panel starts (docs/ledger/acp.md):
 //! where each is found, the arguments that make it speak ACP over stdio, how
 //! it is kept asking before it runs anything, how it signs in, and where the
-//! person installs it. Clarity never installs them.
+//! person installs it. Clarity never installs them. A scan finds the ones
+//! installed, so the panel lists them with no vault connection; the person
+//! may choose another program in Clarity settings > Environment.
 //!
 //! Every fact here is from the vendor's own pages, cited beside it and read
 //! 2026-11-09. What those pages do not say is marked OPEN.
 
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::Program;
@@ -21,7 +23,25 @@ pub enum Vendor {
 }
 
 impl Vendor {
+    /// Every vendor, in the order the panel and the Environment settings list them.
+    pub const ALL: [Vendor; 2] = [Vendor::Codex, Vendor::Copilot];
+
+    /// The key the vendor goes by: the panel's name for the agent a scan
+    /// found, and the key its chosen program is kept under.
+    pub fn key(self) -> &'static str {
+        match self {
+            Vendor::Codex => "codex",
+            Vendor::Copilot => "copilot",
+        }
+    }
+
+    /// The vendor of key `key`, exactly as `key` gives it.
+    pub fn of_key(key: &str) -> Option<Vendor> {
+        Vendor::ALL.into_iter().find(|v| v.key() == key)
+    }
+
     /// The vendor a vault connection of kind `kind` names: `codex` or `copilot`, in any case.
+    /// Such connections are read still; new ones are not needed (docs/ledger/acp.md, 2026-11-23).
     pub fn of_kind(kind: &str) -> Option<Vendor> {
         match kind.trim().to_ascii_lowercase().as_str() {
             "codex" => Some(Vendor::Codex),
@@ -219,44 +239,178 @@ pub fn program_names(vendor: Vendor) -> &'static [&'static str] {
     }
 }
 
-/// The vendor's program to start: the path the person set in Clarity's
-/// settings when there is one, else the first on the PATH.
-pub fn find(vendor: Vendor, from_settings: Option<&Path>) -> Result<Program, String> {
-    find_in(vendor, from_settings, std::env::var_os("PATH").as_deref())
+/// An agent installed on this machine, as a scan finds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    pub vendor: Vendor,
+    pub program: PathBuf,
 }
 
-/// Like `find`, with `path` in place of the PATH.
-pub fn find_in(vendor: Vendor, from_settings: Option<&Path>, path: Option<&OsStr>) -> Result<Program, String> {
+/// The agents installed on this machine, each with the first copy of its
+/// program in the folders `search_folders` gives.
+pub fn scan() -> Vec<Found> {
+    scan_in(&search_folders())
+}
+
+/// Like `scan`, in `folders` alone: the vendors with a copy in them, in `Vendor::ALL`'s order.
+pub fn scan_in(folders: &[PathBuf]) -> Vec<Found> {
+    Vendor::ALL.into_iter().filter_map(|vendor| copies_in(vendor, folders).into_iter().next().map(|program| Found { vendor, program })).collect()
+}
+
+/// Every copy of the vendor's program in `folders`, in their order, each once.
+pub fn copies_in(vendor: Vendor, folders: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = Vec::new();
+    for file in folders.iter().flat_map(|folder| program_names(vendor).iter().map(move |name| folder.join(name))) {
+        if startable(&file) && !found.contains(&file) {
+            found.push(file);
+        }
+    }
+    found
+}
+
+/// Where a scan looks: where the build tools check looks (the PATH and the
+/// official installers' folders, `clarity_gen_core::tools::installers_path`),
+/// then the folders the agents' programs are installed in (`install_folders`).
+pub fn search_folders() -> Vec<PathBuf> {
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    let mut folders: Vec<PathBuf> = std::env::split_paths(&clarity_gen_core::tools::installers_path()).collect();
+    for folder in install_folders(std::env::consts::OS, &|name| std::env::var_os(name), home.as_deref()) {
+        if !folders.contains(&folder) {
+            folders.push(folder);
+        }
+    }
+    folders
+}
+
+/// The folders the agents' programs get installed in on system `os`
+/// (`linux`, `macos`, `windows`), by the environment variables `var` gives
+/// and the home folder `home`. Codex's ACP adapter comes from npm
+/// (`npm install -g @agentclientprotocol/codex-acp`); Copilot CLI from npm,
+/// WinGet, Homebrew or its install script (`install_page`). So: npm's global
+/// folder (on Windows `%APPDATA%\npm` or Node's own folder, elsewhere
+/// `<prefix>/bin`), a prefix of the person's (`NPM_CONFIG_PREFIX`,
+/// `~/.npm-global`), nvm's versions (newest first), Volta, pnpm and Bun;
+/// WinGet's and Scoop's links on Windows; the install script's
+/// `~/.local/bin` and `/usr/local/bin`, and Homebrew's folders, elsewhere.
+pub fn install_folders(os: &str, var: &dyn Fn(&str) -> Option<OsString>, home: Option<&Path>) -> Vec<PathBuf> {
+    let windows = os == "windows";
+    let mut out: Vec<PathBuf> = Vec::new();
+    let from = |name: &str| var(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    if let Some(prefix) = from("NPM_CONFIG_PREFIX") {
+        out.push(if windows { prefix } else { prefix.join("bin") });
+    }
+    if windows {
+        if let Some(roaming) = from("APPDATA") {
+            out.push(roaming.join("npm"));
+        }
+        // nvm for Windows links the Node in use here.
+        out.extend(from("NVM_SYMLINK"));
+        for program_files in ["ProgramFiles", "ProgramFiles(x86)"].iter().filter_map(|v| from(v)) {
+            out.push(program_files.join("nodejs"));
+        }
+        if let Some(local) = from("LOCALAPPDATA") {
+            out.push(local.join("Microsoft").join("WinGet").join("Links"));
+            out.push(from("PNPM_HOME").unwrap_or_else(|| local.join("pnpm")));
+        } else {
+            out.extend(from("PNPM_HOME"));
+        }
+        if let Some(home) = home {
+            out.push(home.join("scoop").join("shims"));
+        }
+    } else {
+        out.extend(from("NVM_BIN"));
+        if let Some(home) = home {
+            out.push(home.join(".npm-global").join("bin"));
+            out.extend(nvm_versions(&home.join(".nvm").join("versions").join("node")));
+            out.push(home.join(".local").join("bin"));
+            let pnpm = if os == "macos" { home.join("Library").join("pnpm") } else { home.join(".local").join("share").join("pnpm") };
+            out.push(from("PNPM_HOME").unwrap_or(pnpm));
+        } else {
+            out.extend(from("PNPM_HOME"));
+        }
+        out.extend(["/usr/local/bin", "/opt/homebrew/bin"].map(PathBuf::from));
+    }
+    match (from("VOLTA_HOME"), home) {
+        (Some(volta), _) => out.push(volta.join("bin")),
+        (None, Some(home)) => out.push(home.join(".volta").join("bin")),
+        (None, None) => {}
+    }
+    if let Some(home) = home {
+        out.push(home.join(".bun").join("bin"));
+    }
+    let mut once: Vec<PathBuf> = Vec::new();
+    for folder in out {
+        if !once.contains(&folder) {
+            once.push(folder);
+        }
+    }
+    once
+}
+
+/// The `bin` folders of the Node versions nvm keeps in `versions`, newest first.
+fn nvm_versions(versions: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(versions) else { return Vec::new() };
+    let number = |name: &str| name.trim_start_matches('v').split('.').map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>();
+    let mut named: Vec<(Vec<u32>, PathBuf)> = entries.flatten().filter(|e| e.path().is_dir()).map(|e| (number(&e.file_name().to_string_lossy()), e.path().join("bin"))).collect();
+    named.sort();
+    named.reverse();
+    named.into_iter().map(|(_, bin)| bin).collect()
+}
+
+/// The agents the panel lists, each with the program it starts: the one
+/// chosen in Clarity settings > Environment while it is there, else the
+/// first a scan finds. An agent with neither is not installed.
+pub fn installed() -> Vec<Found> {
+    let env = clarity_gen_core::tools::environment::Environment::current();
+    installed_in(&|vendor| env.chosen_agent(vendor.key()).map(Path::to_path_buf), &search_folders())
+}
+
+/// Like `installed`, with the choices `chosen` gives and `folders` in place of the scan's.
+pub fn installed_in(chosen: &dyn Fn(Vendor) -> Option<PathBuf>, folders: &[PathBuf]) -> Vec<Found> {
+    Vendor::ALL
+        .into_iter()
+        .filter_map(|vendor| {
+            let program = chosen(vendor).filter(|p| startable(p)).or_else(|| copies_in(vendor, folders).into_iter().next())?;
+            Some(Found { vendor, program })
+        })
+        .collect()
+}
+
+/// The vendor's program to start: the command of an old vault connection
+/// (`from_vault`) when it has one, else the program chosen in Clarity
+/// settings > Environment while it is there, else the first a scan finds.
+pub fn find(vendor: Vendor, from_vault: Option<&Path>) -> Result<Program, String> {
+    let env = clarity_gen_core::tools::environment::Environment::current();
+    find_in(vendor, from_vault, env.chosen_agent(vendor.key()), &search_folders())
+}
+
+/// Like `find`, with the choice from the settings given and `folders` in place of the scan's.
+pub fn find_in(vendor: Vendor, from_vault: Option<&Path>, from_settings: Option<&Path>, folders: &[PathBuf]) -> Result<Program, String> {
     let program = |command: PathBuf| Program {
         command,
         args: vendor.acp_args().iter().map(|a| a.to_string()).collect(),
         env: vendor.environment().iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
     };
-    if let Some(chosen) = from_settings {
-        if startable(chosen) {
-            return Ok(program(chosen.to_path_buf()));
+    if let Some(command) = from_vault {
+        if startable(command) {
+            return Ok(program(command.to_path_buf()));
         }
         return Err(format!(
-            "{} cannot be started from {}, the command path of its connection in the vault; install it ({}) or set the path again",
+            "{} cannot be started from {}, the command of its connection in the vault; install it ({}) or remove the command, so Clarity finds the program itself",
             vendor.name(),
-            chosen.display(),
+            command.display(),
             vendor.install_page()
         ));
     }
-    let folders: Vec<PathBuf> = path.map(|p| std::env::split_paths(p).collect()).unwrap_or_default();
-    folders
-        .iter()
-        .flat_map(|folder| program_names(vendor).iter().map(move |name| folder.join(name)))
-        .find(|file| startable(file))
-        .map(program)
-        .ok_or_else(|| {
-            format!(
-                "{} is not installed: its program ({}) is not on the PATH. Install it from {}, or give its full path as the field command of its connection in the vault",
-                vendor.name(),
-                program_names(vendor)[0],
-                vendor.install_page()
-            )
-        })
+    let chosen = |of: Vendor| if of == vendor { from_settings.map(Path::to_path_buf) } else { None };
+    installed_in(&chosen, folders).into_iter().find(|f| f.vendor == vendor).map(|f| program(f.program)).ok_or_else(|| {
+        format!(
+            "{} is not installed: its program ({}) is not on the PATH or in the folders npm and the installers use. Install it from {}, or choose its program in Clarity settings > Environment",
+            vendor.name(),
+            program_names(vendor)[0],
+            vendor.install_page()
+        )
+    })
 }
 
 /// Whether `file` is a program that can be started: a file, and on Linux and macOS one marked to run.

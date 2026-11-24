@@ -49,8 +49,9 @@ func settingsOS() string {
 // StoreFolderIn is the folder of file store store when a folder setting
 // names it, on system goos: the kept value when it is text that is not
 // empty, else def, else a folder named after the store; a relative folder
-// is in settingsFolder, the folder of the settings file.
-func StoreFolderIn(goos, settingsFolder, store string, kept any, def string) string {
+// is in dataFolder, the program's data folder (DataFolder), or where the
+// program runs when that is "".
+func StoreFolderIn(goos, dataFolder, store string, kept any, def string) string {
 	chosen, _ := kept.(string)
 	if chosen == "" {
 		chosen = def
@@ -68,7 +69,7 @@ func StoreFolderIn(goos, settingsFolder, store string, kept any, def string) str
 	if absolute {
 		return chosen
 	}
-	return settingsFolder + "/" + chosen
+	return InFolder(dataFolder, chosen)
 }
 
 func isLetter(b byte) bool { return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') }

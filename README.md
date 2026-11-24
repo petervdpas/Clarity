@@ -199,7 +199,7 @@ Clarity's own agent works in the Agent panel through a connection in the vault, 
 - **Your agent in Clarity:** Codex (with `codex-acp`) or the GitHub Copilot CLI in the Agent panel, started by Clarity and signed in with the vendor's own login. See [Your own agent in Clarity](manual/ai.your-agent.md).
 - **Clarity in your agent:** Claude Code, Codex or Copilot starts `clarity mcp` and designs and generates the project open in the IDE with Clarity's tools: `claude mcp add --scope user clarity -- clarity mcp`. See [Clarity in your own agent](manual/ai.mcp.md).
 
-`clarity mcp` never builds or runs. In the panel, Clarity's own agent runs or builds only as **Clarity settings** allow (it asks each time by default), and Codex or Copilot asks before every command it runs, apart from commands that only read, which Codex runs in its read-only sandbox. The same settings section turns outside agents off and shows each tool call they make.
+`clarity mcp` never builds or runs. In the panel, Clarity's own agent runs or builds only as **Clarity settings** allow (it asks each time by default), and Codex or Copilot asks before every command it runs, apart from commands that only read, which Codex runs in its read-only sandbox. The same settings section shows each tool call outside agents make; the **MCP** item in the IDE's status bar turns each MCP server (`clarity`, `clarity-cdev`) on and off.
 
 ## License
 

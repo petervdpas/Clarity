@@ -39,3 +39,13 @@ fn a_number_too_large_is_said_by_its_key() {
     assert_eq!(shown.key.as_deref(), Some("numberTooLarge"));
     assert_eq!(shown.show(), "The number is too large");
 }
+
+#[test]
+fn no_folder_chosen_is_said_by_its_key() {
+    let db = clarity_runtime::Db::memory().unwrap();
+    let failed = db.files("folder:").unwrap_err();
+    assert_eq!(failed.to_string(), "no folder was chosen");
+    let shown = said(&failed);
+    assert_eq!(shown.key.as_deref(), Some("noFolderChosen"));
+    assert_eq!(shown.show(), "No folder was chosen");
+}

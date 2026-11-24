@@ -84,7 +84,7 @@
     <p class="done">{list.unavailable}.</p>
   {:else}
     <p class="intro">
-      Copies of the database in <code>backups/</code> beside it. Clarity takes one before it applies migration steps to a database that holds data,
+      Copies of the database in <code>{list?.folder ?? ""}</code>, its folder in the project's backups folder. Clarity takes one before it applies migration steps to a database that holds data,
       and keeps the newest ten of those; one taken by hand stays until you delete it.
     </p>
     {#if error}<p class="problem">{error}</p>{/if}

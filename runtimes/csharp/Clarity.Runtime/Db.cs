@@ -26,6 +26,8 @@ public sealed partial class Db : IDisposable
 
     /// <summary>The folders of the file stores, by name.</summary>
     readonly Dictionary<string, string> stores = [];
+    // The file stores at env:NAME with the variable unset: each use says so.
+    readonly Dictionary<string, string> storesNotSet = [];
 
     /// <summary>The file stores whose folder is a folder setting, by name.</summary>
     readonly Dictionary<string, (string Program, string Setting, string Fallback)> storeSettings = [];
@@ -84,10 +86,25 @@ public sealed partial class Db : IDisposable
     /// <summary>
     /// Adds the file store <paramref name="name"/> at <paramref name="location"/>, a folder
     /// (made when it is not there yet); <c>env:NAME</c> takes it from that environment variable.
+    /// <c>data:&lt;program&gt;/&lt;name&gt;</c> is in the program's data folder, and with <c>env:NAME</c>
+    /// unset the store says so where it is used, so the program does not stop
+    /// (conformance/data-folder.json, stores).
     /// </summary>
     public void AddStore(string name, string location)
     {
-        var folder = Store.Location(location);
+        storesNotSet.Remove(name);
+        string folder;
+        try
+        {
+            folder = DataFolder.Store(location);
+        }
+        catch (NotSetException e)
+        {
+            stores.Remove(name);
+            storeSettings.Remove(name);
+            storesNotSet[name] = e.Variable;
+            return;
+        }
         try
         {
             Directory.CreateDirectory(folder);
@@ -109,6 +126,7 @@ public sealed partial class Db : IDisposable
     public void AddStoreSetting(string name, string program, string setting, string fallback)
     {
         stores.Remove(name);
+        storesNotSet.Remove(name);
         storeSettings[name] = (program, setting, fallback);
         StoreFolder(name);
     }
@@ -144,7 +162,7 @@ public sealed partial class Db : IDisposable
             {
                 found.Add((name, StoreFolder(name)));
             }
-            catch (StorageException)
+            catch (ClarityException e) when (e is StorageException or NotSetException)
             {
             }
         }
@@ -157,13 +175,15 @@ public sealed partial class Db : IDisposable
         if (name.StartsWith(FolderStore, StringComparison.Ordinal))
         {
             var path = name[FolderStore.Length..];
-            return path.Length > 0 ? path : throw new StorageException("no folder was chosen");
+            return path.Length > 0 ? path : throw new NoFolderException();
         }
+        if (storesNotSet.TryGetValue(name, out var variable))
+            throw new NotSetException(variable);
         if (storeSettings.TryGetValue(name, out var s))
         {
-            var file = KeptSettings.File(s.Program) ?? throw new StorageException("this system names no folder for application settings");
-            var settingsFolder = Path.GetDirectoryName(file)!.Replace('\\', '/');
-            var folder = KeptSettings.StoreFolderIn(KeptSettings.Os, settingsFolder, name, KeptSettings.Now(heldSettings, KeptSettings.Read(s.Program), s.Setting), s.Fallback);
+            // A relative folder is in the program's data folder (conformance/settings.json, folders).
+            var dataFolder = DataFolder.Folder(s.Program).Replace('\\', '/');
+            var folder = KeptSettings.StoreFolderIn(KeptSettings.Os, dataFolder, name, KeptSettings.Now(heldSettings, KeptSettings.Read(s.Program), s.Setting), s.Fallback);
             try
             {
                 Directory.CreateDirectory(folder);

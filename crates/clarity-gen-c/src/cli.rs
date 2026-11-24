@@ -416,9 +416,11 @@ static ClarityCliProgram program(void) {{
 {described}    return (ClarityCliProgram){{.name = {name}, .help = {help}, .commands = commands, .command_count = {count}, .agents = {agents}}};
 }}
 
-/// Says what went wrong, and ends the program.
+/// Says what went wrong, in Clarity's own words where it has them (an
+/// environment variable not set, conformance/data-folder.json), and ends the program.
 static int failed(ClarityDb* db) {{
-    fprintf(stderr, \"%s\\n\", clarity_error()->message);
+    const ClarityText* said = clarity_said(clarity_error());
+    fprintf(stderr, \"%s\\n\", said ? clarity_text_show(said) : clarity_error()->message);
     clarity_db_close(db);
     return 1;
 }}

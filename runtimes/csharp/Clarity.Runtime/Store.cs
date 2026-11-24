@@ -52,7 +52,7 @@ internal static class Store
         if (!text.StartsWith("env:", StringComparison.Ordinal))
             return text;
         var name = text[4..];
-        return Environment.GetEnvironmentVariable(name) ?? throw new StorageException($"the environment variable {name} is not set");
+        return Environment.GetEnvironmentVariable(name) is { Length: > 0 } found ? found : throw new NotSetException(name);
     }
 
     /// <summary>The kinds of database the application turned on.</summary>
@@ -121,4 +121,58 @@ public static class DataFolder
         };
         return folder is null ? name : folder + "/" + kept;
     }
+
+    static string ThisOs => OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
+
+    /// <summary>
+    /// The program's data folder (conformance/data-folder.json, folders): the folder
+    /// CLARITY_DATA names, else the person's folder for application data under the program's
+    /// name; "" when the environment names neither, which is where the program runs. A relative
+    /// file store and a relative folder setting are in it, as a relative SQLite database is.
+    /// </summary>
+    public static string Folder(string program, Func<string, string?>? env = null) => FolderOn(ThisOs, program, env);
+
+    /// <summary><see cref="Folder"/> on system <paramref name="os"/> (windows, macos or another).</summary>
+    public static string FolderOn(string os, string program, Func<string, string?>? env = null)
+    {
+        env ??= Environment.GetEnvironmentVariable;
+        string? Set(string name) => env(name) is { Length: > 0 } value ? value : null;
+        if (Set(Variable) is { } moved)
+            return moved;
+        var folder = os switch
+        {
+            "windows" => Set("APPDATA"),
+            "macos" => Set("HOME") is { } home ? home + "/Library/Application Support" : null,
+            _ => Set("XDG_DATA_HOME") ?? (Set("HOME") is { } home ? home + "/.local/share" : null),
+        };
+        return folder is null ? "" : folder + "/" + program;
+    }
+
+    /// <summary>
+    /// The folder of a file store at <paramref name="location"/> (conformance/data-folder.json,
+    /// stores): <c>data:&lt;program&gt;/&lt;name&gt;</c> (a relative folder in the project file) is in
+    /// the program's data folder under its own name; <c>env:NAME</c> is that variable's value, a
+    /// <see cref="NotSetException"/> while it is unset or empty; anything else is as it is.
+    /// </summary>
+    public static string Store(string location, Func<string, string?>? env = null) => StoreOn(ThisOs, location, env);
+
+    /// <summary><see cref="Store"/> on system <paramref name="os"/>.</summary>
+    public static string StoreOn(string os, string location, Func<string, string?>? env = null)
+    {
+        env ??= Environment.GetEnvironmentVariable;
+        if (location.StartsWith("env:", StringComparison.Ordinal))
+        {
+            var variable = location[4..];
+            return env(variable) is { Length: > 0 } value ? value : throw new NotSetException(variable);
+        }
+        if (!location.StartsWith("data:", StringComparison.Ordinal))
+            return location;
+        var kept = location[5..];
+        var slash = kept.IndexOf('/');
+        var (program, name) = slash < 0 ? ("", kept) : (kept[..slash], kept[(slash + 1)..]);
+        return InFolder(FolderOn(os, program, env), name);
+    }
+
+    /// <summary><paramref name="name"/> in <paramref name="folder"/>; just the name when there is no folder.</summary>
+    public static string InFolder(string folder, string name) => folder.Length == 0 ? name : folder + "/" + name;
 }

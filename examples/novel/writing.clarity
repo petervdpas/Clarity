@@ -2,10 +2,12 @@ module writing
 
 use books
 
-// Each person's language and theme, kept on their machine.
+// Each person's language and theme, and the folder books are exported to,
+// kept on their machine.
 settings
     language
     theme
+    exportFolder: folder, default "export", label @exportFolderLabel
 
 // The menu: each language by its own name, and each theme.
 code Novel

@@ -64,19 +64,19 @@ func TestAFolderSettingIsWhereEveryRuntimePutsAStore(t *testing.T) {
 	}
 	var cases struct {
 		Folders []struct {
-			OS             string `json:"os"`
-			SettingsFolder string `json:"settingsFolder"`
-			Store          string `json:"store"`
-			Kept           any    `json:"kept"`
-			Default        string `json:"default"`
-			Folder         string `json:"folder"`
+			OS         string `json:"os"`
+			DataFolder string `json:"dataFolder"`
+			Store      string `json:"store"`
+			Kept       any    `json:"kept"`
+			Default    string `json:"default"`
+			Folder     string `json:"folder"`
 		} `json:"folders"`
 	}
 	if err := json.Unmarshal(text, &cases); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range cases.Folders {
-		if found := StoreFolderIn(c.OS, c.SettingsFolder, c.Store, c.Kept, c.Default); found != c.Folder {
+		if found := StoreFolderIn(c.OS, c.DataFolder, c.Store, c.Kept, c.Default); found != c.Folder {
 			t.Errorf("%v: found %q, wanted %q", c, found, c.Folder)
 		}
 	}

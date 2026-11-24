@@ -445,6 +445,15 @@ fn any_click(
     part: &dyn Fn(&crate::model::WidgetProps) -> bool,
     command: &dyn Fn(&crate::model::CommandProps) -> bool,
 ) -> bool {
+    any_click_in(&project.files, part, command)
+}
+
+/// Like `any_click`, over the modules `files`, as the checker has them.
+pub(crate) fn any_click_in(
+    files: &[crate::model::SpecFile],
+    part: &dyn Fn(&crate::model::WidgetProps) -> bool,
+    command: &dyn Fn(&crate::model::CommandProps) -> bool,
+) -> bool {
     let commands = |list: &[crate::model::Command]| -> bool {
         fn walk(list: &[crate::model::Command], command: &dyn Fn(&crate::model::CommandProps) -> bool) -> bool {
             list.iter().any(|c| command(&c.props) || walk(&c.items, command))
@@ -470,5 +479,5 @@ fn any_click(
             || f.sidebars.iter().any(|s| widgets(&s.widgets, part, &commands))
             || f.footer.as_ref().is_some_and(|ft| widgets(&ft.widgets, part, &commands))
     };
-    project.pages().any(|p| widgets(&p.widgets, part, &commands) || frame(&p.frame)) || project.apps().any(|a| frame(&a.frame))
+    files.iter().flat_map(|f| &f.pages).any(|p| widgets(&p.widgets, part, &commands) || frame(&p.frame)) || files.iter().flat_map(|f| &f.apps).any(|a| frame(&a.frame))
 }

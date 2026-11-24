@@ -60,6 +60,21 @@ fn a_file_store_says_where_its_pictures_are() {
     has(&text, "- `scans`: the file store of pictures in the folder `scans`; a relative path is taken from the folder the program starts in.\n");
 }
 
+/// A relative file store, as built (data:<program>/<folder>), is in the
+/// program's data folder, and a folder setting's relative folder too
+/// (conformance/data-folder.json); the README names neither machine's path.
+#[test]
+fn a_file_store_is_kept_in_the_program_s_data_folder() {
+    let mut unbuilt = starter("Shop", "shop");
+    unbuilt.filestores.push(clarity_project::FileStore { name: "photos".into(), location: "data/photos".into() });
+    unbuilt.filestores.push(clarity_project::FileStore { name: "exports".into(), location: "setting:exportsFolder".into() });
+    let dir = std::env::temp_dir().join("clarity-readme-stores");
+    let text = readme(&clarity_project::build_settings(&dir, &unbuilt));
+    has(&text, "- `photos`: the file store of pictures, kept in the program's data folder: `~/.local/share/shop/photos` on Linux (`$XDG_DATA_HOME` when set), `~/Library/Application Support/shop/photos` on macOS, `%APPDATA%\\shop\\photos` on Windows. Set the environment variable `CLARITY_DATA` to a folder to keep it there instead, under its own name.\n");
+    has(&text, "- `exports`: the file store in the folder the setting `exportsFolder` names; a relative folder, and its default, is in the program's data folder.\n");
+    assert!(!text.contains(&dir.display().to_string()), "{text}");
+}
+
 /// A built program keeps the database the project keeps beside it in the
 /// person's folder for application data (conformance/data-folder.json), so
 /// the README says where that is on each system and that a run in Clarity

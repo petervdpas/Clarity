@@ -12,7 +12,7 @@ form, author), the chosen book on the right with its title, subtitle,
 author, language, form and a note. The table adds and removes books; a new
 book gets a free title (New book, New book 2, ...). The buttons below:
 
-- Export writes the manuscript to `export/<title>/`.
+- Export writes the manuscript to `<title>/` in the export folder, the setting `exportFolder` (by default `export` in the app's settings folder).
 - Cover opens the CoverDesk window to paint the book's cover.
 - Save keeps the book; Open goes to its Desk.
 
@@ -39,8 +39,9 @@ toolbox: select, lasso, pen, pencil, spray, eraser, fill, colour picker,
 shapes, rotate, flip, crop, size, opacity, colours, import and export.
 
 The app's menu holds Language (English, Dutch, German), Go (Back with
-Alt+Left, Forward with Alt+Right) and Theme (Paper, Night, Sepia, Ink). The
-language and the theme are settings each person keeps on their machine.
+Alt+Left, Forward with Alt+Right), Theme (Paper, Night, Sepia, Ink) and
+Settings. The language, the theme and the export folder are settings each
+person keeps on their machine; Settings shows all three.
 
 ## Stack
 
@@ -56,9 +57,9 @@ C++, desktop. An example builds only for the stack its project file names.
 
 ## Files
 
-- `../novel.clarity`: the project file (stack, output folder, the SQLite data source, the `export` file store, the themes).
+- `../novel.clarity`: the project file (stack, output folder, the SQLite data source, the `export` file store on the `exportFolder` setting, the themes).
 - `books.clarity`: the enums, the entities and the `exportManuscript` action.
-- `writing.clarity`: the language and theme settings and the code behind every window and part.
+- `writing.clarity`: the language, theme and export folder settings and the code behind every window and part.
 - `themes.clarity`: the four themes Paper, Night, Sepia and Ink.
 - `design/`:
   - `Novel.cxaml`: the app with its menu and footer.

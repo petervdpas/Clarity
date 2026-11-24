@@ -65,6 +65,19 @@ public sealed class StorageException(string what, Exception? inner = null) : Cla
     public new Exception? InnerException { get; } = inner;
 }
 
+/// <summary>
+/// A database or file store at <c>env:NAME</c> while that environment variable is unset or
+/// empty (conformance/data-folder.json): said in Clarity's own words, naming the variable.
+/// </summary>
+public sealed class NotSetException(string variable)
+    : ClarityException($"the environment variable {variable} is not set", Own("variableNotSet", "The environment variable {variable} must be set", ("variable", variable)))
+{
+    public string Variable { get; } = variable;
+}
+
+/// <summary>Code listed or wrote a folder that is no store, with no folder chosen.</summary>
+public sealed class NoFolderException() : ClarityException("no folder was chosen", Own("noFolderChosen", "No folder was chosen"));
+
 /// <summary>A database connects with a secret setting (manual/data.settings.md) the person has not kept yet.</summary>
 public sealed class NotKeptException(string setting) : ClarityException($"storage: the secret setting {setting} is not kept yet: the settings name the connection")
 {

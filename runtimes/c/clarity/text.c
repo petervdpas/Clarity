@@ -81,6 +81,7 @@ ClarityText* clarity_keyed_text(const char* key, const char* english) {
 const ClarityText* clarity_said(const ClarityError* error) {
     switch (error->kind) {
     case CLARITY_REFUSED:
+    case CLARITY_NOT_SET:
     case CLARITY_VALUE: return error->text;
     case CLARITY_NOT_FOUND:
         if (!error->id) return NULL;
@@ -90,6 +91,17 @@ const ClarityText* clarity_said(const ClarityError* error) {
     default: return NULL;
     }
 }
+
+bool clarity_not_set(const char* variable) {
+    clarity_value_error(clarity_text_with(clarity_keyed_text("variableNotSet", "The environment variable {variable} must be set"), "variable", clarity_slot_text(clarity_copy(variable))),
+                        "the environment variable %s is not set", variable);
+    ClarityError error = *clarity_error();
+    error.kind = CLARITY_NOT_SET;
+    clarity_set_error(&error);
+    return false;
+}
+
+bool clarity_no_folder_chosen(void) { return clarity_value_error(clarity_keyed_text("noFolderChosen", "No folder was chosen"), "no folder was chosen"); }
 
 bool clarity_too_large(void) { return clarity_value_error(clarity_keyed_text("numberTooLarge", "The number is too large"), "a number too large"); }
 

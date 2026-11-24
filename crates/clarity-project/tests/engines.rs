@@ -202,3 +202,39 @@ fn a_new_engine_builds_as_it_is_made() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A new engine asks for the engine library as it is published: the version
+/// of runtimes/rust-engine, as Cargo reads it (its major and minor).
+#[test]
+fn a_new_engine_asks_for_the_engine_library_s_own_version() {
+    let manifest = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust-engine/Cargo.toml")).unwrap();
+    let version = manifest.lines().find_map(|l| l.strip_prefix("version = \"")).and_then(|v| v.strip_suffix('"')).expect("the engine library has a version");
+    let wanted = version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".");
+    assert_eq!(engines::ENGINE_LIBRARY_VERSION, wanted, "runtimes/rust-engine is {version}");
+}
+
+/// Every engine of every example builds where the example is downloaded to,
+/// outside this repository: its Cargo.toml names no path, so the engine
+/// library comes from crates.io as a new engine's does (the IDE's development
+/// build points it at runtimes/rust-engine itself).
+#[test]
+fn the_examples_engines_build_outside_the_repository() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let mut found = 0;
+    let mut wrong = Vec::new();
+    for example in std::fs::read_dir(&examples).unwrap().flatten() {
+        let Ok(crates) = std::fs::read_dir(example.path().join("engines")) else { continue };
+        for engine in crates.flatten() {
+            let Ok(cargo) = std::fs::read_to_string(engine.path().join("Cargo.toml")) else { continue };
+            found += 1;
+            if cargo.contains("path =") || cargo.contains("path=") {
+                wrong.push(engine.path().display().to_string());
+            }
+            if !cargo.contains(&format!("clarity-engine = \"{}\"", engines::ENGINE_LIBRARY_VERSION)) {
+                wrong.push(format!("{}: not clarity-engine = \"{}\"", engine.path().display(), engines::ENGINE_LIBRARY_VERSION));
+            }
+        }
+    }
+    assert!(found > 0, "no engines found in {}", examples.display());
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}

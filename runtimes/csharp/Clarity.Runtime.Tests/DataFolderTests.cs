@@ -68,4 +68,39 @@ public class DataFolderConformanceTests
             Assert.Equal(c.GetProperty("file").GetString(), got.Replace('\\', '/'));
         }
     }
+
+    /// <summary>Every runtime finds a program's data folder alike (conformance/data-folder.json, folders).</summary>
+    [Fact]
+    public void TheDataFolderIsWhereEveryRuntimeFindsIt()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "../../../../../../conformance/data-folder.json");
+        using var cases = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var c in cases.RootElement.GetProperty("folders").EnumerateArray())
+        {
+            var env = c.GetProperty("env").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString());
+            var got = DataFolder.FolderOn(c.GetProperty("os").GetString()!, c.GetProperty("program").GetString()!, name => env.GetValueOrDefault(name));
+            Assert.Equal(c.GetProperty("folder").GetString(), got.Replace('\\', '/'));
+        }
+    }
+
+    /// <summary>Every runtime places a file store alike, and an unset variable is said in Clarity's own words (conformance/data-folder.json, stores).</summary>
+    [Fact]
+    public void AFileStoreIsWhereEveryRuntimePlacesIt()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "../../../../../../conformance/data-folder.json");
+        using var cases = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var c in cases.RootElement.GetProperty("stores").EnumerateArray())
+        {
+            var env = c.GetProperty("env").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString());
+            string Got() => DataFolder.StoreOn(c.GetProperty("os").GetString()!, c.GetProperty("location").GetString()!, name => env.GetValueOrDefault(name));
+            if (c.TryGetProperty("unset", out var unset))
+            {
+                var e = Assert.Throws<NotSetException>(Got);
+                Assert.Equal("variableNotSet", e.Said.Key);
+                Assert.Equal($"The environment variable {unset.GetString()} must be set", e.Said.Show());
+            }
+            else
+                Assert.Equal(c.GetProperty("folder").GetString(), Got().Replace('\\', '/'));
+        }
+    }
 }

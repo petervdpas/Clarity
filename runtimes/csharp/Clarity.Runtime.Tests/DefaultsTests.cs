@@ -25,7 +25,6 @@ public class DefaultsTests
         Assert.Equal(SigninSource.DefaultTries, At("signin", "tries"));
         Assert.Equal(SigninSource.DefaultTriesSeconds, At("signin", "triesMinutes") * 60);
         Assert.Equal(Db.UndoSteps, At("undoSteps"));
-        Assert.Equal(Backup.KeptAutomatic, At("keptBackups"));
         Assert.Equal((long)Http.Timeout.TotalSeconds, At("httpSeconds"));
         Assert.Equal(Db.OwnersPerRead, At("ownersPerRead"));
         Assert.Equal(EditBus.Keeps, At("editBusKeeps"));

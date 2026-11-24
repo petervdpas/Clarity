@@ -160,7 +160,7 @@ pub fn warnings(said: &str) -> Vec<String> {
 pub fn migrate_for_run(file: &Path, project: &clarity_spec::Project, settings: &clarity_project::Settings, data: Option<&Path>) {
     let built = clarity_project::build_settings(&clarity_project::module_dir(file), settings);
     for found in clarity_gen::migrated_databases(project, &built).unwrap_or_else(|e| panic!("{e:?}")) {
-        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location: found.location, steps: found.steps };
+        let database = clarity_migrate::Database { source: found.source, dialect: found.dialect, location: found.location, steps: found.steps, backups: None };
         let database = match data {
             Some(folder) => clarity_migrate::in_data_folder(&database, folder),
             None => database,

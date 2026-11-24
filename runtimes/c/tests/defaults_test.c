@@ -3,7 +3,6 @@
 
 #include "auth/auth.h"
 #include "check.h"
-#include "clarity/backup.h"
 #include "clarity/db.h"
 #include "clarity/edits.h"
 #include "http/http.h"
@@ -29,7 +28,6 @@ void the_defaults_are_the_spec_s(void) {
     CHECK(CLARITY_SIGNIN_TRIES == number(file, "signin.tries"));
     CHECK(CLARITY_SIGNIN_TRIES_SECONDS == number(file, "signin.triesMinutes") * 60);
     CHECK(CLARITY_UNDO_STEPS == number(file, "undoSteps"));
-    CHECK(CLARITY_KEPT_BACKUPS == number(file, "keptBackups"));
     CHECK(CLARITY_HTTP_TIMEOUT == number(file, "httpSeconds"));
     CHECK(CLARITY_OWNERS_PER_READ == number(file, "ownersPerRead"));
     CHECK(CLARITY_EDIT_BUS_KEEPS == number(file, "editBusKeeps"));

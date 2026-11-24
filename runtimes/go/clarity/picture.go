@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -213,12 +214,27 @@ func pictureColumn(r Record, column string) (PictureColumn, bool) {
 
 // AddStore adds the file store name at a place, a folder (made when it is
 // not there yet); env:NAME takes it from that environment variable.
+//
+// data:<program>/<name> is in the program's data folder, and with env:NAME
+// unset the store says so where it is used, so the program does not stop
+// (conformance/data-folder.json, stores).
 func (db *Db) AddStore(name, at string) error {
 	delete(db.storeSettings, name)
-	folder, err := location(at)
+	delete(db.storesNotSet, name)
+	folder, err := DataFolderStore(at, os.Getenv)
+	var unset *NotSetError
+	if errors.As(err, &unset) {
+		delete(db.stores, name)
+		if db.storesNotSet == nil {
+			db.storesNotSet = map[string]string{}
+		}
+		db.storesNotSet[name] = unset.Variable
+		return nil
+	}
 	if err != nil {
 		return err
 	}
+	folder = filepath.FromSlash(folder)
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		return &StorageError{What: "cannot make the file store " + folder + ": " + err.Error(), Err: err}
 	}
@@ -259,6 +275,7 @@ func (db *Db) HoldSetting(setting, value string) {
 // once.
 func (db *Db) AddStoreSetting(name, program, setting, def string) error {
 	delete(db.stores, name)
+	delete(db.storesNotSet, name)
 	if db.storeSettings == nil {
 		db.storeSettings = map[string]storeSetting{}
 	}
@@ -313,16 +330,17 @@ func (db *Db) storeFolder(name string) (string, error) {
 	// A folder that is no store, by its path: just a folder.
 	if path, ok := strings.CutPrefix(name, FolderStore); ok {
 		if path == "" {
-			return "", &StorageError{What: "no folder was chosen"}
+			return "", noFolderChosen()
 		}
 		return path, nil
 	}
+	if variable, ok := db.storesNotSet[name]; ok {
+		return "", &NotSetError{Variable: variable}
+	}
 	if s, ok := db.storeSettings[name]; ok {
-		file, ok := SettingsFile(s.program)
-		if !ok {
-			return "", &StorageError{What: "this system names no folder for application settings"}
-		}
-		folder := filepath.FromSlash(StoreFolderIn(settingsOS(), filepath.ToSlash(filepath.Dir(file)), name, SettingNow(db.held, ReadSettings(s.program), s.setting), s.def))
+		// A relative folder is in the program's data folder (conformance/settings.json, folders).
+		dataFolder := filepath.ToSlash(DataFolder(s.program, os.Getenv))
+		folder := filepath.FromSlash(StoreFolderIn(settingsOS(), dataFolder, name, SettingNow(db.held, ReadSettings(s.program), s.setting), s.def))
 		if err := os.MkdirAll(folder, 0o755); err != nil {
 			return "", &StorageError{What: "cannot make the file store " + folder + ": " + err.Error(), Err: err}
 		}

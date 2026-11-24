@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="videoplayer.Preferences" title="@preferencesTitle">
+  <Form name="settingsForm" at="1,1" span="12" bind="settings" labels="3">
+    <Folder name="videoFolderBox" at="4,1" span="6" bind="settings.videoFolder" />
+  </Form>
+  <Button name="closeButton" at="11,3" span="2" caption="@closeButtonCaption" opens="close" cancel="true" />
+</Dialog>

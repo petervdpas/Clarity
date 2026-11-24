@@ -839,6 +839,8 @@ pub fn load_dir_signed(dir: &Path, replaced: &[(&Path, &str)], sources: &[Source
     resources::attach(&mut project, resources::resource_files(dir)?.unwrap_or_default());
     // A declared engine needs its file, so the folder is read even when it is missing.
     engines::attach(&mut project, engines::engine_files(dir)?.unwrap_or_default());
+    // An engine's source that builds only on this machine is warned about.
+    engines::check_sources(&mut project, &engines::engine_sources(dir)?);
     // A declared native part needs its folder, so a missing one is reported.
     let part_files = native::native_files(dir, &project)?;
     native::attach(&mut project, part_files);

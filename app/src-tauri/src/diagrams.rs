@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use clarity_spec::diagrams::{self, DIAGRAMS_DIR, DiagramKind, DiagramKindInfo, Proposal, views};
+use clarity_spec::diagrams::{self, DiagramKind, DiagramKindInfo, Proposal, views};
 use clarity_spec::{Diagnostic, Preview};
 use tauri::State;
 
@@ -54,18 +54,13 @@ pub fn write_classes(design: diagrams::class_model::ClassDesign) -> String {
     diagrams::class_model::write(&design)
 }
 
-/// Makes diagram `name` of `kind`, with the kind's starter text.
+/// Makes diagram `name` of `kind`, with the kind's starter text, the one
+/// way (clarity_tools::diagrams::add_diagram); one undo step takes it back.
 #[tauri::command]
-pub fn add_diagram(name: String, kind: DiagramKind, from_project: bool, state: State<WatchState>) -> Result<Preview, String> {
+pub fn add_diagram(name: String, kind: DiagramKind, from_project: bool, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let file = diagram_file(&dir, &name)?;
-    if file.exists() {
-        return Err(format!("the diagrams have {} already", file.file_name().unwrap_or_default().to_string_lossy()));
-    }
-    let starter = diagrams::starter(kind);
-    let text = if from_project { views::generate(&read_project(&dir)?, &starter, false).unwrap_or(starter) } else { starter };
-    std::fs::create_dir_all(dir.join(DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
-    write_atomically(&file, &text)?;
+    let change = clarity_tools::diagrams::add_diagram(&dir, &name, kind, from_project)?;
+    record(&history, vec![change])?;
     load(&dir)
 }
 
@@ -86,15 +81,13 @@ pub fn generate_diagram(name: String, only_drawn: bool, state: State<WatchState>
     load(&dir)
 }
 
-/// Writes the text of diagram `name`.
+/// Writes the text of diagram `name`, the one way
+/// (clarity_tools::diagrams::write_diagram); one undo step.
 #[tauri::command]
 pub fn save_diagram(name: String, text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
-    let file = diagram_file(&dir, &name)?;
-    let before = std::fs::read_to_string(&file).ok();
-    if before.as_deref() != Some(text.as_str()) {
-        write_atomically(&file, &text)?;
-        record(&history, vec![FileChange { file, before, after: Some(text) }])?;
+    if let (_, Some(change)) = clarity_tools::diagrams::write_diagram(&dir, &name, &text)? {
+        record(&history, vec![change])?;
     }
     load(&dir)
 }
@@ -171,7 +164,7 @@ mod tests {
     fn a_diagram_is_renamed_by_moving_its_text_to_the_new_file() {
         let dir = std::env::temp_dir().join(format!("clarity-rename-diagram-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join(DIAGRAMS_DIR)).unwrap();
+        std::fs::create_dir_all(dir.join(diagrams::DIAGRAMS_DIR)).unwrap();
         std::fs::write(dir.join("diagrams/orders.mermaid"), "erDiagram\n").unwrap();
         std::fs::write(dir.join("diagrams/taken.mermaid"), "classDiagram\n").unwrap();
 

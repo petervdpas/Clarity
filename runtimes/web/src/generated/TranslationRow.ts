@@ -20,7 +20,7 @@ values: Array<string | null>,
  */
 resources: Array<string | null>, 
 /**
- * Per language, whether it is left to translate (`untranslated`): the
- * default's when empty, another's when empty or the same as the default's.
+ * Per language, whether it lacks the key (`is_missing`): absent or empty,
+ * and no file of the resources.
  */
 missing: Array<boolean>, };

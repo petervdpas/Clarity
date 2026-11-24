@@ -101,14 +101,11 @@ fn view() -> Result<ReleaseView, String> {
         .map(|s| ReleaseRow { key: s.key, name: s.name, tag: s.tag, source: s.source, code: s.changes.code, manifest: s.changes.manifest, tests: s.changes.tests, docs: s.changes.docs })
         .collect();
     let (files, since) = release::since_ide_release(&repo)?;
-    let records = release::check_records(&repo);
-    let state = release::tree_state(&repo).ok();
-    let checks = release::checks(&repo, &files)
+    let checks = release::check_standings(&repo, &files)
         .into_iter()
-        .map(|c| {
-            let now = state.as_ref().map(|s| s.fingerprint(&c));
-            let last = records.get(&c.key).map(|r| CheckLast { passed: r.passed, why: r.why.clone(), ended: r.ended, current: now.as_deref() == Some(r.tree.as_str()) });
-            CheckRow { job: job_key(&c.key), title: c.title, command: c.run.shown(), last }
+        .map(|s| {
+            let last = s.record.map(|r| CheckLast { passed: r.passed, why: r.why, ended: r.ended, current: s.counted.current() });
+            CheckRow { job: job_key(&s.check.key), title: s.check.title, command: s.check.run.shown(), last }
         })
         .collect();
     Ok(ReleaseView { releases, chain, checks, since })
@@ -161,19 +158,17 @@ fn record_of(job: &Job, ran_on: Option<&(String, String)>) -> Option<CheckRecord
 pub fn release_run(jobs: Vec<String>, app: AppHandle, builds: State<DevJobs>) -> Result<(), String> {
     let repo = repo()?;
     let (files, _) = release::since_ide_release(&repo)?;
-    let checks = release::checks(&repo, &files);
-    // A check that passed on what it reads now still counts: it is not run again.
-    let state = release::tree_state(&repo).ok();
-    let records = release::check_records(&repo);
-    let counts = |check: &Check| records.get(&check.key).is_some_and(|r| r.passed && state.as_ref().is_some_and(|s| s.fingerprint(check) == r.tree));
+    let checks = release::check_standings(&repo, &files);
     let mut refused = Vec::new();
     for key in jobs {
-        let Some(check) = checks.iter().find(|c| job_key(&c.key) == key) else {
+        let Some(standing) = checks.iter().find(|s| job_key(&s.check.key) == key) else {
             refused.push(format!("there is no check {key}"));
             continue;
         };
+        let check = &standing.check;
+        // A check that passed on what it reads now still counts: it is not run again.
         // The checkout, the one build and the clean tree always run: they are cheap when nothing changed.
-        if check.inputs != release::Inputs::Whole && counts(check) {
+        if check.inputs != release::Inputs::Whole && standing.counted == release::Counted::Passed {
             continue;
         }
         if let Err(why) = builds.0.start(&key, &check.title, check.run.clone(), Some(recording(&app, repo.clone(), check.clone()))) {

@@ -198,3 +198,54 @@ fn code_copies_a_picture_and_a_file_from_another_record() {
     has(&cpp, "album.photo = db.copied_picture<Album>(other.cover, other.id, \"cover\", std::nullopt, \"photos\");");
     has(&cpp, "album.booklet = db.copied_file<Album>(other.booklet, other.id, \"booklet\", std::nullopt, std::nullopt);");
 }
+
+/// A relative file store is written as the program's data folder holds it
+/// (data:<program>/<folder>, conformance/data-folder.json), on every stack:
+/// no path of the machine it was generated on is in the program. "hard coded
+/// folders or files are a problem when the examples run on a other
+/// environment" (the user, 2026-11-23).
+#[test]
+fn a_relative_file_store_is_written_without_the_build_machine_s_folder() {
+    let dir = std::path::absolute(std::env::temp_dir().join("clarity-stores-built").join("records")).unwrap();
+    for backend in [Backend::Rust, Backend::Go, Backend::Csharp, Backend::C, Backend::Cpp] {
+        let mut unbuilt = settings(backend, Ui::Clarity, SourceKind::Sqlite);
+        unbuilt.filestores[0].location = "data/photos".into();
+        let built = clarity_project::build_settings(&dir, &unbuilt);
+        let files = generate(&project(), &built).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
+        assert!(files.iter().any(|f| f.text.contains("\"data:records/photos\"")), "{backend:?}: no data:records/photos");
+        let machine = clarity_project::slashed(&dir);
+        let found: Vec<&str> = files.iter().filter(|f| f.text.contains(&machine)).map(|f| f.path.as_str()).collect();
+        assert!(found.is_empty(), "{backend:?}: {machine} in {found:?}");
+    }
+}
+
+/// A database or file store whose environment variable is not set never
+/// crashes a Rust program at its start: it says so in Clarity's own words
+/// (`variableNotSet`, translated) and stops, on the desktop and the command line.
+#[test]
+fn a_rust_program_says_why_its_databases_did_not_open() {
+    let files = files(Backend::Rust, Ui::Clarity, SourceKind::Sqlite);
+    let main = text(&files, "src/main.rs");
+    assert!(!main.contains("open_databases().expect("), "{main}");
+    has(main, "        Err(err) => {\n            eprintln!(\"{}\", clarity_runtime::program::said(&err).show());\n            std::process::exit(1);\n        }\n");
+}
+
+/// A Go program that cannot open its databases (an environment variable not
+/// set) says why in Clarity's own words, translated, and stops.
+#[test]
+fn a_go_program_says_why_its_databases_did_not_open() {
+    let files = files(Backend::Go, Ui::Clarity, SourceKind::Sqlite);
+    has(text(&files, "main.go"), "\tdb, err := openDatabases()\n\tif err != nil {\n\t\tfmt.Fprintln(os.Stderr, clarity.Shown(err))\n\t\tos.Exit(1)\n\t}\n");
+}
+
+/// A C, C++ or C# program that cannot open its databases (an environment
+/// variable not set) says why in Clarity's own words, translated, and stops.
+#[test]
+fn every_other_stack_says_why_its_databases_did_not_open() {
+    let c = files(Backend::C, Ui::Clarity, SourceKind::Sqlite);
+    has(text(&c, "src/main.c"), "    const ClarityText* said = clarity_said(clarity_error());\n    fprintf(stderr, \"%s\\n\", said ? clarity_text_show(said) : clarity_error()->message);\n");
+    let cpp = files(Backend::Cpp, Ui::Clarity, SourceKind::Sqlite);
+    has(text(&cpp, "src/main.cpp"), "        auto said = clarity::said(e);\n        std::cerr << (said ? said->show() : std::string(e.what())) << \"\\n\";\n");
+    let csharp = files(Backend::Csharp, Ui::Clarity, SourceKind::Sqlite);
+    has(text(&csharp, "Program.cs"), "Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));");
+}

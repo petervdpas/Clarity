@@ -119,7 +119,21 @@ pub fn data(settings: &Settings, project: &clarity_spec::Project) -> String {
         }
     }
     for store in &settings.filestores {
-        match store.location.strip_prefix("env:") {
+        let location = store.location.as_str();
+        if let Some(kept) = location.strip_prefix("data:") {
+            // A relative folder of the project file, as built (conformance/data-folder.json, `stores`).
+            out.push_str(&format!(
+                "- `{}`: the file store of pictures, kept in the program's data folder: `~/.local/share/{kept}` on Linux (`$XDG_DATA_HOME` when set), `~/Library/Application Support/{kept}` on macOS, `%APPDATA%\\{}` on Windows. Set the environment variable `CLARITY_DATA` to a folder to keep it there instead, under its own name.\n",
+                store.name,
+                kept.replace('/', "\\")
+            ));
+            continue;
+        }
+        if let Some(setting) = location.strip_prefix("setting:") {
+            out.push_str(&format!("- `{}`: the file store in the folder the setting `{setting}` names; a relative folder, and its default, is in the program's data folder.\n", store.name));
+            continue;
+        }
+        match location.strip_prefix("env:") {
             Some(variable) => out.push_str(&format!(
                 "- `{}`: a file store of pictures. Set the environment variable `{variable}` to its folder.\n",
                 store.name

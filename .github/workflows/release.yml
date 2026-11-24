@@ -292,6 +292,31 @@ jobs:
           path: out/*
 
   # ───────────────────────────────────────────────────────────────
+  # The example projects as Examples.zip beside the installers: what
+  # git keeps of examples/ (no out/ or data/), unpacking to a folder
+  # named examples, to open in an installed Clarity.
+  # ───────────────────────────────────────────────────────────────
+  examples:
+    name: Examples
+    needs: [check]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Zip the examples
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          git archive --format=zip --output=out/Examples.zip HEAD examples
+          unzip -l out/Examples.zip | tail -1
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-examples
+          path: out/Examples.zip
+
+  # ───────────────────────────────────────────────────────────────
   # Linux: each package built inside its distribution's container.
   # ubuntu-24.04-arm is a real arm64 runner, so the Raspberry Pi
   # package is built natively, in an arm64 debian:bookworm.
@@ -407,7 +432,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   release:
     name: Publish GitHub Release
-    needs: [windows, install, vscode]
+    needs: [windows, install, vscode, examples]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:

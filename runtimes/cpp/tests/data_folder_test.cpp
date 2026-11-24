@@ -84,3 +84,50 @@ TEST(a_database_opens_where_every_runtime_opens_it) {
         CHECK_EQ(got, item["file"].get<std::string>());
     }
 }
+
+// Every runtime finds a program's data folder alike (conformance/data-folder.json, folders).
+TEST(the_data_folder_is_where_every_runtime_finds_it) {
+    const json& cases = conformance("data-folder.json");
+    for (const auto& item : cases["folders"]) {
+        json vars = item["env"];
+        std::string kept;
+        auto env = [&](const char* name) -> const char* {
+            if (!vars.contains(name)) return nullptr;
+            kept = vars[name].get<std::string>();
+            return kept.c_str();
+        };
+        std::string got = data_folder_on(item["os"].get<std::string>(), item["program"].get<std::string>(), env);
+        for (auto& c : got)
+            if (c == '\\') c = '/';
+        CHECK_EQ(got, item["folder"].get<std::string>());
+    }
+}
+
+// Every runtime places a file store alike, and an unset variable is said in
+// Clarity's own words (conformance/data-folder.json, stores).
+TEST(a_file_store_is_where_every_runtime_places_it) {
+    const json& cases = conformance("data-folder.json");
+    for (const auto& item : cases["stores"]) {
+        json vars = item["env"];
+        std::string kept;
+        auto env = [&](const char* name) -> const char* {
+            if (!vars.contains(name)) return nullptr;
+            kept = vars[name].get<std::string>();
+            return kept.c_str();
+        };
+        if (item.contains("unset")) {
+            try {
+                data_folder_store_on(item["os"].get<std::string>(), item["location"].get<std::string>(), env);
+                CHECK(false);
+            } catch (const NotSetError& e) {
+                CHECK_EQ(*said(e)->key(), "variableNotSet");
+                CHECK_EQ(said(e)->show(), "The environment variable " + item["unset"].get<std::string>() + " must be set");
+            }
+            continue;
+        }
+        std::string got = data_folder_store_on(item["os"].get<std::string>(), item["location"].get<std::string>(), env);
+        for (auto& c : got)
+            if (c == '\\') c = '/';
+        CHECK_EQ(got, item["folder"].get<std::string>());
+    }
+}

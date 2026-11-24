@@ -92,7 +92,11 @@ Ask as you would in the Agent panel; see [The agent](ai.agent.md). The agent rea
 
 ## Turning it off and watching it
 
-**Clarity settings**, section **Agent**, holds both:
+The **MCP** item in Clarity's status bar, at the foot of the window, turns each of Clarity's MCP servers on and off. A dot beside it per server is green while that server is on and red while it is off. Click it for a toggle switch per server:
 
-- **Let outside agents work on my project**: on unless you turn it off. While it is off, your agent can still read this manual and the references through `clarity mcp`, but no tool touches the project.
-- **Agent activity**: each tool call an outside agent makes, as it happens: which program, the tool, the file, and whether it worked. It never shows what a file holds, and it keeps only the last calls.
+- **clarity**: the server of the installed Clarity, the one you added to your agent above.
+- **clarity-cdev**: the server of a Clarity built from its own repository, for people who develop Clarity itself.
+
+Both are on until you turn one off. While a server is off, every tool call your agent makes through it is refused with a message that the access is turned off in Clarity and that you turn it on in the status bar; it reads and changes nothing, the manual included. Your agent still sees the tools. A switch holds from the agent's next call: there is nothing to restart or reconnect. The switches are kept in `mcp.json` in Clarity's own folder (`.clarity` in your home folder), so they hold for every project and after Clarity restarts. Clarity's own [Agent panel](ai.agent.md) is not held by them.
+
+**Clarity settings**, section **Agent**, shows **Agent activity**: each tool call an outside agent makes, as it happens: which program, the tool, the file, and whether it worked (a call refused by a switch shows as failed). It never shows what a file holds, and it keeps only the last calls.

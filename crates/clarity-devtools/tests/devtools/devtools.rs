@@ -82,7 +82,7 @@ fn every_piece_has_a_build_with_at_most_two_jobs_of_cargo() {
         let run = swap::build(&repo, piece);
         assert!(!run.shown().is_empty(), "{}", piece.key);
         if run.program == "cargo" || run.shown().contains("build.sh") {
-            assert!(run.env.iter().any(|(k, v)| k == "CARGO_BUILD_JOBS" && v == "2"), "{}: the machine has 7.5 GB", piece.key);
+            assert!(run.env.iter().any(|(k, v)| k == "CARGO_BUILD_JOBS" && matches!(v.as_str(), "1" | "2")), "{}: the machine has 7.5 GB", piece.key);
         }
     }
     assert_eq!(swap::build(&repo, swap::piece("clarityUi").unwrap()).shown(), "cargo build --release -p clarity-ui-ffi");
@@ -582,6 +582,27 @@ fn a_check_counts_only_on_the_tree_it_ran_on() {
     assert!(release::held_back_of([("a".to_string(), "check a".to_string(), tree.clone())].into_iter(), &records).is_empty(), "all passed on this tree: none held back");
 }
 
+/// How a check's last run counts is decided once, for the plan (MCP
+/// release_state), the Release planning tab and its Run: a tree that could
+/// not be read leaves every run counting as on another tree, never as passed.
+#[test]
+fn how_a_check_counts_is_one_rule() {
+    use release::Counted;
+    let record = |passed: bool| CheckRecord { key: "a".into(), title: "check a".into(), passed, why: None, ended: 1, head: "abc".into(), tree: "t1".into(), lines: vec![] };
+    assert_eq!(Counted::of(Some(&record(true)), Some("t1")), Counted::Passed);
+    assert_eq!(Counted::of(Some(&record(false)), Some("t1")), Counted::Failed);
+    assert_eq!(Counted::of(Some(&record(true)), Some("t2")), Counted::OtherTree);
+    assert_eq!(Counted::of(Some(&record(true)), None), Counted::OtherTree, "the tree could not be read");
+    assert_eq!(Counted::of(None, Some("t1")), Counted::NotRun);
+    assert!(Counted::Passed.current() && Counted::Failed.current() && !Counted::OtherTree.current() && !Counted::NotRun.current());
+    // Every check of the tree as it is, each with its last run: what the three readers list.
+    let repo = repo();
+    let (files, _) = release::since_ide_release(&repo).unwrap();
+    let standings = release::check_standings(&repo, &files);
+    assert_eq!(standings.len(), release::checks(&repo, &files).len());
+    assert!(standings.iter().all(|s| s.counted.current() == (s.record.is_some() && matches!(s.counted, Counted::Passed | Counted::Failed))));
+}
+
 #[test]
 fn a_check_counts_on_the_files_it_can_read_only() {
     // A crate's test reads every file of the tree but the Rust code of the crates it does not build: a change there,
@@ -743,4 +764,96 @@ fn the_fresh_checkout_gets_the_native_libraries_as_on_github() {
     assert_eq!(std::fs::read_to_string(placed("Clarity.AppMcp", "clarity_app_mcp")).unwrap(), "clarity_app_mcp");
     assert!(!placed("Clarity.Pdf", "clarity_pdf").exists(), "a library not built is left out");
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// Every build's state is written to its own file as it changes (waiting,
+/// running, how it ended, its last lines), so an agent reads it while it
+/// builds (build_state); written aside and renamed, never read half written.
+#[test]
+fn a_builds_state_is_written_to_its_file_on_each_change_and_read_back() {
+    use clarity_devtools::jobs::{self, RecordState};
+    let dir = temp("job-records");
+    let jobs = Jobs::default();
+    jobs.record_in(&dir);
+    let key = swap::job_key("clarityUi", false);
+    assert_eq!(key, "piece:clarityUi");
+    assert_eq!(swap::job_key("clarityUi", true), "piece:clarityUi:debug");
+    jobs.start_by(&key, "Clarity.UI library", shell("echo one && echo two"), Some("Claude Code".into()), None).unwrap();
+    let first = jobs::read_record(&dir, &key).expect("written as soon as it is pressed");
+    assert!(matches!(first.state, RecordState::Waiting | RecordState::Running | RecordState::Succeeded), "{:?}", first.state);
+    assert_eq!((first.title.as_str(), first.by.as_deref()), ("Clarity.UI library", Some("Claude Code")));
+    assert!(first.queued.is_some(), "when it was pressed");
+    jobs.wait(&key, Duration::from_secs(20)).unwrap();
+    let done = jobs::read_record(&dir, &key).unwrap();
+    assert_eq!(done.state, RecordState::Succeeded);
+    assert!(done.lines.iter().any(|l| l == "one") && done.lines.iter().any(|l| l == "two"), "{:?}", done.lines);
+    assert!(done.started.is_some() && done.ended.is_some());
+    jobs.start("failing", "Failing", shell("exit 3"), None).unwrap();
+    jobs.wait("failing", Duration::from_secs(20)).unwrap();
+    let failed = jobs::read_record(&dir, "failing").unwrap();
+    assert_eq!(failed.state, RecordState::Failed);
+    assert!(failed.why.is_some());
+    let long = if cfg!(windows) { "ping -n 30 127.0.0.1 > nul" } else { "sleep 30" };
+    jobs.start("long", "Long", shell(long), None).unwrap();
+    while jobs.job("long").unwrap().state != JobState::Running {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(jobs::read_record(&dir, "long").unwrap().state, RecordState::Running);
+    jobs.stop(&["long".to_string()]);
+    jobs.wait("long", Duration::from_secs(10)).unwrap();
+    assert_eq!(jobs::read_record(&dir, "long").unwrap().state, RecordState::Stopped);
+    let keys: Vec<String> = jobs::read_records(&dir).into_iter().map(|r| r.key).collect();
+    assert_eq!(keys, ["failing", "long", "piece:clarityUi"]);
+    let names: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    assert!(names.iter().all(|n| n.ends_with(".json") && !n.contains(':')), "only whole records, named for every system: {names:?}");
+}
+
+/// A record left waiting or running by a Clarity that ended reads as
+/// stopped when the next one starts, never as running forever.
+#[test]
+fn a_build_left_running_by_a_clarity_that_ended_reads_as_stopped() {
+    use clarity_devtools::jobs::{self, RecordState};
+    let dir = temp("job-leftover");
+    let jobs = Jobs::default();
+    jobs.record_in(&dir);
+    let long = if cfg!(windows) { "ping -n 30 127.0.0.1 > nul" } else { "sleep 30" };
+    jobs.start("left", "Left", shell(long), None).unwrap();
+    while jobs.job("left").unwrap().state != JobState::Running {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Another Clarity starts with the same folder: the build of the first is no more.
+    Jobs::default().record_in(&dir);
+    let left = jobs::read_record(&dir, "left").unwrap();
+    assert_eq!(left.state, RecordState::Stopped);
+    assert!(left.why.as_deref().unwrap_or_default().contains("Clarity"), "{:?}", left.why);
+    jobs.stop(&["left".to_string()]);
+}
+
+/// What build_state says of a build: its state, since when, how long, who
+/// started it and its last lines.
+#[test]
+fn a_builds_record_is_told_with_its_state_times_and_last_lines() {
+    use clarity_devtools::jobs::{JobRecord, RecordState};
+    let at = 1_793_912_345_000; // 2026-11-05 20:59:05 UTC
+    let record = JobRecord {
+        key: "piece:clarityUi".into(),
+        title: "Clarity.UI library".into(),
+        command: "cargo build --release -p clarity-ui-ffi".into(),
+        state: RecordState::Running,
+        why: None,
+        by: Some("Claude Code".into()),
+        queued: Some(at - 5_000),
+        started: Some(at),
+        ended: None,
+        lines: (1..=50).map(|n| format!("line {n}")).collect(),
+        written: at + 60_000,
+    };
+    let told = record.told(at + 125_000, 3);
+    assert!(told.contains("Clarity.UI library (piece:clarityUi): running since 2026-11-05 20:59:05 UTC, 2 min 5 s so far; started by Claude Code"), "{told}");
+    assert!(told.contains("cargo build --release -p clarity-ui-ffi"), "{told}");
+    assert!(told.contains("Last 3 of 50 lines:\nline 48\nline 49\nline 50"), "{told}");
+    assert!(!told.contains("line 47"), "{told}");
+    let ended = JobRecord { state: RecordState::Failed, why: Some("cargo ended with exit status: 101".into()), ended: Some(at + 3_725_000), by: None, ..record };
+    let told = ended.told(at + 4_000_000, 40);
+    assert!(told.contains("failed at 2026-11-05 22:01:10 UTC after 1 h 2 min 5 s: cargo ended with exit status: 101; started by the person"), "{told}");
 }

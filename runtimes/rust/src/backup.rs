@@ -29,7 +29,35 @@ pub fn stamp(seconds: i64) -> String {
 
 /// The file of a backup of the database named `database` (its file's name without `.db`) taken at `seconds` before step `step`.
 pub fn file_name(database: &str, seconds: i64, step: usize) -> String {
-    format!("{database}-{}-before-migration-{step:04}.db", stamp(seconds))
+    format!("{database}-{}-{}.db", stamp(seconds), before_migration(step))
+}
+
+/// Why a backup before step `step` is taken, as its file says it: `before-migration-0006`.
+pub fn before_migration(step: usize) -> String {
+    format!("before-migration-{step:04}")
+}
+
+/// The file of a new backup of the database named `database`, taken at
+/// `seconds` for `why` into `folder`: `<database>-<when>-<why>.db`, with `_n`
+/// before `.db` when the database has backups of that second there already,
+/// n one more than their highest count (conformance/backups.json, `next`).
+/// So the backups of one second have an order, whatever their reasons, and
+/// pruning keeps the newest. The one naming, for clarity-migrate and for
+/// Clarity's Backups (clarity_db).
+pub fn next_file(folder: &Path, database: &str, seconds: i64, why: &str) -> String {
+    let when = stamp(seconds);
+    let highest = std::fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| parse(database, &e.file_name().to_string_lossy()))
+        .filter(|named| named.when == when)
+        .map(|named| named.count)
+        .max();
+    match highest {
+        Some(count) => format!("{database}-{when}-{why}_{}.db", count + 1),
+        None => format!("{database}-{when}-{why}.db"),
+    }
 }
 
 /// A backup's file name read back: when (UTC), its count within that second (1, or the n of `_n`), and why.
@@ -83,7 +111,8 @@ pub fn prune(folder: &Path, database: &str) {
             parse(name, &file).filter(Named::automatic).map(|n| (n.when, n.count, e.path()))
         })
         .collect();
-    automatic.sort_by(|a, b| (&b.0, b.1).cmp(&(&a.0, a.1)));
+    // The newest first: by its second, then its count in that second, then its name, so the order never follows how the folder lists its files.
+    automatic.sort_by(|a, b| (&b.0, b.1, &b.2).cmp(&(&a.0, a.1, &a.2)));
     for (_, _, old) in automatic.into_iter().skip(KEPT_AUTOMATIC) {
         let _ = std::fs::remove_file(old);
     }

@@ -61,6 +61,7 @@ The user: "backups are a project option first of all!! and it path is set in the
 - 2026-11-05: a backup is a copy beside the database, made with SQLite's `VACUUM INTO`; no tool is added to any stack. (Where it goes changed on 2026-11-23: the project's backups folder.)
 - 2026-11-05: the name says when (UTC) and why: `manual`, `before-migration-NNNN`, `before-restore`.
 - 2026-11-05: automatic backups are pruned to the 10 newest, manual ones never.
+- 2026-11-24: the backups of one second have an order: a new backup carries `_n` when its database has backups of that second already, whatever their reasons (`clarity_runtime::backup::next_file`, the one naming for clarity-migrate and clarity-db; `conformance/backups.json` `next`). Before, steps taken within one second had no order and pruning could remove the newest (the Checks on main failed on it).
 - 2026-11-05: a restore first backs up what it replaces, and refuses while the program runs on that database.
 - 2026-11-05: a failed backup stops the migration it guards.
 - 2026-11-05: the agent asks before taking or restoring; listing only reads.

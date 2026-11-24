@@ -1,5 +1,5 @@
 {
-  "about": "Backups of an SQLite database (docs/ledger/backups.md), alike in Clarity (crates/clarity-db) and the Rust runtime that clarity-migrate runs on (runtimes/rust; the programs of the other stacks neither back up nor migrate, so their runtimes carry no backup code): a copy in the folder of the database's data source in the backups folder the project names (backups \"data/backups\": data/backups/<source>/; none without the line), made with VACUUM INTO, named <database>-<when>-<why>.db with the time in UTC; a second one of the same second gets _2, _3 before .db. clarity-migrate takes one, for before-migration-NNNN (the first step it applies, four digits), before applying steps to a database that already has a schema when the project has a backups folder, and refuses to migrate when it cannot; the programs do not migrate (docs/ledger/migrations.md). Each database keeps its newest `kept` automatic backups (any reason but manual): a prune removes the older ones and leaves manual backups, other databases' and every other file alone.",
+  "about": "Backups of an SQLite database (docs/ledger/backups.md), alike in Clarity (crates/clarity-db) and the Rust runtime that clarity-migrate runs on (runtimes/rust; the programs of the other stacks neither back up nor migrate, so their runtimes carry no backup code): a copy in the folder of the database's data source in the backups folder the project names (backups \"data/backups\": data/backups/<source>/; none without the line), made with VACUUM INTO, named <database>-<when>-<why>.db with the time in UTC; a second one of the same second, whatever its reason, gets _2, _3 before .db (one more than the highest count that database has in that second: `next`), so the backups of one second have an order. clarity-migrate takes one, for before-migration-NNNN (the first step it applies, four digits), before applying steps to a database that already has a schema when the project has a backups folder, and refuses to migrate when it cannot; the programs do not migrate (docs/ledger/migrations.md). Each database keeps its newest `kept` automatic backups (any reason but manual): a prune removes the older ones and leaves manual backups, other databases' and every other file alone.",
   "stamps": [
     { "seconds": 0, "stamp": "19700101T000000Z" },
     { "seconds": 951782400, "stamp": "20000229T000000Z" },
@@ -9,6 +9,12 @@
   "names": [
     { "database": "shop", "seconds": 1793912345, "step": 6, "file": "shop-20261105T205905Z-before-migration-0006.db" },
     { "database": "modelling", "seconds": 951782400, "step": 12, "file": "modelling-20000229T000000Z-before-migration-0012.db" }
+  ],
+  "next": [
+    { "database": "shop", "seconds": 1793912345, "why": "before-migration-0006", "files": [], "file": "shop-20261105T205905Z-before-migration-0006.db" },
+    { "database": "shop", "seconds": 1793912345, "why": "before-migration-0006", "files": ["shop-20261105T205905Z-before-migration-0006.db"], "file": "shop-20261105T205905Z-before-migration-0006_2.db" },
+    { "database": "shop", "seconds": 1793912345, "why": "before-migration-0006", "files": ["shop-20261105T205905Z-before-migration-0005.db"], "file": "shop-20261105T205905Z-before-migration-0006_2.db" },
+    { "database": "shop", "seconds": 1793912345, "why": "before-restore", "files": ["shop-20261105T205905Z-before-migration-0005.db", "shop-20261105T205905Z-before-migration-0006_2.db", "shop-20261105T205905Z-manual_3.db", "shopkeeper-20261105T205905Z-manual_7.db", "shop-20261105T205904Z-manual_9.db", "notes.txt"], "file": "shop-20261105T205905Z-before-restore_4.db" }
   ],
   "kept": 10,
   "prune": {

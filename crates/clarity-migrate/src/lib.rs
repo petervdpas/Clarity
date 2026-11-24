@@ -193,13 +193,7 @@ fn backup_first(db: &Db, source: &str, step: usize, folder: &std::path::Path) ->
     std::fs::create_dir_all(&dir).map_err(|e| refused(format!("{}: {e}", dir.display())))?;
     let name = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "database".into());
     let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-    let first = dir.join(backup::file_name(&name, seconds, step));
-    let mut path = first.clone();
-    let mut n = 2;
-    while path.exists() {
-        path = std::path::PathBuf::from(format!("{}_{n}.db", first.with_extension("").display()));
-        n += 1;
-    }
+    let path = dir.join(backup::next_file(&dir, &name, seconds, &backup::before_migration(step)));
     let quoted = path.to_string_lossy().replace('\'', "''");
     db.batch(source, &format!("VACUUM INTO '{quoted}'")).map_err(|e| refused(e.to_string()))?;
     backup::prune(&dir, &name);

@@ -52,15 +52,9 @@ pub fn take(database: &Path, folder: &Path, why: &str) -> Result<Backup, String>
     }
     let dir = folder;
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
-    let when = stamp(SystemTime::now());
-    let base = format!("{}-{when}-{why}", stem(database));
-    let mut path = dir.join(format!("{base}.db"));
-    let mut n = 2;
-    while path.exists() {
-        // Reasons hold no `_`, so the count of a second backup of the same second reads apart from its reason.
-        path = dir.join(format!("{base}_{n}.db"));
-        n += 1;
-    }
+    // Named by the runtime, as clarity-migrate's are: a second backup of the same second carries its count, whatever its reason.
+    let seconds = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let path = dir.join(clarity_runtime::backup::next_file(dir, &stem(database), seconds, why));
     let db = Connection::open_with_flags(database, OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(|e| format!("cannot open {}: {e}", database.display()))?;
     db.execute("VACUUM INTO ?1", [path.to_string_lossy().as_ref()]).map_err(|e| format!("cannot back up {}: {e}", database.display()))?;
     drop(db);
